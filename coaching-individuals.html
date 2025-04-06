@@ -237,6 +237,9 @@
             max-width: 600px;
             margin: 20px auto;
             display: block;
+            border: 1px solid #ddd;
+            padding: 10px;
+            background-color: white;
         }
         .orange-header {
             background-color: #e67e22;
@@ -323,6 +326,11 @@
             grid-column: 2;
             grid-row: 2;
             color: #333;
+        }
+        .save-container {
+            display: flex;
+            align-items: center;
+            margin-top: 10px;
         }
     </style>
 </head>
@@ -498,7 +506,7 @@
                 </tr>
             </table>
             
-            <div style="text-align: center; margin: 15px 0;">
+            <div class="save-container">
                 <button class="save-btn" onclick="saveAllTeamMembers()">Save All Answers</button>
                 <span class="saved-message" id="saved-team-members">✓ Saved</span>
                 <span class="error-message" id="error-team-members">Please complete all fields</span>
@@ -528,9 +536,11 @@
             <div class="question-item">
                 <div class="question-text">How would you apply the Solution-Focused approach with one of your team members?</div>
                 <div class="editable-answer" contenteditable="true" id="solution-answer" placeholder="Enter your answer here..."></div>
-                <button class="save-btn" onclick="saveAnswer('solution-answer')">Save Answer</button>
-                <span class="saved-message" id="saved-solution">✓ Saved</span>
-                <span class="error-message" id="error-solution">Please provide an answer</span>
+                <div class="save-container">
+                    <button class="save-btn" onclick="saveAnswer('solution-answer')">Save Answer</button>
+                    <span class="saved-message" id="saved-solution">✓ Saved</span>
+                    <span class="error-message" id="error-solution">Please provide an answer</span>
+                </div>
             </div>
             
             <p>This model is effective for most people, in most situations. However, if your team member wants to explore the deeper issues behind her behavior or actions, you might want to take a different approach.</p>
@@ -633,25 +643,31 @@
         <div class="question-item">
             <div class="question-text">1. How did you initiate the conversation?</div>
             <div class="editable-answer" contenteditable="true" id="answer1" placeholder="Enter your answer here..."></div>
-            <button class="save-btn" onclick="saveAnswer('answer1')">Save Answer</button>
-            <span class="saved-message" id="saved1">✓ Saved</span>
-            <span class="error-message" id="error1">Please provide an answer</span>
+            <div class="save-container">
+                <button class="save-btn" onclick="saveAnswer('answer1')">Save Answer</button>
+                <span class="saved-message" id="saved1">✓ Saved</span>
+                <span class="error-message" id="error1">Please provide an answer</span>
+            </div>
         </div>
         
         <div class="question-item">
             <div class="question-text">2. How did you know that the person would benefit from an informal coaching session? What were the clues?</div>
             <div class="editable-answer" contenteditable="true" id="answer2" placeholder="Enter your answer here..."></div>
-            <button class="save-btn" onclick="saveAnswer('answer2')">Save Answer</button>
-            <span class="saved-message" id="saved2">✓ Saved</span>
-            <span class="error-message" id="error2">Please provide an answer</span>
+            <div class="save-container">
+                <button class="save-btn" onclick="saveAnswer('answer2')">Save Answer</button>
+                <span class="saved-message" id="saved2">✓ Saved</span>
+                <span class="error-message" id="error2">Please provide an answer</span>
+            </div>
         </div>
         
         <div class="question-item">
             <div class="question-text">3. Was your team member receptive to you?</div>
             <div class="editable-answer" contenteditable="true" id="answer3" placeholder="Enter your answer here..."></div>
-            <button class="save-btn" onclick="saveAnswer('answer3')">Save Answer</button>
-            <span class="saved-message" id="saved3">✓ Saved</span>
-            <span class="error-message" id="error3">Please provide an answer</span>
+            <div class="save-container">
+                <button class="save-btn" onclick="saveAnswer('answer3')">Save Answer</button>
+                <span class="saved-message" id="saved3">✓ Saved</span>
+                <span class="error-message" id="error3">Please provide an answer</span>
+            </div>
         </div>
 
         <h2 class="section-title">2.4. Drawing This Together</h2>
@@ -681,18 +697,8 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            // Clear all saved answers when page loads
-            ['answer1', 'answer2', 'answer3', 'solution-answer', 'team-member1', 'team-member2', 'team-member3', 'team-member4', 'team-member5', 'team-member6', 'coaching-map1', 'coaching-map2', 'coaching-map3', 'coaching-map4', 'coaching-map5', 'coaching-map6'].forEach(id => {
-                localStorage.removeItem(id);
-                const element = document.getElementById(id);
-                if (element) {
-                    if (element.hasAttribute('contenteditable')) {
-                        element.innerHTML = '';
-                    } else {
-                        element.value = '';
-                    }
-                }
-            });
+            // Load saved answers from localStorage
+            loadSavedAnswers();
 
             // Navigation buttons
             document.getElementById('backButton').addEventListener('click', function() {
@@ -700,97 +706,106 @@
             });
 
             document.getElementById('nextButton').addEventListener('click', function(e) {
-                const unanswered = [];
-                let allAnswered = true;
-                
-                ['answer1', 'answer2', 'answer3', 'solution-answer'].forEach(id => {
-                    const answer = document.getElementById(id);
-                    if(answer.textContent.trim() === '') {
-                        unanswered.push(document.querySelector(`#${id}`).previousElementSibling.textContent.trim());
-                        answer.classList.add('required-field');
-                        document.getElementById(`error${id.split('-').pop()}`).style.display = 'inline';
-                        allAnswered = false;
-                    } else {
-                        answer.classList.remove('required-field');
-                        document.getElementById(`error${id.split('-').pop()}`).style.display = 'none';
-                    }
-                });
-                
-                // Check team member inputs
-                let hasTeamEntries = false;
-                for (let i = 1; i <= 6; i++) {
-                    const memberInput = document.getElementById(`team-member${i}`);
-                    const mapInput = document.getElementById(`coaching-map${i}`);
-                    
-                    if (memberInput.value.trim() !== '' || mapInput.value.trim() !== '') {
-                        hasTeamEntries = true;
-                        
-                        if (memberInput.value.trim() === '' || mapInput.value.trim() === '') {
-                            if (memberInput.value.trim() === '') {
-                                memberInput.classList.add('required-field');
-                            }
-                            if (mapInput.value.trim() === '') {
-                                mapInput.classList.add('required-field');
-                            }
-                            document.getElementById('error-team-members').style.display = 'inline';
-                            allAnswered = false;
-                        } else {
-                            memberInput.classList.remove('required-field');
-                            mapInput.classList.remove('required-field');
-                        }
-                    }
-                }
-                
-                if (hasTeamEntries) {
-                    document.getElementById('error-team-members').style.display = 'none';
-                } else {
-                    allAnswered = false;
-                }
-                
-                if(!allAnswered) {
+                if (!validateAllFields()) {
                     e.preventDefault();
-                    const warningMessage = document.getElementById('warningMessage');
-                    warningMessage.style.display = 'block';
-                    
-                    // Scroll to first empty field
-                    const firstEmpty = Array.from(document.querySelectorAll('.editable-answer, input[type="text"]')).find(el => 
-                        (el.hasAttribute('contenteditable') && el.textContent.trim() === '') || 
-                        (el.type === 'text' && el.value.trim() === '' && 
-                         (el.classList.contains('required-field') || 
-                          (el.id.includes('team-member') && document.getElementById(el.id.replace('team-member', 'coaching-map')).value.trim() !== '') ||
-                          (el.id.includes('coaching-map') && document.getElementById(el.id.replace('coaching-map', 'team-member')).value.trim() !== '')))
-                    );
-                    
-                    if (firstEmpty) {
-                        firstEmpty.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                        firstEmpty.focus();
-                    }
+                    document.getElementById('warningMessage').style.display = 'block';
                 } else {
                     window.location.href = 'coaching-team.html';
                 }
             });
         });
 
+        function loadSavedAnswers() {
+            // Load answers for questions
+            ['answer1', 'answer2', 'answer3', 'solution-answer'].forEach(id => {
+                const saved = localStorage.getItem(id);
+                if (saved) {
+                    document.getElementById(id).innerHTML = saved;
+                }
+            });
+
+            // Load team member data
+            for (let i = 1; i <= 6; i++) {
+                const member = localStorage.getItem(`team-member${i}`);
+                const map = localStorage.getItem(`coaching-map${i}`);
+                
+                if (member) document.getElementById(`team-member${i}`).value = member;
+                if (map) document.getElementById(`coaching-map${i}`).value = map;
+            }
+        }
+
+        function validateAllFields() {
+            let allValid = true;
+            
+            // Validate questions
+            ['answer1', 'answer2', 'answer3', 'solution-answer'].forEach(id => {
+                const answer = document.getElementById(id);
+                const errorElement = document.getElementById(`error${id.split('-').pop()}`);
+                
+                if (answer.textContent.trim() === '') {
+                    answer.classList.add('required-field');
+                    errorElement.style.display = 'inline';
+                    allValid = false;
+                } else {
+                    answer.classList.remove('required-field');
+                    errorElement.style.display = 'none';
+                }
+            });
+            
+            // Validate team members
+            let hasTeamEntries = false;
+            for (let i = 1; i <= 6; i++) {
+                const memberInput = document.getElementById(`team-member${i}`);
+                const mapInput = document.getElementById(`coaching-map${i}`);
+                
+                if (memberInput.value.trim() !== '' || mapInput.value.trim() !== '') {
+                    hasTeamEntries = true;
+                    
+                    if (memberInput.value.trim() === '' || mapInput.value.trim() === '') {
+                        if (memberInput.value.trim() === '') {
+                            memberInput.classList.add('required-field');
+                        }
+                        if (mapInput.value.trim() === '') {
+                            mapInput.classList.add('required-field');
+                        }
+                        document.getElementById('error-team-members').style.display = 'inline';
+                        allValid = false;
+                    } else {
+                        memberInput.classList.remove('required-field');
+                        mapInput.classList.remove('required-field');
+                    }
+                }
+            }
+            
+            if (hasTeamEntries) {
+                document.getElementById('error-team-members').style.display = 'none';
+            } else {
+                allValid = false;
+                document.getElementById('error-team-members').style.display = 'inline';
+                document.getElementById('error-team-members').textContent = 'Please enter at least one team member and coaching map';
+            }
+            
+            return allValid;
+        }
+
         function saveAnswer(id) {
             const element = document.getElementById(id);
-            const answer = element.hasAttribute('contenteditable') ? element.innerHTML : element.value;
+            const answer = element.innerHTML.trim();
             const errorElement = document.getElementById(`error${id.split('-').pop()}`);
+            const savedMsg = document.getElementById(`saved${id.split('-').pop()}`);
             
-            if (answer.trim() === '') {
+            if (answer === '') {
                 element.classList.add('required-field');
                 errorElement.style.display = 'inline';
+                savedMsg.style.display = 'none';
                 return;
             }
             
-            localStorage.setItem(id, answer);
+            localStorage.setItem(id, element.innerHTML);
             element.classList.remove('required-field');
             errorElement.style.display = 'none';
-            
-            const savedMsg = document.getElementById(`saved${id.split('-').pop()}`);
-            if (savedMsg) {
-                savedMsg.style.display = 'inline';
-                setTimeout(() => savedMsg.style.display = 'none', 2000);
-            }
+            savedMsg.style.display = 'inline';
+            setTimeout(() => savedMsg.style.display = 'none', 2000);
         }
         
         function saveAllTeamMembers() {
@@ -819,12 +834,14 @@
             if (!hasEntries) {
                 document.getElementById('error-team-members').style.display = 'inline';
                 document.getElementById('error-team-members').textContent = 'Please enter at least one team member and coaching map';
+                document.getElementById('saved-team-members').style.display = 'none';
                 return;
             }
             
             if (!allValid) {
                 document.getElementById('error-team-members').style.display = 'inline';
                 document.getElementById('error-team-members').textContent = 'Please complete all team member entries with both name and coaching map';
+                document.getElementById('saved-team-members').style.display = 'none';
                 return;
             }
             
@@ -842,9 +859,8 @@
             }
             
             document.getElementById('error-team-members').style.display = 'none';
-            const savedMsg = document.getElementById('saved-team-members');
-            savedMsg.style.display = 'inline';
-            setTimeout(() => savedMsg.style.display = 'none', 2000);
+            document.getElementById('saved-team-members').style.display = 'inline';
+            setTimeout(() => document.getElementById('saved-team-members').style.display = 'none', 2000);
         }
     </script>
 </body>
