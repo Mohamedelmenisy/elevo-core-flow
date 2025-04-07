@@ -222,10 +222,84 @@
             cursor: pointer;
             margin-left: 10px;
         }
+        .auth-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.7);
+            z-index: 1001;
+            justify-content: center;
+            align-items: center;
+        }
+        .auth-content {
+            background-color: white;
+            padding: 30px;
+            border-radius: 8px;
+            max-width: 400px;
+            width: 90%;
+        }
+        .auth-input {
+            width: 100%;
+            padding: 12px;
+            margin: 8px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .auth-button {
+            width: 100%;
+            padding: 12px;
+            margin-top: 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .login-button {
+            background-color: #2c3e50;
+            color: white;
+        }
+        .signup-button {
+            background-color: #27ae60;
+            color: white;
+        }
+        .auth-error {
+            color: #e74c3c;
+            margin-top: 10px;
+            text-align: center;
+            display: none;
+        }
+        .auth-switch {
+            text-align: center;
+            margin-top: 15px;
+        }
     </style>
     <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
+    <!-- Authentication Modal -->
+    <div class="auth-modal" id="authModal">
+        <div class="auth-content">
+            <h2 id="authTitle">Login</h2>
+            <form id="authForm">
+                <div id="nameField" style="display: none;">
+                    <input type="text" id="authName" class="auth-input" placeholder="Full Name">
+                </div>
+                <input type="email" id="authEmail" class="auth-input" placeholder="Email" required>
+                <input type="password" id="authPassword" class="auth-input" placeholder="Password" required>
+                <p id="authError" class="auth-error">Invalid credentials</p>
+                <button type="submit" id="authSubmit" class="auth-button login-button">Login</button>
+            </form>
+            <div class="auth-switch">
+                <span id="authSwitchText">Don't have an account?</span>
+                <a href="#" id="authSwitchLink">Sign up</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
     <div class="user-info">
         Welcome, <span id="displayUserEmail"></span>
         <span class="logout-btn" onclick="logout()">Logout</span>
@@ -350,20 +424,15 @@
             localStorage.setItem('userAnswers', JSON.stringify({}));
         }
 
-        document.addEventListener('DOMContentLoaded', function() {
-            const userEmail = localStorage.getItem('userEmail');
-            if (!userEmail) {
-                alert('Please login to access this page.');
-                window.location.href = 'login.html';
-                return;
-            }
+        // Initialize users object if it doesn't exist
+        if (!localStorage.getItem('users')) {
+            localStorage.setItem('users', JSON.stringify([]));
+        }
 
-            // Display user email
-            document.getElementById('displayUserEmail').textContent = userEmail;
-            
-            // Load user's answers
-            loadUserAnswers(userEmail);
-            
+        document.addEventListener('DOMContentLoaded', function() {
+            // Check authentication status
+            checkAuthStatus();
+
             // Set up event listeners
             document.getElementById('next-button').addEventListener('click', function(e) {
                 e.preventDefault();
@@ -377,7 +446,113 @@
             document.getElementById('goBackButton').addEventListener('click', function() {
                 document.getElementById('warningModal').style.display = 'none';
             });
+
+            // Auth modal event listeners
+            document.getElementById('authSwitchLink').addEventListener('click', function(e) {
+                e.preventDefault();
+                toggleAuthMode();
+            });
+
+            document.getElementById('authForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                handleAuthSubmit();
+            });
         });
+
+        function checkAuthStatus() {
+            const userEmail = localStorage.getItem('userEmail');
+            if (!userEmail) {
+                showAuthModal();
+                return;
+            }
+
+            // Display user email
+            document.getElementById('displayUserEmail').textContent = userEmail;
+            
+            // Load user's answers
+            loadUserAnswers(userEmail);
+        }
+
+        function showAuthModal() {
+            document.getElementById('authModal').style.display = 'flex';
+            document.body.style.overflow = 'hidden'; // Prevent scrolling
+        }
+
+        function hideAuthModal() {
+            document.getElementById('authModal').style.display = 'none';
+            document.body.style.overflow = ''; // Restore scrolling
+        }
+
+        function toggleAuthMode() {
+            const isLogin = document.getElementById('authTitle').textContent === 'Login';
+            document.getElementById('authTitle').textContent = isLogin ? 'Sign Up' : 'Login';
+            document.getElementById('authSubmit').textContent = isLogin ? 'Sign Up' : 'Login';
+            document.getElementById('authSwitchText').textContent = isLogin ? 'Already have an account?' : 'Don\'t have an account?';
+            document.getElementById('authSwitchLink').textContent = isLogin ? 'Login' : 'Sign up';
+            document.getElementById('nameField').style.display = isLogin ? 'block' : 'none';
+        }
+
+        function handleAuthSubmit() {
+            const isLogin = document.getElementById('authTitle').textContent === 'Login';
+            const name = document.getElementById('authName').value;
+            const email = document.getElementById('authEmail').value.trim();
+            const password = document.getElementById('authPassword').value.trim();
+            const errorElement = document.getElementById('authError');
+
+            // Reset error
+            errorElement.style.display = 'none';
+
+            // Validate inputs
+            if (!email || !password || (!isLogin && !name)) {
+                errorElement.textContent = 'Please fill in all fields';
+                errorElement.style.display = 'block';
+                return;
+            }
+
+            if (isLogin) {
+                // Login logic
+                const users = JSON.parse(localStorage.getItem('users'));
+                const user = users.find(u => u.email === email && u.password === password);
+                
+                if (user) {
+                    // Successful login
+                    localStorage.setItem('userEmail', email);
+                    hideAuthModal();
+                    checkAuthStatus();
+                } else {
+                    errorElement.textContent = 'Invalid email or password';
+                    errorElement.style.display = 'block';
+                }
+            } else {
+                // Signup logic
+                const users = JSON.parse(localStorage.getItem('users'));
+                
+                // Check if email already exists
+                if (users.some(u => u.email === email)) {
+                    errorElement.textContent = 'Email already registered';
+                    errorElement.style.display = 'block';
+                    return;
+                }
+                
+                // Create new user
+                const newUser = {
+                    name,
+                    email,
+                    password,
+                    createdAt: new Date().toISOString()
+                };
+                
+                // Add to users array
+                users.push(newUser);
+                
+                // Save to localStorage
+                localStorage.setItem('users', JSON.stringify(users));
+                localStorage.setItem('userEmail', email);
+                
+                hideAuthModal();
+                checkAuthStatus();
+            }
+        }
 
         function loadUserAnswers(userEmail) {
             const allAnswers = JSON.parse(localStorage.getItem('userAnswers'));
@@ -392,8 +567,7 @@
         function saveAnswer(textareaId, confirmationId, errorId) {
             const userEmail = localStorage.getItem('userEmail');
             if (!userEmail) {
-                alert('Session expired. Please login again.');
-                window.location.href = 'login.html';
+                showAuthModal();
                 return;
             }
 
@@ -437,8 +611,7 @@
         function deleteAnswer(textareaId, confirmationId, errorId) {
             const userEmail = localStorage.getItem('userEmail');
             if (!userEmail) {
-                alert('Session expired. Please login again.');
-                window.location.href = 'login.html';
+                showAuthModal();
                 return;
             }
 
@@ -490,7 +663,7 @@
 
         function logout() {
             localStorage.removeItem('userEmail');
-            window.location.href = 'login.html';
+            window.location.href = 'index.html';
         }
     </script>
 </body>
