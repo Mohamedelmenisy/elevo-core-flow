@@ -126,6 +126,16 @@
             cursor: pointer;
             margin-top: 8px;
         }
+        .delete-button {
+            background-color: #e74c3c;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-top: 8px;
+            margin-left: 8px;
+        }
         .save-confirmation {
             color: #27ae60;
             font-size: 12px;
@@ -137,6 +147,11 @@
             font-size: 12px;
             margin-left: 8px;
             display: none;
+        }
+        .button-group {
+            display: flex;
+            align-items: center;
+            margin-top: 8px;
         }
         table {
             width: 100%;
@@ -188,6 +203,12 @@
         .go-back-button {
             background-color: #3498db;
             color: white;
+        }
+        .footer {
+            text-align: center;
+            padding: 20px;
+            color: #777;
+            font-size: 14px;
         }
     </style>
     <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
@@ -257,8 +278,9 @@
         <div class="question-box">
             <h3>What makes a great coach? Write down your ideas, below.</h3>
             <textarea placeholder="Type your thoughts here..." class="coaching-answer" id="answer1"></textarea>
-            <div>
+            <div class="button-group">
                 <button class="save-button" onclick="saveAnswer('answer1', 'confirmation1', 'error1')">Save Answer</button>
+                <button class="delete-button" onclick="deleteAnswer('answer1', 'confirmation1', 'error1')">Delete Answer</button>
                 <span class="save-confirmation" id="confirmation1">Answer saved!</span>
                 <span class="error-message" id="error1">Please enter an answer before saving.</span>
             </div>
@@ -267,8 +289,9 @@
         <div class="question-box">
             <h3>Which of these skills do you already have?</h3>
             <textarea placeholder="List the skills you already possess..." class="coaching-answer" id="answer2"></textarea>
-            <div>
+            <div class="button-group">
                 <button class="save-button" onclick="saveAnswer('answer2', 'confirmation2', 'error2')">Save Answer</button>
+                <button class="delete-button" onclick="deleteAnswer('answer2', 'confirmation2', 'error2')">Delete Answer</button>
                 <span class="save-confirmation" id="confirmation2">Answer saved!</span>
                 <span class="error-message" id="error2">Please enter an answer before saving.</span>
             </div>
@@ -277,8 +300,9 @@
         <div class="question-box">
             <h3>Which of these skills do you need to develop?</h3>
             <textarea placeholder="List the skills you want to develop..." class="coaching-answer" id="answer3"></textarea>
-            <div>
+            <div class="button-group">
                 <button class="save-button" onclick="saveAnswer('answer3', 'confirmation3', 'error3')">Save Answer</button>
+                <button class="delete-button" onclick="deleteAnswer('answer3', 'confirmation3', 'error3')">Delete Answer</button>
                 <span class="save-confirmation" id="confirmation3">Answer saved!</span>
                 <span class="error-message" id="error3">Please enter an answer before saving.</span>
             </div>
@@ -305,7 +329,14 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            loadAllAnswers();
+            // Load answers only for the logged in user
+            const userEmail = localStorage.getItem('userEmail');
+            if (userEmail) {
+                loadUserAnswers(userEmail);
+            } else {
+                alert('Please login to access your saved answers.');
+                window.location.href = 'login.html';
+            }
             
             // Set up next button click handler
             document.getElementById('next-button').addEventListener('click', function(e) {
@@ -323,18 +354,22 @@
             });
         });
 
-        function loadAllAnswers() {
-            const answer1 = localStorage.getItem('coaching_answer_1');
-            if (answer1) document.getElementById('answer1').value = answer1;
+        function loadUserAnswers(userEmail) {
+            const answers = JSON.parse(localStorage.getItem('userAnswers') || '{}');
+            const userAnswers = answers[userEmail] || {};
             
-            const answer2 = localStorage.getItem('coaching_answer_2');
-            if (answer2) document.getElementById('answer2').value = answer2;
-            
-            const answer3 = localStorage.getItem('coaching_answer_3');
-            if (answer3) document.getElementById('answer3').value = answer3;
+            if (userAnswers.answer1) document.getElementById('answer1').value = userAnswers.answer1;
+            if (userAnswers.answer2) document.getElementById('answer2').value = userAnswers.answer2;
+            if (userAnswers.answer3) document.getElementById('answer3').value = userAnswers.answer3;
         }
 
         function saveAnswer(textareaId, confirmationId, errorId) {
+            const userEmail = localStorage.getItem('userEmail');
+            if (!userEmail) {
+                alert('Please login to save your answers.');
+                return;
+            }
+
             const textarea = document.getElementById(textareaId);
             const answer = textarea.value.trim();
             
@@ -348,24 +383,59 @@
                 return;
             }
             
-            let questionNumber;
-            switch(textareaId) {
-                case 'answer1': questionNumber = 1; break;
-                case 'answer2': questionNumber = 2; break;
-                case 'answer3': questionNumber = 3; break;
-                default: questionNumber = 0;
-            }
+            // Save answers linked to user's email
+            const answers = JSON.parse(localStorage.getItem('userAnswers') || '{}');
+            const userAnswers = answers[userEmail] || {};
             
-            localStorage.setItem(`coaching_answer_${questionNumber}`, answer);
+            userAnswers[textareaId] = answer;
+            answers[userEmail] = userAnswers;
+            localStorage.setItem('userAnswers', JSON.stringify(answers));
             
+            // Show confirmation
             const confirmation = document.getElementById(confirmationId);
             confirmation.style.display = 'inline';
+            confirmation.textContent = 'Answer saved!';
             
+            // Hide confirmation after 3 seconds
             setTimeout(() => {
                 confirmation.style.display = 'none';
             }, 3000);
         }
         
+        function deleteAnswer(textareaId, confirmationId, errorId) {
+            const userEmail = localStorage.getItem('userEmail');
+            if (!userEmail) {
+                alert('Please login to manage your answers.');
+                return;
+            }
+
+            // Clear the textarea
+            document.getElementById(textareaId).value = '';
+            
+            // Hide any messages
+            document.getElementById(confirmationId).style.display = 'none';
+            document.getElementById(errorId).style.display = 'none';
+            
+            // Remove from localStorage
+            const answers = JSON.parse(localStorage.getItem('userAnswers') || '{}');
+            const userAnswers = answers[userEmail] || {};
+            
+            delete userAnswers[textareaId];
+            answers[userEmail] = userAnswers;
+            localStorage.setItem('userAnswers', JSON.stringify(answers));
+            
+            // Show delete confirmation
+            const confirmation = document.getElementById(confirmationId);
+            confirmation.textContent = 'Answer deleted!';
+            confirmation.style.display = 'inline';
+            
+            // Reset after 3 seconds
+            setTimeout(() => {
+                confirmation.style.display = 'none';
+                confirmation.textContent = 'Answer saved!';
+            }, 3000);
+        }
+
         function checkAnswersBeforeProceeding() {
             const answer1 = document.getElementById('answer1').value.trim();
             const answer2 = document.getElementById('answer2').value.trim();
