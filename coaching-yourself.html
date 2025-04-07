@@ -16,6 +16,7 @@
             --success-color: #27ae60;
             --error-color: #e74c3c;
             --border-color: #e0e0e0;
+            --warning-color: #f39c12;
         }
 
         * {
@@ -357,7 +358,7 @@
 
         .warning-message {
             background-color: #fdebd0;
-            border-left: 4px solid #f39c12;
+            border-left: 4px solid var(--warning-color);
             padding: 1.2rem;
             margin: 1.5rem 0;
             color: var(--text-color);
@@ -520,6 +521,44 @@
             margin-bottom: 20px;
         }
 
+        .validation-warning {
+            color: var(--error-color);
+            background-color: #fde8e8;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+            border-left: 4px solid var(--error-color);
+            display: none;
+        }
+
+        .validation-warning.show {
+            display: block;
+        }
+
+        .lock-message {
+            position: absolute;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--error-color);
+            color: white;
+            padding: 8px 15px;
+            border-radius: 4px;
+            font-size: 14px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            z-index: 1;
+            width: max-content;
+            max-width: 90%;
+            text-align: center;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: translateX(-50%) scale(1); }
+            50% { transform: translateX(-50%) scale(1.05); }
+            100% { transform: translateX(-50%) scale(1); }
+        }
+
         @keyframes modalFadeIn {
             from { opacity: 0; transform: translateY(-20px); }
             to { opacity: 1; transform: translateY(0); }
@@ -644,6 +683,11 @@
             <div id="signupForm" style="display: none;">
                 <h2>Sign Up</h2>
                 <div class="form-group">
+                    <label for="signupName">Full Name</label>
+                    <input type="text" id="signupName" required>
+                    <div class="form-error" id="signupNameError"></div>
+                </div>
+                <div class="form-group">
                     <label for="signupEmail">Email</label>
                     <input type="email" id="signupEmail" required>
                     <div class="form-error" id="signupEmailError"></div>
@@ -676,6 +720,11 @@
             <p>Your self-coaching session has been saved successfully.</p>
             <button class="button" id="closeSuccessModal" style="margin-top: 20px;">Continue</button>
         </div>
+    </div>
+
+    <div class="validation-warning" id="validationWarning">
+        <strong>Please complete all required questions before proceeding.</strong> 
+        <p>There are unanswered questions highlighted in red. Please provide responses to continue.</p>
     </div>
 
     <div class="warning-message" id="warningMessage">
@@ -962,27 +1011,78 @@
     </div>
 
     <script>
-        // Authentication and User Management
-        let currentUser = null;
-        
+        // Initialize users and userAnswers if they don't exist
+        if (!localStorage.getItem('users')) {
+            localStorage.setItem('users', JSON.stringify([]));
+        }
+        if (!localStorage.getItem('userAnswers')) {
+            localStorage.setItem('userAnswers', JSON.stringify({}));
+        }
+
         document.addEventListener('DOMContentLoaded', function() {
-            // Check if user is logged in
+            // Check authentication status
             checkAuthStatus();
             
+            // Set up auth modal event listeners
+            document.getElementById('switchToSignup').addEventListener('click', function(e) {
+                e.preventDefault();
+                document.getElementById('loginForm').style.display = 'none';
+                document.getElementById('signupForm').style.display = 'block';
+                clearAuthErrors();
+            });
+
+            document.getElementById('switchToLogin').addEventListener('click', function(e) {
+                e.preventDefault();
+                document.getElementById('signupForm').style.display = 'none';
+                document.getElementById('loginForm').style.display = 'block';
+                clearAuthErrors();
+            });
+
+            document.getElementById('loginSubmit').addEventListener('click', function(e) {
+                e.preventDefault();
+                loginUser();
+            });
+
+            document.getElementById('signupSubmit').addEventListener('click', function(e) {
+                e.preventDefault();
+                signupUser();
+            });
+
+            document.getElementById('closeModal').addEventListener('click', function() {
+                document.getElementById('authModal').style.display = 'none';
+                clearAuthErrors();
+            });
+
+            document.getElementById('authButton').addEventListener('click', function() {
+                if (currentUser) {
+                    logout();
+                } else {
+                    document.getElementById('authModal').style.display = 'block';
+                }
+            });
+
+            // Close modal when clicking outside
+            window.addEventListener('click', function(event) {
+                if (event.target === document.getElementById('authModal')) {
+                    document.getElementById('authModal').style.display = 'none';
+                    clearAuthErrors();
+                }
+            });
+
             // Load saved answers for current user
             loadUserAnswers();
-            
-            // Set up authentication modal
-            setupAuthModal();
             
             // Navigation buttons
             document.getElementById('backButton').addEventListener('click', function() {
                 window.location.href = 'coaching-team.html';
             });
 
-            document.getElementById('nextButton').addEventListener('click', function() {
-                if (validateBeforeProceeding()) {
-                    showSuccessModal();
+            document.getElementById('nextButton').addEventListener('click', function(e) {
+                if (!validateBeforeProceeding(e)) {
+                    e.preventDefault();
+                } else if (checkAllAnswersCompleted()) {
+                    document.getElementById('successModal').style.display = 'flex';
+                    e.preventDefault();
                 }
             });
             
@@ -992,89 +1092,32 @@
                 window.location.href = 'coaching-action-plan.html';
             });
         });
-        
+
+        let currentUser = null;
+
         function checkAuthStatus() {
-            const authToken = localStorage.getItem('authToken');
-            if (authToken) {
-                try {
-                    const userData = JSON.parse(localStorage.getItem('userData'));
-                    if (userData && userData.email) {
-                        currentUser = userData.email;
-                        updateAuthUI(true);
-                    }
-                } catch (e) {
-                    console.error('Error parsing user data:', e);
-                    logout();
-                }
+            const userEmail = localStorage.getItem('userEmail');
+            if (userEmail) {
+                currentUser = userEmail;
+                updateAuthUI(true);
             } else {
                 updateAuthUI(false);
             }
         }
-        
+
         function updateAuthUI(isLoggedIn) {
             const authButton = document.getElementById('authButton');
             const userInfo = document.getElementById('userInfo');
             
             if (isLoggedIn) {
                 authButton.textContent = 'Logout';
-                userInfo.textContent = `Logged in as: ${currentUser}`;
+                userInfo.textContent = `Welcome, ${currentUser}`;
             } else {
                 authButton.textContent = 'Login';
                 userInfo.textContent = '';
             }
         }
-        
-        function setupAuthModal() {
-            const modal = document.getElementById('authModal');
-            const authButton = document.getElementById('authButton');
-            const closeModal = document.getElementById('closeModal');
-            const switchToSignup = document.getElementById('switchToSignup');
-            const switchToLogin = document.getElementById('switchToLogin');
-            const loginSubmit = document.getElementById('loginSubmit');
-            const signupSubmit = document.getElementById('signupSubmit');
-            
-            authButton.addEventListener('click', function() {
-                if (currentUser) {
-                    logout();
-                } else {
-                    modal.style.display = 'block';
-                }
-            });
-            
-            closeModal.addEventListener('click', function() {
-                modal.style.display = 'none';
-                clearAuthErrors();
-            });
-            
-            switchToSignup.addEventListener('click', function() {
-                document.getElementById('loginForm').style.display = 'none';
-                document.getElementById('signupForm').style.display = 'block';
-                clearAuthErrors();
-            });
-            
-            switchToLogin.addEventListener('click', function() {
-                document.getElementById('signupForm').style.display = 'none';
-                document.getElementById('loginForm').style.display = 'block';
-                clearAuthErrors();
-            });
-            
-            loginSubmit.addEventListener('click', function() {
-                loginUser();
-            });
-            
-            signupSubmit.addEventListener('click', function() {
-                signupUser();
-            });
-            
-            // Close modal when clicking outside
-            window.addEventListener('click', function(event) {
-                if (event.target === modal) {
-                    modal.style.display = 'none';
-                    clearAuthErrors();
-                }
-            });
-        }
-        
+
         function clearAuthErrors() {
             const errorElements = document.querySelectorAll('.form-error');
             errorElements.forEach(el => {
@@ -1082,7 +1125,12 @@
                 el.textContent = '';
             });
         }
-        
+
+        function validateEmail(email) {
+            const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            return re.test(email);
+        }
+
         function loginUser() {
             const email = document.getElementById('loginEmail').value.trim();
             const password = document.getElementById('loginPassword').value.trim();
@@ -1126,19 +1174,25 @@
             
             // Login successful
             currentUser = email;
-            localStorage.setItem('authToken', generateAuthToken());
-            localStorage.setItem('userData', JSON.stringify({ email: email }));
-            
+            localStorage.setItem('userEmail', email);
             document.getElementById('authModal').style.display = 'none';
             updateAuthUI(true);
             loadUserAnswers();
         }
-        
+
         function signupUser() {
+            const name = document.getElementById('signupName').value.trim();
             const email = document.getElementById('signupEmail').value.trim();
             const password = document.getElementById('signupPassword').value.trim();
             const confirmPassword = document.getElementById('signupConfirmPassword').value.trim();
             let isValid = true;
+            
+            // Validate name
+            if (!name) {
+                document.getElementById('signupNameError').textContent = 'Name is required';
+                document.getElementById('signupNameError').style.display = 'block';
+                isValid = false;
+            }
             
             // Validate email
             if (!email) {
@@ -1180,117 +1234,45 @@
             }
             
             // Create new user
-            users.push({ email, password });
+            users.push({ name, email, password });
             localStorage.setItem('users', JSON.stringify(users));
             
             // Login the new user
             currentUser = email;
-            localStorage.setItem('authToken', generateAuthToken());
-            localStorage.setItem('userData', JSON.stringify({ email: email }));
-            
+            localStorage.setItem('userEmail', email);
             document.getElementById('authModal').style.display = 'none';
             updateAuthUI(true);
+            loadUserAnswers();
         }
-        
+
         function logout() {
             currentUser = null;
-            localStorage.removeItem('authToken');
-            localStorage.removeItem('userData');
+            localStorage.removeItem('userEmail');
             updateAuthUI(false);
+            window.location.href = 'index.html';
         }
-        
-        function generateAuthToken() {
-            return 'token-' + Math.random().toString(36).substr(2) + Date.now().toString(36);
-        }
-        
-        function validateEmail(email) {
-            const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-            return re.test(email);
-        }
-        
-        // User Data Management
-        function getUserDataKey() {
-            if (!currentUser) return null;
-            return `userAnswers_${currentUser}`;
-        }
-        
+
         function loadUserAnswers() {
             if (!currentUser) return;
+
+            const allAnswers = JSON.parse(localStorage.getItem('userAnswers'));
+            const userAnswers = allAnswers[currentUser] || {};
             
-            const userDataKey = getUserDataKey();
-            if (!userDataKey) return;
-            
-            const savedData = localStorage.getItem(userDataKey);
-            if (savedData) {
-                try {
-                    const answers = JSON.parse(savedData);
-                    
-                    // Load answers for all fields
-                    for (const [id, value] of Object.entries(answers)) {
-                        const field = document.getElementById(id);
-                        if (field) {
-                            field.value = value;
-                        }
-                    }
-                } catch (e) {
-                    console.error('Error loading user answers:', e);
+            // Load answers into fields
+            const inputs = document.querySelectorAll('input, textarea, select');
+            inputs.forEach(input => {
+                if (userAnswers[input.id]) {
+                    input.value = userAnswers[input.id];
                 }
-            }
+            });
         }
-        
-        function saveUserAnswer(id, value) {
-            if (!currentUser) {
-                alert('Please login to save your answers');
-                document.getElementById('authModal').style.display = 'block';
-                return false;
-            }
-            
-            const userDataKey = getUserDataKey();
-            if (!userDataKey) return false;
-            
-            let answers = {};
-            const savedData = localStorage.getItem(userDataKey);
-            
-            if (savedData) {
-                try {
-                    answers = JSON.parse(savedData);
-                } catch (e) {
-                    console.error('Error parsing saved answers:', e);
-                }
-            }
-            
-            answers[id] = value;
-            localStorage.setItem(userDataKey, JSON.stringify(answers));
-            return true;
-        }
-        
-        function deleteUserAnswer(id) {
-            if (!currentUser) return false;
-            
-            const userDataKey = getUserDataKey();
-            if (!userDataKey) return false;
-            
-            const savedData = localStorage.getItem(userDataKey);
-            if (!savedData) return false;
-            
-            try {
-                let answers = JSON.parse(savedData);
-                delete answers[id];
-                localStorage.setItem(userDataKey, JSON.stringify(answers));
-                return true;
-            } catch (e) {
-                console.error('Error deleting answer:', e);
-                return false;
-            }
-        }
-        
+
         function saveTableData(tableType) {
             if (!currentUser) {
-                alert('Please login to save your answers');
-                document.getElementById('authModal').style.display = 'block';
+                showAuthModal();
                 return false;
             }
-            
+
             let ids = [];
             let requiredFields = [];
             let hasEmptyFields = false;
@@ -1341,33 +1323,32 @@
             }
             
             // Save all fields if validation passes
-            const userDataKey = getUserDataKey();
-            let answers = {};
-            const savedData = localStorage.getItem(userDataKey);
-            
-            if (savedData) {
-                try {
-                    answers = JSON.parse(savedData);
-                } catch (e) {
-                    console.error('Error parsing saved answers:', e);
-                }
-            }
+            const allAnswers = JSON.parse(localStorage.getItem('userAnswers'));
+            const userAnswers = allAnswers[currentUser] || {};
             
             ids.forEach(id => {
                 const field = document.getElementById(id);
                 if (field) {
-                    answers[id] = field.value;
+                    userAnswers[id] = field.value;
                     field.classList.remove('required-field');
                 }
             });
             
-            localStorage.setItem(userDataKey, JSON.stringify(answers));
+            allAnswers[currentUser] = userAnswers;
+            localStorage.setItem('userAnswers', JSON.stringify(allAnswers));
+            
+            // Show save confirmation
+            const savedMsg = document.getElementById('saved-' + tableType.split('-').join(''));
+            savedMsg.style.display = 'inline';
+            savedMsg.textContent = '✓ Saved';
+            setTimeout(() => savedMsg.style.display = 'none', 2000);
+            
             return true;
         }
-        
+
         function deleteTableData(tableType) {
             if (!currentUser) return false;
-            
+
             let ids = [];
             
             switch(tableType) {
@@ -1382,33 +1363,31 @@
                     break;
             }
             
-            const userDataKey = getUserDataKey();
-            let answers = {};
-            const savedData = localStorage.getItem(userDataKey);
-            
-            if (savedData) {
-                try {
-                    answers = JSON.parse(savedData);
-                } catch (e) {
-                    console.error('Error parsing saved answers:', e);
-                }
-            }
+            const allAnswers = JSON.parse(localStorage.getItem('userAnswers'));
+            const userAnswers = allAnswers[currentUser] || {};
             
             // Delete all fields associated with the table
             ids.forEach(id => {
                 const field = document.getElementById(id);
                 if (field) {
                     field.value = '';
-                    delete answers[id];
+                    delete userAnswers[id];
                     field.classList.remove('required-field');
                 }
             });
             
-            localStorage.setItem(userDataKey, JSON.stringify(answers));
+            allAnswers[currentUser] = userAnswers;
+            localStorage.setItem('userAnswers', JSON.stringify(allAnswers));
+            
+            // Show delete confirmation
+            const savedMsg = document.getElementById('saved-' + tableType.split('-').join(''));
+            savedMsg.style.display = 'inline';
+            savedMsg.textContent = '✓ Deleted';
+            setTimeout(() => savedMsg.style.display = 'none', 2000);
+            
             return true;
         }
-        
-        // Answer Management Functions
+
         function saveAnswer(id) {
             const answer = document.getElementById(id).value.trim();
             const warningElement = document.getElementById('empty-' + id.split('-').join(''));
@@ -1433,6 +1412,22 @@
             return false;
         }
 
+        function saveUserAnswer(id, value) {
+            if (!currentUser) {
+                showAuthModal();
+                return false;
+            }
+            
+            const allAnswers = JSON.parse(localStorage.getItem('userAnswers'));
+            const userAnswers = allAnswers[currentUser] || {};
+            
+            userAnswers[id] = value;
+            allAnswers[currentUser] = userAnswers;
+            
+            localStorage.setItem('userAnswers', JSON.stringify(allAnswers));
+            return true;
+        }
+
         function deleteAnswer(id) {
             const field = document.getElementById(id);
             if (field) {
@@ -1445,8 +1440,26 @@
             return false;
         }
 
-        function validateBeforeProceeding() {
-            // Get all required fields
+        function deleteUserAnswer(id) {
+            if (!currentUser) return false;
+            
+            const allAnswers = JSON.parse(localStorage.getItem('userAnswers'));
+            const userAnswers = allAnswers[currentUser] || {};
+            
+            delete userAnswers[id];
+            allAnswers[currentUser] = userAnswers;
+            
+            localStorage.setItem('userAnswers', JSON.stringify(allAnswers));
+            return true;
+        }
+
+        function validateBeforeProceeding(e) {
+            if (!currentUser) {
+                showAuthModal();
+                e.preventDefault();
+                return false;
+            }
+
             const requiredFields = document.querySelectorAll('.required-answer');
             let firstEmptyField = null;
             let hasEmptyFields = false;
@@ -1467,13 +1480,13 @@
             });
 
             if (hasEmptyFields) {
-                // Show warning message
-                const warningMessage = document.getElementById('warningMessage');
-                warningMessage.style.display = 'block';
+                // Show validation warning
+                const warning = document.getElementById('validationWarning');
+                warning.classList.add('show');
                 
                 // Hide warning after 5 seconds
                 setTimeout(() => {
-                    warningMessage.style.display = 'none';
+                    warning.classList.remove('show');
                 }, 5000);
                 
                 // Scroll to first empty field
@@ -1489,9 +1502,22 @@
             }
             return true;
         }
-        
-        function showSuccessModal() {
-            document.getElementById('successModal').style.display = 'block';
+
+        function checkAllAnswersCompleted() {
+            const requiredFields = document.querySelectorAll('.required-answer');
+            let allAnswered = true;
+            
+            requiredFields.forEach(field => {
+                if (field.value.trim() === '') {
+                    allAnswered = false;
+                }
+            });
+            
+            return allAnswered;
+        }
+
+        function showAuthModal() {
+            document.getElementById('authModal').style.display = 'block';
         }
 
         function showMessage(elementId, message, duration) {
