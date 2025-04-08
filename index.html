@@ -78,6 +78,12 @@
             border-radius: 5px;
             font-weight: bold;
             transition: all 0.3s;
+            pointer-events: none;
+            opacity: 0.7;
+        }
+        .article-link.unlocked {
+            pointer-events: auto;
+            opacity: 1;
         }
         .article-link:hover {
             background-color: #2980b9;
@@ -224,6 +230,36 @@
             text-align: center;
             margin-top: 15px;
         }
+        .access-denied-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.7);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+        .access-denied-content {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            max-width: 400px;
+            text-align: center;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
+        .access-denied-button {
+            background-color: #e74c3c;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 20px;
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
@@ -244,6 +280,15 @@
                 <span id="authSwitchText">Don't have an account?</span>
                 <a href="#" id="authSwitchLink">Sign up</a>
             </div>
+        </div>
+    </div>
+
+    <!-- Access Denied Modal -->
+    <div class="access-denied-modal" id="accessDeniedModal">
+        <div class="access-denied-content">
+            <h3>Access Denied</h3>
+            <p>Please answer the question below to unlock this article.</p>
+            <button class="access-denied-button" onclick="document.getElementById('accessDeniedModal').style.display = 'none'">OK</button>
         </div>
     </div>
 
@@ -358,8 +403,9 @@
             
             // Article link click handler
             document.getElementById('articleLink').addEventListener('click', function(e) {
-                if (this.style.pointerEvents === 'none') {
+                if (!this.classList.contains('unlocked')) {
                     e.preventDefault();
+                    document.getElementById('accessDeniedModal').style.display = 'flex';
                     document.getElementById('lockMessage').style.animation = 'none';
                     void document.getElementById('lockMessage').offsetWidth; // Trigger reflow
                     document.getElementById('lockMessage').style.animation = 'pulse 0.5s 3';
@@ -382,6 +428,14 @@
             
             // Load user's answers
             loadUserAnswers(userEmail);
+            
+            // Check if user has answered the question
+            const allAnswers = JSON.parse(localStorage.getItem('userAnswers'));
+            const userAnswers = allAnswers[userEmail] || {};
+            
+            if (userAnswers.answer) {
+                unlockArticle();
+            }
         }
 
         function showAuthModal() {
@@ -470,9 +524,8 @@
             const userAnswers = allAnswers[userEmail] || {};
             
             // Load answers into textareas
-            if (userAnswers.answer1) document.getElementById('answer1').value = userAnswers.answer1;
-            if (userAnswers.answer2) document.getElementById('answer2').value = userAnswers.answer2;
-            if (userAnswers.answer3) document.getElementById('answer3').value = userAnswers.answer3;
+            if (userAnswers.name) document.getElementById('name').value = userAnswers.name;
+            if (userAnswers.answer) document.getElementById('answer').value = userAnswers.answer;
         }
 
         function submitAnswer() {
@@ -512,14 +565,18 @@
             localStorage.setItem('userAnswers', JSON.stringify(allAnswers));
             
             // Unlock content
-            document.getElementById('lockMessage').style.display = 'none';
-            document.getElementById('articleLink').style.pointerEvents = 'auto';
-            document.getElementById('articleLink').style.opacity = '1';
+            unlockArticle();
             document.getElementById('successModal').style.display = 'flex';
+        }
+        
+        function unlockArticle() {
+            document.getElementById('lockMessage').style.display = 'none';
+            document.getElementById('articleLink').classList.add('unlocked');
         }
         
         function closeModal() {
             document.getElementById('successModal').style.display = 'none';
+            document.getElementById('accessDeniedModal').style.display = 'none';
         }
         
         function redirectToArticle() {
@@ -538,7 +595,7 @@
 
         function logout() {
             localStorage.removeItem('userEmail');
-            window.location.href = "index.html";
+            window.location.href = "index.html"; // أو الصفحة الرئيسية لتسجيل الدخول
         }
     </script>
 </body>
