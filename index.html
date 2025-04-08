@@ -78,6 +78,12 @@
             border-radius: 5px;
             font-weight: bold;
             transition: all 0.3s;
+            pointer-events: none;
+            opacity: 0.7;
+        }
+        .article-link.unlocked {
+            pointer-events: auto;
+            opacity: 1;
         }
         .article-link:hover {
             background-color: #2980b9;
@@ -171,59 +177,6 @@
             cursor: pointer;
             margin-left: 10px;
         }
-        .auth-modal {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0,0,0,0.7);
-            z-index: 1001;
-            justify-content: center;
-            align-items: center;
-        }
-        .auth-content {
-            background-color: white;
-            padding: 30px;
-            border-radius: 8px;
-            max-width: 400px;
-            width: 90%;
-        }
-        .auth-input {
-            width: 100%;
-            padding: 12px;
-            margin: 8px 0;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-        }
-        .auth-button {
-            width: 100%;
-            padding: 12px;
-            margin-top: 15px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-weight: bold;
-        }
-        .login-button {
-            background-color: #2c3e50;
-            color: white;
-        }
-        .signup-button {
-            background-color: #27ae60;
-            color: white;
-        }
-        .auth-error {
-            color: #e74c3c;
-            margin-top: 10px;
-            text-align: center;
-            display: none;
-        }
-        .auth-switch {
-            text-align: center;
-            margin-top: 15px;
-        }
         .access-denied-modal {
             display: none;
             position: fixed;
@@ -257,26 +210,6 @@
     </style>
 </head>
 <body>
-    <!-- Authentication Modal -->
-    <div class="auth-modal" id="authModal">
-        <div class="auth-content">
-            <h2 id="authTitle">Login</h2>
-            <form id="authForm">
-                <div id="nameField" style="display: none;">
-                    <input type="text" id="authName" class="auth-input" placeholder="Full Name">
-                </div>
-                <input type="email" id="authEmail" class="auth-input" placeholder="Email" required>
-                <input type="password" id="authPassword" class="auth-input" placeholder="Password" required>
-                <p id="authError" class="auth-error">Invalid credentials</p>
-                <button type="submit" id="authSubmit" class="auth-button login-button">Login</button>
-            </form>
-            <div class="auth-switch">
-                <span id="authSwitchText">Don't have an account?</span>
-                <a href="#" id="authSwitchLink">Sign up</a>
-            </div>
-        </div>
-    </div>
-
     <!-- Access Denied Modal -->
     <div class="access-denied-modal" id="accessDeniedModal">
         <div class="access-denied-content">
@@ -286,9 +219,9 @@
         </div>
     </div>
 
-    <!-- Main Content -->
+    <!-- User Info Section -->
     <div class="user-info">
-        Welcome, <span id="displayUserEmail"></span>
+        Welcome, <span id="displayUserName"></span>
         <span class="logout-btn" onclick="logout()">Logout</span>
     </div>
 
@@ -333,82 +266,108 @@
     </div>
     
     <script>
-        // Initialize userAnswers object if it doesn't exist
-        if (!localStorage.getItem('userAnswers')) {
-            localStorage.setItem('userAnswers', JSON.stringify({}));
+        // Store answers in localStorage
+        function storeAnswers(name, answer) {
+            localStorage.setItem('userName', name);
+            localStorage.setItem('userAnswer', answer);
+            localStorage.setItem('hasAnswered', 'true');
         }
-
-        // Initialize users object if it doesn't exist
-        if (!localStorage.getItem('users')) {
-            localStorage.setItem('users', JSON.stringify([]));
-        }
-
-        document.addEventListener('DOMContentLoaded', function() {
-            // Check authentication status
-            checkAuthStatus();
-
-            // Set up event listeners
-            document.getElementById('submitBtn').addEventListener('click', submitAnswer);
+        
+        // Submit answer function
+        function submitAnswer() {
+            let name = document.getElementById('name').value.trim();
+            let answer = document.getElementById('answer').value.trim();
+            let errorMessage = document.getElementById('error-message');
             
-            document.getElementById('next-button')?.addEventListener('click', function(e) {
-                e.preventDefault();
-                checkAnswersBeforeProceeding();
-            });
-            
-            document.getElementById('continueButton')?.addEventListener('click', function() {
-                window.location.href = "coaching-skills.html";
-            });
-            
-            document.getElementById('goBackButton')?.addEventListener('click', function() {
-                document.getElementById('warningModal').style.display = 'none';
-            });
-
-            // Auth modal event listeners
-            document.getElementById('authSwitchLink').addEventListener('click', function(e) {
-                e.preventDefault();
-                toggleAuthMode();
-            });
-
-            document.getElementById('authForm').addEventListener('submit', function(e) {
-                e.preventDefault();
-                handleAuthSubmit();
-            });
-
-            // Keyboard event listeners
-            document.getElementById('name')?.addEventListener('keypress', function(e) {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    document.getElementById('submitBtn').click();
-                }
-            });
-            
-            document.getElementById('answer')?.addEventListener('keypress', function(e) {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    document.getElementById('submitBtn').click();
-                }
-            });
-            
-            document.addEventListener('keydown', function(e) {
-                if (e.key === 'Escape') {
-                    closeModal();
-                }
-            });
-            
-            // Article link click handler
-            document.getElementById('articleLink').addEventListener('click', function(e) {
-                // Check if user has answered the question
-                const userEmail = localStorage.getItem('userEmail');
-                if (!userEmail) {
-                    e.preventDefault();
-                    showAuthModal();
-                    return;
-                }
-
-                const allAnswers = JSON.parse(localStorage.getItem('userAnswers'));
-                const userAnswers = allAnswers[userEmail] || {};
+            if (name && answer) {
+                // Store answers
+                storeAnswers(name, answer);
                 
-                if (!userAnswers.answer) {
+                // Unlock content
+                unlockArticle();
+                document.getElementById('successModal').style.display = 'flex';
+                
+                // Update displayed user name
+                document.getElementById('displayUserName').textContent = name;
+                
+                // Hide error message if shown
+                errorMessage.style.display = "none";
+            } else {
+                errorMessage.style.display = "block";
+            }
+        }
+        
+        // Unlock article function
+        function unlockArticle() {
+            document.getElementById('lockMessage').style.display = 'none';
+            document.getElementById('articleLink').classList.add('unlocked');
+        }
+        
+        // Close modal function
+        function closeModal() {
+            document.getElementById('successModal').style.display = 'none';
+            document.getElementById('accessDeniedModal').style.display = 'none';
+        }
+        
+        // Redirect to article
+        function redirectToArticle() {
+            window.location.href = "article1.html";
+        }
+        
+        // Logout function
+        function logout() {
+            // Clear user data
+            localStorage.removeItem('userName');
+            localStorage.removeItem('userAnswer');
+            localStorage.removeItem('hasAnswered');
+            
+            // Redirect to login page (replace with your actual login page URL)
+            window.location.replace("login.html");
+        }
+        
+        // Handle Enter key press
+        function handleKeyPress(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                document.getElementById('submitBtn').click();
+            }
+        }
+        
+        // Handle ESC key to close modal
+        function handleKeyDown(e) {
+            if (e.key === 'Escape') {
+                closeModal();
+            }
+        }
+        
+        // Initialize the page
+        function init() {
+            // Load saved data if exists
+            const userName = localStorage.getItem('userName');
+            const userAnswer = localStorage.getItem('userAnswer');
+            const hasAnswered = localStorage.getItem('hasAnswered');
+            
+            if (userName) {
+                document.getElementById('name').value = userName;
+                document.getElementById('displayUserName').textContent = userName;
+            }
+            
+            if (userAnswer) {
+                document.getElementById('answer').value = userAnswer;
+            }
+            
+            if (hasAnswered === 'true') {
+                unlockArticle();
+            }
+            
+            // Add keyboard event listeners
+            document.getElementById('name').addEventListener('keypress', handleKeyPress);
+            document.getElementById('answer').addEventListener('keypress', handleKeyPress);
+            document.addEventListener('keydown', handleKeyDown);
+            
+            // Add click event for the article link to show warning if clicked while locked
+            document.getElementById('articleLink').addEventListener('click', function(e) {
+                if (!this.classList.contains('unlocked')) {
                     e.preventDefault();
                     document.getElementById('accessDeniedModal').style.display = 'flex';
                     document.getElementById('lockMessage').style.animation = 'none';
@@ -419,191 +378,10 @@
                     }, 1500);
                 }
             });
-        });
-
-        function checkAuthStatus() {
-            const userEmail = localStorage.getItem('userEmail');
-            if (!userEmail) {
-                showAuthModal();
-                return;
-            }
-
-            // Display user email
-            document.getElementById('displayUserEmail').textContent = userEmail;
-            
-            // Load user's answers
-            loadUserAnswers(userEmail);
-            
-            // Check if user has answered the question
-            const allAnswers = JSON.parse(localStorage.getItem('userAnswers'));
-            const userAnswers = allAnswers[userEmail] || {};
-            
-            if (userAnswers.answer) {
-                unlockArticle();
-            }
-        }
-
-        function showAuthModal() {
-            document.getElementById('authModal').style.display = 'flex';
-            document.body.style.overflow = 'hidden'; // Prevent scrolling
-        }
-
-        function hideAuthModal() {
-            document.getElementById('authModal').style.display = 'none';
-            document.body.style.overflow = ''; // Restore scrolling
-        }
-
-        function toggleAuthMode() {
-            const isLogin = document.getElementById('authTitle').textContent === 'Login';
-            document.getElementById('authTitle').textContent = isLogin ? 'Sign Up' : 'Login';
-            document.getElementById('authSubmit').textContent = isLogin ? 'Sign Up' : 'Login';
-            document.getElementById('authSwitchText').textContent = isLogin ? 'Already have an account?' : 'Don\'t have an account?';
-            document.getElementById('authSwitchLink').textContent = isLogin ? 'Login' : 'Sign up';
-            document.getElementById('nameField').style.display = isLogin ? 'block' : 'none';
-        }
-
-        function handleAuthSubmit() {
-            const isLogin = document.getElementById('authTitle').textContent === 'Login';
-            const name = document.getElementById('authName').value;
-            const email = document.getElementById('authEmail').value.trim();
-            const password = document.getElementById('authPassword').value.trim();
-            const errorElement = document.getElementById('authError');
-
-            // Reset error
-            errorElement.style.display = 'none';
-
-            // Validate inputs
-            if (!email || !password || (!isLogin && !name)) {
-                errorElement.textContent = 'Please fill in all fields';
-                errorElement.style.display = 'block';
-                return;
-            }
-
-            if (isLogin) {
-                // Login logic
-                const users = JSON.parse(localStorage.getItem('users'));
-                const user = users.find(u => u.email === email && u.password === password);
-                
-                if (user) {
-                    // Successful login
-                    localStorage.setItem('userEmail', email);
-                    hideAuthModal();
-                    checkAuthStatus();
-                } else {
-                    errorElement.textContent = 'Invalid email or password';
-                    errorElement.style.display = 'block';
-                }
-            } else {
-                // Signup logic
-                const users = JSON.parse(localStorage.getItem('users'));
-                
-                // Check if email already exists
-                if (users.some(u => u.email === email)) {
-                    errorElement.textContent = 'Email already registered';
-                    errorElement.style.display = 'block';
-                    return;
-                }
-                
-                // Create new user
-                const newUser = {
-                    name,
-                    email,
-                    password,
-                    createdAt: new Date().toISOString()
-                };
-                
-                // Add to users array
-                users.push(newUser);
-                
-                // Save to localStorage
-                localStorage.setItem('users', JSON.stringify(users));
-                localStorage.setItem('userEmail', email);
-                
-                hideAuthModal();
-                checkAuthStatus();
-            }
-        }
-
-        function loadUserAnswers(userEmail) {
-            const allAnswers = JSON.parse(localStorage.getItem('userAnswers'));
-            const userAnswers = allAnswers[userEmail] || {};
-            
-            // Load answers into textareas
-            if (userAnswers.name) document.getElementById('name').value = userAnswers.name;
-            if (userAnswers.answer) document.getElementById('answer').value = userAnswers.answer;
-        }
-
-        function submitAnswer() {
-            const userEmail = localStorage.getItem('userEmail');
-            if (!userEmail) {
-                showAuthModal();
-                return;
-            }
-
-            const name = document.getElementById('name').value.trim();
-            const answer = document.getElementById('answer').value.trim();
-            const errorMessage = document.getElementById('error-message');
-            
-            // Reset messages
-            errorMessage.style.display = 'none';
-            
-            // Validate answer
-            if (!name || !answer) {
-                errorMessage.style.display = 'block';
-                return;
-            }
-            
-            // Get all answers
-            const allAnswers = JSON.parse(localStorage.getItem('userAnswers'));
-            
-            // Get or create user's answers
-            const userAnswers = allAnswers[userEmail] || {};
-            
-            // Update the answer
-            userAnswers.name = name;
-            userAnswers.answer = answer;
-            
-            // Update all answers
-            allAnswers[userEmail] = userAnswers;
-            
-            // Save back to localStorage
-            localStorage.setItem('userAnswers', JSON.stringify(allAnswers));
-            
-            // Unlock content
-            unlockArticle();
-            document.getElementById('successModal').style.display = 'flex';
         }
         
-        function unlockArticle() {
-            document.getElementById('lockMessage').style.display = 'none';
-            document.getElementById('articleLink').style.pointerEvents = 'auto';
-            document.getElementById('articleLink').style.opacity = '1';
-        }
-        
-        function closeModal() {
-            document.getElementById('successModal').style.display = 'none';
-            document.getElementById('accessDeniedModal').style.display = 'none';
-        }
-        
-        function redirectToArticle() {
-            window.location.href = "article1.html";
-        }
-
-        function checkAnswersBeforeProceeding() {
-            const answer = document.getElementById('answer').value.trim();
-            
-            if (!answer) {
-                document.getElementById('warningModal').style.display = 'flex';
-            } else {
-                window.location.href = "coaching-skills.html";
-            }
-        }
-
-        function logout() {
-            localStorage.removeItem('userEmail');
-            // Redirect to login page outside the current page
-            window.location.replace("login.html"); // أو أي صفحة تسجيل الدخول الرئيسية
-        }
+        // Run initialization when page loads
+        window.onload = init;
     </script>
 </body>
 </html>
