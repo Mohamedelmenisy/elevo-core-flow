@@ -28,6 +28,20 @@
             background: rgba(255,255,255,0.2);
             padding: 5px 10px;
             border-radius: 4px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .user-email {
+            font-weight: bold;
+        }
+        .logout-btn {
+            background: none;
+            border: none;
+            color: white;
+            cursor: pointer;
+            font-size: 14px;
+            text-decoration: underline;
         }
         .container {
             max-width: 800px;
@@ -174,7 +188,10 @@
 <body>
     <div class="header">
         Coaching & Leadership Course
-        <div class="user-display" id="userDisplay"></div>
+        <div class="user-display" id="userDisplay">
+            <span class="user-email" id="userEmail"></span>
+            <button class="logout-btn" id="logoutBtn">Logout</button>
+        </div>
     </div>
     <div class="container">
         <h2>Welcome to the Coaching & Leadership Course!</h2>
@@ -216,18 +233,34 @@
     </div>
     
     <script>
-        // Store answers in localStorage
-        function storeAnswers(name, answer) {
-            localStorage.setItem('userName', name);
-            localStorage.setItem('userAnswer', answer);
+        // Session management functions
+        function getCurrentUser() {
+            return JSON.parse(localStorage.getItem('currentUser'));
         }
         
-        // Display user name
-        function displayUserName() {
-            const userName = localStorage.getItem('userName');
-            if (userName) {
-                document.getElementById('userDisplay').textContent = `Welcome, ${userName}`;
+        function displayUserEmail() {
+            const user = getCurrentUser();
+            const userEmailElement = document.getElementById('userEmail');
+            
+            if (user && user.email) {
+                userEmailElement.textContent = user.email;
+                document.getElementById('userDisplay').style.display = 'flex';
+            } else {
+                document.getElementById('userDisplay').style.display = 'none';
             }
+        }
+        
+        function logout() {
+            localStorage.removeItem('currentUser');
+            window.location.href = 'login.html';
+        }
+        
+        // Store answers in localStorage
+        function storeAnswers(name, answer) {
+            const user = getCurrentUser() || {};
+            user.name = name;
+            user.answer = answer;
+            localStorage.setItem('currentUser', JSON.stringify(user));
         }
         
         // Submit answer function
@@ -245,9 +278,6 @@
                 document.getElementById('articleLink').style.pointerEvents = 'auto';
                 document.getElementById('articleLink').style.opacity = '1';
                 document.getElementById('successModal').style.display = 'flex';
-                
-                // Update user display
-                displayUserName();
                 
                 // Hide error message if shown
                 errorMessage.style.display = "none";
@@ -283,18 +313,30 @@
         
         // Initialize the page
         function init() {
-            // Display user name if available
-            displayUserName();
+            // Check if user is logged in
+            const user = getCurrentUser();
+            if (!user || !user.email) {
+                window.location.href = 'login.html';
+                return;
+            }
+            
+            // Display user email
+            displayUserEmail();
+            
+            // Setup logout button
+            document.getElementById('logoutBtn').addEventListener('click', logout);
             
             // Disable article link initially
             document.getElementById('articleLink').style.pointerEvents = 'none';
             document.getElementById('articleLink').style.opacity = '0.7';
             
             // Check if user has already answered
-            if (localStorage.getItem('userAnswer')) {
+            if (user && user.answer) {
                 document.getElementById('lockMessage').style.display = 'none';
                 document.getElementById('articleLink').style.pointerEvents = 'auto';
                 document.getElementById('articleLink').style.opacity = '1';
+                document.getElementById('name').value = user.name || '';
+                document.getElementById('answer').value = user.answer || '';
             }
             
             // Add keyboard event listeners
