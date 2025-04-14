@@ -8,11 +8,6 @@
     <link rel="apple-touch-icon" sizes="180x180" href="https://cdn-icons-png.flaticon.com/512/3281/3281289.png">
     <link rel="icon" type="image/png" sizes="32x32" href="https://cdn-icons-png.flaticon.com/512/3281/3281289.png">
     <link rel="icon" type="image/png" sizes="16x16" href="https://cdn-icons-png.flaticon.com/512/3281/3281289.png">
-    <!-- Firebase SDK CDN -->
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-analytics-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
     <style>
         * {
             margin: 0;
@@ -389,86 +384,42 @@
     </div>
     
     <script>
-        // Firebase configuration
-        const firebaseConfig = {
-            apiKey: "AIzaSyCVmIol40My_XVh6PcBuvmRZVOT7H6UbBw",
-            authDomain: "thechefz-ms.firebaseapp.com",
-            projectId: "thechefz-ms",
-            storageBucket: "thechefz-ms.firebasestorage.app",
-            messagingSenderId: "630248105383",
-            appId: "1:630248105383:web:75e23f85b17ea1c3418282",
-            measurementId: "G-25CEM0LR5B"
-        };
-
-        // Initialize Firebase
-        firebase.initializeApp(firebaseConfig);
-        const analytics = firebase.analytics();
-        const db = firebase.firestore();
-        const auth = firebase.auth();
-        
         // Check if user is logged in
-        function checkAuth() {
-            auth.onAuthStateChanged(user => {
-                if (!user) {
-                    window.location.href = 'login.html';  // Redirect to login if not logged in
-                } else {
-                    // Display user info if logged in
-                    const userEmail = user.email || 'user@example.com';
-                    const displayName = user.displayName || 'User';
-                    
-                    document.getElementById('userName').textContent = `Welcome, ${displayName}`;
-                    document.getElementById('userEmail').textContent = userEmail;
-                    
-                    // Check if user has already submitted an answer
-                    db.collection('userAnswers').doc(user.uid).get()
-                        .then((doc) => {
-                            if (doc.exists && doc.data().answer) {
-                                // Unlock content if answer exists
-                                document.getElementById('lockMessage').style.display = 'none';
-                                document.getElementById('articleLink').style.pointerEvents = 'auto';
-                                document.getElementById('articleLink').style.opacity = '1';
-                                document.getElementById('name').value = doc.data().name || '';
-                                document.getElementById('answer').value = doc.data().answer || '';
-                            }
-                        })
-                        .catch((error) => {
-                            console.error("Error fetching user answer:", error);
-                        });
-                }
-            });
-        }
-        
-        // Store answers in Firebase
-        function storeAnswers(name, answer) {
-            const user = auth.currentUser;
-            if (user) {
-                return db.collection('userAnswers').doc(user.uid).set({
-                    name: name,
-                    answer: answer,
-                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
-                })
-                .then(() => {
-                    console.log("Document successfully written!");
-                    return true;
-                })
-                .catch((error) => {
-                    console.error("Error writing document: ", error);
-                    return false;
-                });
-            } else {
-                console.log("No user is signed in.");
-                return Promise.resolve(false);
+        if (!localStorage.getItem('loggedIn')) {
+            window.location.href = 'login.html';  // Redirect to login if not logged in
+        } else {
+            // Display user info if logged in
+            const userData = JSON.parse(localStorage.getItem('currentUser')) || {};
+            const userName = userData.name || 'User';
+            const userEmail = userData.email || 'user@example.com';
+            
+            document.getElementById('userName').textContent = `Welcome, ${userName}`;
+            document.getElementById('userEmail').textContent = userEmail;
+            
+            // If user has already submitted an answer, unlock content
+            if (localStorage.getItem('userAnswer')) {
+                document.getElementById('lockMessage').style.display = 'none';
+                document.getElementById('articleLink').style.pointerEvents = 'auto';
+                document.getElementById('articleLink').style.opacity = '1';
+                document.getElementById('name').value = localStorage.getItem('userName') || '';
+                document.getElementById('answer').value = localStorage.getItem('userAnswer') || '';
             }
+        }
+
+        // Store answers in localStorage
+        function storeAnswers(name, answer) {
+            localStorage.setItem('userName', name);
+            localStorage.setItem('userAnswer', answer);
         }
         
         // Logout function
         function logout() {
-            auth.signOut().then(() => {
-                // Redirect to login page
-                window.location.href = 'login.html';
-            }).catch((error) => {
-                console.error("Error signing out: ", error);
-            });
+            // Clear user session
+            localStorage.removeItem('loggedIn');
+            localStorage.removeItem('currentUser');
+            
+            // Redirect to login page
+            window.location.href = 'login.html';
         }
         
         // Submit answer function
@@ -478,38 +429,20 @@
             let errorMessage = document.getElementById('error-message');
             
             if (name && answer.length >= 20) {
-                // Store answers in Firebase
-                storeAnswers(name, answer).then(success => {
-                    if (success) {
-                        // Update user's display name if different
-                        const user = auth.currentUser;
-                        if (user && user.displayName !== name) {
-                            user.updateProfile({
-                                displayName: name
-                            }).then(() => {
-                                // Update welcome message
-                                document.getElementById('userName').textContent = `Welcome, ${name}`;
-                            }).catch(error => {
-                                console.error("Error updating profile:", error);
-                            });
-                        }
-                        
-                        // Unlock content
-                        document.getElementById('lockMessage').style.display = 'none';
-                        document.getElementById('articleLink').style.pointerEvents = 'auto';
-                        document.getElementById('articleLink').style.opacity = '1';
-                        document.getElementById('successModal').style.display = 'flex';
-                        
-                        // Hide error message if shown
-                        errorMessage.style.display = "none";
-                        
-                        // Track submission in analytics
-                        analytics.logEvent('course_answer_submitted', {
-                            course_name: 'Coaching & Leadership',
-                            article: 'Introduction'
-                        });
-                    }
-                });
+                // Store answers
+                storeAnswers(name, answer);
+                
+                // Update welcome message if name changed
+                document.getElementById('userName').textContent = `Welcome, ${name}`;
+                
+                // Unlock content
+                document.getElementById('lockMessage').style.display = 'none';
+                document.getElementById('articleLink').style.pointerEvents = 'auto';
+                document.getElementById('articleLink').style.opacity = '1';
+                document.getElementById('successModal').style.display = 'flex';
+                
+                // Hide error message if shown
+                errorMessage.style.display = "none";
             } else {
                 errorMessage.style.display = "block";
                 if (!name) {
@@ -528,16 +461,11 @@
         // Redirect to article
         function redirectToArticle() {
             window.location.href = "article1.html";
-            
-            // Track article access in analytics
-            analytics.logEvent('article_accessed', {
-                article_name: 'Introduction to Coaching & Leadership'
-            });
         }
         
         // Handle Enter key press
         function handleKeyPress(e) {
-            if (e.key === 'Enter' && !e.shiftKey && e.target.id !== 'answer') {
+            if (e.key === 'Enter') {
                 e.preventDefault();
                 document.getElementById('submitBtn').click();
             }
@@ -552,15 +480,15 @@
         
         // Initialize the page
         function init() {
-            // Check authentication
-            checkAuth();
-            
             // Disable article link initially if answer not submitted
-            document.getElementById('articleLink').style.pointerEvents = 'none';
-            document.getElementById('articleLink').style.opacity = '0.7';
+            if (!localStorage.getItem('userAnswer')) {
+                document.getElementById('articleLink').style.pointerEvents = 'none';
+                document.getElementById('articleLink').style.opacity = '0.7';
+            }
             
             // Add keyboard event listeners
             document.getElementById('name').addEventListener('keypress', handleKeyPress);
+            document.getElementById('answer').addEventListener('keypress', handleKeyPress);
             document.addEventListener('keydown', handleKeyDown);
             
             // Add click event for the article link to show warning if clicked while locked
