@@ -8,11 +8,6 @@
     <link rel="apple-touch-icon" sizes="180x180" href="https://cdn-icons-png.flaticon.com/512/3281/3281289.png">
     <link rel="icon" type="image/png" sizes="32x32" href="https://cdn-icons-png.flaticon.com/512/3281/3281289.png">
     <link rel="icon" type="image/png" sizes="16x16" href="https://cdn-icons-png.flaticon.com/512/3281/3281289.png">
-    <!-- Firebase SDK CDN -->
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
     <style>
         * {
             margin: 0;
@@ -194,22 +189,6 @@
         .terms input {
             margin-right: 8px;
         }
-
-        .loading-spinner {
-            display: none;
-            margin: 0 auto;
-            width: 40px;
-            height: 40px;
-            border: 3px solid #f3f3f3;
-            border-top: 3px solid #3498db;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
     </style>
 </head>
 <body>
@@ -249,11 +228,10 @@
                 <label for="terms">I agree to the <a href="#" style="color: #3498db;">Terms of Service</a> and <a href="#" style="color: #3498db;">Privacy Policy</a></label>
             </div>
             
-            <div id="signupError" class="error-message">Error during registration</div>
+            <div id="signupError" class="error-message">Email already registered</div>
             <div id="signupSuccess" class="success-message">Registration successful! Redirecting...</div>
-            <div class="loading-spinner" id="spinner"></div>
             
-            <button type="submit" class="signup-button" id="signupButton">Create Account</button>
+            <button type="submit" class="signup-button">Create Account</button>
         </form>
         
         <div class="login-link">
@@ -262,22 +240,6 @@
     </div>
 
     <script>
-        // Firebase configuration
-        const firebaseConfig = {
-            apiKey: "AIzaSyCVmIol40My_XVh6PcBuvmRZVOT7H6UbBw",
-            authDomain: "thechefz-ms.firebaseapp.com",
-            projectId: "thechefz-ms",
-            storageBucket: "thechefz-ms.firebasestorage.app",
-            messagingSenderId: "630248105383",
-            appId: "1:630248105383:web:75e23f85b17ea1c3418282",
-            measurementId: "G-25CEM0LR5B"
-        };
-
-        // Initialize Firebase
-        firebase.initializeApp(firebaseConfig);
-        const auth = firebase.auth();
-        const db = firebase.firestore();
-
         document.addEventListener('DOMContentLoaded', function() {
             const signupForm = document.getElementById('signupForm');
             const nameInput = document.getElementById('name');
@@ -291,8 +253,6 @@
             const signupError = document.getElementById('signupError');
             const signupSuccess = document.getElementById('signupSuccess');
             const passwordStrength = document.getElementById('passwordStrength');
-            const spinner = document.getElementById('spinner');
-            const signupButton = document.getElementById('signupButton');
             
             // Password strength indicator
             passwordInput.addEventListener('input', function() {
@@ -322,7 +282,6 @@
                 }
             });
             
-            // Submit form handler
             signupForm.addEventListener('submit', function(e) {
                 e.preventDefault();
                 
@@ -370,58 +329,35 @@
                 
                 if (!isValid) return;
                 
-                // Show loading spinner and disable button
-                spinner.style.display = 'block';
-                signupButton.disabled = true;
-                signupButton.textContent = 'Creating Account...';
+                // Check if email exists
+                const users = JSON.parse(localStorage.getItem('users')) || [];
+                const emailExists = users.some(user => user.email === email);
                 
-                // Create user with Firebase Auth
-                auth.createUserWithEmailAndPassword(email, password)
-                    .then((userCredential) => {
-                        // User signed up successfully
-                        const user = userCredential.user;
-                        
-                        // Update profile with user's name
-                        return user.updateProfile({
-                            displayName: name
-                        }).then(() => {
-                            // Add user data to Firestore
-                            return db.collection('users').doc(user.uid).set({
-                                name: name,
-                                email: email,
-                                status: 'pending', // initially set to pending
-                                createdAt: firebase.firestore.FieldValue.serverTimestamp()
-                            });
-                        });
-                    })
-                    .then(() => {
-                        // Show success message
-                        spinner.style.display = 'none';
-                        signupSuccess.style.display = 'block';
-                        signupButton.textContent = 'Account Created!';
-                        
-                        // Redirect to login page after 1.5 seconds
-                        setTimeout(function() {
-                            window.location.href = 'login.html?email=' + encodeURIComponent(email);
-                        }, 1500);
-                    })
-                    .catch((error) => {
-                        // Hide spinner
-                        spinner.style.display = 'none';
-                        signupButton.disabled = false;
-                        signupButton.textContent = 'Create Account';
-                        
-                        // Display appropriate error message
-                        signupError.style.display = 'block';
-                        
-                        if (error.code === 'auth/email-already-in-use') {
-                            signupError.textContent = 'This email is already registered';
-                        } else {
-                            signupError.textContent = error.message;
-                        }
-                        
-                        console.error("Signup error:", error);
-                    });
+                if (emailExists) {
+                    signupError.style.display = 'block';
+                    return;
+                }
+                
+                // Create new user
+                const newUser = {
+                    id: Date.now().toString(),
+                    name: name,
+                    email: email,
+                    password: password,
+                    createdAt: new Date().toISOString()
+                };
+                
+                // Save user
+                users.push(newUser);
+                localStorage.setItem('users', JSON.stringify(users));
+                
+                // Show success message
+                signupSuccess.style.display = 'block';
+                
+                // Redirect to login page after 1.5 seconds
+                setTimeout(function() {
+                    window.location.href = 'login.html?email=' + encodeURIComponent(email);
+                }, 1500);
             });
             
             // Auto-focus first input
