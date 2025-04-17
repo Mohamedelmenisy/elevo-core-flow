@@ -189,14 +189,17 @@
             min-height: 40px; /* Default min height for input/select */
             line-height: 1.5;
             display: block; /* Ensure block display */
+            color: #333; /* Default text color */
         }
 
-        /* Specific styles for contenteditable divs */
-        .editable-answer[contenteditable="true"] {
+        /* Specific styles for textareas */
+        .editable-answer[contenteditable="true"],
+        textarea.editable-answer {
             min-height: 100px;
             cursor: text;
         }
-        .editable-answer[contenteditable="true"]:empty:before {
+        .editable-answer[contenteditable="true"]:empty:before,
+        textarea.editable-answer:placeholder-shown:empty:before { /* Apply placeholder style to textarea too */
             content: attr(placeholder);
             color: #aaa;
             font-style: italic;
@@ -459,7 +462,17 @@
             display: inline-block; /* Allow button group to be beside */
             vertical-align: middle;
             flex-grow: 1; /* Allow input/select to grow */
+            color: #2c3e50; /* <<< UPDATED: Darker text color for better contrast */
+            background-color: white; /* Ensure background is white */
+            border: 1px solid #ccc; /* Slightly darker border */
         }
+
+        /* Style placeholder specifically within orange rows */
+        .orange-row input.editable-answer::placeholder {
+            color: #666; /* <<< UPDATED: Darker placeholder */
+            opacity: 1; /* Ensure placeholder is not faded */
+        }
+
         /* Container for input/select and buttons in the table cell */
         .table-input-group {
              display: flex;
@@ -729,14 +742,14 @@
             <!-- Skill/Will Matrix Table -->
             <table>
                 <thead>
-                    <tr class="orange-header">
+                    <tr class="orange-header"> <!-- This header row has white text on orange BG -->
                         <th>Name of Team Member</th>
                         <th>The Coaching Map Quadrant</th>
                     </tr>
                 </thead>
                 <tbody>
                     <!-- Row 1 -->
-                    <tr class="orange-row">
+                    <tr class="orange-row"> <!-- Cells in this row have light orange BG -->
                         <td><input type="text" class="editable-answer" placeholder="Enter name..." data-question="team-member1"></td>
                         <td>
                             <div class="table-input-group">
@@ -1188,13 +1201,7 @@
             if (!allAnswers[userEmail]) {
                 allAnswers[userEmail] = {};
             }
-            // Only save non-empty answers to avoid cluttering storage if desired,
-            // but saving empty strings might be needed if you differentiate between 'not answered' and 'answered empty'
-            // if (answer?.trim()) {
-                 allAnswers[userEmail][questionId] = answer;
-            // } else {
-            //     delete allAnswers[userEmail][questionId]; // Optionally remove if saved as empty
-            // }
+            allAnswers[userEmail][questionId] = answer;
             localStorage.setItem(localStorageKey, JSON.stringify(allAnswers));
             console.log(`Saved locally: ${questionId}`);
         }
@@ -1215,24 +1222,45 @@
         function setupEventListeners(userEmail) {
              // Auto-remove required styling on input/change
              document.querySelectorAll('.required-answer, input.editable-answer[data-question^="team-member"], select.editable-answer[data-question^="coaching-map"]').forEach(field => {
-                 const eventType = (field.tagName === 'SELECT') ? 'change' : 'input';
+                 const eventType = (field.tagName === 'SELECT' || field.tagName === 'INPUT') ? 'input' : 'input'; // Use input for text/select
                  field.addEventListener(eventType, function() {
                      const questionId = this.getAttribute('data-question');
-                     const errorId = field.classList.contains('required-answer') ? `error-${questionId}` : `error-team${questionId.slice(-1)}`;
-                     const errorElement = document.getElementById(errorId);
+                     let errorId = '';
+                     let errorElement = null;
+
+                      if (this.classList.contains('required-answer')) {
+                          errorId = `error-${questionId}`;
+                          errorElement = document.getElementById(errorId);
+                      } else if (questionId.startsWith('team-member') || questionId.startsWith('coaching-map')) {
+                           const rowNum = questionId.slice(-1);
+                           errorId = `error-team${rowNum}`;
+                           errorElement = document.getElementById(errorId);
+                      }
+
 
                      if (this.value.trim() !== '') {
                          this.classList.remove('required-field');
-                         if (errorElement) errorElement.style.display = 'none';
+                         if (errorElement && this.classList.contains('required-answer')) {
+                             errorElement.style.display = 'none'; // Hide individual error message
+                         }
 
-                         // Special check for combined fields - remove combined error if both now have value
+
+                         // Special check for combined fields - remove combined error ONLY if BOTH now have value
                          if (questionId.startsWith('team-member') || questionId.startsWith('coaching-map')) {
                              const rowNum = questionId.slice(-1);
                              const nameField = document.querySelector(`[data-question="team-member${rowNum}"]`);
                              const mapField = document.querySelector(`[data-question="coaching-map${rowNum}"]`);
                              const combinedErrorElement = document.getElementById(`error-team${rowNum}`);
+
+                             // Remove red border from the specific field being typed into/changed
+                             this.classList.remove('required-field');
+
+                             // Hide the COMBINED error message if BOTH fields are now filled
                              if (nameField.value.trim() !== '' && mapField.value.trim() !== '' && combinedErrorElement) {
                                  combinedErrorElement.style.display = 'none';
+                                 // Also remove red borders from both if the error is hidden
+                                 nameField.classList.remove('required-field');
+                                 mapField.classList.remove('required-field');
                              }
                          }
                      }
@@ -1256,14 +1284,19 @@
 
         function validateAllAnswers() {
             let allValid = true;
+            const userEmail = getUserEmail();
+            const allAnswers = JSON.parse(localStorage.getItem(localStorageKey)) || {};
+            const userPageAnswers = allAnswers[userEmail] || {};
 
-            // Check required textareas
+            // Check required textareas based on their CURRENT value OR saved value
             document.querySelectorAll('textarea.required-answer').forEach(field => {
                 const questionId = field.getAttribute('data-question');
                 const errorId = `error-${questionId}`;
                 const errorElement = document.getElementById(errorId);
+                const currentValue = field.value.trim();
+                const savedValue = userPageAnswers[questionId]?.trim();
 
-                 if (field.value.trim() === '') {
+                 if (!currentValue && !savedValue) { // Invalid if neither current nor saved value exists
                     allValid = false;
                     field.classList.add('required-field');
                     if (errorElement) {
@@ -1276,40 +1309,53 @@
                 }
             });
 
-            // Check Skill/Will Matrix rows (only validate map if name is entered)
-            for (let i = 1; i <= 6; i++) {
+            // Check Skill/Will Matrix rows (only validate map if name is entered or saved)
+             for (let i = 1; i <= 6; i++) {
                 const nameField = document.querySelector(`[data-question="team-member${i}"]`);
                 const mapField = document.querySelector(`[data-question="coaching-map${i}"]`);
                 const errorId = `error-team${i}`;
                 const errorElement = document.getElementById(errorId);
 
                 if (nameField && mapField) {
-                    const nameValue = nameField.value.trim();
-                    const mapValue = mapField.value.trim();
+                    const nameQuestionId = `team-member${i}`;
+                    const mapQuestionId = `coaching-map${i}`;
 
-                    // If a name is entered, the map selection becomes required
-                    if (nameValue !== '' && mapValue === '') {
-                        allValid = false;
-                        mapField.classList.add('required-field'); // Highlight the select dropdown
-                        if (errorElement) {
-                            errorElement.textContent = 'Please select a quadrant.';
-                            errorElement.style.display = 'inline';
-                        }
-                    } else {
-                         mapField.classList.remove('required-field');
-                         // Hide combined error only if name field is also filled or empty
-                         if (errorElement && (nameValue !== '' || nameValue === '')) {
-                             errorElement.style.display = 'none';
+                    const currentNameValue = nameField.value.trim();
+                    const currentMapValue = mapField.value.trim();
+                    const savedNameValue = userPageAnswers[nameQuestionId]?.trim();
+                    const savedMapValue = userPageAnswers[mapQuestionId]?.trim();
+
+                    const hasName = currentNameValue || savedNameValue; // Consider name present if current or saved
+                    const hasMap = currentMapValue || savedMapValue; // Consider map present if current or saved
+
+                    // Reset styles first
+                    nameField.classList.remove('required-field');
+                    mapField.classList.remove('required-field');
+                    if (errorElement) errorElement.style.display = 'none';
+
+
+                    // If a name is present (current or saved), the map selection becomes required (current or saved)
+                    if (hasName && !hasMap) {
+                         allValid = false;
+                         mapField.classList.add('required-field'); // Highlight the select dropdown
+                         if (errorElement) {
+                             errorElement.textContent = 'Please select a quadrant.';
+                             errorElement.style.display = 'inline';
                          }
                     }
-                    // If name field is empty, it's not invalid itself, but map is not required either
-                     if (nameValue === '') {
-                         nameField.classList.remove('required-field');
-                         mapField.classList.remove('required-field');
-                         if(errorElement) errorElement.style.display = 'none'; // Hide error if name is cleared
-                     }
+                     // Optional: Could also validate that if a map is selected, a name must be present
+                     /* else if (!hasName && hasMap) {
+                          allValid = false;
+                          nameField.classList.add('required-field'); // Highlight the name input
+                          if (errorElement) {
+                              errorElement.textContent = 'Please enter a name.';
+                              errorElement.style.display = 'inline';
+                          }
+                     } */
+                     // Current logic: Only enforce map if name exists. Allow empty rows.
                 }
             }
+
 
             return allValid;
         }
@@ -1325,7 +1371,9 @@
             if (firstEmptyField) {
                 firstEmptyField.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 // Small delay before focus sometimes helps after scrollIntoView
-                setTimeout(() => firstEmptyField.focus(), 100);
+                setTimeout(() => {
+                     try { firstEmptyField.focus({ preventScroll: true }); } catch(e) { /* ignore potential errors */ }
+                }, 150); // Slightly longer delay
             }
 
             setTimeout(() => {
@@ -1354,7 +1402,7 @@
              errorElement.style.display = 'inline';
              if (field) { // Only add class and focus if field is provided
                  field.classList.add('required-field');
-                 field.focus();
+                  try { field.focus({ preventScroll: true }); } catch(e) { /* ignore potential errors */ }
              }
         }
 
@@ -1376,18 +1424,21 @@
 
              const statusId = `save-status-${questionId}`;
              const errorId = `error-${questionId}`;
-             const answer = field.value.trim();
+             const answer = field.value.trim(); // Use trimmed value for validation
 
              hideMessages(statusId, errorId, field);
 
-             if (!answer) {
+             if (!answer && field.classList.contains('required-answer')) { // Check if required and empty
                 showError(errorId, field, 'Please enter an answer.');
                 return;
              }
 
+             // Save the original value (including whitespace if desired, though usually trim is preferred)
              saveAnswerToStorage(userEmail, questionId, field.value);
-             submitToFormspree(userEmail, questionId, field.value);
+             submitToFormspree(userEmail, questionId, field.value); // Submit original value
              showSaveStatus(statusId);
+             field.classList.remove('required-field'); // Ensure field is not marked required after save
+             if(document.getElementById(errorId)) document.getElementById(errorId).style.display = 'none'; // Hide error message
         }
 
         function deleteAnswer(questionId) {
@@ -1404,6 +1455,7 @@
              field.value = '';
              deleteAnswerFromStorage(userEmail, questionId);
              showSaveStatus(statusId, '✓ Deleted');
+             // Don't add required-field on delete, validation handles it
         }
 
         // --- Actions (Save, Delete for Combined Skill/Will Rows) ---
@@ -1426,16 +1478,27 @@
              const mapValue = mapField.value.trim();
 
              // Hide previous messages first
-             hideMessages(statusId, errorId, nameField); // Use nameField for combined row messages
-             hideMessages(null, null, mapField); // Hide only potential border on map field
+              hideMessages(statusId, errorId, null); // Hide combined message first
+              nameField.classList.remove('required-field'); // Clear potential individual highlights
+              mapField.classList.remove('required-field');
+
 
              // Validate: BOTH must be filled to save this row
-             if (!nameValue || !mapValue) {
-                 showError(errorId, null, 'Both Name and Quadrant are required to save.'); // Show combined error without focusing specific field
-                 if (!nameValue) nameField.classList.add('required-field');
-                 if (!mapValue) mapField.classList.add('required-field');
-                 return;
+             let rowValid = true;
+             if (!nameValue) {
+                 showError(errorId, null, 'Both Name and Quadrant are required to save.');
+                 nameField.classList.add('required-field');
+                 rowValid = false;
              }
+              if (!mapValue) {
+                  // Show error only once if both are missing
+                  if(rowValid) showError(errorId, null, 'Both Name and Quadrant are required to save.');
+                  mapField.classList.add('required-field');
+                  rowValid = false;
+             }
+
+             if (!rowValid) return;
+
 
              // Save both pieces of data
              saveAnswerToStorage(userEmail, nameQuestionId, nameField.value);
@@ -1446,6 +1509,9 @@
              submitToFormspree(userEmail, mapQuestionId, mapField.value);
 
              showSaveStatus(statusId);
+             nameField.classList.remove('required-field'); // Ensure fields are not marked required after save
+             mapField.classList.remove('required-field');
+             if(errorElement) errorElement.style.display = 'none';
          }
 
          function deleteCombinedAnswer(rowIdentifier) {
@@ -1463,8 +1529,10 @@
              if (!nameField || !mapField) { console.error(`Fields not found for ${rowIdentifier}`); return; }
 
              // Hide messages and remove red borders
-             hideMessages(statusId, errorId, nameField);
-             hideMessages(null, null, mapField);
+             hideMessages(statusId, errorId, null); // Hide combined message first
+             nameField.classList.remove('required-field');
+             mapField.classList.remove('required-field');
+
 
              nameField.value = '';
              mapField.value = ''; // Reset select to default
@@ -1478,17 +1546,18 @@
 
         // --- Formspree Submission ---
         function submitToFormspree(userEmail, questionId, answer) {
-            // Only submit if answer is not empty or just whitespace
-            if (!answer?.trim()) {
-                console.log(`Skipping Formspree submission for empty answer: ${questionId}`);
-                return;
-            }
+            // Submit even if the answer is just whitespace, but maybe not if completely empty string?
+            // Let's submit if answer exists (even whitespace), Formspree can handle it.
+             if (answer === undefined || answer === null) {
+                 console.log(`Skipping Formspree submission for undefined/null answer: ${questionId}`);
+                 return;
+             }
 
             const formData = new FormData();
             formData.append('email', userEmail);
-            formData.append('page', document.title); // e.g., "Coaching Individuals"
-            formData.append('question_id', questionId); // e.g., "solution-goal" or "team-member1"
-            formData.append('answer_text', answer);
+            formData.append('page', document.title + " (Coaching Individuals)"); // Add page context
+            formData.append('question_id', questionId);
+            formData.append('answer_text', answer); // Send the potentially non-trimmed answer
 
             fetch(formspreeEndpoint, {
                 method: 'POST',
