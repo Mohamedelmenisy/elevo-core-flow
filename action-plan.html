@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title> Action Plan | Leadership Coaching</title>
+    <title>Coaching Action Plan | Leadership Coaching</title>
     <!-- Favicon Links -->
     <link rel="apple-touch-icon" sizes="180x180" href="https://cdn-icons-png.flaticon.com/512/3281/3281289.png">
     <link rel="icon" type="image/png" sizes="32x32" href="https://cdn-icons-png.flaticon.com/512/3281/3281289.png">
@@ -16,7 +16,7 @@
         }
         html { scroll-behavior: smooth; }
         body {
-            margin: 0; padding: 0; line-height: 1.7;
+            margin: 0; padding: 0; line-height: 1.7; /* Adjusted */
             background-color: #f9f9f9; color: #333;
         }
 
@@ -132,6 +132,11 @@
         .save-button:hover { background-color: #2ecc71; transform: translateY(-1px); }
         .delete-button:hover { background-color: #c0392b; transform: translateY(-1px); }
         .save-button:active, .delete-button:active { transform: translateY(0); }
+         /* Disabled State */
+         .save-button:disabled, .delete-button:disabled {
+             background-color: #bdc3c7; cursor: not-allowed; transform: none; box-shadow: none;
+         }
+
 
         .button-group { /* Container for section buttons */
             display: flex; align-items: center; margin-top: 20px; flex-wrap: wrap; gap: 10px;
@@ -169,6 +174,10 @@
         .navigation-buttons #completeButton { background-color: #e67e22; } /* Orange complete */
         .navigation-buttons a:hover, .navigation-buttons button:hover { transform: translateY(-1px); filter: brightness(110%); }
         .navigation-buttons a:active, .navigation-buttons button:active { transform: translateY(0); filter: brightness(100%); }
+        /* Disabled Complete Button */
+         .navigation-buttons #completeButton:disabled {
+             background-color: #bdc3c7; cursor: not-allowed; transform: none; box-shadow: none; filter: none;
+         }
 
 
         /* Floating Warning (General Page Validation) (Consistent) */
@@ -226,6 +235,7 @@
              .completion-message { padding: 20px; }
              .completion-message h3 { font-size: 1.2em; }
         }
+
     </style>
 </head>
 <body>
@@ -575,7 +585,7 @@
                 window.location.href = `login.html?redirect=${encodeURIComponent(window.location.pathname)}`;
                 return;
             }
-            displayUserInfo(currentUser);
+            displayUserInfo(currentUser); // Use the retrieved user object
             loadUserAnswers(currentUser.email);
             setupEventListeners(currentUser.email);
             highlightActiveNav();
@@ -584,17 +594,50 @@
         });
 
         // --- User Info & Authentication ---
-        function getCurrentUser() { /* ... Consistent ... */
-             try { const data = localStorage.getItem(currentUserKey); return data ? JSON.parse(data) : null; } catch (e) { console.error("Error parsing user data:", e); return null; }
+        function getCurrentUser() {
+             try {
+                 const data = localStorage.getItem(currentUserKey);
+                 // Add a check here to see if data is actually valid JSON
+                 if (data) {
+                     const parsedData = JSON.parse(data);
+                     // Ensure essential properties exist
+                     if (parsedData && parsedData.email) { // Check for email at minimum
+                         return parsedData;
+                     } else {
+                         console.warn("currentUser data found but missing essential properties (e.g., email).");
+                         localStorage.removeItem(currentUserKey); // Remove invalid data
+                         return null;
+                     }
+                 }
+                 return null;
+             } catch (e) {
+                 console.error("Error parsing currentUser data:", e);
+                  localStorage.removeItem(currentUserKey); // Remove potentially corrupted data
+                 return null;
+             }
         }
-        function displayUserInfo(user) { /* ... Consistent ... */
-            document.getElementById('userName').textContent = `Welcome, ${user.name || 'User'}`;
-            document.getElementById('userEmail').textContent = user.email;
+        function displayUserInfo(user) { // Parameter 'user' is the object from getCurrentUser()
+            // Directly use properties from the user object passed in
+            document.getElementById('userName').textContent = `Welcome, ${user.name || 'User'}`; // Use user.name
+            document.getElementById('userEmail').textContent = user.email; // Use user.email
         }
-        function logout() { /* ... Consistent ... */
-            localStorage.removeItem('loggedIn'); localStorage.removeItem(currentUserKey);
-            const userEmail = getCurrentUser()?.email;
-            if (userEmail) localStorage.removeItem(`${localStorageKey}_completed_${userEmail}`);
+        function logout() {
+            console.log("Logout function called"); // DEBUG LOG
+            localStorage.removeItem('loggedIn');
+            localStorage.removeItem(currentUserKey); // Remove the user object
+            const userEmail = getCurrentUser()?.email; // Try to get email before removing currentUser (might be too late)
+            // Safer: Get email from the element if needed AFTER removing currentUser
+            const displayedEmail = document.getElementById('userEmail')?.textContent;
+
+            if (displayedEmail) { // Use the email that was displayed
+                 console.log("Removing completion status for:", displayedEmail); // DEBUG LOG
+                 localStorage.removeItem(`${localStorageKey}_completed_${displayedEmail}`);
+            } else {
+                 console.warn("Could not determine user email to remove completion status.");
+            }
+             // No need to remove userEmailKey if it's not being used to store just the email anymore
+             // localStorage.removeItem(userEmailKey);
+            console.log("Redirecting to login.html"); // DEBUG LOG
             window.location.href = 'login.html';
         }
         function highlightActiveNav() { /* ... Consistent ... */
@@ -605,101 +648,65 @@
          }
          function addRequiredStars() { /* ... Consistent ... */
               document.querySelectorAll('.required-answer').forEach(field => {
-                   let labelElement = field.closest('.question-box')?.querySelector(`label[for="${field.id}"]`) ||
-                                      field.closest('.question-box')?.querySelector('h4') ||
-                                      field.closest('li');
+                   let labelElement = field.closest('.question-box')?.querySelector(`label[for="${field.id}"]`) || field.closest('.question-box')?.querySelector('h4') || field.closest('li');
                     if (labelElement && !labelElement.querySelector('.required-star') && !labelElement.textContent.includes('*')) {
-                       if(labelElement.tagName === 'LI') {
-                          const firstTextNode = Array.from(labelElement.childNodes).find(node => node.nodeType === Node.TEXT_NODE && node.textContent.trim() !== '');
-                           if (firstTextNode) firstTextNode.parentNode.insertBefore(document.createElement('span'), firstTextNode.nextSibling).outerHTML = '<span class="required-star">*</span> ';
-                           else labelElement.insertAdjacentHTML('afterbegin', '<span class="required-star">*</span> ');
-                      } else { labelElement.insertAdjacentHTML('beforeend', '<span class="required-star">*</span>'); }
+                       if(labelElement.tagName === 'LI') { const firstTextNode = Array.from(labelElement.childNodes).find(node => node.nodeType === Node.TEXT_NODE && node.textContent.trim() !== ''); if (firstTextNode) firstTextNode.parentNode.insertBefore(document.createElement('span'), firstTextNode.nextSibling).outerHTML = '<span class="required-star">*</span> '; else labelElement.insertAdjacentHTML('afterbegin', '<span class="required-star">*</span> '); }
+                       else { labelElement.insertAdjacentHTML('beforeend', '<span class="required-star">*</span>'); }
                    }
                });
                document.querySelectorAll('p:has(.required-star)').forEach(note => note.style.display = 'none');
          }
 
-
         // --- Answer Handling (Local Storage) ---
         function loadUserAnswers(userEmail) { /* ... Consistent ... */
-             if (!userEmail) return;
-            let allAnswers = {};
-            try { const storedData = localStorage.getItem(localStorageKey); if (storedData) { allAnswers = JSON.parse(storedData) || {}; } }
-            catch(e) { console.error("Error parsing stored answers:", e); }
-            const userPageAnswers = allAnswers[userEmail] || {};
-            document.querySelectorAll('.required-answer[data-question]').forEach(field => { loadFieldState(field, field.dataset.question, userPageAnswers); });
+             if (!userEmail) return; let allAnswers = {};
+             try { const storedData = localStorage.getItem(localStorageKey); if (storedData) { allAnswers = JSON.parse(storedData) || {}; } } catch(e) { console.error("Error parsing stored answers:", e); }
+             const userPageAnswers = allAnswers[userEmail] || {};
+             document.querySelectorAll('.required-answer[data-question]').forEach(field => { loadFieldState(field, field.dataset.question, userPageAnswers); });
         }
         function loadFieldState(field, questionId, userAnswers) { /* ... Consistent ... */
-             if (userAnswers[questionId] !== undefined) {
-                field.value = userAnswers[questionId]; field.classList.remove('required-field');
-            } else { field.value = ''; }
-            const statusId = `save-status-${getSectionIdFromQuestionId(questionId)}`;
-            const statusElement = document.getElementById(statusId);
-            if(statusElement) statusElement.style.display = 'none'; // Hide section status on load
+             if (userAnswers[questionId] !== undefined) { field.value = userAnswers[questionId]; field.classList.remove('required-field'); }
+             else { field.value = ''; }
+             const statusId = `save-status-${getSectionIdFromQuestionId(questionId)}`; const statusElement = document.getElementById(statusId); if(statusElement) statusElement.style.display = 'none';
         }
         function saveAnswerToStorage(userEmail, questionId, answer) { /* ... Consistent ... */
-            if (!userEmail) return false;
-            let allAnswers = {};
-            try { const storedData = localStorage.getItem(localStorageKey); if (storedData) { allAnswers = JSON.parse(storedData) || {}; } }
-            catch(e) { console.error("Error parsing answers before save:", e); allAnswers = {}; }
-            if (!allAnswers[userEmail]) { allAnswers[userEmail] = {}; }
-            allAnswers[userEmail][questionId] = answer;
+            if (!userEmail) return false; let allAnswers = {};
+            try { const storedData = localStorage.getItem(localStorageKey); if (storedData) { allAnswers = JSON.parse(storedData) || {}; } } catch(e) { console.error("Error parsing answers before save:", e); allAnswers = {}; }
+            if (!allAnswers[userEmail]) { allAnswers[userEmail] = {}; } allAnswers[userEmail][questionId] = answer;
             try { localStorage.setItem(localStorageKey, JSON.stringify(allAnswers)); console.log(`Saved locally: ${questionId}`); return true; }
-            catch (error) { console.error("Error saving to localStorage:", error); return false; }
+            catch (error) { console.error("Error saving to localStorage:", error); alert("Could not save answer. Browser storage might be full."); return false; }
         }
         function deleteAnswerFromStorage(userEmail, questionIds) { /* ... Consistent ... */
              if (!userEmail) return false; let allAnswers = {};
-              try { const storedData = localStorage.getItem(localStorageKey); if (storedData) { allAnswers = JSON.parse(storedData) || {}; } else { return false; } }
-             catch(e) { console.error("Error parsing answers before delete:", e); return false; }
+              try { const storedData = localStorage.getItem(localStorageKey); if (storedData) { allAnswers = JSON.parse(storedData) || {}; } else { return false; } } catch(e) { console.error("Error parsing answers before delete:", e); return false; }
              let updated = false;
              if (allAnswers[userEmail]) {
                  const idsToDelete = Array.isArray(questionIds) ? questionIds : [questionIds];
                  idsToDelete.forEach(id => { if (allAnswers[userEmail]?.[id] !== undefined) { delete allAnswers[userEmail][id]; updated = true; } });
                  if (Object.keys(allAnswers[userEmail]).length === 0) { delete allAnswers[userEmail]; }
              }
-             if(updated) {
-                try { localStorage.setItem(localStorageKey, JSON.stringify(allAnswers)); console.log(`Deleted locally: ${Array.isArray(questionIds) ? questionIds.join(', ') : questionIds}`); return true; }
-                catch (error) { console.error("Error saving after delete:", error); return false; }
-             }
-             return false;
+             if(updated) { try { localStorage.setItem(localStorageKey, JSON.stringify(allAnswers)); console.log(`Deleted locally: ${Array.isArray(questionIds) ? questionIds.join(', ') : questionIds}`); return true; } catch (error) { console.error("Error saving after delete:", error); return false; } } return false;
         }
 
         // --- Event Listeners Setup ---
         function setupEventListeners(userEmail) { /* ... Consistent ... */
-            // Input listeners
              document.querySelectorAll('.required-answer').forEach(field => {
                  const eventType = (field.type === 'date') ? 'change' : 'input';
                  field.addEventListener(eventType, function() {
-                     const errorId = `error-${this.dataset.question}`;
-                     this.classList.remove('required-field');
-                     hideError(errorId);
+                     const errorId = `error-${this.dataset.question}`; this.classList.remove('required-field'); hideError(errorId);
                      const sectionBox = this.closest('.question-box');
                      if (sectionBox) {
-                         const sectionId = sectionBox.dataset.section;
-                         const sectionWarning = document.getElementById(`warning-${sectionId}`);
-                         if (sectionWarning) {
-                             let sectionStillInvalid = false;
-                             sectionBox.querySelectorAll('.required-answer').forEach(f => { if (f.value.trim() === '') sectionStillInvalid = true; });
-                             if (!sectionStillInvalid) sectionWarning.style.display = 'none';
-                         }
+                         const sectionId = sectionBox.dataset.section; const sectionWarning = document.getElementById(`warning-${sectionId}`);
+                         if (sectionWarning) { let sectionStillInvalid = false; sectionBox.querySelectorAll('.required-answer').forEach(f => { if (f.value.trim() === '') sectionStillInvalid = true; }); if (!sectionStillInvalid) sectionWarning.style.display = 'none'; }
                      }
                  });
              });
-             // Add data-section attributes
-             document.querySelectorAll('.question-box').forEach(qb => {
-                  const firstField = qb.querySelector('[data-question]');
-                  if (firstField) { const sectionId = getSectionIdFromQuestionId(firstField.dataset.question); if (sectionId) qb.dataset.section = sectionId; }
-             });
-             // Complete button
-            const completeButton = document.getElementById('completeButton');
-            if (completeButton) { completeButton.addEventListener('click', handleCompleteButtonClick); }
+             document.querySelectorAll('.question-box').forEach(qb => { const firstField = qb.querySelector('[data-question]'); if (firstField) { const sectionId = getSectionIdFromQuestionId(firstField.dataset.question); if (sectionId) qb.dataset.section = sectionId; } });
+             const completeButton = document.getElementById('completeButton'); if (completeButton) { completeButton.addEventListener('click', handleCompleteButtonClick); }
         }
-
          function handleCompleteButtonClick(e) { /* ... Consistent ... */
-              e.preventDefault(); const userEmail = getCurrentUser()?.email;
-              if (!userEmail) { alert("Session error. Please log in again."); return; }
-              if (!validateAllAnswers(true)) { showGeneralWarningMessage(); }
-              else { markPlanAsComplete(userEmail); }
+              e.preventDefault(); const userEmail = getCurrentUser()?.email; if (!userEmail) { alert("Session error. Please log in again."); return; }
+              if (!validateAllAnswers(true)) { showGeneralWarningMessage(); } else { markPlanAsComplete(userEmail); }
          }
 
         // Helper to map question ID to section ID
@@ -750,10 +757,8 @@
              const errorElement = document.getElementById(errorId); if (errorElement) errorElement.style.display = 'none';
         }
         function hideMessages(statusId, errorId, field) { /* ... Consistent ... */
-             hideError(errorId);
-             const statusElement = statusId ? document.getElementById(statusId) : null;
-             if (statusElement) statusElement.style.display = 'none';
-             if (field) field.classList.remove('required-field');
+             hideError(errorId); const statusElement = statusId ? document.getElementById(statusId) : null;
+             if (statusElement) statusElement.style.display = 'none'; if (field) field.classList.remove('required-field');
         }
 
         // --- Section-Based Save/Delete ---
@@ -781,11 +786,11 @@
              let savedOk = true;
              for (const id in dataToSave) { if (!saveAnswerToStorage(userEmail, id, dataToSave[id])) savedOk = false; submitToFormspree(userEmail, id, dataToSave[id]); }
              if (savedOk) showSaveStatus(statusId);
-             checkCompletionState(userEmail);
+             checkCompletionState(userEmail); // Check completion after saving a section
         }
         function deleteSection(questionIds, sectionId) { /* ... Consistent ... */
              const userEmail = getCurrentUser()?.email; if (!userEmail) return;
-             if (!confirm(`Are you sure you want to clear all answers for the "${sectionId.toUpperCase().replace('-', ' ')}" section?`)) return; // Added confirmation
+             if (!confirm(`Are you sure you want to clear all answers for the "${sectionId.toUpperCase().replace('-', ' ')}" section?`)) return;
              const statusId = `save-status-${sectionId}`; const warningId = `warning-${sectionId}`;
              hideMessages(statusId, null, null); const warningElement = document.getElementById(warningId);
              if(warningElement) warningElement.style.display = 'none'; let deletedSomething = false;
@@ -794,7 +799,7 @@
                  if (field) { field.value = ''; hideError(`error-${id}`); field.classList.remove('required-field'); if (deleteAnswerFromStorage(userEmail, id)) deletedSomething = true; }
              });
              if (deletedSomething) showSaveStatus(statusId, '✓ Cleared');
-             checkCompletionState(userEmail);
+             checkCompletionState(userEmail); // Re-check completion after clearing
         }
 
         // --- Formspree Submission ---
@@ -825,13 +830,14 @@
              const backBtn = document.getElementById('backButton'); if(backBtn) { backBtn.textContent = '← Back to Home'; backBtn.href = 'index.html'; }
         }
 
-        // --- Modal Handling Removed ---
+        // --- Modal Functions Removed ---
 
         function redirectToNextPage() { /* ... Consistent ... */
              alert('Congratulations! You have completed the Leadership Coaching Toolkit Action Plan.');
-             window.location.href = 'index.html'; // Redirect home
+             window.location.href = 'index.html';
         }
 
     </script>
+
 </body>
 </html>
