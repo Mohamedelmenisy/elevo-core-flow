@@ -372,6 +372,16 @@
             color: #34495e;
             line-height: 1.6;
         }
+
+        /* Style for the course author's name */
+        .course-author {
+            font-weight: 600; /* يجعل الخط أثقل قليلاً */
+            color: #e67e22; /* يستخدم لون مميز (البرتقالي) */
+            /* background-color: #fdfaf6; */ /* لون خلفية خفيف جداً (اختياري) */
+            /* border-bottom: 2px dotted #e67e22; */ /* خط منقط أسفل الاسم (اختياري) */
+            /* padding-bottom: 1px; */ /* مسافة صغيرة للخط السفلي إن استخدم */
+            font-style: italic; /* ميلان خفيف (اختياري) */
+        }
         /* --- End of CSS Rules --- */
     </style>
 </head>
@@ -404,7 +414,8 @@
     <!-- Main Content Area -->
     <main class="container">
         <h2>Welcome to the Coaching & Leadership Course!</h2>
-        <p>This course is provided by Mohamed Elmenisy and includes articles, images, and interactive questions designed to enhance your leadership skills.</p>
+        <!-- **** النص المحدث هنا **** -->
+        <p>This comprehensive course, expertly developed by <span class="course-author">Mohamed Elmenisy</span>, integrates insightful articles, relevant visuals, and interactive questions designed to sharpen your leadership skills.</p>
 
         <!-- Author Quote Block -->
         <div class="author-info">
@@ -421,7 +432,6 @@
         </div>
 
         <!-- Course Image -->
-        <!-- Suggestion: Replace with a relevant high-quality image from Unsplash, Pexels, etc. -->
         <img src="https://images.unsplash.com/photo-1556761175-5973dc0f32e7?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1032&q=80"
              alt="Team members collaborating around a laptop, representing leadership and teamwork"
              class="course-image">
@@ -465,6 +475,7 @@
 
     <script>
         const formspreeEndpoint = 'https://formspree.io/f/xzzeqvea'; // Your Formspree Endpoint
+        const currentUserKey = 'currentUser'; // Consistent key for user object
 
         // DOM Elements
         const userNameDisplay = document.getElementById('userName');
@@ -481,12 +492,12 @@
 
         function initializePage() {
             // Check if user is logged in
-            if (!localStorage.getItem('loggedIn')) {
+            if (localStorage.getItem('loggedIn') !== 'true') { // Explicit check
                 window.location.href = 'login.html'; // Redirect to login if not logged in
                 return; // Stop further execution
             }
 
-            // Display user info if logged in
+            // Display user info if logged in (Reads from localStorage inside)
             displayUserInfo();
 
             // Check unlock status based on stored answer
@@ -496,75 +507,94 @@
             addEventListeners();
         }
 
+        // Reads directly from localStorage - Consistent pattern
         function displayUserInfo() {
-            try {
-                const userDataString = localStorage.getItem('currentUser');
-                const userData = userDataString ? JSON.parse(userDataString) : {};
-                const userName = userData.name || 'User';
-                const userEmail = userData.email || 'user@example.com';
+            const userNameElement = document.getElementById('userName');
+            const userEmailElement = document.getElementById('userEmail');
+            let userName = 'User'; // Default
+            let userEmail = 'user@example.com'; // Default
 
-                userNameDisplay.textContent = `Welcome, ${userName}`;
-                userEmailDisplay.textContent = userEmail;
+            try {
+                const userDataString = localStorage.getItem(currentUserKey);
+                if (userDataString) {
+                    const userData = JSON.parse(userDataString);
+                     // Check if parsed data is valid and has needed properties
+                     if (userData && typeof userData === 'object') {
+                        userName = userData.name || userName; // Use stored name or default
+                        userEmail = userData.email || userEmail; // Use stored email or default
+                     } else {
+                         console.warn("User data from localStorage is not a valid object:", userData);
+                     }
+                }
             } catch (error) {
-                console.error("Error parsing user data from localStorage:", error);
-                // Handle error state, maybe display default info or log out
-                userNameDisplay.textContent = `Welcome, User`;
-                userEmailDisplay.textContent = 'user@example.com';
+                console.error("Error parsing or displaying user info:", error);
+                // Keep defaults if error occurs, maybe log out if critical?
+                // Consider calling logout() here if user data is corrupted.
             }
+
+            if (userNameElement) userNameElement.textContent = `Welcome, ${userName}`;
+            if (userEmailElement) userEmailElement.textContent = userEmail;
         }
 
+
         function checkUnlockStatus() {
-            const storedAnswer = localStorage.getItem('userAnswer');
+            // Use a key specific to this page's unlock mechanism
+            const storedAnswerKey = 'introGoalAnswer';
+            const storedNameKey = 'introGoalSubmitterName'; // Store name associated with answer
+
+            const storedAnswer = localStorage.getItem(storedAnswerKey);
+            const storedName = localStorage.getItem(storedNameKey);
+
             if (storedAnswer) {
                 unlockContent();
                 // Prefill name and answer from localStorage if they exist
-                nameInput.value = localStorage.getItem('userName') || '';
-                answerInput.value = storedAnswer;
+                if(nameInput && storedName) nameInput.value = storedName;
+                if(answerInput) answerInput.value = storedAnswer;
             } else {
                 lockContent();
             }
         }
 
         function lockContent() {
-            lockMessage.classList.remove('unlocked');
-            articleLink.classList.add('locked');
+            if(lockMessage) lockMessage.classList.remove('unlocked');
+            if(articleLink) articleLink.classList.add('locked');
         }
 
         function unlockContent() {
-            lockMessage.classList.add('unlocked');
-            articleLink.classList.remove('locked');
+            if(lockMessage) lockMessage.classList.add('unlocked');
+            if(articleLink) articleLink.classList.remove('locked');
         }
 
         // --- Event Handling ---
 
         function addEventListeners() {
             // Keyboard listeners for form submission and modal closing
-            nameInput.addEventListener('keypress', handleKeyPress);
-            answerInput.addEventListener('keypress', handleKeyPress);
+            if(nameInput) nameInput.addEventListener('keypress', handleKeyPress);
+            if(answerInput) answerInput.addEventListener('keypress', handleKeyPress);
             document.addEventListener('keydown', handleKeyDown); // Listen globally for ESC
 
             // Click listener for the locked article link (provides feedback)
-             articleLink.addEventListener('click', handleLockedLinkClick);
+             if(articleLink) articleLink.addEventListener('click', handleLockedLinkClick);
         }
 
         function handleKeyPress(e) {
             // Submit on Enter key within name or answer fields
-            if (e.key === 'Enter' && (e.target.id === 'name' || e.target.id === 'answer')) {
+            if (e.key === 'Enter' && (e.target === nameInput || e.target === answerInput)) {
                 e.preventDefault(); // Prevent default newline in textarea or form submit
-                submitBtn.click(); // Trigger the submit button click
+                if(submitBtn) submitBtn.click(); // Trigger the submit button click
             }
         }
 
         function handleKeyDown(e) {
             // Close modal with ESC key
-            if (e.key === 'Escape' && successModal.style.display === 'flex') {
+            if (e.key === 'Escape' && successModal && successModal.style.display === 'flex') {
                 closeModal();
             }
         }
 
         function handleLockedLinkClick(e) {
             // Provide visual feedback if the link is clicked while locked
-            if (articleLink.classList.contains('locked')) {
+            if (articleLink && articleLink.classList.contains('locked') && lockMessage) {
                 e.preventDefault(); // Stop navigation
                 // Simple visual feedback: make the lock message pulse faster briefly
                 lockMessage.style.animation = 'none'; // Reset animation
@@ -572,27 +602,30 @@
                 lockMessage.style.animation = 'pulse 0.5s 3'; // Pulse faster 3 times
                 // Restore original animation after a short period
                 setTimeout(() => {
-                    lockMessage.style.animation = 'pulse 2s infinite';
+                    if (lockMessage) lockMessage.style.animation = 'pulse 2s infinite';
                 }, 1500); // 1.5 seconds (3 pulses * 0.5s)
             }
         }
 
         // --- Core Functionality ---
 
-        // Store answers in localStorage
+        // Store answers specific to this page's unlock mechanism
         function storeAnswersLocally(name, answer) {
-            localStorage.setItem('userName', name); // Store name used in submission
-            localStorage.setItem('userAnswer', answer);
+            const storedAnswerKey = 'introGoalAnswer';
+            const storedNameKey = 'introGoalSubmitterName';
+            localStorage.setItem(storedNameKey, name); // Store name used in this submission
+            localStorage.setItem(storedAnswerKey, answer); // Store the answer for unlocking
         }
 
         // Logout function
         function logout() {
             // Clear user session data
             localStorage.removeItem('loggedIn');
-            localStorage.removeItem('currentUser');
-            // Optionally clear the answer/name if you want re-submission on next login
-            // localStorage.removeItem('userName');
-            // localStorage.removeItem('userAnswer');
+            localStorage.removeItem(currentUserKey); // Remove the main user object
+
+            // Clear this page's specific unlock data on logout
+            localStorage.removeItem('introGoalAnswer');
+            localStorage.removeItem('introGoalSubmitterName');
 
             // Redirect to login page
             window.location.href = 'login.html';
@@ -600,34 +633,41 @@
 
         // Submit answer function (triggered by button click)
         function submitAnswer() {
+            if (!nameInput || !answerInput || !userEmailDisplay) return; // Guard clause
+
             const name = nameInput.value.trim();
             const answer = answerInput.value.trim();
-            const email = userEmailDisplay.textContent.trim(); // Get email text directly
+            // Get email directly from the displayed element (which was set from localStorage)
+            const email = userEmailDisplay.textContent.trim();
 
             // --- Validation ---
+            let isValid = true;
+            hideError(); // Clear previous errors
+
             if (!name) {
-                showError("Please enter your name.");
-                return;
+                showError("Please enter your name.", nameInput); // Pass element to focus
+                isValid = false;
             }
             if (answer.length < 20) {
-                 showError("Please write a more detailed answer (at least 20 characters).");
-                 return;
+                 showError("Please write a more detailed answer (at least 20 characters).", answerInput);
+                 isValid = false;
             }
 
-            // --- If Validation Passes ---
-            hideError();
+            if (!isValid) return; // Stop if validation failed
 
-            // 1. Store answers locally (for unlocking content)
+            // --- If Validation Passes ---
+            // 1. Store answers locally (for unlocking content on this page)
             storeAnswersLocally(name, answer);
 
-            // 2. Update welcome message if name changed
-            userNameDisplay.textContent = `Welcome, ${name}`;
+            // 2. Update welcome message? Optional. Usually keep the logged-in user's name.
+            // if(userNameDisplay) userNameDisplay.textContent = `Welcome, ${name}`; // Uncomment if you want name field to update welcome message
 
             // 3. Prepare data for Formspree
             const formData = new FormData();
-            formData.append('name', name);          // Key 'name' for Formspree
-            formData.append('email', email);        // Key 'email' for Formspree
+            formData.append('name', name);          // Key 'name' for Formspree (name entered in this form)
+            formData.append('email', email);        // Key 'email' for Formspree (logged-in email)
             formData.append('goal_answer', answer); // Key 'goal_answer' for this specific question
+            formData.append('page', document.title); // Add page context
 
             // 4. Send data to Formspree asynchronously
             sendToFormspree(formData);
@@ -638,6 +678,10 @@
         }
 
         function sendToFormspree(formData) {
+             if (!formspreeEndpoint) {
+                 console.warn("Formspree endpoint not configured.");
+                 return; // Don't try to send if no endpoint
+             }
             fetch(formspreeEndpoint, {
                 method: 'POST',
                 body: formData,
@@ -651,14 +695,11 @@
                 } else {
                     // Try to parse error details from Formspree response
                     response.json().then(data => {
-                        if (data.errors) {
-                            console.error('Formspree submission error:', data.errors.map(error => error.message).join(", "));
-                        } else {
-                            console.error('Non-OK response from Formspree.', response.statusText);
-                        }
+                        const errorMsg = data?.errors ? data.errors.map(e => e.message).join(', ') : `Status ${response.status}`;
+                        console.error('Formspree submission error:', errorMsg);
                     }).catch(() => {
                          // Fallback if parsing fails
-                         console.error('Error parsing Formspree error response or Non-OK response from server.');
+                         console.error('Non-OK response from Formspree. Status:', response.status, response.statusText);
                     });
                 }
             })
@@ -671,33 +712,38 @@
 
         // --- UI Update Functions ---
 
-        function showError(message) {
-             errorMessage.textContent = message;
-             errorMessage.style.display = "block";
-             // Optionally focus the first invalid field
-             if (message.includes("name")) {
-                nameInput.focus();
-             } else if (message.includes("answer")) {
-                answerInput.focus();
+        function showError(message, fieldToFocus = null) {
+             if(errorMessage) {
+                 errorMessage.textContent = message;
+                 errorMessage.style.display = "block";
+             }
+             // Optionally focus the relevant field
+             if (fieldToFocus) {
+                 fieldToFocus.focus();
+                 // Optionally add a class for styling the invalid field
+                 fieldToFocus.classList.add('invalid-field-style'); // Define .invalid-field-style in CSS if needed
              }
         }
 
         function hideError() {
-             errorMessage.style.display = "none";
+             if(errorMessage) errorMessage.style.display = "none";
+             // Remove invalid style from fields
+             if(nameInput) nameInput.classList.remove('invalid-field-style');
+             if(answerInput) answerInput.classList.remove('invalid-field-style');
         }
 
         function showSuccessModal() {
-            successModal.style.display = 'flex';
+            if(successModal) successModal.style.display = 'flex';
         }
 
         // Close modal function
         function closeModal() {
-            successModal.style.display = 'none';
+            if(successModal) successModal.style.display = 'none';
         }
 
         // Redirect to article (called from modal button)
         function redirectToArticle() {
-            window.location.href = "article1.html";
+            window.location.href = "article1.html"; // Make sure article1.html exists
         }
 
         // --- Run Initialization on Page Load ---
