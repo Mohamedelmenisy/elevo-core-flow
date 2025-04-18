@@ -136,13 +136,15 @@
         </form>
 
         <div class="links">
-            Don't have an account? <a href="signup.html">Sign up</a> |
+            Don't have an account? <a href="signup.html">Sign up</a> | <!-- Make sure signup.html exists -->
             <a href="#" id="forgotPasswordLink">Forgot password?</a>
         </div>
     </div>
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
+            const currentUserKey = 'currentUser'; // Define the key used across pages
+
             // --- DOM Elements ---
             const loginForm = document.getElementById('loginForm');
             const emailInput = document.getElementById('email');
@@ -158,28 +160,39 @@
             const loginSuccess = document.getElementById('loginSuccess');
 
             // --- Utility Functions ---
-            function showError(element, message) { element.textContent = message; element.style.display = 'block'; }
-            function hideError(element) { element.style.display = 'none'; }
+            function showError(element, message) { if(element){ element.textContent = message; element.style.display = 'block'; } }
+            function hideError(element) { if(element) element.style.display = 'none'; }
             function togglePasswordVisibility(toggleButton, inputElement) {
+                 if(!toggleButton || !inputElement) return;
                  const svg = toggleButton.querySelector('svg'); const isPassword = inputElement.type === 'password';
                  inputElement.type = isPassword ? 'text' : 'password';
                  toggleButton.setAttribute('aria-label', isPassword ? 'Hide password' : 'Show password');
                  const circle = svg?.querySelector('circle'); if (circle) circle.style.display = isPassword ? 'none' : 'block';
             }
-            function setButtonLoading(isLoading) { loginButton.disabled = isLoading; loginButton.classList.toggle('loading', isLoading); }
+            function setButtonLoading(isLoading) {
+                if(!loginButton) return;
+                loginButton.disabled = isLoading;
+                loginButton.classList.toggle('loading', isLoading);
+            }
 
             // --- Initial Setup ---
             const urlParams = new URLSearchParams(window.location.search);
             const emailParam = urlParams.get('email');
             const signedUpParam = urlParams.get('signedup');
-            if (emailParam) { emailInput.value = emailParam; }
+            if (emailParam && emailInput) { emailInput.value = emailParam; }
             if (signedUpParam) {
-                 showError(loginSuccess, "Account created successfully! Please log in."); loginSuccess.style.color = '#27ae60';
+                 showError(loginSuccess, "Account created successfully! Please log in.");
+                 if(loginSuccess) loginSuccess.style.color = '#27ae60';
+                 // Clean the URL history
                  window.history.replaceState({}, document.title, window.location.pathname);
              }
             const rememberedEmail = localStorage.getItem('rememberedEmail');
-            if (rememberedEmail) { emailInput.value = rememberedEmail; rememberCheckbox.checked = true; }
-            if (emailInput.value === '') { emailInput.focus(); } else { passwordInput.focus(); }
+            if (rememberedEmail && emailInput) { emailInput.value = rememberedEmail; if(rememberCheckbox) rememberCheckbox.checked = true; }
+
+            // Auto-focus logic
+            if (emailInput && passwordInput) {
+                 if (emailInput.value === '') { emailInput.focus(); } else { passwordInput.focus(); }
+            }
 
             // --- Event Listeners ---
             if (passwordToggle) {
@@ -187,123 +200,142 @@
                 passwordToggle.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); togglePasswordVisibility(passwordToggle, passwordInput); } });
             }
 
-            loginForm.addEventListener('submit', function(e) {
-                e.preventDefault();
-                hideError(emailError); hideError(passwordError); hideError(loginError); hideError(loginSuccess);
-                setButtonLoading(true);
+            if(loginForm) {
+                loginForm.addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    hideError(emailError); hideError(passwordError); hideError(loginError); hideError(loginSuccess);
+                    setButtonLoading(true);
 
-                const email = emailInput.value.trim().toLowerCase();
-                const password = passwordInput.value;
-                const rememberMe = rememberCheckbox.checked;
-
-                let isValid = true;
-                if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showError(emailError, "Please enter a valid email address"); isValid = false; }
-                if (!password) { showError(passwordError, "Password is required"); isValid = false; }
-
-                if (!isValid) { setButtonLoading(false); return; }
-
-                if (rememberMe) { localStorage.setItem('rememberedEmail', email); }
-                else { localStorage.removeItem('rememberedEmail'); }
-
-                // ** DEMO AUTHENTICATION **
-                console.log("Attempting demo authentication for:", email);
-                setTimeout(() => authenticateUserDemo(email), 800);
-            });
-
-            function authenticateUserDemo(email) {
-                console.warn("DEMO AUTHENTICATION: Checking localStorage 'users'.");
-                let users = [];
-                let usersString = localStorage.getItem('users');
-
-                // 1. Try parsing the users data
-                try {
-                    if (usersString) {
-                        users = JSON.parse(usersString);
-                        console.log("Loaded users:", users);
-                    } else {
-                        console.log("'users' not found in localStorage.");
-                    }
-                } catch (error) {
-                    console.error("Error parsing 'users' from localStorage:", error);
-                    showError(loginError, 'Error retrieving user data. Data might be corrupted.');
-                    setButtonLoading(false);
-                    return; // Stop if users data is broken
-                }
-
-                 // Ensure users is actually an array
-                 if (!Array.isArray(users)) {
-                     console.error("'users' in localStorage is not an array:", users);
-                     showError(loginError, 'User data format is incorrect.');
-                     localStorage.removeItem('users'); // Clear corrupted data
-                     setButtonLoading(false);
-                     return;
-                 }
-
-
-                // 2. Find the user
-                const user = users.find(u => u && u.email && u.email.toLowerCase() === email); // Ensure u and u.email exist
-
-                if (user) {
-                    console.log("User found:", user);
-
-                    // 3. **CRITICAL CHECK:** Ensure found user object has name and email
-                    if (!user.name || !user.email) {
-                         console.error("User object found but missing 'name' or 'email' property:", user);
-                         showError(loginError, 'User data is incomplete. Please sign up again or contact support.');
+                    if (!emailInput || !passwordInput || !rememberCheckbox) {
                          setButtonLoading(false);
-                         return; // Stop if user data is incomplete
+                         showError(loginError, "Form elements missing. Please refresh.");
+                         return;
                     }
 
-                    // --- Login Success (DEMO) ---
-                    console.log("Proceeding with login for:", user.email);
-                    showError(loginSuccess, "Login successful! Redirecting...");
-                    loginSuccess.style.display = 'block';
+                    const email = emailInput.value.trim().toLowerCase();
+                    const password = passwordInput.value; // Password validation should happen server-side ideally
+                    const rememberMe = rememberCheckbox.checked;
 
-                    const currentUserData = {
-                        // Include ID only if it exists and is needed later
-                        // id: user.id || Date.now(), // Example: Generate an ID if missing?
-                        name: user.name,
-                        email: user.email
-                    };
-                    const currentUserString = JSON.stringify(currentUserData);
+                    let isValid = true;
+                    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showError(emailError, "Please enter a valid email address"); isValid = false; }
+                    if (!password) { showError(passwordError, "Password is required"); isValid = false; } // Basic check
 
-                    // 4. Try setting localStorage items
-                    try {
-                        console.log("Setting 'loggedIn' to true");
-                        localStorage.setItem('loggedIn', 'true');
+                    if (!isValid) { setButtonLoading(false); return; }
 
-                        console.log("Setting 'currentUser' to:", currentUserString);
-                        localStorage.setItem('currentUser', currentUserString);
+                    // Handle 'Remember Me'
+                    if (rememberMe) { localStorage.setItem('rememberedEmail', email); }
+                    else { localStorage.removeItem('rememberedEmail'); }
 
-                        // Verify immediately
-                        const storedUser = localStorage.getItem('currentUser');
-                        console.log("Value of 'currentUser' immediately after setting:", storedUser);
-
-                    } catch (storageError) {
-                         console.error("Error saving data to localStorage:", storageError);
-                         showError(loginError, 'Could not save login session. Browser storage might be full or disabled.');
-                         setButtonLoading(false);
-                         return; // Stop if saving fails
-                    }
-
-
-                    if (window.location.search) { window.history.replaceState({}, document.title, window.location.pathname); }
-
-                    // Redirect
-                    setTimeout(() => window.location.href = 'index.html', 1000);
-
-                } else {
-                    // --- Login Failed ---
-                    console.log("Demo Login Failed: Email not found", email);
-                    showError(loginError, 'Email not found in our records (Demo)');
-                    setButtonLoading(false);
-                }
+                    // ** DEMO AUTHENTICATION **
+                    console.log("Attempting demo authentication for:", email);
+                    // Simulate network delay
+                    setTimeout(() => authenticateUserDemo(email, password), 800); // Pass password for demo check
+                });
             }
 
+             // DEMO Authentication Function (Adapt for real backend)
+             function authenticateUserDemo(email, password) {
+                 console.warn("DEMO AUTHENTICATION: Checking localStorage 'users'. Password check is basic/insecure.");
+                 let users = [];
+                 let usersString = localStorage.getItem('users');
+
+                 // 1. Try parsing the users data
+                 try {
+                     if (usersString) {
+                         users = JSON.parse(usersString);
+                         if (!Array.isArray(users)) throw new Error("'users' is not an array."); // Add array check
+                         console.log("Loaded users:", users);
+                     } else {
+                         console.log("'users' not found in localStorage.");
+                         // Optional: Create a dummy user if none exist for testing
+                         // users = [{id: 1, name: "Demo User", email: "test@example.com", password: "password123"}];
+                         // localStorage.setItem('users', JSON.stringify(users));
+                     }
+                 } catch (error) {
+                     console.error("Error handling 'users' from localStorage:", error);
+                     showError(loginError, 'Error retrieving user data. Data might be corrupted.');
+                     setButtonLoading(false);
+                     return; // Stop if users data is broken
+                 }
+
+                 // 2. Find the user by email
+                 const user = users.find(u => u && u.email && u.email.toLowerCase() === email);
+
+                 // 3. Check if user exists AND (for demo) if password matches
+                 // !! WARNING: In a real app, NEVER store or check plain text passwords like this!
+                 // Password check should happen on the server using hashed passwords.
+                 if (user && user.password === password) { // Basic demo password check
+                     console.log("User found and demo password matches:", user);
+
+                     // 4. **CRITICAL CHECK:** Ensure found user object has name and email
+                     if (!user.name || !user.email) {
+                          console.error("User object found but missing 'name' or 'email' property:", user);
+                          showError(loginError, 'User data is incomplete. Please sign up again or contact support.');
+                          setButtonLoading(false);
+                          return; // Stop if user data is incomplete
+                     }
+
+                     // --- Login Success (DEMO) ---
+                     console.log("Proceeding with login for:", user.email);
+                     showError(loginSuccess, "Login successful! Redirecting...");
+                     if(loginSuccess) loginSuccess.style.display = 'block';
+
+                     // Prepare the user object to store (only essential info)
+                     const currentUserData = {
+                         // id: user.id || Date.now(), // Include ID only if necessary
+                         name: user.name,
+                         email: user.email
+                         // DO NOT STORE PASSWORD or other sensitive info here
+                     };
+                     const currentUserString = JSON.stringify(currentUserData);
+
+                     // 5. Try setting localStorage items
+                     try {
+                         console.log("Setting 'loggedIn' to true");
+                         localStorage.setItem('loggedIn', 'true');
+
+                         console.log("Setting 'currentUser' to:", currentUserString);
+                         localStorage.setItem(currentUserKey, currentUserString); // Use the defined key
+
+                         // Verify immediately (for debugging)
+                         const storedUser = localStorage.getItem(currentUserKey);
+                         console.log("Value of 'currentUser' immediately after setting:", storedUser);
+
+                     } catch (storageError) {
+                          console.error("Error saving data to localStorage:", storageError);
+                          showError(loginError, 'Could not save login session. Browser storage might be full or disabled.');
+                          setButtonLoading(false);
+                          return; // Stop if saving fails
+                     }
+
+                     // Clean up URL params if any
+                     if (window.location.search) { window.history.replaceState({}, document.title, window.location.pathname); }
+
+                     // Redirect after a short delay
+                     setTimeout(() => window.location.href = 'index.html', 1000); // Redirect to home/course page
+
+                 } else if (user && user.password !== password) {
+                      // --- Login Failed (Wrong Password - Demo) ---
+                     console.log("Demo Login Failed: Incorrect password for", email);
+                     showError(loginError, 'Incorrect password (Demo)');
+                     setButtonLoading(false);
+                 }
+                 else {
+                     // --- Login Failed (Email Not Found) ---
+                     console.log("Demo Login Failed: Email not found", email);
+                     showError(loginError, 'Email not found in our records (Demo)');
+                     setButtonLoading(false);
+                 }
+             }
+
             // Forgot password placeholder
-            document.getElementById('forgotPasswordLink')?.addEventListener('click', function(e) {
-                e.preventDefault(); alert('Password reset functionality is not implemented in this demo.');
-            });
+            const forgotPasswordLink = document.getElementById('forgotPasswordLink');
+            if(forgotPasswordLink) {
+                forgotPasswordLink.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    alert('Password reset functionality is not implemented in this demo.');
+                });
+            }
         });
     </script>
 </body>
