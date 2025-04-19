@@ -9,6 +9,7 @@
     <link rel="icon" type="image/png" sizes="32x32" href="https://cdn-icons-png.flaticon.com/512/3281/3281289.png">
     <link rel="icon" type="image/png" sizes="16x16" href="https://cdn-icons-png.flaticon.com/512/3281/3281289.png">
     <style>
+        /* --- CSS (تبقى كما هي) --- */
         /* --- Global Styles --- */
         * {
             margin: 0;
@@ -776,104 +777,114 @@
     <script>
         // --- Configuration ---
         const formspreeEndpoint = 'https://formspree.io/f/xzzeqvea'; // Your Formspree Endpoint URL
-        const localStorageKey = 'allUserAnswers_coachingSkills'; // Specific key for THIS page's answers
-        const currentUserKey = 'currentUser'; // Key for storing the whole user object
+        const localStorageAnswersKey = 'allUserAnswers_coachingSkills'; // Specific key for THIS page's answers
+        // ***** ---> التغييرات هنا <--- *****
+        const LOGGED_IN_KEY = 'isUserLoggedIn'; // مفتاح حالة تسجيل الدخول الموحد
+        const CURRENT_USER_KEY = 'currentUser'; // مفتاح بيانات المستخدم الموحد
+        // ***** ---> نهاية التغييرات <--- *****
 
         // --- Initialization ---
         document.addEventListener('DOMContentLoaded', function() {
-             // --- 1. Basic Login Check ---
-             if (localStorage.getItem('loggedIn') !== 'true') {
-                 console.log("Not logged in, redirecting...");
-                 window.location.href = `login.html?redirect=${encodeURIComponent(window.location.pathname + window.location.search)}`; // Include query params if any
-                 return;
-             }
+             console.log("Coaching Skills page script loaded."); // DEBUG
 
-             // --- 2. Get User Data ---
+             // --- 1. Unified Login Check ---
+             // Check for the actual user data first, it's more reliable
              const currentUser = getCurrentUser();
 
-             // --- 3. Display User Info (Handles defaults internally) ---
-             displayUserInfo(); // Reads from localStorage
-
-             // --- 4. Validate User Session ---
-             if (!currentUser || !currentUser.email) {
-                 console.error("User session invalid or email missing after login check. Logging out...");
-                 alert('Your session data seems corrupted. Please log in again.');
-                 logout(); // Force logout and redirect
-                 return;
+             if (!currentUser) { // Check if currentUser data exists and is valid
+                 console.warn(`Coaching Skills: User data not found or invalid under key "${CURRENT_USER_KEY}". Redirecting to login.`);
+                 // Optionally also check the boolean flag as a backup, but currentUser is primary
+                 // if (localStorage.getItem(LOGGED_IN_KEY) !== 'true') { ... }
+                 window.location.href = `login.html?redirect=${encodeURIComponent(window.location.pathname + window.location.search)}`; // Redirect if not logged in
+                 return; // Stop script execution
              }
 
-             // --- 5. Proceed with Page Setup ---
-             const userEmail = currentUser.email;
-             console.log("User is valid:", userEmail, "- Proceeding with page setup.");
-             loadUserAnswers(userEmail);
-             setupEventListeners(userEmail);
-             highlightActiveNav(); // Highlight current nav tab
-             // markRequiredQuestions(); // Add visual markers (optional, done via CSS/HTML mostly now)
+             // --- 2. Proceed if logged in ---
+             console.log(`Coaching Skills: User logged in (${currentUser.email}). Proceeding.`); // DEBUG
+
+             // --- 3. Display User Info ---
+             displayUserInfo(); // Reads from localStorage using CURRENT_USER_KEY
+
+             // --- 4. Load Page-Specific Answers ---
+             loadUserAnswers(currentUser.email);
+
+             // --- 5. Setup Event Listeners ---
+             setupEventListeners(currentUser.email);
+
+             // --- 6. Highlight Active Nav Tab ---
+             highlightActiveNav();
+
+             console.log("Coaching Skills page initialization complete."); // DEBUG
         });
 
         // --- User Info & Authentication ---
         function getCurrentUser() {
-             // Re-usable function to get and parse user data safely
+             // Consistent function across pages
              try {
-                 const data = localStorage.getItem(currentUserKey);
+                 const data = localStorage.getItem(CURRENT_USER_KEY); // Uses unified key
                  if (data) {
                      const parsedData = JSON.parse(data);
-                     // Basic validation: ensure it's an object with at least an email
+                     // Validate structure (must be object with email)
                      if (parsedData && typeof parsedData === 'object' && parsedData.email) {
+                         // console.log("getCurrentUser successful:", parsedData); // DEBUG
                          return parsedData;
                      } else {
-                         console.warn("currentUser data found but invalid or missing email.", parsedData);
-                         localStorage.removeItem(currentUserKey); // Clean up invalid data
-                         localStorage.removeItem('loggedIn'); // Force logout
+                         console.warn(`currentUser data found under key "${CURRENT_USER_KEY}" but invalid:`, parsedData);
+                         localStorage.removeItem(CURRENT_USER_KEY);
+                         localStorage.removeItem(LOGGED_IN_KEY); // Remove boolean flag too
                          return null;
                      }
                  }
+                 // console.log(`No data found for key "${CURRENT_USER_KEY}"`); // DEBUG
                  return null; // No data found
              } catch (e) {
-                 console.error("Error parsing currentUser data:", e);
-                  localStorage.removeItem(currentUserKey); // Clean up corrupted data
-                  localStorage.removeItem('loggedIn'); // Force logout
+                 console.error(`Error parsing currentUser data (key: "${CURRENT_USER_KEY}"):`, e);
+                  localStorage.removeItem(CURRENT_USER_KEY); // Clean up corrupted data
+                  localStorage.removeItem(LOGGED_IN_KEY);
                  return null;
              }
         }
 
         function displayUserInfo() {
-            // Reads directly from localStorage - Consistent pattern
+            // Consistent function across pages
             const userNameElement = document.getElementById('userName');
             const userEmailElement = document.getElementById('userEmail');
-            let userName = 'User'; // Default
-            let userEmail = 'user@example.com'; // Default
+            let userName = 'User'; // Default if name is missing
+            let userEmail = '';    // Default
 
-            try {
-                const userDataString = localStorage.getItem(currentUserKey);
-                if (userDataString) {
-                    const userData = JSON.parse(userDataString);
-                    userName = userData.name || userName; // Use stored name or default
-                    userEmail = userData.email || userEmail; // Use stored email or default
-                }
-            } catch (error) {
-                console.error("Error displaying user info:", error);
-                 // Keep defaults if error occurs
+            const currentUser = getCurrentUser(); // Get potentially updated user data
+
+            if (currentUser) {
+                userName = currentUser.name || userName; // Use stored name or default
+                userEmail = currentUser.email || userEmail; // Should always have email if check passed
+            } else {
+                 console.warn("displayUserInfo called but no valid currentUser data found.");
             }
 
             if (userNameElement) userNameElement.textContent = `Welcome, ${userName}`;
             if (userEmailElement) userEmailElement.textContent = userEmail;
+             // console.log("displayUserInfo updated:", userName, userEmail); // DEBUG
         }
 
         function logout() {
-            console.log("Logging out...");
-            localStorage.removeItem('loggedIn');
-            localStorage.removeItem(currentUserKey);
-            // No need to remove userEmailKey if currentUserKey is the standard
-            // localStorage.removeItem(userEmailKey);
-
-            // Decide if page-specific answers should be cleared on logout
-            // localStorage.removeItem(localStorageKey); // Uncomment to clear page answers on logout
-
-            window.location.href = 'login.html';
+            // Consistent function across pages
+            console.log("Logging out from Coaching Skills page...");
+            try {
+                localStorage.removeItem(LOGGED_IN_KEY);     // Use unified key
+                localStorage.removeItem(CURRENT_USER_KEY); // Use unified key
+                // Optional: Clear page-specific answers on logout? Usually not desired.
+                // localStorage.removeItem(localStorageAnswersKey);
+                console.log("Cleared login keys:", LOGGED_IN_KEY, CURRENT_USER_KEY);
+                window.location.href = 'login.html'; // Redirect to login
+            } catch (error) {
+                 console.error("Error clearing localStorage during logout:", error);
+                 // Redirect anyway
+                 window.location.href = 'login.html';
+            }
         }
 
         function highlightActiveNav() {
+             // Consistent function across pages
              const currentPath = window.location.pathname.split('/').pop() || 'index.html';
              document.querySelectorAll('.nav-tab a').forEach(link => {
                  const linkPath = (link.getAttribute('href') || '').split('/').pop();
@@ -881,463 +892,439 @@
              });
          }
 
-        // Optional: Function to add asterisks dynamically if not done in HTML
-        // function markRequiredQuestions() { ... } // Can be added if needed
-
-        // --- Answer Handling (Local Storage) ---
+        // --- Answer Handling (Local Storage for this page) ---
         function loadUserAnswers(userEmail) {
+            // Specific to this page's answers
             if (!userEmail) { console.warn("loadUserAnswers: No userEmail provided."); return; }
-            console.log("Loading answers for:", userEmail);
+            console.log("Loading answers for:", userEmail, `from key: ${localStorageAnswersKey}`); // DEBUG
             let allAnswers = {};
             try {
-                 const storedAnswers = localStorage.getItem(localStorageKey);
+                 const storedAnswers = localStorage.getItem(localStorageAnswersKey); // Use page-specific key
                  if (storedAnswers) {
                      allAnswers = JSON.parse(storedAnswers) || {};
                  }
             } catch (e) {
                  console.error("Error parsing user answers from localStorage:", e);
-                 allAnswers = {}; // Reset on error to prevent further issues
+                 // Consider backing up corrupted data before resetting?
+                 // localStorage.setItem(localStorageAnswersKey + '_backup_' + Date.now(), localStorage.getItem(localStorageAnswersKey));
+                 localStorage.removeItem(localStorageAnswersKey); // Clear corrupted data
+                 allAnswers = {};
             }
 
             const userAnswers = allAnswers[userEmail] || {};
-            console.log("Found answers:", userAnswers);
+            console.log("Found answers for this user:", userAnswers); // DEBUG
 
+            // Populate fields
             document.querySelectorAll('.required-answer, input[type="text"][data-question]').forEach(field => {
                 const questionId = field.getAttribute('data-question');
-                if (!questionId) return; // Skip elements without data-question
+                if (!questionId) return;
 
                 const statusId = `save-status-${questionId}`;
-                const statusElement = document.getElementById(statusId);
                 const errorId = `error-${questionId}`;
-                const errorElement = document.getElementById(errorId);
+                hideMessages(statusId, errorId, field); // Reset state first
 
-                // Reset states
-                field.classList.remove('required-field');
-                if (statusElement) statusElement.style.display = 'none';
-                if (errorElement) errorElement.style.display = 'none';
-
-                // Load value if exists
                 if (userAnswers[questionId] !== undefined && userAnswers[questionId] !== null) {
                     field.value = userAnswers[questionId];
-                    // Optional: Show saved status briefly only on initial load
-                    // if (String(userAnswers[questionId]).trim() !== '' && statusElement) {
-                    //     statusElement.textContent = '✓ Loaded'; // Indicate loaded state
-                    //     statusElement.style.color = '#6c757d'; // Grey for loaded
-                    //     statusElement.style.display = 'inline';
-                    //     setTimeout(() => { statusElement.style.display = 'none'; }, 2000);
-                    // }
+                    // console.log(`Loaded answer for ${questionId}:`, userAnswers[questionId]); // DEBUG
                 } else {
-                    field.value = ''; // Ensure field is clear if no answer stored
+                    field.value = ''; // Ensure field is empty if no answer stored
                 }
             });
+            console.log("Finished loading answers into fields."); // DEBUG
         }
 
         function saveAnswerToStorage(userEmail, questionId, answer) {
+             // Specific to this page's answers
              if (!userEmail) { console.error("saveAnswerToStorage: No userEmail!"); return false; }
              let allAnswers = {};
              try {
-                 const storedAnswers = localStorage.getItem(localStorageKey);
+                 const storedAnswers = localStorage.getItem(localStorageAnswersKey); // Use page-specific key
                  if (storedAnswers) {
                      allAnswers = JSON.parse(storedAnswers) || {};
                  }
              } catch (e) {
                  console.error("Error parsing answers before saving:", e);
                  alert("Could not load previous answers due to data error. Your new answer might overwrite others.");
-                 allAnswers = {}; // Reset if corrupted to avoid spreading error
+                 allAnswers = {};
              }
 
             if (!allAnswers[userEmail]) {
                 allAnswers[userEmail] = {};
             }
-            allAnswers[userEmail][questionId] = answer;
+            allAnswers[userEmail][questionId] = answer; // Save the answer
 
             try {
-                localStorage.setItem(localStorageKey, JSON.stringify(allAnswers));
-                console.log(`Saved: ${userEmail} -> ${localStorageKey} -> ${questionId}`);
+                localStorage.setItem(localStorageAnswersKey, JSON.stringify(allAnswers)); // Use page-specific key
+                console.log(`Saved to ${localStorageAnswersKey}: ${userEmail} -> ${questionId}`); // DEBUG
                 return true;
             } catch (e) {
                  console.error("Error saving answers to localStorage:", e);
-                 alert("Failed to save your answer. Local storage might be full or disabled.");
+                 // Consider specific error messages (e.g., quota exceeded)
+                 let message = "Failed to save your answer.";
+                 if (e.name === 'QuotaExceededError') {
+                     message += " Local storage might be full.";
+                 }
+                 alert(message);
                  return false;
             }
         }
 
          function deleteAnswerFromStorage(userEmail, questionId) {
+             // Specific to this page's answers
              if (!userEmail) { console.error("deleteAnswerFromStorage: No userEmail!"); return false; }
              let allAnswers = {};
              try {
-                 const storedAnswers = localStorage.getItem(localStorageKey);
+                 const storedAnswers = localStorage.getItem(localStorageAnswersKey); // Use page-specific key
                  if (storedAnswers) {
                      allAnswers = JSON.parse(storedAnswers) || {};
                  } else {
+                     console.log("No answers found in storage to delete from."); // DEBUG
                      return false; // Nothing to delete from
                  }
              } catch (e) {
                  console.error("Error parsing answers before deletion:", e);
                  alert("Could not load answers to perform deletion due to data error.");
-                 return false; // Abort deletion if data is corrupted
+                 return false;
              }
 
              let updated = false;
              if (allAnswers[userEmail] && allAnswers[userEmail][questionId] !== undefined) {
-                delete allAnswers[userEmail][questionId];
+                delete allAnswers[userEmail][questionId]; // Delete the specific answer
                 updated = true;
-                console.log(`Deleted: ${userEmail} -> ${localStorageKey} -> ${questionId}`);
-                // Optional: remove user entry if no answers left
+                console.log(`Deleted from ${localStorageAnswersKey}: ${userEmail} -> ${questionId}`); // DEBUG
+                // Optional: Clean up empty user object
                 if (Object.keys(allAnswers[userEmail]).length === 0) {
                     delete allAnswers[userEmail];
-                     console.log(`Removed empty user entry ${userEmail} from ${localStorageKey}`);
+                     console.log(`Removed empty user entry ${userEmail} from ${localStorageAnswersKey}`); // DEBUG
                 }
+            } else {
+                 console.log(`Answer ${questionId} not found for user ${userEmail} in ${localStorageAnswersKey}.`); // DEBUG
             }
 
              if (updated) {
                  try {
-                     localStorage.setItem(localStorageKey, JSON.stringify(allAnswers));
+                     // Save the updated structure (might be empty if last answer was deleted)
+                     localStorage.setItem(localStorageAnswersKey, JSON.stringify(allAnswers)); // Use page-specific key
                      return true;
                  } catch (e) {
                      console.error("Error saving after deletion:", e);
-                     // State might be inconsistent now
+                     alert("Failed to update storage after deleting the answer.");
                      return false;
                  }
              }
-             return false; // Nothing was deleted
+             return false; // Indicate nothing was actually deleted from storage
         }
 
         // --- Event Listeners Setup ---
         function setupEventListeners(userEmail) {
             if (!userEmail) { console.warn("setupEventListeners: No userEmail."); return; }
+             console.log("Setting up event listeners..."); // DEBUG
 
-            // Auto-remove required styling on input/change
+            // Input listeners to clear validation errors
             document.querySelectorAll('.required-answer, input[type="text"][data-question]').forEach(field => {
                const eventType = (field.tagName === 'TEXTAREA' || field.type === 'text') ? 'input' : 'change';
                field.addEventListener(eventType, function() {
                    const questionId = this.getAttribute('data-question');
-                   const errorId = `error-${questionId}`;
-                   hideError(errorId); // Hide specific error message
-                   this.classList.remove('required-field'); // Remove red border
-
-                   // If it's a metaphor field, re-check the group validation silently
-                   if (questionId && questionId.startsWith('m')) {
-                       checkMetaphorGroupSilently();
+                   if (questionId) {
+                       const errorId = `error-${questionId}`;
+                       hideError(errorId); // Hide specific error message for this field
+                       if (this.value.trim() !== '') { // Only remove border if field now has content
+                            this.classList.remove('required-field');
+                       }
+                       // Re-check metaphor group silently if needed
+                       if (questionId.startsWith('m')) {
+                           checkMetaphorGroupSilently();
+                       }
                    }
                });
             });
 
-           // Next button validation
+           // Next button validation listener
            const nextButton = document.getElementById('nextButton');
            if (nextButton) {
                nextButton.addEventListener('click', function(e) {
-                   console.log("Next button clicked. Validating...");
-                   if (!validateAllAnswers(true)) { // Pass true to show errors
-                       e.preventDefault(); // Stop navigation
+                   console.log("Next button clicked. Validating..."); // DEBUG
+                   if (!validateAllAnswers(true)) { // Pass true to SHOW errors on click
+                       e.preventDefault(); // Prevent navigation
                        showWarningMessage("Please complete all required fields marked with * before proceeding.");
-                       console.log("Validation failed. Navigation stopped.");
+                       console.log("Validation failed. Navigation stopped."); // DEBUG
                    } else {
-                       console.log("Validation passed. Proceeding to next page.");
-                       // Allow default navigation
+                       console.log("Validation passed. Allowing navigation."); // DEBUG
+                       // Allow default link behavior to proceed
                    }
                });
+               console.log("Next button listener added."); // DEBUG
            } else {
-               console.warn("Next button not found.");
+               console.warn("Next button element not found."); // DEBUG
            }
        }
 
         // --- UI Feedback & Validation ---
         function validateAllAnswers(showErrors = false) {
+            // Consistent function across pages
             let allValid = true;
             let firstInvalidField = null;
-            console.log(`Running validation (Show Errors: ${showErrors})`);
+            console.log(`Running validation (Show Errors: ${showErrors})`); // DEBUG
 
-            // 1. Check all non-metaphor required fields
+            // 1. Check standard required fields
             document.querySelectorAll('.required-answer:not([data-question^="m"])').forEach(field => {
                  const questionId = field.getAttribute('data-question');
                  const errorId = `error-${questionId}`;
-                 // Reset first
-                 hideError(errorId);
-                 field.classList.remove('required-field');
-
-                 if (field.value.trim() === '') {
+                 if (!field.value.trim()) {
                      allValid = false;
-                     console.log(`Validation fail: ${questionId} is empty.`);
-                     if (showErrors) {
-                         showError(errorId, field, 'This field is required.');
-                     }
+                     if (showErrors) showError(errorId, field);
                      if (!firstInvalidField) firstInvalidField = field;
+                      console.log(`Validation fail (standard): ${questionId} is empty.`); // DEBUG
+                 } else {
+                      // If filled, ensure error state is cleared
+                      hideError(errorId);
+                      field.classList.remove('required-field');
                  }
             });
 
-             // 2. Check metaphor fields count
+             // 2. Check Metaphor fields (at least 3 required)
              let metaphorCount = 0;
-             const metaphorFields = document.querySelectorAll('input[data-question^="m"]'); // Select all metaphor inputs
+             const metaphorFields = document.querySelectorAll('input[data-question^="m"].required-answer'); // Only check REQUIRED metaphor fields
              metaphorFields.forEach(field => {
                  if (field.value.trim() !== '') {
                      metaphorCount++;
                  }
              });
 
-             const requiredMetaphorCount = 3;
+             const requiredMetaphorCount = 3; // Hardcoded requirement
              if (metaphorCount < requiredMetaphorCount) {
                  allValid = false;
-                 console.log(`Validation fail: Metaphor count is ${metaphorCount}, required ${requiredMetaphorCount}.`);
+                 console.log(`Validation fail (metaphors): Count is ${metaphorCount}, required ${requiredMetaphorCount}.`); // DEBUG
                  if (showErrors) {
-                     // Highlight only the *required* ones (m1, m2, m3) if count is low
-                     document.querySelectorAll('.required-answer[data-question^="m"]').forEach(field => {
+                     // Highlight the required metaphor fields (m1, m2, m3)
+                     metaphorFields.forEach(field => {
                          const questionId = field.getAttribute('data-question');
                          const errorId = `error-${questionId}`;
-                         showError(errorId, field, `Please enter at least ${requiredMetaphorCount} metaphors.`);
-                          if (!firstInvalidField) firstInvalidField = field; // Track the first required empty metaphor field
+                         // Show error only if the field itself is empty within the required group
+                         if (!field.value.trim()) {
+                            showError(errorId, field, `Please enter at least ${requiredMetaphorCount} metaphors.`);
+                            if (!firstInvalidField) firstInvalidField = field; // Track first empty required metaphor
+                         }
                      });
                  }
              } else {
                   // Clear errors from required metaphor fields if count is met
-                 document.querySelectorAll('.required-answer[data-question^="m"]').forEach(field => {
+                 metaphorFields.forEach(field => {
                      const questionId = field.getAttribute('data-question');
                      const errorId = `error-${questionId}`;
                      hideError(errorId);
-                     // Only remove red border if the specific field is also filled
-                     if (field.value.trim() !== '') {
-                          field.classList.remove('required-field');
-                     }
+                     field.classList.remove('required-field'); // Remove red border if count met
                  });
              }
 
-            // 3. Scroll to first error if validation failed
+            // 3. Scroll to the first invalid field found
             if (!allValid && showErrors && firstInvalidField) {
-                console.log("Scrolling to first invalid field:", firstInvalidField.dataset.question);
+                console.log("Scrolling to first invalid field:", firstInvalidField.dataset.question); // DEBUG
                 firstInvalidField.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                setTimeout(() => { try { firstInvalidField.focus({ preventScroll: true }); } catch (e) {} }, 300);
+                 // Delay focus slightly for smoother scroll animation effect
+                 setTimeout(() => {
+                     try { firstInvalidField.focus({ preventScroll: true }); } // preventScroll might not be needed with block:center
+                     catch(e){ console.warn("Could not focus element:", e); }
+                 }, 350);
             }
 
-            console.log("Validation overall result:", allValid);
+            console.log("Validation overall result:", allValid); // DEBUG
             return allValid;
         }
 
-         // Helper to silently check metaphor count and clear group error if met
          function checkMetaphorGroupSilently() {
+             // Helper to clear group error without showing messages
              let metaphorCount = 0;
-             document.querySelectorAll('input[data-question^="m"]').forEach(field => {
+             const metaphorFields = document.querySelectorAll('input[data-question^="m"].required-answer');
+             metaphorFields.forEach(field => {
                  if (field.value.trim() !== '') {
                      metaphorCount++;
                  }
              });
              if (metaphorCount >= 3) {
-                 document.querySelectorAll('.required-answer[data-question^="m"]').forEach(field => {
+                 metaphorFields.forEach(field => {
                      const errorId = `error-${field.getAttribute('data-question')}`;
                      hideError(errorId);
-                     // Remove border only if individually filled
-                     if (field.value.trim() !== '') {
-                         field.classList.remove('required-field');
-                     }
+                     field.classList.remove('required-field'); // Remove border if group requirement met
                  });
              }
          }
 
 
         function showWarningMessage(message = "Please complete all required fields marked with *.") {
+            // Consistent function across pages
             const warningElement = document.getElementById('warningMessage');
-            if (!warningElement) return;
+            if (!warningElement) { console.error("Floating warning element not found."); return; }
 
-            warningElement.innerHTML = `<strong>Action Required:</strong> ${message}`; // Use innerHTML to render span if needed
-            warningElement.style.animation = 'none'; // Reset animation
-            void warningElement.offsetWidth; // Trigger reflow
+            warningElement.innerHTML = `<strong>Action Required:</strong> ${message}`;
+            warningElement.style.animation = 'none';
+            void warningElement.offsetWidth; // Force reflow to restart animation
             warningElement.style.display = 'block';
             warningElement.style.animation = 'slideDownFadeInWarn 0.4s ease-out';
 
-            // Clear previous timer if exists
-            clearTimeout(warningElement.timer);
-
-            // Set new timer to hide the message
+            clearTimeout(warningElement.timer); // Clear existing timer
             warningElement.timer = setTimeout(() => {
                 warningElement.style.animation = 'fadeOutUpWarn 0.5s ease-out forwards';
-                setTimeout(() => {
-                    if (warningElement.style.animationName === 'fadeOutUpWarn') {
-                        warningElement.style.display = 'none';
-                        warningElement.style.animation = '';
-                    }
-                }, 500); // Matches animation duration
-            }, 4000); // Display duration
+                 // Set display none *after* fade-out animation completes
+                 setTimeout(() => {
+                      // Double-check it wasn't shown again in the meantime
+                      if (warningElement.style.animationName === 'fadeOutUpWarn') {
+                           warningElement.style.display = 'none';
+                           warningElement.style.animation = ''; // Reset animation property
+                      }
+                 }, 500);
+            }, 4000); // How long the warning stays visible
         }
 
         function showSaveStatus(statusId, message = '✓ Saved') {
+             // Consistent function across pages
              const statusElement = document.getElementById(statusId);
              if (!statusElement) return;
              statusElement.textContent = message;
-             statusElement.classList.remove('deleted'); // Ensure it's not styled as deleted unless specified
-             statusElement.style.color = '#27ae60'; // Default green
+             statusElement.classList.remove('deleted');
+             statusElement.style.color = '#27ae60'; // Green for saved
 
              if (message.toLowerCase().includes('delete')) {
-                 statusElement.classList.add('deleted'); // Add class for potential specific styling
-                 statusElement.style.color = '#e74c3c'; // Red for deleted confirmation
+                 statusElement.classList.add('deleted');
+                 statusElement.style.color = '#e74c3c'; // Red for deleted
              }
 
              statusElement.style.display = 'inline-block';
-             clearTimeout(statusElement.timer); // Clear previous timer
+             clearTimeout(statusElement.timer);
              statusElement.timer = setTimeout(() => {
                  statusElement.style.display = 'none';
-             }, 3000);
+             }, 3000); // Hide after 3 seconds
         }
 
         function showError(errorId, field, message = 'This field is required.') {
+             // Consistent function across pages
              const errorElement = document.getElementById(errorId);
              if (errorElement) {
                  errorElement.textContent = message;
-                 errorElement.style.display = 'inline-block'; // Show error message
+                 errorElement.style.display = 'inline-block';
              }
              if (field) {
-                  field.classList.add('required-field'); // Add red border
+                  field.classList.add('required-field'); // Add red border/style
              }
         }
 
         function hideError(errorId) {
+             // Consistent function across pages
              const errorElement = document.getElementById(errorId);
              if (errorElement) errorElement.style.display = 'none';
-             // Note: We don't remove 'required-field' class here, only on input or successful validation
+             // Removing 'required-field' class is handled by input listeners or validation success
         }
 
         function hideMessages(statusId, errorId, field) {
-            // Utility to hide status and error for a field
+            // Consistent utility across pages
              const statusElement = document.getElementById(statusId);
              const errorElement = document.getElementById(errorId);
              if (statusElement) statusElement.style.display = 'none';
              if (errorElement) errorElement.style.display = 'none';
-             if (field) field.classList.remove('required-field'); // Remove validation style
-        }
+             if (field) field.classList.remove('required-field');
+         }
 
 
-        // --- Actions (Save, Delete) - Make available globally for onclick ---
+        // --- Actions (Save, Delete) - Made global for onclick ---
+        // Ensure these are accessible in the global scope
         window.saveAnswer = function(questionId, statusId, errorId) {
             const currentUser = getCurrentUser();
-            if (!currentUser || !currentUser.email) {
-                alert('Session expired. Please login again.');
-                logout();
-                return;
-            }
+            if (!currentUser?.email) { /* ... (handle session error) ... */ alert('Session expired. Please login again.'); logout(); return; }
             const userEmail = currentUser.email;
 
             const field = document.querySelector(`[data-question="${questionId}"]`);
-            if (!field) { console.error(`Field not found: ${questionId}`); return; }
+            if (!field) { /* ... (handle field not found) ... */ console.error(`Save failed: Field ${questionId} not found.`); return; }
 
-            const answer = field.value; // Get current value
+            const answer = field.value; // Keep raw value for saving whitespace if needed
             const isRequired = field.classList.contains('required-answer');
 
-            // --- Basic Validation ---
-            hideMessages(statusId, errorId, field); // Clear previous state
+            hideMessages(statusId, errorId, field); // Clear previous state first
 
-            // 1. Check if required field is empty
+            // Validate if required and empty
             if (isRequired && answer.trim() === '') {
-                showError(errorId, field, 'This field is required.');
-                return; // Don't save empty required field
+                showError(errorId, field); // Show specific error for this field
+                return; // Stop saving
             }
 
-             // 2. Check metaphor group requirement if applicable
-             let isMetaphorField = questionId.startsWith('m');
-             if (isMetaphorField) {
-                  let metaphorCount = 0;
-                  document.querySelectorAll('input[data-question^="m"]').forEach(mf => {
-                      if (mf.value.trim() !== '') metaphorCount++;
-                  });
-                  if (metaphorCount < 3) {
-                      // Don't necessarily show an error *here* unless this save *fails* the group,
-                      // but maybe prevent saving optional empty ones if count is below 3?
-                      // For simplicity, we'll allow saving individual ones, validation handles the group check on 'Next'.
-                  } else {
-                       // If count is now >= 3, clear any lingering group errors
-                       checkMetaphorGroupSilently();
-                  }
-             }
-
-
-            // --- Save and Submit ---
-            // 1. Save to Local Storage
+            // Save and submit
             if (saveAnswerToStorage(userEmail, questionId, answer)) {
-                 // 2. Send to Formspree (only if saved locally successfully)
                  submitToFormspree(userEmail, questionId, answer);
-                 // 3. Show confirmation
-                 showSaveStatus(statusId, '✓ Saved');
+                 showSaveStatus(statusId); // Show "Saved"
             } else {
-                 // Show save error status if localStorage failed
-                 showSaveStatus(statusId, '✗ Save Error');
+                 showSaveStatus(statusId, '✗ Save Error'); // Show save error
             }
         }
 
         window.deleteAnswer = function(questionId, statusId, errorId) {
              const currentUser = getCurrentUser();
-             if (!currentUser || !currentUser.email) {
-                 alert('Session expired. Please login again.');
-                 logout();
-                 return;
-             }
+             if (!currentUser?.email) { /* ... (handle session error) ... */ alert('Session expired. Please login again.'); logout(); return; }
              const userEmail = currentUser.email;
 
             const field = document.querySelector(`[data-question="${questionId}"]`);
-            if (!field) { console.error(`Field not found: ${questionId}`); return; }
+             if (!field) { /* ... (handle field not found) ... */ console.error(`Delete failed: Field ${questionId} not found.`); return; }
             const isRequired = field.classList.contains('required-answer');
 
-            hideMessages(statusId, errorId, field); // Hide previous state
+            hideMessages(statusId, errorId, field); // Clear previous state
 
-            // Clear the field value
-            field.value = '';
+            field.value = ''; // Clear the field visually
 
-            // Remove from Local Storage
             if (deleteAnswerFromStorage(userEmail, questionId)) {
                  showSaveStatus(statusId, '✓ Answer Deleted');
-                 // Re-apply required styles if needed
+                 // If it was required, mark it as invalid again and re-check group validation
                  if (isRequired) {
-                      field.classList.add('required-field'); // Mark as required again since it's empty
-                      // If it's a metaphor field, re-check group status
-                      if (questionId.startsWith('m')) {
-                           validateAllAnswers(true); // Re-run validation to show group error if needed
-                      }
+                     field.classList.add('required-field');
+                     if (questionId.startsWith('m')) {
+                         validateAllAnswers(false); // Re-run validation silently or show errors immediately? Maybe show: validateAllAnswers(true);
+                     }
                  }
             } else {
-                 showSaveStatus(statusId, '✗ Delete Error'); // Indicate if deletion failed
+                 showSaveStatus(statusId, '✗ Delete Error');
             }
         }
 
         // --- Formspree Submission ---
         function submitToFormspree(userEmail, questionId, answer) {
-            // Submit even if answer is whitespace, let backend handle if needed
+            // Consistent function across pages
             if (!formspreeEndpoint) { console.warn("Formspree endpoint not configured."); return; }
             if (!userEmail) { console.warn("Formspree: No userEmail provided."); return; }
 
             const formData = new FormData();
             formData.append('email', userEmail);
-            formData.append('page_title', document.title);
+            formData.append('page_title', document.title); // Page title
             formData.append('page_key', 'coachingSkills'); // Specific key for this page
             formData.append('question_id', questionId);
-            formData.append('answer_text', answer);
+            formData.append('answer_text', answer); // Send the raw answer
 
             const currentUser = getCurrentUser();
              if (currentUser?.name) formData.append('user_name', currentUser.name);
 
-            // Add question context
-             let context = `Q-ID: ${questionId}`; // Fallback
+            // Get Context (Improved)
+            let context = `Q-ID: ${questionId}`; // Fallback
              const fieldElement = document.querySelector(`[data-question="${questionId}"]`);
              if (fieldElement) {
-                 let headingElement = null;
                  const questionBox = fieldElement.closest('.question-box');
                  const table = fieldElement.closest('.metaphor-table');
+                 let headingElement = null;
 
                  if (questionBox) { // Standard question box
                       headingElement = questionBox.querySelector('h3');
                      // Handle SWOT structure where P precedes textarea
-                     if (!headingElement) {
-                          const pLabel = fieldElement.previousElementSibling;
-                          if (pLabel && pLabel.tagName === 'P') { headingElement = pLabel; }
+                     if (!headingElement && fieldElement.previousElementSibling?.tagName === 'P') {
+                          headingElement = fieldElement.previousElementSibling;
                      }
                  } else if (table) { // Metaphor table
-                     headingElement = table.querySelector('th'); // Get table header
-                     context = headingElement ? `${headingElement.textContent.trim()} (#${questionId.substring(1)})` : `Metaphor Entry (#${questionId.substring(1)})`;
-                     headingElement = null; // Prevent using table header text directly below
+                     const tableHeader = table.querySelector('th');
+                     context = tableHeader ? `${tableHeader.textContent.trim()} (#${questionId.substring(1)})` : `Metaphor Entry (#${questionId.substring(1)})`;
                  }
 
-                 if (headingElement) {
-                      context = headingElement.textContent.replace(/<span class="required-star">\*<\/span>/gi, '').trim(); // Remove star span/text
+                 if (headingElement) { // Use heading text if found
+                      context = headingElement.textContent.replace(/\*/g, '').trim(); // Remove asterisk
                  }
              }
-            formData.append('question_context', context);
+             formData.append('question_context', context);
 
 
+            console.log(`Submitting to Formspree: ${questionId} = "${answer.substring(0, 30)}..."`); // DEBUG
             fetch(formspreeEndpoint, {
                 method: 'POST',
                 body: formData,
@@ -1345,18 +1332,22 @@
             })
             .then(response => {
                 if (response.ok) {
-                    console.log(`Formspree: ${questionId} (Page: ${document.title}) submitted.`);
+                    console.log(`Formspree: ${questionId} (Page: ${document.title}) submitted successfully.`);
                 } else {
+                     // Log error details if possible
                      response.json().then(data => {
                         const errorMsg = data?.errors ? data.errors.map(e => e.message || e.code).join(', ') : `Status: ${response.status}`;
                         console.error(`Formspree error (${questionId}, ${document.title}): ${errorMsg}`);
-                    }).catch(() => {
+                    }).catch(() => { // Handle non-JSON error responses
                         console.error(`Formspree non-JSON error (${questionId}, ${document.title}). Status: ${response.status} ${response.statusText}`);
                     });
                 }
             })
             .catch(error => {
+                // Log network errors
                 console.error(`Network error submitting (${questionId}, ${document.title}) to Formspree:`, error);
+                // Maybe notify user of submission failure? Could use showWarningMessage
+                // showWarningMessage(`Failed to submit answer for ${questionId}. Please check connection.`);
             });
         }
 
