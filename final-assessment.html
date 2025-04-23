@@ -59,11 +59,40 @@
         #finalAssessmentForm .input-meta-info { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; }
         #finalAssessmentForm .word-count-info { font-size: 13px; color: #6b7280; }
         #finalAssessmentForm .paste-warning { font-size: 13px; color: #f97316; display: none; }
-        #finalAssessmentForm .error-message { color: #ef4444; font-size: 14px; margin-top: 8px; display: none; font-weight: 500;}
-        #finalAssessmentForm input.invalid, #finalAssessmentForm textarea.invalid { border-color: #ef4444; }
+        /* Style for inline error messages */
+        #finalAssessmentForm .error-message {
+             color: #ef4444; /* Red color for errors */
+             font-size: 14px;
+             margin-top: 8px; /* Space above the message */
+             display: none; /* Hidden by default */
+             font-weight: 500;
+             background-color: #fee2e2; /* Light red background */
+             border-left: 3px solid #ef4444; /* Red left border */
+             padding: 8px 12px; /* Padding inside the message box */
+             border-radius: 4px; /* Rounded corners */
+        }
+        #finalAssessmentForm input.invalid, #finalAssessmentForm textarea.invalid {
+             border-color: #ef4444; /* Red border for invalid fields */
+             background-color: #fef2f2; /* Very light red background */
+        }
+        /* --- NEW: Style for the Summary Error Message --- */
+        .form-summary-error {
+            background-color: #fee2e2; /* Light red background */
+            color: #b91c1c; /* Darker red text */
+            border: 1px solid #fecaca; /* Slightly darker red border */
+            border-left: 4px solid #ef4444; /* Prominent left red border */
+            padding: 12px 18px;
+            border-radius: 6px;
+            margin-bottom: 25px; /* Space before submit button */
+            font-size: 15px;
+            font-weight: 500;
+            text-align: center; /* Center the text */
+            display: none; /* Hidden by default */
+        }
+        /* --- End NEW Style --- */
         #submissionProgressContainer { width: 100%; height: 10px; background-color: #e5e7eb; border-radius: 5px; overflow: hidden; margin: 20px 0 30px 0; display: none; }
         #submissionProgressBar { width: 0%; height: 100%; background: linear-gradient(90deg, #a78bfa, #7c3aed); border-radius: 5px; transition: width 0.4s ease-out; }
-        #finalSubmitBtn { background-color: #7c3aed; color: white; padding: 14px 30px; border: none; border-radius: 8px; font-size: 17px; font-weight: 600; cursor: pointer; transition: all 0.3s ease; }
+        #finalSubmitBtn { background-color: #7c3aed; color: white; padding: 14px 30px; border: none; border-radius: 8px; font-size: 17px; font-weight: 600; cursor: pointer; transition: all 0.3s ease; display: block; /* Make button block for centering */ width: fit-content; margin: 0 auto; /* Center the button */ }
         #finalSubmitBtn:hover { background-color: #6d28d9; transform: translateY(-2px); box-shadow: 0 4px 10px rgba(124, 58, 237, 0.25); }
         #finalSubmitBtn:disabled { background-color: #9ca3af; cursor: not-allowed; transform: none; box-shadow: none;}
 
@@ -165,13 +194,15 @@
             main { padding: 0 15px; margin: 15px auto; }
             .assessment-container { padding: 25px 30px; }
             .user-bar { padding: 10px 20px; }
+            #finalAssessmentForm .error-message { padding: 6px 10px; font-size: 13px; }
+            .form-summary-error { padding: 10px 15px; font-size: 14px; margin-bottom: 20px; }
          }
          @media (max-width: 600px) {
             .assessment-container { padding: 20px; }
             #finalAssessmentForm textarea { min-height: 120px; }
             #finalAssessmentForm label { font-size: 17px; }
             #finalAssessmentForm input[type="number"], #finalAssessmentForm textarea { padding: 12px 14px; font-size: 15px; }
-            #finalSubmitBtn { padding: 12px 25px; font-size: 16px; }
+            #finalSubmitBtn { padding: 12px 25px; font-size: 16px; width: 100%; /* Full width button on small screens */ }
             .form-group.situational, .form-group.reflection, .form-group.evaluation { padding-left: 10px; padding-right: 10px; }
             #assessmentCompletePopup { width: 90%; padding: 30px 25px; }
             /* Access Denied Modal adjustments */
@@ -179,6 +210,9 @@
             .modal-content-box h2 { font-size: 1.3rem; }
             .modal-content-box p { font-size: 1rem; }
             .modal-content-box button { padding: 10px 20px; font-size: 0.95rem;}
+             #finalAssessmentForm .error-message { padding: 5px 8px; font-size: 12px; margin-top: 6px; }
+             .form-summary-error { padding: 8px 12px; font-size: 13px; margin-bottom: 15px;}
+
         }
     </style>
 </head>
@@ -292,6 +326,12 @@
                      <div id="submissionProgressBar"></div>
                  </div>
 
+                 <!-- --- NEW: Summary Error Message Area --- -->
+                 <div id="formSummaryError" class="form-summary-error">
+                     <!-- Error message will be injected here by JS -->
+                 </div>
+                 <!-- --- End NEW Area --- -->
+
                  <!-- Submit Button -->
                 <button type="submit" id="finalSubmitBtn">Submit Final Assessment</button>
             </form>
@@ -334,16 +374,23 @@
                 const userDataString = localStorage.getItem(CURRENT_USER_KEY);
                 if (!userDataString) return null;
                 const parsedUser = JSON.parse(userDataString);
-                if (parsedUser && typeof parsedUser === 'object' && parsedUser.name && parsedUser.email && parsedUser.progress) {
+                // Added check for progress property existence
+                if (parsedUser && typeof parsedUser === 'object' && parsedUser.name && parsedUser.email && typeof parsedUser.progress === 'object') {
                     return parsedUser;
                 }
-                console.warn("Invalid user data structure in localStorage.");
-                return null;
+                console.warn("Invalid or incomplete user data structure in localStorage.");
+                // Attempt partial recovery or default if structure is bad
+                if(parsedUser && parsedUser.name && parsedUser.email) {
+                     if(!parsedUser.progress) parsedUser.progress = {}; // Initialize progress if missing
+                     return parsedUser;
+                }
+                return null; // Completely invalid
             } catch (error) {
                 console.error("Error parsing user data:", error);
                 return null;
             }
         }
+
 
         // --- **MODIFIED** IMMEDIATE ACCESS CONTROL (Self-Executing Function) ---
         (function checkAccess() {
@@ -351,9 +398,9 @@
             const isLoggedIn = localStorage.getItem(LOGGED_IN_KEY) === 'true';
             const user = getLocalStorageUser();
 
-            // 1. Basic Login & User Data Check
-            if (!isLoggedIn || !user || !user.progress) {
-                 console.warn("Redirecting to login: User not logged in or data invalid.");
+            // 1. Basic Login & User Data Check (User object check improved)
+            if (!isLoggedIn || !user) { // Simplified check as getLocalStorageUser now validates structure
+                 console.warn("Redirecting to login: User not logged in or data invalid/incomplete.");
                  window.location.replace('login.html');
                  throw new Error("Redirecting user: Not logged in or invalid data. Halting script.");
             }
@@ -366,55 +413,48 @@
             if (isAdmin) {
                 console.log("%cAdmin Access Granted: Bypassing module completion checks.", "color: blue; font-weight: bold;");
                 currentUser = user; // Grant access by setting the global user object
-                // Admin access granted, no need for further checks here. Script continues.
             }
             // 4. Handle Non-Admin Access (Requires Module Check)
             else {
                 console.log("%cNon-Admin User: Checking module completion...", "color: orange;");
                 let allSectionsComplete = true;
                 for (const section of requiredCourseSections) {
-                    if ((user.progress[section.id] || 0) < 100) { // Check progress, default to 0 if missing
+                    const progressValue = user.progress[section.id]; // Access progress safely
+                    if (typeof progressValue !== 'number' || progressValue < 100) {
                         allSectionsComplete = false;
-                        console.warn(`Non-admin incomplete: Section '${section.id}' (Progress: ${user.progress[section.id] || 0})`);
-                        break; // Stop checking once one incomplete section is found
+                        console.warn(`Non-admin incomplete: Section '${section.id}' (Progress: ${progressValue ?? 'undefined'})`);
+                        break;
                     }
                 }
 
                 // 4a. Non-Admin & Incomplete -> Deny Access, Show Modal
                 if (!allSectionsComplete) {
                     console.warn("%cAccess Denied for Non-Admin: Course not fully completed. Showing Modal.", "color: red; font-weight: bold;");
-
                     // Hide potential background content immediately
                     const loadingMsg = document.getElementById('loadingOrAccessMessage');
                     const assessmentContainer = document.getElementById('assessmentContainer');
                     if (loadingMsg) loadingMsg.style.display = 'none';
                     if (assessmentContainer) assessmentContainer.style.display = 'none';
-
                     // Show the "Access Denied" modal
                     const modal = document.getElementById('accessDeniedModal');
                     if (modal) {
-                        modal.style.display = 'flex'; // Use flex to activate centering CSS
-                        // NOTE: Redirection happens when the user clicks the button in the modal,
-                        // which calls the globally defined goBackToNext() function.
+                        modal.style.display = 'flex';
                     } else {
                         console.error("Access Denied Modal element (#accessDeniedModal) not found!");
-                        // Fallback if modal isn't found
                         alert("Access Denied: Please complete all course modules.");
-                        window.location.href = WHATS_NEXT_URL; // Redirect immediately as fallback
+                        window.location.href = WHATS_NEXT_URL;
                     }
-
-                    // Stop further script execution for this page load
+                    // Stop further script execution
                     throw new Error("Stopping script: Non-admin user has not completed required modules.");
                 }
                 // 4b. Non-Admin & Complete -> Grant Access
                 else {
                     console.log("%cNon-Admin Access Granted: All modules completed.", "color: green; font-weight: bold;");
-                    currentUser = user; // Grant access by setting the global user object
-                    // Script continues.
+                    currentUser = user; // Grant access
                 }
             }
 
-            // If the script reaches this point, access has been granted (either admin or completed non-admin)
+            // Access granted if script reaches here
             console.log("%cAccess Check Complete: Proceeding with page setup.", "color: green;");
 
         })();
@@ -422,19 +462,16 @@
 
 
         // --- DOMContentLoaded Event Listener ---
-        // Runs ONLY if the checkAccess function did not throw an error
         document.addEventListener('DOMContentLoaded', function() {
             console.log("DOM fully loaded. Setting up assessment page.");
 
-            // This check is important. If access was denied, currentUser would be null.
             if (!currentUser) {
                  console.error("DOM Load Error: currentUser is null. Access was likely denied earlier. Aborting page setup.");
-                 // Make sure content is hidden and maybe show error message
                  const loadingMsg = document.getElementById('loadingOrAccessMessage');
                  if (loadingMsg) loadingMsg.textContent = 'Page setup aborted due to access restrictions.';
                  const assessmentContainer = document.getElementById('assessmentContainer');
                  if (assessmentContainer) assessmentContainer.style.display = 'none';
-                 return; // Stop execution
+                 return;
             }
 
             // --- Element References ---
@@ -445,35 +482,48 @@
             const completionOverlay = document.getElementById('completionPopupOverlay');
             const closeCompletePopupButton = document.getElementById('closeCompletePopupBtn');
             const submitButton = document.getElementById('finalSubmitBtn');
-            const accessDeniedModal = document.getElementById('accessDeniedModal'); // For closing logic
+            const accessDeniedModal = document.getElementById('accessDeniedModal');
+            const summaryErrorElement = document.getElementById('formSummaryError'); // Ref for summary error
 
             // --- Populate Top Bar ---
             populateTopBar(currentUser);
 
             // --- Setup Form & Check Completion Status ---
-            setupFinalAssessmentForm(); // Includes admin-specific logic now
-            const alreadyCompleted = currentUser.finalAssessmentCompleted || currentUser.progress[FINAL_ASSESSMENT_ID] === 100;
+            setupFinalAssessmentForm();
+            const alreadyCompleted = currentUser.finalAssessmentCompleted || (currentUser.progress && currentUser.progress[FINAL_ASSESSMENT_ID] === 100);
 
              if (alreadyCompleted) {
                 console.log("Assessment already completed by this user. Disabling form.");
                  assessmentForm.querySelectorAll('textarea, input[type="number"], button').forEach(el => el.disabled = true);
                  submitButton.textContent = 'Assessment Submitted';
+                 submitButton.style.cursor = 'not-allowed';
+                 submitButton.style.backgroundColor = '#9ca3af';
                  const introNote = assessmentContainer.querySelector('.assessment-intro');
-                 if(introNote) {
+                 if(introNote && !introNote.querySelector('.completed-note')) {
                      const completedNote = document.createElement('p');
+                     completedNote.classList.add('completed-note');
                      completedNote.innerHTML = '<strong>Note:</strong> You have already completed and submitted this assessment.';
                      completedNote.style.cssText = 'margin-top: 15px; font-weight: 500; color: #7c3aed;';
                      introNote.appendChild(completedNote);
                  }
              } else {
                  assessmentForm.addEventListener('submit', handleFinalAssessmentSubmit);
+                 // Add event listener to hide summary error on input
+                 if (summaryErrorElement) {
+                     assessmentForm.addEventListener('input', () => {
+                         if (summaryErrorElement.style.display === 'block') {
+                             summaryErrorElement.style.display = 'none';
+                         }
+                     });
+                 }
              }
 
-            // --- Show Assessment Content (Access was granted) ---
+            // --- Show Assessment Content ---
             if (loadingMsg) loadingMsg.style.display = 'none';
             if (assessmentContainer) {
                 assessmentContainer.style.display = 'block';
-                setTimeout(() => assessmentContainer.classList.add('fade-in'), 50);
+                void assessmentContainer.offsetWidth;
+                assessmentContainer.classList.add('fade-in');
             }
 
             // --- Completion Popup Close Button ---
@@ -485,14 +535,11 @@
                  });
              }
 
-            // --- Access Denied Modal Closing Logic Setup ---
-            // This listener is added, but will only be relevant if the modal
-            // was somehow shown *after* the initial check (less likely now).
-            // The primary closing mechanism for denied access is the button click.
+            // --- Access Denied Modal Closing Logic ---
             if (accessDeniedModal) {
               accessDeniedModal.addEventListener('click', function (event) {
                   if (event.target === accessDeniedModal) {
-                     goBackToNext(); // Redirect if overlay is clicked
+                     goBackToNext();
                   }
               });
             }
@@ -500,14 +547,13 @@
         }); // End DOMContentLoaded
 
         // *** Define goBackToNext function globally ***
-        // Needs to be global for the inline onclick="goBackToNext()" in the modal button HTML
         function goBackToNext() {
             console.log("Redirecting user to required completion page:", WHATS_NEXT_URL);
             window.location.href = WHATS_NEXT_URL;
         }
 
 
-        // --- Helper Functions (No changes needed below this line for the requested logic) ---
+        // --- Helper Functions ---
 
         function saveCurrentUser(userObject) {
             try {
@@ -535,55 +581,64 @@
             return text ? text.trim().split(/\s+/).filter(Boolean).length : 0;
         }
 
-        // Modified slightly to use the global IS_ADMIN_USER
-        function setupWordCountValidation(textarea, countSpan, errorElement, countContainer /*, isAdmin - removed */) {
+        function setupWordCountValidation(textarea, countSpan, errorElement, countContainer) {
             const minWords = parseInt(textarea.getAttribute('data-min-words'), 10);
             if (isNaN(minWords)) return;
 
-            if (IS_ADMIN_USER) { // Use global variable
+            const minWordsDisplay = countContainer?.querySelector('span + span');
+
+            if (IS_ADMIN_USER) {
                 if(countContainer) countContainer.style.display = 'none';
+                textarea.addEventListener('input', () => {
+                    if (errorElement) errorElement.style.display = 'none';
+                    textarea.classList.remove('invalid');
+                });
                 return;
             }
 
-            const minWordsDisplay = countContainer.querySelector('span + span');
              if (minWordsDisplay) minWordsDisplay.textContent = `/${minWords}`;
 
-            textarea.addEventListener('input', () => {
-                const words = countWords(textarea.value);
-                countSpan.textContent = words;
-                validateWordCount(textarea, minWords, errorElement /*, IS_ADMIN_USER - removed */);
-            });
-            validateWordCount(textarea, minWords, errorElement /*, IS_ADMIN_USER - removed */);
+            const updateValidation = () => {
+                 const words = countWords(textarea.value);
+                 countSpan.textContent = words;
+                 validateWordCount(textarea, minWords, errorElement);
+            };
+
+            textarea.addEventListener('input', updateValidation);
+            textarea.addEventListener('blur', updateValidation);
+            updateValidation();
         }
 
-        // Modified slightly to use the global IS_ADMIN_USER
-        function validateWordCount(textarea, minWords, errorElement /*, isAdmin - removed */) {
-            if (IS_ADMIN_USER || isNaN(minWords)) { // Use global variable
+        function validateWordCount(textarea, minWords, errorElement) {
+            if (IS_ADMIN_USER || isNaN(minWords)) {
                 if (errorElement) errorElement.style.display = 'none';
                 textarea.classList.remove('invalid');
                 return true;
             }
             const words = countWords(textarea.value);
             const isFieldEmpty = !textarea.value.trim();
+
             if (!isFieldEmpty && words < minWords) {
-                errorElement.textContent = `Minimum ${minWords} words required.`;
-                errorElement.style.display = 'block';
+                if (errorElement) {
+                    errorElement.textContent = `Minimum ${minWords} words required.`;
+                    errorElement.style.display = 'block';
+                }
                 textarea.classList.add('invalid');
                 return false;
             } else {
-                errorElement.style.display = 'none';
+                if (errorElement) errorElement.style.display = 'none';
                 textarea.classList.remove('invalid');
                 return true;
             }
         }
 
-        // Modified slightly to use the global IS_ADMIN_USER
-        function setupPastePrevention(textarea, warningElement /*, isAdmin - removed */) {
-            if (!IS_ADMIN_USER) { // Use global variable
+        function setupPastePrevention(textarea, warningElement) {
+            if (!IS_ADMIN_USER) {
                 textarea.addEventListener('paste', (event) => {
                     event.preventDefault();
                     warningElement.textContent = 'Pasting content is disabled.';
                     warningElement.style.display = 'block';
+                    warningElement.style.color = '#ef4444';
                     setTimeout(() => { warningElement.style.display = 'none'; }, 4000);
                 });
             } else {
@@ -591,20 +646,27 @@
             }
         }
 
-        // Modified slightly to use the global IS_ADMIN_USER
         function setupFinalAssessmentForm() {
             const form = document.getElementById('finalAssessmentForm');
             if (!form) return;
             const textareas = form.querySelectorAll('textarea[data-min-words]');
 
-            if (IS_ADMIN_USER) { // Use global variable
+            if (IS_ADMIN_USER) {
                 const adminNote = document.getElementById('adminAssessmentNote');
                 if (adminNote) adminNote.style.display = 'inline';
-                textareas.forEach(ta => ta.placeholder = "Admin Mode: No restrictions.");
+                textareas.forEach(ta => ta.placeholder = "Admin Mode: Restrictions disabled.");
+                 const ratingInput = form.querySelector('#q_eval_confidence_rating');
+                 if (ratingInput) {
+                    ratingInput.removeAttribute('min');
+                    ratingInput.removeAttribute('max');
+                    ratingInput.placeholder = "Enter rating (Admin mode)";
+                 }
             } else {
                 textareas.forEach(ta => {
                     const min = ta.getAttribute('data-min-words');
-                    if (min) ta.placeholder += ` (Minimum ${min} words)`;
+                    if (min && !ta.placeholder.includes(`(Minimum ${min} words)`)) {
+                         ta.placeholder += ` (Minimum ${min} words)`;
+                    }
                 });
             }
 
@@ -615,18 +677,22 @@
                 const countContainer = document.getElementById(`${baseId}_word_count_container`);
                 const pasteWarning = document.getElementById(`${baseId}_paste_warning`);
                 if (countSpan && errorElement && countContainer && pasteWarning) {
-                    // Pass the global IS_ADMIN_USER implicitly now
                     setupWordCountValidation(ta, countSpan, errorElement, countContainer);
                     setupPastePrevention(ta, pasteWarning);
                 } else {
                     console.warn(`Missing validation elements for ${baseId}`);
                 }
             });
-            // Setup for number input (remains the same logic)
-             const ratingInput = form.querySelector('#q_eval_confidence_rating');
-             const ratingError = form.querySelector('#q_eval_rating_error');
-             if (ratingInput && ratingError) {
-                 ratingInput.addEventListener('input', () => {
+
+            const ratingInput = form.querySelector('#q_eval_confidence_rating');
+            const ratingError = form.querySelector('#q_eval_rating_error');
+            if (ratingInput && ratingError) {
+                 const validateRating = () => {
+                     if (IS_ADMIN_USER) {
+                         ratingError.style.display = 'none';
+                         ratingInput.classList.remove('invalid');
+                         return true;
+                     }
                      const val = parseInt(ratingInput.value, 10);
                      const min = parseInt(ratingInput.min, 10);
                      const max = parseInt(ratingInput.max, 10);
@@ -634,15 +700,19 @@
                           ratingError.textContent = `Please enter a number between ${min} and ${max}.`;
                           ratingError.style.display = 'block';
                           ratingInput.classList.add('invalid');
+                          return false;
                      } else {
                           ratingError.style.display = 'none';
                           ratingInput.classList.remove('invalid');
+                          return true;
                      }
-                 });
+                 };
+                 ratingInput.addEventListener('input', validateRating);
+                 ratingInput.addEventListener('blur', validateRating);
              }
         }
 
-        // Modified slightly to use the global IS_ADMIN_USER in validation calls
+        // --- UPDATED: handleFinalAssessmentSubmit ---
         function handleFinalAssessmentSubmit(event) {
             event.preventDefault();
             console.log("Final Assessment submission initiated...");
@@ -652,17 +722,22 @@
             const progressBar = document.getElementById('submissionProgressBar');
             const completionOverlay = document.getElementById('completionPopupOverlay');
             const completePopup = document.getElementById('assessmentCompletePopup');
+            const summaryErrorElement = document.getElementById('formSummaryError'); // Get summary error element
 
+            // Disable button, show progress, hide summary error initially
             submitButton.disabled = true;
             submitButton.textContent = 'Submitting...';
             if(progressContainer) progressContainer.style.display = 'block';
             if(progressBar) progressBar.style.width = '10%';
+            if (summaryErrorElement) summaryErrorElement.style.display = 'none'; // Hide previous summary error
 
+            // Clear previous inline errors
             form.querySelectorAll('.error-message').forEach(el => el.style.display = 'none');
             form.querySelectorAll('.invalid').forEach(el => el.classList.remove('invalid'));
 
             let isValid = true;
             let validationProgress = 10;
+
             const inputs = { /* ... same input definitions ... */
                 situational_disengaged: form.querySelector('#q_situational_disengaged'),
                 situational_feedback: form.querySelector('#q_situational_feedback'),
@@ -680,40 +755,58 @@
                 evaluation_confidence_explanation: form.querySelector('#q_eval_exp_error')
             };
 
+            // --- Validation Loop (same as before) ---
             const totalFields = Object.keys(inputs).length;
-            const progressIncrement = Math.floor(90 / totalFields);
-
+            const progressIncrement = Math.floor(80 / totalFields);
             for (const key in inputs) {
                 const input = inputs[key];
                 const errorEl = errors[key];
                 let fieldValid = true;
                 if (!input) continue;
+                const isRequired = input.hasAttribute('required');
+                const isEmpty = !input.value.trim();
 
-                if (input.type === 'textarea') {
-                    if (!input.value.trim() && input.hasAttribute('required')) {
-                        errorEl.textContent = 'This field is required.'; errorEl.style.display = 'block'; input.classList.add('invalid'); fieldValid = false;
-                    } else if (input.hasAttribute('data-min-words')) {
-                        // Use validateWordCount which now implicitly uses global IS_ADMIN_USER
-                        if (!validateWordCount(input, parseInt(input.getAttribute('data-min-words'), 10), errorEl) && input.value.trim()) {
-                             fieldValid = false;
+                if (!IS_ADMIN_USER && isRequired && isEmpty) {
+                    if (errorEl) { errorEl.textContent = 'This field is required.'; errorEl.style.display = 'block'; }
+                    input.classList.add('invalid'); fieldValid = false;
+                } else if (!isEmpty) {
+                    if (input.type === 'textarea' && input.hasAttribute('data-min-words')) {
+                        if (!validateWordCount(input, parseInt(input.getAttribute('data-min-words'), 10), errorEl)) { fieldValid = false; }
+                    } else if (input.type === 'number' && !IS_ADMIN_USER) {
+                        const ratingVal = parseInt(input.value, 10); const min = parseInt(input.min, 10); const max = parseInt(input.max, 10);
+                        if (isNaN(ratingVal) || ratingVal < min || ratingVal > max) {
+                            if (errorEl) { errorEl.textContent = `Please enter a valid rating between ${min} and ${max}.`; errorEl.style.display = 'block'; }
+                            input.classList.add('invalid'); fieldValid = false;
                         }
                     }
-                } else if (input.type === 'number') {
-                    const ratingVal = parseInt(input.value, 10); const min = parseInt(input.min, 10); const max = parseInt(input.max, 10);
-                    if (input.hasAttribute('required') && (!input.value || isNaN(ratingVal) || ratingVal < min || ratingVal > max)) {
-                        errorEl.textContent = `Please enter a valid rating between ${min} and ${max}.`; errorEl.style.display = 'block'; input.classList.add('invalid'); fieldValid = false;
-                    }
                 }
-                validationProgress += progressIncrement;
-                if(progressBar) progressBar.style.width = `${Math.min(validationProgress, 95)}%`;
                 if (!fieldValid) isValid = false;
-            }
+                validationProgress += progressIncrement;
+                if(progressBar) progressBar.style.width = `${Math.min(validationProgress, 90)}%`;
+            } // End validation loop
 
+            // --- Process Submission or Show Errors ---
             setTimeout(() => {
                 if (isValid) {
+                    // --- SUCCESS ---
+                    console.log("Form is valid. Submitting...");
                     if(progressBar) progressBar.style.width = '100%';
+                    if (summaryErrorElement) summaryErrorElement.style.display = 'none'; // Ensure summary is hidden
+
                     let updatedUser = getLocalStorageUser();
-                    if (!updatedUser) { console.error("User data lost before saving."); /* ... error handling ... */ return; }
+                    if (!updatedUser) { /* ... error handling ... */
+                         console.error("Critical Error: User data lost before saving!");
+                         if (summaryErrorElement) {
+                             summaryErrorElement.textContent = "Error: Could not save data. Please refresh and try again.";
+                             summaryErrorElement.style.display = 'block';
+                         } else {
+                             alert("Error: Could not save data. Please refresh and try again.");
+                         }
+                         submitButton.disabled = false; submitButton.textContent = 'Submit Final Assessment';
+                         if(progressContainer) progressContainer.style.display = 'none';
+                         return;
+                    }
+
                     const finalAnswers = {};
                     for (const key in inputs) { if(inputs[key]) { finalAnswers[key] = inputs[key].value.trim(); } }
                     updatedUser.finalAssessmentAnswers = finalAnswers;
@@ -721,27 +814,54 @@
                     if (!updatedUser.progress) { updatedUser.progress = {}; }
                     updatedUser.progress[FINAL_ASSESSMENT_ID] = 100;
                     saveCurrentUser(updatedUser);
+
                     if(completePopup) completePopup.style.display = 'block';
                     if(completionOverlay) completionOverlay.style.display = 'block';
                      setTimeout(() => { if(progressContainer) progressContainer.style.display = 'none'; }, 500);
+
                 } else {
-                    console.log("Form validation failed.");
-                    submitButton.disabled = false; submitButton.textContent = 'Submit Final Assessment';
-                    if(progressContainer) progressContainer.style.display = 'none'; if(progressBar) progressBar.style.width = '0%';
-                    const firstError = form.querySelector('.invalid');
-                    if (firstError) { firstError.scrollIntoView({ behavior: 'smooth', block: 'center' }); firstError.focus(); }
-                    alert("Please review the highlighted fields and correct any errors.");
+                    // --- FAILURE ---
+                    console.log("Form validation failed. Errors displayed inline.");
+
+                    // ** NEW: Show the summary error message **
+                    if (summaryErrorElement) {
+                        summaryErrorElement.textContent = 'Please review the highlighted fields and correct any errors.';
+                        summaryErrorElement.style.display = 'block';
+                         // Scroll the summary message into view as well, might be useful on long forms
+                        summaryErrorElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                    }
+
+                    // Re-enable button, hide progress
+                    submitButton.disabled = false;
+                    submitButton.textContent = 'Submit Final Assessment';
+                    if(progressContainer) progressContainer.style.display = 'none';
+                    if(progressBar) progressBar.style.width = '0%';
+
+                    // Scroll to the *first* actual invalid field for better UX
+                    const firstErrorInput = form.querySelector('.invalid');
+                    if (firstErrorInput) {
+                        // Slight delay to ensure summary scroll finishes first if needed
+                        setTimeout(() => {
+                           firstErrorInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        }, 100); // Adjust delay if necessary
+                    }
                 }
             }, 300);
         }
 
+
         function logout() {
             console.log("Logging out...");
             try {
-                localStorage.removeItem(LOGGED_IN_KEY); localStorage.removeItem(CURRENT_USER_KEY);
-                IS_ADMIN_USER = false; currentUser = null;
+                localStorage.removeItem(LOGGED_IN_KEY);
+                localStorage.removeItem(CURRENT_USER_KEY);
+                IS_ADMIN_USER = false;
+                currentUser = null;
                 window.location.href = 'login.html';
-            } catch (e) { console.error("Logout error:", e); window.location.href = 'login.html'; }
+            } catch (e) {
+                console.error("Logout error:", e);
+                window.location.href = 'login.html';
+            }
         }
 
     </script>
