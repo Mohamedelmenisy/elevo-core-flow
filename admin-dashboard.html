@@ -59,7 +59,8 @@
     <div class="login-container">
         <div class="logo"> <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"> <circle cx="12" cy="12" r="10"></circle> <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"></polygon> </svg> <h2>Coaching & Leadership</h2> </div>
         <div class="login-header"> <h2>Welcome Back</h2> <p>Please enter your credentials to access the course</p> </div>
-        <div id="alreadyLoggedInMessage">You are already logged in. <a href="admin_dashboard.html">Go to Dashboard</a></div> <!-- Point existing link to dashboard -->
+        <!-- ✨ Link updated here ✨ -->
+        <div id="alreadyLoggedInMessage">You are already logged in. <a href="admin_dashboard.html">Go to Dashboard</a></div>
         <div id="loginMessage" class="success-message" style="margin-bottom: 15px;"></div>
         <div id="loginError" class="error-message" style="text-align: center; margin-bottom: 15px;"></div>
         <form id="loginForm" novalidate>
@@ -116,17 +117,20 @@
             function setButtonLoading(isLoading) { if (!loginButton) return; console.log(`Setting button loading: ${isLoading}`); loginButton.disabled = isLoading; loginButton.classList.toggle('loading', isLoading); }
 
             // --- Initial Checks & Setup ---
-            if (localStorage.getItem(LOGGED_IN_KEY) === 'true' && localStorage.getItem(CURRENT_USER_KEY)) {
+             // ✨ Updated href in already logged in message ✨
+             if (localStorage.getItem(LOGGED_IN_KEY) === 'true' && localStorage.getItem(CURRENT_USER_KEY)) {
                 console.log("User already logged in, showing message.");
-                if(alreadyLoggedInMessageDiv) alreadyLoggedInMessageDiv.style.display = 'block';
+                 if(alreadyLoggedInMessageDiv) {
+                    alreadyLoggedInMessageDiv.style.display = 'block';
+                    const link = alreadyLoggedInMessageDiv.querySelector('a');
+                    if (link) link.href = 'admin_dashboard.html'; // Point link to dashboard
+                 }
                 hideMessage(loginMessage);
             }
 
             const urlParams = new URLSearchParams(window.location.search);
             const emailParam = urlParams.get('email');
             const signedUpParam = urlParams.get('signedup');
-            // ✨ Removed redirectParam handling as we always go to dashboard now ✨
-
             if (emailParam && emailInput) { emailInput.value = emailParam; }
             if (signedUpParam && (!alreadyLoggedInMessageDiv || alreadyLoggedInMessageDiv.style.display === 'none')) {
                  showMessage(loginMessage, "Account created successfully! Please log in.", false);
@@ -138,13 +142,10 @@
 
             // --- Event Listeners ---
             if (passwordToggle && passwordInput) { passwordToggle.addEventListener('click', () => togglePasswordVisibility(passwordToggle, passwordInput)); passwordToggle.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') togglePasswordVisibility(passwordToggle, passwordInput); }); }
-
             if(loginForm) {
                 loginForm.addEventListener('submit', function(e) {
-                    e.preventDefault();
-                    console.log("Login form submitted.");
-                    hideMessage(emailError); hideMessage(passwordError); hideMessage(loginError); hideMessage(loginMessage);
-                    hideMessage(alreadyLoggedInMessageDiv);
+                    e.preventDefault(); console.log("Login form submitted.");
+                    hideMessage(emailError); hideMessage(passwordError); hideMessage(loginError); hideMessage(loginMessage); hideMessage(alreadyLoggedInMessageDiv);
                     setButtonLoading(true);
                     if (!emailInput || !passwordInput || !rememberCheckbox) { console.error("Form elements missing!"); showMessage(loginError, "Form error."); setButtonLoading(false); return; }
                     const email = emailInput.value.trim().toLowerCase();
@@ -154,26 +155,19 @@
                     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showMessage(emailError, "Please enter a valid email address"); isValid = false; }
                     if (!password) { showMessage(passwordError, "Password is required"); isValid = false; }
                     if (!isValid) { console.log("Validation failed."); setButtonLoading(false); return; }
-                    if (rememberMe) { localStorage.setItem(REMEMBERED_EMAIL_KEY, email); }
-                    else { localStorage.removeItem(REMEMBERED_EMAIL_KEY); }
+                    if (rememberMe) { localStorage.setItem(REMEMBERED_EMAIL_KEY, email); } else { localStorage.removeItem(REMEMBERED_EMAIL_KEY); }
                     console.log(`Authenticating: ${email}`);
-                    setTimeout(() => {
-                        authenticateUser(email, password); // Removed redirectParam
-                    }, 500);
+                    setTimeout(() => { authenticateUser(email, password); }, 500);
                 });
             } else { console.error("Login form element not found!"); }
 
-             // --- Authentication Function (Uses unified keys) ---
-             function authenticateUser(email, password) { // Removed redirectTarget parameter
-                console.log(`Running authenticateUser for ${email}.`);
-                console.warn("SECURITY WARNING: Plaintext password check is insecure.");
+             // --- Authentication Function ---
+             function authenticateUser(email, password) {
+                console.log(`Running authenticateUser for ${email}.`); console.warn("SECURITY WARNING: Plaintext password check is insecure.");
                 let users = [];
                 try { const usersString = localStorage.getItem(USERS_KEY); users = usersString ? JSON.parse(usersString) : []; if (!Array.isArray(users)) users = []; }
                 catch (error) { console.error("Error reading/parsing users:", error); showMessage(loginError, 'Error accessing user data.'); setButtonLoading(false); return; }
-
                 const foundUser = users.find(u => u && typeof u.email === 'string' && u.email.toLowerCase() === email);
-                console.log(`User found? ${!!foundUser}`);
-
                 if (foundUser && foundUser.password === password) {
                     console.log("Password matches for:", foundUser.email);
                      if (!foundUser.name || !foundUser.email) { console.error("Found user data incomplete:", foundUser); showMessage(loginError, 'User data corrupted.'); setButtonLoading(false); return; }
@@ -183,22 +177,14 @@
                          localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(currentUserData));
                          console.log(`Saved login state. Key: ${CURRENT_USER_KEY}, Data: ${JSON.stringify(currentUserData)}`);
                          showMessage(loginMessage, "Login successful! Redirecting...", false);
-
                          // ✨ --- REDIRECTION CHANGE --- ✨
                          const destination = 'admin_dashboard.html'; // Always redirect to the dashboard
                          console.log(`Redirecting to: ${destination}`);
                          // ✨ --- END REDIRECTION CHANGE --- ✨
-
                          setTimeout(() => { window.location.href = destination; }, 1000);
-
                      } catch (storageError) { console.error("Error saving login state:", storageError); showMessage(loginError, 'Could not save login session.'); setButtonLoading(false); }
-                 } else {
-                     console.log("Incorrect email or password.");
-                     showMessage(loginError, 'Incorrect email or password.');
-                     setButtonLoading(false);
-                 }
+                 } else { console.log("Incorrect email or password."); showMessage(loginError, 'Incorrect email or password.'); setButtonLoading(false); }
              }
-
             const forgotPasswordLink = document.getElementById('forgotPasswordLink');
             if(forgotPasswordLink) { forgotPasswordLink.addEventListener('click', function(e) { e.preventDefault(); alert('Forgot Password functionality not implemented.'); }); }
              console.log("Login page script finished loading.");
@@ -211,10 +197,8 @@
 
 **File 2: `admin_dashboard.html` (Updated)**
 
-*   **Change 1:** Renamed `COURSE_HOME_URL` to `ARTICLE_PAGE_URL` and set it to `article1.html`.
-*   **Change 2:** Updated the `modalBackBtn` event listener to redirect to `ARTICLE_PAGE_URL`.
-*   **Change 3:** Added a new "Go to Course Content" button within the main dashboard view (`#dashboard-content`) for the authenticated admin.
-*   **Change 4:** Added an event listener for the new button to also redirect to `ARTICLE_PAGE_URL`.
+*   **Change:** The constant `ARTICLE_PAGE_URL` is now `COURSE_INDEX_URL` and points to `index.html`.
+*   **Change:** Both the modal button (`modalBackBtn`) and the admin's button (`goToCourseBtn`) now use `COURSE_INDEX_URL` (`index.html`) as their target.
 
 ```html
 <!DOCTYPE html>
@@ -223,12 +207,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin Dashboard - Course Progress</title>
-    <!-- Favicon Links (Copied from article1.txt) -->
+    <!-- Favicon Links -->
     <link rel="apple-touch-icon" sizes="180x180" href="https://cdn-icons-png.flaticon.com/512/3281/3281289.png">
     <link rel="icon" type="image/png" sizes="32x32" href="https://cdn-icons-png.flaticon.com/512/3281/3281289.png">
     <link rel="icon" type="image/png" sizes="16x16" href="https://cdn-icons-png.flaticon.com/512/3281/3281289.png">
     <style>
-        /* --- Base CSS Rules (Copied VERBATIM from previous version based on article1.txt) --- */
+        /* --- CSS Rules (Copied VERBATIM from previous version based on article1.txt) --- */
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         html { scroll-behavior: smooth; }
         body { margin: 0; padding: 0; line-height: 1.7; background-color: #f9f9f9; color: #333; display: flex; flex-direction: column; min-height: 100vh; }
@@ -268,7 +252,7 @@
         .modal-button { border: none; padding: 10px 25px; font-size: 15px; cursor: pointer; border-radius: 6px; font-weight: 600; transition: all 0.3s ease; text-decoration: none; display: inline-flex; align-items: center; gap: 8px; box-shadow: none; }
         .modal-button.close { background-color: #6c757d; color: white; }
         .modal-button.close:hover { background-color: #5a6268; transform: translateY(-1px); }
-        .modal-button.back { background-color: #e67e22; color: white; } /* Orange like article nav */
+        .modal-button.back { background-color: #e67e22; color: white; }
         .modal-button.back:hover { background-color: #d35400; transform: translateY(-1px); }
 
         /* --- Dashboard Content Styles --- */
@@ -278,27 +262,8 @@
         #dashboard-user-info h3 { margin: 0 0 10px 0; font-size: 20px; color: #2c3e50; }
         #dashboard-user-info p { margin-bottom: 5px; font-size: 1em; color: #34495e; }
         #dashboard-user-info strong { font-weight: 600; color: #2c3e50; }
-
-        /* ✨ Go To Course Button Style (New) ✨ */
-        .dashboard-action-button {
-            background-color: #e67e22; /* Orange like article nav */
-            color: white;
-            border: none;
-            padding: 10px 25px;
-            font-size: 15px;
-            cursor: pointer;
-            border-radius: 6px;
-            font-weight: 600;
-            transition: all 0.3s ease;
-            text-decoration: none;
-            display: inline-block; /* Or block if needed */
-            margin-top: 20px; /* Space above button */
-            box-shadow: none;
-        }
-        .dashboard-action-button:hover {
-            background-color: #d35400;
-            transform: translateY(-1px);
-        }
+        .dashboard-action-button { background-color: #e67e22; color: white; border: none; padding: 10px 25px; font-size: 15px; cursor: pointer; border-radius: 6px; font-weight: 600; transition: all 0.3s ease; text-decoration: none; display: inline-block; margin-top: 20px; box-shadow: none; }
+        .dashboard-action-button:hover { background-color: #d35400; transform: translateY(-1px); }
 
         /* Dashboard Table Styles */
         #dashboardTable { width: 100%; margin: 30px 0; border-collapse: collapse; background-color: #fff; font-size: 15px; border: 1px solid #eee; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05); }
@@ -317,13 +282,7 @@
         .skill-name { font-weight: 500; color: #34495e; }
 
         /* Responsive Adjustments */
-         @media (max-width: 768px) {
-            /* ... (keep existing responsive styles) ... */
-            .container { padding: 20px; margin: 20px 15px; }
-            #dashboard-user-info { padding: 15px; }
-            #dashboardTable th, #dashboardTable td { padding: 10px 12px; font-size: 14px; }
-            .dashboard-action-button { width: 100%; text-align: center; } /* Make button full width */
-         }
+         @media (max-width: 768px) { .container { padding: 20px; margin: 20px 15px; } #dashboard-user-info { padding: 15px; } #dashboardTable th, #dashboardTable td { padding: 10px 12px; font-size: 14px; } .dashboard-action-button { width: 100%; text-align: center; } }
     </style>
 </head>
 <body>
@@ -358,24 +317,15 @@
                 <h3>Administrator Dashboard</h3>
                 <p><strong>Viewing As:</strong> <span id="dashboardInfoName"></span></p>
                 <p><strong>Email:</strong> <span id="dashboardInfoEmail"></span></p>
-                 <!-- ✨ New Button Added Here ✨ -->
-                 <button id="goToCourseBtn" class="dashboard-action-button">Go to Course Content</button>
+                 <!-- ✨ Button points to COURSE_INDEX_URL ✨ -->
+                 <button id="goToCourseBtn" class="dashboard-action-button">Go to Course Homepage</button>
             </div>
 
             <h2>User Progress Overview</h2>
             <p>Detailed skill development tracking for the course participant.</p>
 
             <table id="dashboardTable">
-                <thead>
-                    <tr>
-                        <th>User Email</th>
-                        <th>Skill / Topic</th>
-                        <th>Pre-Score</th>
-                        <th>Post-Score</th>
-                        <th>Improvement</th>
-                        <th>Progress</th>
-                    </tr>
-                </thead>
+                <thead> <tr> <th>User Email</th> <th>Skill / Topic</th> <th>Pre-Score</th> <th>Post-Score</th> <th>Improvement</th> <th>Progress</th> </tr> </thead>
                 <tbody id="progressDataBody"></tbody>
             </table>
         </div>
@@ -385,7 +335,6 @@
     <footer class="footer">
         <span class="footer-text">© 2025 Elmenisy Leadership Coaching - All Rights Reserved</span>
         <div class="social-icons">
-            <!-- Social Icons -->
              <a href="https://www.linkedin.com/in/mohamedmenisy17/" target="_blank" rel="noopener noreferrer" aria-label="LinkedIn Profile"><svg viewBox="0 0 24 24"><path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/></svg></a>
              <a href="https://wa.me/201014527321" target="_blank" rel="noopener noreferrer" aria-label="WhatsApp Chat"><svg viewBox="0 0 24 24"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01s-.521.074-.792.372c-.272.296-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/></svg></a>
              <a href="https://www.instagram.com/mohamed_menisyy/profilecard/?igsh=d3ZwZDM4czRqMzB2" target="_blank" rel="noopener noreferrer" aria-label="Instagram Profile"><svg viewBox="0 0 24 24"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 1.172.053 1.905.33 2.46.538.7.268 1.192.64 1.64 1.092.45.447.83 1.004 1.093 1.64.208.555.485 1.288.538 2.46.058 1.265.07 1.646.07 4.85s-.012 3.584-.07 4.85c-.053 1.172-.33 1.905-.538 2.46-.268.7-.64 1.192-1.092 1.64-.447.45-.997.827-1.64 1.093-.555.208-1.288.485-2.46.538-1.265.058-1.646.07-4.85.07s-3.584-.012-4.85-.07c-1.172-.053-1.905-.33-2.46-.538-.697-.268-1.19-.64-1.64-1.093-.45-.447-.827-.997-1.093-1.64-.208-.555-.485-1.288-.538-2.46-.058-1.265-.07-1.646-.07-4.85s.012-3.584.07-4.85c.053-1.172.33-1.905.538-2.46.268-.697.64-1.19 1.093-1.64.45-.45.997-.827 1.64-1.093.555-.208 1.288.485 2.46.538 1.265-.058 1.646-.07 4.85-.07zm0-2.163c-3.259 0-3.667.014-4.947.072-1.356.06-2.31.344-3.174.732-.884.396-1.627.96-2.377 1.71-.755.752-1.318 1.494-1.716 2.378-.386.863-.67 1.818-.73 3.172C.014 8.333 0 8.741 0 12s.014 3.667.072 4.947c.06 1.356.344 2.31.73 3.174.396.884.96 1.627 1.716 2.377.752.755 1.494 1.318 2.378 1.716.863.386 1.818.67 3.172.73 1.28.058 1.688.072 4.947.072s3.667-.014 4.947-.072c1.356-.06 2.31-.344 3.174-.73.884-.396 1.627-.96 2.377-1.716.755-.752 1.318-1.494 1.716-2.378.386.863.67-1.818.73-3.172.058-1.28.072-1.688.072-4.947s-.014-3.667-.072-4.947c-.06-1.356-.344-2.31-.73-3.174-.396-.884-.96-1.627-1.716-2.377-.752-.755-1.494-1.318-2.378-1.716-.863-.386-1.818-.67-3.172-.73C15.667.014 15.259 0 12 0zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.162 6.162 6.162 6.162-2.759 6.162-6.162S15.403 5.838 12 5.838zm0 10.333c-2.306 0-4.171-1.865-4.171-4.171s1.865-4.171 4.171-4.171 4.171 1.865 4.171 4.171-1.865 4.171-4.171 4.171zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg></a>
@@ -398,7 +347,7 @@
             <p class="modal-message">Admin access is required to view this content.</p>
             <div class="modal-actions">
                  <button id="modal-close-btn" class="modal-button close">Close</button>
-                 <!-- ✨ This button now points to article1.html ✨ -->
+                 <!-- ✨ Button points to COURSE_INDEX_URL ✨ -->
                  <button id="modal-back-btn" class="modal-button back">Back to Course</button>
             </div>
         </div>
@@ -409,7 +358,7 @@
         // --- Configuration ---
         const ADMIN_EMAIL = "m.elsayed@thechefz.co";
         // ✨ --- URL CHANGE --- ✨
-        const ARTICLE_PAGE_URL = "article1.html"; // Target page for "Go to Course"
+        const COURSE_INDEX_URL = "index.html"; // Target homepage for "Go to Course"
         // ✨ --- END URL CHANGE --- ✨
         const LOGGED_IN_KEY = 'isUserLoggedIn';
         const CURRENT_USER_KEY = 'currentUser';
@@ -419,10 +368,10 @@
         let headerUserNameEl, headerUserEmailEl;
         let dashboardInfoNameEl, dashboardInfoEmailEl;
         let progressTableBodyEl;
-        let goToCourseBtn; // ✨ Reference for the new button
+        let goToCourseBtn;
 
         // --- Authentication Check ---
-        function checkAdminAuthStatus() {
+        function checkAdminAuthStatus() { /* ... Same as previous ... */
             try {
                 const isLoggedIn = localStorage.getItem(LOGGED_IN_KEY) === 'true';
                  if (!isLoggedIn) { return { isAdmin: false, user: null }; }
@@ -434,13 +383,11 @@
                 return { isAdmin: isUserAdmin, user: user };
             } catch (e) { console.error("Auth Check Error:", e); return { isAdmin: false, user: null }; }
         }
-
         // --- Modal Control ---
         function showAuthModal() { if (authModalOverlayEl) authModalOverlayEl.classList.add('visible'); }
         function hideAuthModal() { if (authModalOverlayEl) authModalOverlayEl.classList.remove('visible'); }
-
         // --- Display User Info ---
-        function displayUserInfo(user) {
+        function displayUserInfo(user) { /* ... Same as previous ... */
              const displayName = user ? user.name : "Restricted";
              const displayEmail = user ? user.email : "No Access";
              if (headerUserNameEl) headerUserNameEl.textContent = displayName;
@@ -448,19 +395,15 @@
              if (dashboardInfoNameEl) dashboardInfoNameEl.textContent = displayName;
              if (dashboardInfoEmailEl) dashboardInfoEmailEl.textContent = displayEmail;
         }
-
-         // --- Logout Function ---
-        function logout() {
+        // --- Logout Function ---
+        function logout() { /* ... Same as previous ... */
              try { localStorage.removeItem(LOGGED_IN_KEY); localStorage.removeItem(CURRENT_USER_KEY); window.location.href = 'login.html'; }
              catch (e) { console.error("Logout Error:", e); window.location.href = 'login.html'; }
         }
-
         // --- Dashboard Data Loading ---
-        function loadDashboardData() {
+        function loadDashboardData() { /* ... Same as previous ... */
              console.log("Loading dashboard data...");
-             const userProgressData = [ // Only admin data included
-                { userEmail: "M.elsayed@thechefz.co", skill: "Communication", scorePre: 65, scorePost: 85 }, { userEmail: "M.elsayed@thechefz.co", skill: "Decision Making", scorePre: 50, scorePost: 70 }, { userEmail: "M.elsayed@thechefz.co", skill: "Coaching Mindset", scorePre: 70, scorePost: 90 }, { userEmail: "M.elsayed@thechefz.co", skill: "Leadership Confidence", scorePre: 60, scorePost: 65 }, { userEmail: "M.elsayed@thechefz.co", skill: "Strategic Thinking", scorePre: 75, scorePost: 70 }, { userEmail: "M.elsayed@thechefz.co", skill: "Team Motivation", scorePre: 80, scorePost: 80 }, { userEmail: "M.elsayed@thechefz.co", skill: "Feedback Delivery", scorePre: 55, scorePost: 80 }, { userEmail: "M.elsayed@thechefz.co", skill: "Overall Summary", scorePre: 65, scorePost: 77 }
-             ];
+             const userProgressData = [ { userEmail: "M.elsayed@thechefz.co", skill: "Communication", scorePre: 65, scorePost: 85 }, { userEmail: "M.elsayed@thechefz.co", skill: "Decision Making", scorePre: 50, scorePost: 70 }, { userEmail: "M.elsayed@thechefz.co", skill: "Coaching Mindset", scorePre: 70, scorePost: 90 }, { userEmail: "M.elsayed@thechefz.co", skill: "Leadership Confidence", scorePre: 60, scorePost: 65 }, { userEmail: "M.elsayed@thechefz.co", skill: "Strategic Thinking", scorePre: 75, scorePost: 70 }, { userEmail: "M.elsayed@thechefz.co", skill: "Team Motivation", scorePre: 80, scorePost: 80 }, { userEmail: "M.elsayed@thechefz.co", skill: "Feedback Delivery", scorePre: 55, scorePost: 80 }, { userEmail: "M.elsayed@thechefz.co", skill: "Overall Summary", scorePre: 65, scorePost: 77 } ];
              if (!progressTableBodyEl) return;
              progressTableBodyEl.innerHTML = '';
              const adminData = userProgressData.filter(item => item.userEmail.toLowerCase() === ADMIN_EMAIL.toLowerCase());
@@ -476,6 +419,11 @@
                 row.insertCell().innerHTML = `<div class="progress-container" title="${improvementText} improvement"><div class="progress-bar" style="width: ${progressBarValue}%;">${barText}</div></div>`;
              });
         }
+        // --- Helper to highlight active nav item ---
+        function highlightActiveNav() { /* ... Same as previous ... */
+             const targetHref = 'admin_dashboard.html'; const navLinks = document.querySelectorAll('.nav-tab a');
+             navLinks.forEach(link => { link.classList.toggle('active', link.getAttribute('href') === targetHref); });
+        }
 
         // --- Initialize Page ---
         document.addEventListener('DOMContentLoaded', function() {
@@ -490,42 +438,32 @@
             dashboardInfoNameEl = document.getElementById('dashboardInfoName');
             dashboardInfoEmailEl = document.getElementById('dashboardInfoEmail');
             progressTableBodyEl = document.getElementById('progressDataBody');
-            goToCourseBtn = document.getElementById('goToCourseBtn'); // ✨ Get reference to new button
+            goToCourseBtn = document.getElementById('goToCourseBtn');
 
             // Check for essential elements
-             if (!dashboardContentEl || !authModalOverlayEl || !modalCloseBtn || !modalBackBtn || !headerUserNameEl || !headerUserEmailEl || !dashboardInfoNameEl || !dashboardInfoEmailEl || !progressTableBodyEl || !goToCourseBtn) { // ✨ Added check for new button ✨
-                console.error("CRITICAL: One or more essential page elements not found!");
-                 document.body.innerHTML = "<p style='color: red; padding: 30px; text-align: center;'>Error: Page initialization failed. Required elements missing.</p>";
-                 return;
+            if (!dashboardContentEl || !authModalOverlayEl || !modalCloseBtn || !modalBackBtn || !headerUserNameEl || !headerUserEmailEl || !dashboardInfoNameEl || !dashboardInfoEmailEl || !progressTableBodyEl || !goToCourseBtn) {
+                console.error("CRITICAL: One or more essential page elements not found!"); document.body.innerHTML = "<p style='color: red; padding: 30px; text-align: center;'>Error: Page initialization failed. Required elements missing.</p>"; return;
             }
 
             const authResult = checkAdminAuthStatus();
 
             if (authResult.isAdmin) {
-                 displayUserInfo(authResult.user);
-                 loadDashboardData();
-                 dashboardContentEl.classList.add('visible');
-                 authModalOverlayEl.style.display = 'none';
-
-                 // ✨ Add Event Listener for the Admin's "Go to Course" button ✨
+                 displayUserInfo(authResult.user); loadDashboardData(); dashboardContentEl.classList.add('visible'); authModalOverlayEl.style.display = 'none';
+                 // ✨ Add Event Listener for the Admin's "Go to Course" button - Points to index.html ✨
                  goToCourseBtn.addEventListener('click', function() {
-                      console.log("Admin 'Go to Course' clicked. Redirecting to:", ARTICLE_PAGE_URL);
-                      window.location.href = ARTICLE_PAGE_URL;
+                      console.log("Admin 'Go to Course Homepage' clicked. Redirecting to:", COURSE_INDEX_URL);
+                      window.location.href = COURSE_INDEX_URL; // Use constant for index.html
                  });
-
             } else {
-                 displayUserInfo(null);
-                 dashboardContentEl.style.display = 'none';
-                 dashboardContentEl.classList.remove('visible');
-                 showAuthModal();
+                 displayUserInfo(null); dashboardContentEl.style.display = 'none'; dashboardContentEl.classList.remove('visible'); showAuthModal();
             }
 
             // Add Modal Button Event Listeners
             modalCloseBtn.addEventListener('click', hideAuthModal);
             modalBackBtn.addEventListener('click', function() {
-                console.log("Modal 'Back to Course' clicked. Redirecting to:", ARTICLE_PAGE_URL);
-                // ✨ --- URL CHANGE --- ✨
-                 window.location.href = ARTICLE_PAGE_URL; // Redirect non-admin to article page
+                console.log("Modal 'Back to Course' clicked. Redirecting to:", COURSE_INDEX_URL);
+                 // ✨ --- URL CHANGE --- ✨
+                 window.location.href = COURSE_INDEX_URL; // Redirect non-admin to index.html
                  // ✨ --- END URL CHANGE --- ✨
             });
             authModalOverlayEl.addEventListener('click', function(event) { if (event.target === authModalOverlayEl) { hideAuthModal(); } });
@@ -533,14 +471,6 @@
             highlightActiveNav();
             console.log("Page initialization complete.");
         });
-
-        // --- Helper to highlight active nav item ---
-         function highlightActiveNav() {
-              const targetHref = 'admin_dashboard.html';
-              const navLinks = document.querySelectorAll('.nav-tab a');
-              navLinks.forEach(link => { link.classList.toggle('active', link.getAttribute('href') === targetHref); });
-          }
-
     </script>
 
 </body>
