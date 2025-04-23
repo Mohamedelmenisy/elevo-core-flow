@@ -122,8 +122,7 @@
         <!-- Header -->
         <div class="login-header"> <h2>Welcome Back</h2> <p>Please enter your credentials to access the course</p> </div>
         <!-- Messages -->
-        <!-- MODIFIED: Link points to dashboard.html -->
-        <div id="alreadyLoggedInMessage">You are already logged in. <a href="dashboard.html">Go to Dashboard</a></div>
+        <div id="alreadyLoggedInMessage">You are already logged in. <a href="index.html">Go to Dashboard</a></div>
         <div id="loginMessage" class="success-message" style="margin-bottom: 15px;"></div>
         <div id="loginError" class="error-message" style="text-align: center; margin-bottom: 15px;"></div>
         <!-- Form -->
@@ -160,7 +159,7 @@
         <div class="links"> Don't have an account? <a href="signup.html">Sign up</a> | <a href="#" id="forgotPasswordLink">Forgot password?</a> </div>
     </div>
 
-    <!-- JavaScript (Only authenticateUser modified) -->
+    <!-- JavaScript (Remains Exactly As Is - Already Uses Unified Keys) -->
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             console.log("Login page script loaded.");
@@ -196,13 +195,16 @@
                 console.log("User already logged in, showing message.");
                 if(alreadyLoggedInMessageDiv) alreadyLoggedInMessageDiv.style.display = 'block';
                 hideMessage(loginMessage);
+                // Optionally hide form or disable button if preferred
+                // if(loginForm) loginForm.style.display = 'none';
+                // if(loginButton) loginButton.disabled = true;
             }
 
             // Handle URL parameters
             const urlParams = new URLSearchParams(window.location.search);
             const emailParam = urlParams.get('email');
             const signedUpParam = urlParams.get('signedup');
-            // const redirectParam = urlParams.get('redirect'); // Redirect param no longer needed for basic flow
+            const redirectParam = urlParams.get('redirect'); // Get potential redirect target
 
             if (emailParam && emailInput) { emailInput.value = emailParam; }
             if (signedUpParam && (!alreadyLoggedInMessageDiv || alreadyLoggedInMessageDiv.style.display === 'none')) {
@@ -247,14 +249,14 @@
                     // Authenticate (simulated delay)
                     console.log(`Authenticating: ${email}`);
                     setTimeout(() => {
-                        authenticateUser(email, password); // Pass only email/password
+                        authenticateUser(email, password, redirectParam);
                     }, 500);
                 });
             } else { console.error("Login form element not found!"); }
 
-             // --- Authentication Function (MODIFIED Redirection) ---
-             function authenticateUser(email, password) { // Removed redirectTarget param
-                console.log(`Running authenticateUser for ${email}.`);
+             // --- Authentication Function (Uses unified keys) ---
+             function authenticateUser(email, password, redirectTarget = null) {
+                console.log(`Running authenticateUser for ${email}. Redirect target: ${redirectTarget}`);
                 console.warn("SECURITY WARNING: Plaintext password check is insecure.");
                 let users = [];
                 try {
@@ -278,19 +280,45 @@
                          showMessage(loginError, 'User data corrupted.'); setButtonLoading(false); return;
                      }
 
-                     // Prepare data with correct keys
-                     const currentUserData = { name: foundUser.name, email: foundUser.email };
+                     // *** Prepare data with correct keys ***
+                      // Ensure progress object exists and initialize if needed
+                      let userProgress = {};
+                      if(foundUser.progress && typeof foundUser.progress === 'object') {
+                         userProgress = foundUser.progress;
+                      } else {
+                         console.log(`Initializing progress for user ${foundUser.email}`);
+                         // Define default progress structure here if necessary, e.g.,
+                         // userProgress = { index: 0, article1: 0, skills: 0, individuals: 0, team: 0, self: 0, action: 0 };
+                      }
+
+                     const currentUserData = {
+                          name: foundUser.name,
+                          email: foundUser.email,
+                          progress: userProgress // Include progress object
+                      };
+
 
                      try {
-                         // Save using unified keys
+                         // *** Save using unified keys ***
                          localStorage.setItem(LOGGED_IN_KEY, 'true');
                          localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(currentUserData));
                          console.log(`Saved login state. Key: ${CURRENT_USER_KEY}, Data: ${JSON.stringify(currentUserData)}`);
 
                          showMessage(loginMessage, "Login successful! Redirecting...", false);
 
-                         // *** MODIFIED: Always redirect to dashboard.html ***
-                         const destination = 'dashboard.html';
+                          // Determine redirect destination
+                         // Priority: 1. Explicit redirect param, 2. Dashboard, 3. Fallback to index
+                         let destination = 'dashboard.html'; // Default to dashboard
+                         if (redirectTarget) {
+                             // Basic validation for redirect target to prevent open redirect issues
+                             // Allow only relative paths or specific known pages
+                             if (redirectTarget.startsWith('/') || ['index.html', 'article1.html', /* add other valid pages */].includes(redirectTarget)) {
+                                destination = redirectTarget;
+                             } else {
+                                console.warn(`Invalid redirect target ignored: ${redirectTarget}. Defaulting to dashboard.html`);
+                             }
+                         }
+
                          console.log(`Redirecting to: ${destination}`);
                          setTimeout(() => { window.location.href = destination; }, 1000);
 
