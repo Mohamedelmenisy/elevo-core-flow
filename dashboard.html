@@ -79,6 +79,8 @@
             justify-content: space-between;
             align-items: center;
             transition: box-shadow 0.3s ease;
+            flex-wrap: wrap; /* Allow wrapping on smaller screens */
+            gap: 10px; /* Add gap for wrapped items */
         }
         .course-section:hover {
             box-shadow: 0 3px 10px rgba(0,0,0, 0.05);
@@ -88,12 +90,16 @@
             font-size: 17px;
             font-weight: 500;
             color: #34495e;
+            flex-grow: 1; /* Allow title to take space */
+             margin-right: 15px; /* Space before progress */
         }
 
         .section-progress {
             display: flex;
             align-items: center;
             gap: 15px;
+            flex-shrink: 0; /* Prevent progress bar from shrinking too much */
+             flex-basis: 280px; /* Give progress section a base width */
         }
 
         .progress-bar-container {
@@ -116,6 +122,7 @@
             color: #7f8c8d;
             min-width: 80px; /* Ensure text doesn't wrap awkwardly */
             text-align: right;
+            font-weight: 500;
         }
 
          .section-link {
@@ -126,6 +133,7 @@
             text-decoration: none;
             font-size: 14px;
             transition: background-color 0.3s;
+             white-space: nowrap; /* Prevent button text wrapping */
         }
         .section-link:hover {
              background-color: #2980b9;
@@ -161,12 +169,14 @@
             width: 100%;
             border-collapse: collapse;
             margin-top: 15px;
+            table-layout: fixed; /* Help with column widths */
         }
         .admin-user-table th, .admin-user-table td {
             border: 1px solid #d0e4f5;
             padding: 10px 12px;
             text-align: left;
             font-size: 15px;
+            word-wrap: break-word; /* Allow long words to break */
         }
         .admin-user-table th {
             background-color: #d6ebfa;
@@ -176,9 +186,22 @@
          .admin-user-table td {
              background-color: #f8fcff;
          }
+         .admin-user-table th:nth-child(1) { width: 40%; } /* Section Title */
+         .admin-user-table th:nth-child(2) { width: 25%; text-align: center;} /* Progress */
+         .admin-user-table th:nth-child(3) { width: 35%; } /* Status */
+         .admin-user-table td:nth-child(2) { text-align: center; } /* Center progress value */
 
          /* Loading Message */
          #loadingMessage { text-align: center; padding: 50px; font-size: 18px; color: #555; }
+
+         /* Responsive Adjustments */
+         @media (max-width: 600px) {
+             .course-section { flex-direction: column; align-items: flex-start; }
+             .section-title { margin-right: 0; margin-bottom: 10px; }
+             .section-progress { flex-basis: auto; width: 100%; justify-content: space-between; }
+             .progress-bar-container { width: 120px; } /* Adjust as needed */
+         }
+
     </style>
 </head>
 <body>
@@ -223,9 +246,6 @@
                     <!-- Course sections will be loaded here by JavaScript -->
                 </div>
             </div>
-
-             <!-- Example Button (Optional - can be removed or repurposed) -->
-            <!-- <button class="course-button" id="goToCourseBtn">Go to Course Introduction</button> -->
         </div>
 
         <!-- Admin-Only Section -->
@@ -255,13 +275,15 @@
 
         // --- Course Structure ---
         const courseSections = [
-            { id: 'intro', title: 'Introduction to Coaching and Leadership', link: 'course/intro.html' },
-            { id: 'skills', title: 'Coaching Skills', link: 'course/skills.html' },
-            { id: 'individuals', title: 'Coaching Individuals', link: 'course/individuals.html' },
-            { id: 'teams', title: 'Coaching Teams', link: 'course/teams.html' },
-            { id: 'self', title: 'Coaching Yourself', link: 'course/self.html' },
-            { id: 'action', title: 'Action Plan', link: 'course/action.html' },
-            { id: 'next', title: "What's Next", link: 'course/next.html' }
+            { id: 'index', title: 'Course Introduction Goal', link: 'index.html' }, // Added index page
+            { id: 'article1', title: 'Introduction to Coaching and Leadership', link: 'article1.html' },
+            { id: 'skills', title: 'Coaching Skills', link: 'coaching-skills.html' }, // Corrected link
+            { id: 'individuals', title: 'Coaching Individuals', link: 'coaching-individuals.html' }, // Corrected link
+            { id: 'team', title: 'Team Coaching', link: 'coaching-team.html' }, // Corrected link & ID
+            { id: 'self', title: 'Self Coaching', link: 'coaching-yourself.html' }, // Corrected link & ID
+            { id: 'action', title: 'Action Plan', link: 'action-plan.html' }, // Corrected link & ID
+            // 'whats-next' doesn't typically have progress tracking, can be excluded or added if needed
+            // { id: 'next', title: "What's Next", link: 'whats-next.html' }
         ];
 
         // --- IMMEDIATE REDIRECTION LOGIC (Slightly adjusted) ---
@@ -277,7 +299,8 @@
         if (!isLoggedIn_immediate) {
             const targetUrl = hasSignedUp_immediate ? 'login.html' : 'signup.html';
             console.error(`%cDashboard Page IMMEDIATE Redirect: Not logged in or user data invalid. Redirecting to ${targetUrl}...`, "color: orange;");
-            window.location.replace(targetUrl + '?redirect=dashboard.html');
+            // Add redirect parameter so login/signup knows where to come back
+            window.location.replace(`${targetUrl}?redirect=${encodeURIComponent(window.location.pathname)}`);
             throw new Error("Redirecting user: Not logged in or invalid user data."); // Stop script execution
         } else {
             console.log("%cDashboard Page IMMEDIATE Check: User IS logged in. Proceeding.", "color: green;");
@@ -308,7 +331,7 @@
                 return; // Stop further execution
             }
 
-            console.log("Current User Data:", currentUser);
+            console.log("Current User Data (Dashboard):", currentUser);
 
             // --- Display User Info ---
             // Top Bar
@@ -320,14 +343,22 @@
             if (dashboardUserEmail) dashboardUserEmail.textContent = currentUser.email;
 
             // --- Display Course Sections for the User ---
-            displayCourseSections(currentUser, courseSectionsList);
+            if(courseSectionsList) {
+                 displayCourseSections(currentUser, courseSectionsList);
+            } else {
+                 console.error("Course sections list container not found!");
+            }
 
             // --- Check for Admin Access ---
             const isAdmin = currentUser.email.toLowerCase() === ADMIN_EMAIL.toLowerCase();
             if (isAdmin) {
                 console.log("Admin user detected.");
                 if (adminSection) adminSection.style.display = 'block';
-                displayAdminData(adminDataContainer); // Call function to populate admin view
+                if (adminDataContainer) {
+                    displayAdminData(adminDataContainer); // Call function to populate admin view
+                } else {
+                     console.error("Admin data container not found!");
+                }
             } else {
                  console.log("Regular user detected.");
                  if (adminSection) adminSection.style.display = 'none';
@@ -352,32 +383,28 @@
                 const parsedUser = JSON.parse(userData);
 
                 if (parsedUser && typeof parsedUser === 'object' && parsedUser.name && parsedUser.email) {
+                    let progressUpdated = false;
                     // Ensure progress object exists
                     if (typeof parsedUser.progress !== 'object' || parsedUser.progress === null) {
-                        console.log("getCurrentUser: Initializing progress for user.");
+                        console.log("getCurrentUser: Initializing progress object for user.");
                         parsedUser.progress = {}; // Initialize progress object if missing
-                        // Optionally pre-populate with 0% for all sections
-                        courseSections.forEach(section => {
-                            if (parsedUser.progress[section.id] === undefined) {
-                                parsedUser.progress[section.id] = 0; // Default progress to 0%
-                            }
-                        });
-                        // Save the updated user object with initialized progress back to localStorage
-                        saveCurrentUser(parsedUser);
-                    } else {
-                         // Ensure progress exists for all *defined* sections, defaulting to 0 if needed
-                         let progressUpdated = false;
-                         courseSections.forEach(section => {
-                            if (parsedUser.progress[section.id] === undefined) {
-                                parsedUser.progress[section.id] = 0;
-                                progressUpdated = true;
-                                console.log(`getCurrentUser: Added default progress for section ${section.id}`);
-                            }
-                        });
-                        if (progressUpdated) {
-                             saveCurrentUser(parsedUser); // Save if defaults were added
-                        }
+                        progressUpdated = true; // Mark as updated because we added the object
                     }
+
+                     // Ensure progress exists for all *defined* sections, defaulting to 0 if needed
+                     courseSections.forEach(section => {
+                        if (parsedUser.progress[section.id] === undefined || parsedUser.progress[section.id] === null) {
+                            parsedUser.progress[section.id] = 0; // Default progress to 0%
+                            progressUpdated = true;
+                            console.log(`getCurrentUser: Added default 0% progress for section ${section.id}`);
+                        }
+                    });
+
+                    // Save the updated user object with initialized/defaulted progress back to localStorage ONLY if changes were made
+                    if (progressUpdated) {
+                        saveCurrentUser(parsedUser);
+                    }
+
                     return parsedUser;
                 } else {
                     console.error("getCurrentUser: Parsed user data is invalid.", parsedUser);
@@ -403,6 +430,7 @@
                  console.log("Saved user data to localStorage:", userObject);
              } catch (error) {
                  console.error("Error saving current user data:", error);
+                 // Optionally alert the user or log more details
              }
         }
 
@@ -413,9 +441,16 @@
             }
             containerElement.innerHTML = ''; // Clear previous content
 
+            if (!user.progress) {
+                 console.warn("Displaying sections, but user.progress object is missing. Defaulting all to 0%. User:", user);
+                 user.progress = {}; // Create an empty progress object to avoid errors below
+            }
+
+
             courseSections.forEach(section => {
-                const progress = user.progress[section.id] || 0; // Get progress, default to 0
-                const progressPercentage = Math.max(0, Math.min(100, progress)); // Clamp between 0-100
+                // Get progress, default to 0 if section ID is not found in progress object
+                const progress = user.progress[section.id] || 0;
+                const progressPercentage = Math.max(0, Math.min(100, Math.round(progress))); // Clamp 0-100 and round
 
                 const sectionElement = document.createElement('div');
                 sectionElement.className = 'course-section';
@@ -427,47 +462,43 @@
                         </div>
                         <span class="progress-text">${progressPercentage}% Complete</span>
                         <a href="${section.link || '#'}" class="section-link" title="Go to ${section.title}">Start</a>
-                         <!-- V2: Could change 'Start' to 'Continue' or 'Review' based on progress -->
                     </div>
                 `;
-                // TODO: Add event listener or proper links to navigate to the section content later
+
+                 // Update link button text based on progress
                  const linkButton = sectionElement.querySelector('.section-link');
                  if (progress >= 100) {
                      linkButton.textContent = 'Review';
                      linkButton.style.backgroundColor = '#2ecc71'; // Green for completed
-                     linkButton.addEventListener('mouseover', () => linkButton.style.backgroundColor = '#27ae60');
-                     linkButton.addEventListener('mouseout', () => linkButton.style.backgroundColor = '#2ecc71');
+                     linkButton.onmouseover = () => linkButton.style.backgroundColor = '#27ae60';
+                     linkButton.onmouseout = () => linkButton.style.backgroundColor = '#2ecc71';
                  } else if (progress > 0) {
                      linkButton.textContent = 'Continue';
                      linkButton.style.backgroundColor = '#f39c12'; // Orange for in progress
-                      linkButton.addEventListener('mouseover', () => linkButton.style.backgroundColor = '#e67e22');
-                      linkButton.addEventListener('mouseout', () => linkButton.style.backgroundColor = '#f39c12');
+                      linkButton.onmouseover = () => linkButton.style.backgroundColor = '#e67e22';
+                      linkButton.onmouseout = () => linkButton.style.backgroundColor = '#f39c12';
                  } else {
-                     // Keep as 'Start'
+                      // Keep default 'Start' style
+                      linkButton.style.backgroundColor = '#3498db'; // Default blue
+                      linkButton.onmouseover = () => linkButton.style.backgroundColor = '#2980b9';
+                      linkButton.onmouseout = () => linkButton.style.backgroundColor = '#3498db';
                  }
-
 
                 containerElement.appendChild(sectionElement);
             });
         }
 
         function displayAdminData(containerElement) {
-             if (!containerElement) return;
-
-             // **Simulated Data Fetching**
-             // In a real app, this would fetch data from a backend API.
-             // Here, we can only access data in the *admin's* localStorage.
-             // We could try to list *all* `currentUser` keys if we had a way
-             // to know them, but localStorage doesn't provide a way to list keys easily
-             // across different origins or without a naming convention.
-
-             // For this example, let's just show the admin's *own* progress in a table format
-             // as a placeholder for a future user list.
+             if (!containerElement) { console.error("Admin container element not found."); return; }
 
              const adminUser = getCurrentUser(); // Get the currently logged-in admin's data
              if (!adminUser) {
                  containerElement.innerHTML = '<p>Error: Could not load admin user data.</p>';
                  return;
+             }
+              if (!adminUser.progress) {
+                 containerElement.innerHTML = '<p>Error: Admin user progress data missing.</p>';
+                 return; // Added check for progress object
              }
 
              let tableHTML = `
@@ -484,8 +515,9 @@
              `;
 
              courseSections.forEach(section => {
+                 // Retrieve progress for this section from admin's data, default to 0
                  const progress = adminUser.progress[section.id] || 0;
-                 const progressPercentage = Math.max(0, Math.min(100, progress));
+                 const progressPercentage = Math.max(0, Math.min(100, Math.round(progress))); // Clamp 0-100 and round
                  let status = 'Not Started';
                  if (progress >= 100) status = 'Completed';
                  else if (progress > 0) status = 'In Progress';
@@ -519,9 +551,6 @@
                 // Optional: Clear signup flag if you want returning users to see signup first after logout
                 // localStorage.removeItem(SIGNUP_FLAG_KEY);
 
-                // Optional: Clear course-specific data if needed
-                // courseSections.forEach(section => localStorage.removeItem(`progress_${section.id}`)); // Example if progress was stored separately
-
                 console.log("Local storage cleared for logout.");
                 window.location.href = 'login.html'; // Redirect to login page
             } catch (e) {
@@ -530,49 +559,6 @@
                 window.location.href = 'login.html';
             }
         }
-
-        // --- Progress Update Function (Placeholder) ---
-        // This function would be called from your course content pages when a user makes progress
-        function updateProgress(sectionId, newProgressValue) {
-            console.log(`Attempting to update progress for section ${sectionId} to ${newProgressValue}%`);
-            const currentUser = getCurrentUser();
-            if (!currentUser) {
-                console.error("Cannot update progress: No user logged in.");
-                return;
-            }
-
-            // Validate progress value
-             newProgressValue = Math.max(0, Math.min(100, Number(newProgressValue))); // Ensure it's a number 0-100
-
-            // Check if the sectionId is valid
-            const isValidSection = courseSections.some(section => section.id === sectionId);
-            if (!isValidSection) {
-                 console.error(`Cannot update progress: Invalid section ID "${sectionId}"`);
-                 return;
-            }
-
-            // Update the progress in the user object
-            currentUser.progress[sectionId] = newProgressValue;
-
-            // Save the updated user object back to localStorage
-            saveCurrentUser(currentUser);
-
-            console.log(`Progress updated for ${sectionId}. New user data:`, currentUser);
-
-            // Refresh the dashboard display if the user is currently on the dashboard page
-             if (document.getElementById('courseSectionsList')) {
-                 displayCourseSections(currentUser, document.getElementById('courseSectionsList'));
-                 // If admin view is visible, refresh it too
-                 if (document.getElementById('adminSection') && document.getElementById('adminSection').style.display !== 'none') {
-                     displayAdminData(document.getElementById('adminDataContainer'));
-                 }
-                 console.log("Dashboard display refreshed.");
-             }
-        }
-
-        // Example of how you might call updateProgress from another page (e.g., after finishing a lesson):
-        // updateProgress('intro', 50); // Sets 'Introduction' progress to 50%
-        // updateProgress('skills', 100); // Sets 'Coaching Skills' progress to 100%
 
     </script>
 </body>
