@@ -82,7 +82,7 @@
             border-top: 6px solid #7c3aed;
             min-width: 350px;
          }
-        #assessmentCompletePopup p { font-size: 19px; color: #374151; margin-bottom: 30px; line-height: 1.6; }
+        #assessmentCompletePopup p { font-size: 19px; color: #374151; margin-bottom: 30px; line-height: 1.6; } /* Default P style */
         #assessmentCompletePopup button { background-color: #3b82f6; color: white; padding: 12px 25px; border: none; border-radius: 6px; cursor: pointer; font-size: 17px; transition: background-color 0.3s; font-weight: 500; }
         #assessmentCompletePopup button:hover { background-color: #2563eb; }
          .popup-overlay { /* Only for completion popup */
@@ -287,6 +287,12 @@
                      <div class="error-message" id="q_eval_exp_error"></div>
                  </div>
 
+                 <!-- Validation Warning Box (Hidden Initially) -->
+                 <div id="validationWarningBox" style="display: none; border: 1px solid #f56565; background-color: #fff5f5; color: #c53030; padding: 15px 20px; margin-bottom: 25px; border-radius: 8px; font-weight: 500;">
+                     <span style="font-size: 1.2em; margin-right: 8px;">⚠️</span>
+                     <span id="validationWarningMessage">You must answer all the questions before submitting the assessment.</span>
+                 </div>
+
                  <!-- Submission Progress Bar -->
                  <div id="submissionProgressContainer">
                      <div id="submissionProgressBar"></div>
@@ -300,8 +306,15 @@
         <!-- Completion Popup -->
         <div class="popup-overlay" id="completionPopupOverlay"></div>
         <div id="assessmentCompletePopup">
-             <p>Success! Your final assessment has been submitted. Thank you for your thoughtful responses.</p>
-             <button id="closeCompletePopupBtn">Return to Dashboard</button>
+             <p style="font-size: 22px; margin-bottom: 20px;">🎉</p> <!-- Emoji for flair -->
+             <p style="font-size: 1.1rem; color: #374151; margin-bottom: 25px; line-height: 1.6;">
+                 Thank you for completing the final assessment.<br>We appreciate your effort throughout the course.
+             </p>
+             <div id="feedbackPlaceholder" style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e7eb; color: #6b7280; font-size: 0.95rem;">
+                 <span style="font-size: 1.3em; margin-right: 8px; vertical-align: middle;">💬</span>
+                 <span style="vertical-align: middle;">We'd love your feedback! [Feedback form coming soon]</span>
+             </div>
+             <button id="closeCompletePopupBtn" style="margin-top: 35px;">Return to Dashboard</button>
         </div>
 
     </main>
@@ -507,7 +520,7 @@
         }
 
 
-        // --- Helper Functions (No changes needed below this line for the requested logic) ---
+        // --- Helper Functions ---
 
         function saveCurrentUser(userObject) {
             try {
@@ -535,6 +548,31 @@
             return text ? text.trim().split(/\s+/).filter(Boolean).length : 0;
         }
 
+        // MODIFIED: Word count validation should still be bypassed for admin *during input*,
+        // but the 'required' check during final submission should apply to all.
+        function validateWordCount(textarea, minWords, errorElement /*, isAdmin - removed */) {
+            // If admin, we DON'T show inline errors during typing, but the submit handler *might* still check if required.
+            // This function primarily controls the *inline* feedback during typing.
+            if (IS_ADMIN_USER || isNaN(minWords)) {
+                if (errorElement) errorElement.style.display = 'none';
+                textarea.classList.remove('invalid');
+                return true; // Always return true for admin *here* to avoid inline errors
+            }
+            // For non-admins, perform the check as before
+            const words = countWords(textarea.value);
+            const isFieldEmpty = !textarea.value.trim();
+            if (!isFieldEmpty && words < minWords) {
+                errorElement.textContent = `Minimum ${minWords} words required.`;
+                errorElement.style.display = 'block';
+                textarea.classList.add('invalid');
+                return false;
+            } else {
+                errorElement.style.display = 'none';
+                textarea.classList.remove('invalid');
+                return true;
+            }
+        }
+
         // Modified slightly to use the global IS_ADMIN_USER
         function setupWordCountValidation(textarea, countSpan, errorElement, countContainer /*, isAdmin - removed */) {
             const minWords = parseInt(textarea.getAttribute('data-min-words'), 10);
@@ -553,28 +591,8 @@
                 countSpan.textContent = words;
                 validateWordCount(textarea, minWords, errorElement /*, IS_ADMIN_USER - removed */);
             });
+            // Initial check
             validateWordCount(textarea, minWords, errorElement /*, IS_ADMIN_USER - removed */);
-        }
-
-        // Modified slightly to use the global IS_ADMIN_USER
-        function validateWordCount(textarea, minWords, errorElement /*, isAdmin - removed */) {
-            if (IS_ADMIN_USER || isNaN(minWords)) { // Use global variable
-                if (errorElement) errorElement.style.display = 'none';
-                textarea.classList.remove('invalid');
-                return true;
-            }
-            const words = countWords(textarea.value);
-            const isFieldEmpty = !textarea.value.trim();
-            if (!isFieldEmpty && words < minWords) {
-                errorElement.textContent = `Minimum ${minWords} words required.`;
-                errorElement.style.display = 'block';
-                textarea.classList.add('invalid');
-                return false;
-            } else {
-                errorElement.style.display = 'none';
-                textarea.classList.remove('invalid');
-                return true;
-            }
         }
 
         // Modified slightly to use the global IS_ADMIN_USER
@@ -587,7 +605,7 @@
                     setTimeout(() => { warningElement.style.display = 'none'; }, 4000);
                 });
             } else {
-                warningElement.style.display = 'none';
+                warningElement.style.display = 'none'; // Ensure it's hidden for admin
             }
         }
 
@@ -601,6 +619,8 @@
                 const adminNote = document.getElementById('adminAssessmentNote');
                 if (adminNote) adminNote.style.display = 'inline';
                 textareas.forEach(ta => ta.placeholder = "Admin Mode: No restrictions.");
+                // Hide word count display for admin
+                form.querySelectorAll('.word-count-info').forEach(el => el.style.display = 'none');
             } else {
                 textareas.forEach(ta => {
                     const min = ta.getAttribute('data-min-words');
@@ -608,21 +628,23 @@
                 });
             }
 
-            textareas.forEach(ta => {
+            // Setup listeners for all textareas (word count and paste)
+            form.querySelectorAll('textarea').forEach(ta => {
                 const baseId = ta.id;
                 const countSpan = document.getElementById(`${baseId}_word_count`);
                 const errorElement = document.getElementById(`${baseId}_error`);
                 const countContainer = document.getElementById(`${baseId}_word_count_container`);
                 const pasteWarning = document.getElementById(`${baseId}_paste_warning`);
-                if (countSpan && errorElement && countContainer && pasteWarning) {
-                    // Pass the global IS_ADMIN_USER implicitly now
-                    setupWordCountValidation(ta, countSpan, errorElement, countContainer);
-                    setupPastePrevention(ta, pasteWarning);
-                } else {
-                    console.warn(`Missing validation elements for ${baseId}`);
+
+                if (ta.hasAttribute('data-min-words') && countSpan && errorElement && countContainer) {
+                     setupWordCountValidation(ta, countSpan, errorElement, countContainer);
                 }
-            });
-            // Setup for number input (remains the same logic)
+                if (pasteWarning) {
+                     setupPastePrevention(ta, pasteWarning);
+                }
+             });
+
+            // Setup for number input (remains the same logic, applies to all)
              const ratingInput = form.querySelector('#q_eval_confidence_rating');
              const ratingError = form.querySelector('#q_eval_rating_error');
              if (ratingInput && ratingError) {
@@ -642,7 +664,7 @@
              }
         }
 
-        // Modified slightly to use the global IS_ADMIN_USER in validation calls
+        // --- MODIFIED Submission Handler ---
         function handleFinalAssessmentSubmit(event) {
             event.preventDefault();
             console.log("Final Assessment submission initiated...");
@@ -652,18 +674,25 @@
             const progressBar = document.getElementById('submissionProgressBar');
             const completionOverlay = document.getElementById('completionPopupOverlay');
             const completePopup = document.getElementById('assessmentCompletePopup');
+            // --- Get references to the new warning box ---
+            const validationWarningBox = document.getElementById('validationWarningBox');
+            const validationWarningMessage = document.getElementById('validationWarningMessage'); // Specific span for message text if needed, otherwise use the box itself.
+
+            // --- Hide warning box at the start of every submission attempt ---
+            if (validationWarningBox) validationWarningBox.style.display = 'none';
 
             submitButton.disabled = true;
-            submitButton.textContent = 'Submitting...';
-            if(progressContainer) progressContainer.style.display = 'block';
-            if(progressBar) progressBar.style.width = '10%';
+            submitButton.textContent = 'Validating...'; // Changed text
+            if(progressContainer) progressContainer.style.display = 'block'; // Show progress bar during validation
+            if(progressBar) progressBar.style.width = '10%'; // Initial progress
 
             form.querySelectorAll('.error-message').forEach(el => el.style.display = 'none');
             form.querySelectorAll('.invalid').forEach(el => el.classList.remove('invalid'));
 
             let isValid = true;
-            let validationProgress = 10;
-            const inputs = { /* ... same input definitions ... */
+            let firstInvalidElement = null; // To focus later if needed
+
+            const inputs = {
                 situational_disengaged: form.querySelector('#q_situational_disengaged'),
                 situational_feedback: form.querySelector('#q_situational_feedback'),
                 reflection_skill: form.querySelector('#q_reflection_skill'),
@@ -671,7 +700,7 @@
                 evaluation_confidence_rating: form.querySelector('#q_eval_confidence_rating'),
                 evaluation_confidence_explanation: form.querySelector('#q_eval_confidence_explanation')
             };
-            const errors = { /* ... same error definitions ... */
+            const errors = {
                 situational_disengaged: form.querySelector('#q_situational_error'),
                 situational_feedback: form.querySelector('#q_feedback_error'),
                 reflection_skill: form.querySelector('#q_skill_error'),
@@ -680,59 +709,143 @@
                 evaluation_confidence_explanation: form.querySelector('#q_eval_exp_error')
             };
 
+            let validationProgress = 10;
             const totalFields = Object.keys(inputs).length;
-            const progressIncrement = Math.floor(90 / totalFields);
+            const progressIncrement = Math.floor(80 / totalFields); // Leave some room for final steps
 
+            // --- VALIDATION LOOP (Applies to ALL users for 'required' and 'range') ---
             for (const key in inputs) {
                 const input = inputs[key];
                 const errorEl = errors[key];
-                let fieldValid = true;
                 if (!input) continue;
 
-                if (input.type === 'textarea') {
-                    if (!input.value.trim() && input.hasAttribute('required')) {
-                        errorEl.textContent = 'This field is required.'; errorEl.style.display = 'block'; input.classList.add('invalid'); fieldValid = false;
-                    } else if (input.hasAttribute('data-min-words')) {
-                        // Use validateWordCount which now implicitly uses global IS_ADMIN_USER
-                        if (!validateWordCount(input, parseInt(input.getAttribute('data-min-words'), 10), errorEl) && input.value.trim()) {
-                             fieldValid = false;
-                        }
-                    }
-                } else if (input.type === 'number') {
-                    const ratingVal = parseInt(input.value, 10); const min = parseInt(input.min, 10); const max = parseInt(input.max, 10);
-                    if (input.hasAttribute('required') && (!input.value || isNaN(ratingVal) || ratingVal < min || ratingVal > max)) {
-                        errorEl.textContent = `Please enter a valid rating between ${min} and ${max}.`; errorEl.style.display = 'block'; input.classList.add('invalid'); fieldValid = false;
+                let fieldValid = true;
+                const isRequired = input.hasAttribute('required');
+
+                // Check if the field is required and empty (APPLIES TO ADMINS TOO)
+                if (isRequired && !input.value.trim()) {
+                    errorEl.textContent = 'This field is required.';
+                    errorEl.style.display = 'block';
+                    input.classList.add('invalid');
+                    fieldValid = false;
+                }
+                // Check number range validity (APPLIES TO ADMINS TOO)
+                else if (input.type === 'number') {
+                    const val = parseInt(input.value, 10);
+                    const min = parseInt(input.min, 10);
+                    const max = parseInt(input.max, 10);
+                    // Check required AND range if value exists
+                    if (isRequired && !input.value) { // Separate check for empty required number
+                         errorEl.textContent = 'This field is required.';
+                         errorEl.style.display = 'block';
+                         input.classList.add('invalid');
+                         fieldValid = false;
+                    } else if (input.value && (isNaN(val) || val < min || val > max)) { // Check range only if not empty
+                        errorEl.textContent = `Please enter a valid rating between ${min} and ${max}.`;
+                        errorEl.style.display = 'block';
+                        input.classList.add('invalid');
+                        fieldValid = false;
                     }
                 }
-                validationProgress += progressIncrement;
-                if(progressBar) progressBar.style.width = `${Math.min(validationProgress, 95)}%`;
-                if (!fieldValid) isValid = false;
-            }
+                // Check word count ONLY IF NOT ADMIN and field has min-words attribute and is not empty
+                else if (!IS_ADMIN_USER && input.type === 'textarea' && input.hasAttribute('data-min-words') && input.value.trim()) {
+                     const minWords = parseInt(input.getAttribute('data-min-words'), 10);
+                     const words = countWords(input.value);
+                     if (words < minWords) {
+                         errorEl.textContent = `Minimum ${minWords} words required.`;
+                         errorEl.style.display = 'block';
+                         input.classList.add('invalid');
+                         fieldValid = false;
+                     }
+                }
 
+                 // Simulate validation progress
+                validationProgress += progressIncrement;
+                if(progressBar) progressBar.style.width = `${Math.min(validationProgress, 90)}%`;
+
+                if (!fieldValid) {
+                    isValid = false;
+                    if (!firstInvalidElement) {
+                        firstInvalidElement = input; // Track the first error element
+                    }
+                }
+            } // End Validation Loop
+
+            // --- Use setTimeout to simulate async validation and allow progress bar update ---
             setTimeout(() => {
                 if (isValid) {
+                    // --- SUCCESS PATH ---
+                    console.log("Validation successful. Submitting...");
+                    submitButton.textContent = 'Submitting...';
                     if(progressBar) progressBar.style.width = '100%';
+
                     let updatedUser = getLocalStorageUser();
-                    if (!updatedUser) { console.error("User data lost before saving."); /* ... error handling ... */ return; }
+                    if (!updatedUser) {
+                        console.error("User data lost before saving.");
+                        if (validationWarningBox) { // Show error in the warning box
+                           validationWarningMessage.textContent = "Error: Could not retrieve user data. Please try logging out and back in.";
+                           validationWarningBox.style.display = 'block';
+                        } else {
+                           alert("Error: Could not retrieve user data. Please try logging out and back in.");
+                        }
+                        submitButton.disabled = false;
+                        submitButton.textContent = 'Submission Error - Try Again';
+                        if(progressContainer) progressContainer.style.display = 'none';
+                        return;
+                    }
+
                     const finalAnswers = {};
-                    for (const key in inputs) { if(inputs[key]) { finalAnswers[key] = inputs[key].value.trim(); } }
+                    for (const key in inputs) {
+                        if(inputs[key]) {
+                            finalAnswers[key] = inputs[key].value.trim();
+                        }
+                    }
+
                     updatedUser.finalAssessmentAnswers = finalAnswers;
                     updatedUser.finalAssessmentCompleted = true;
                     if (!updatedUser.progress) { updatedUser.progress = {}; }
                     updatedUser.progress[FINAL_ASSESSMENT_ID] = 100;
+
                     saveCurrentUser(updatedUser);
+
+                    // Show the updated completion popup
                     if(completePopup) completePopup.style.display = 'block';
                     if(completionOverlay) completionOverlay.style.display = 'block';
-                     setTimeout(() => { if(progressContainer) progressContainer.style.display = 'none'; }, 500);
+
+                    // Hide progress bar after a short delay
+                    setTimeout(() => {
+                        if(progressContainer) progressContainer.style.display = 'none';
+                         // Disable form elements again after successful submission
+                         form.querySelectorAll('textarea, input[type="number"], button').forEach(el => el.disabled = true);
+                         submitButton.textContent = 'Assessment Submitted';
+                    }, 500);
+
                 } else {
+                    // --- VALIDATION FAILED PATH ---
                     console.log("Form validation failed.");
-                    submitButton.disabled = false; submitButton.textContent = 'Submit Final Assessment';
-                    if(progressContainer) progressContainer.style.display = 'none'; if(progressBar) progressBar.style.width = '0%';
-                    const firstError = form.querySelector('.invalid');
-                    if (firstError) { firstError.scrollIntoView({ behavior: 'smooth', block: 'center' }); firstError.focus(); }
-                    alert("Please review the highlighted fields and correct any errors.");
+                    if(progressContainer) progressContainer.style.display = 'none'; // Hide progress bar
+                    if(progressBar) progressBar.style.width = '0%'; // Reset progress
+
+                    // Show the custom validation warning box
+                    if (validationWarningBox) {
+                        validationWarningMessage.textContent = '⚠️ You must answer all the required questions and correct any errors before submitting.'; // Slightly more specific message
+                        validationWarningBox.style.display = 'block';
+                    } else {
+                        // Fallback if the box element wasn't found
+                        alert("⚠️ You must answer all the required questions and correct any errors before submitting.");
+                    }
+
+                    submitButton.disabled = false; // Re-enable button
+                    submitButton.textContent = 'Submit Final Assessment';
+
+                    // Scroll to and focus the first invalid element
+                    if (firstInvalidElement) {
+                        firstInvalidElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        // Add a slight delay before focus sometimes helps browser rendering
+                        setTimeout(() => firstInvalidElement.focus(), 100);
+                    }
                 }
-            }, 300);
+            }, 500); // Delay to simulate processing and show progress
         }
 
         function logout() {
