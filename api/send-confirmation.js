@@ -13,7 +13,7 @@ export default async function handler(req, res) {
       html: `
         <h1>Hello, ${name}!</h1>
         <p>Thank you for signing up. Please click the link below to confirm your email address:</p>
-        <a href="https://your-deployed-app-url.com/confirm.html?email=${email}">Confirm Email</a>
+        <a href="https://mohamedelmenisy.github.io/my-training-course/confirm.html?email=${email}">Confirm Email</a>
       `,
     };
 
