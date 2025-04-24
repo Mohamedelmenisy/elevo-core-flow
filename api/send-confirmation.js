@@ -8,12 +8,12 @@ export default async function handler(req, res) {
 
     const msg = {
       to: email,
-      from: 'M.elsayed@thehefz.co', // البريد المرسل
+      from: 'M.elsayed@thechefz.co', // البريد المرسل
       subject: 'Please confirm your email',
       html: `
         <h1>Hello, ${name}!</h1>
         <p>Thank you for signing up. Please click the link below to confirm your email address:</p>
-        <a href="https://your-deployed-app-url.com/confirm.html?email=${email}">Confirm Email</a>
+        <a href="https://mohamedelmenisy.github.io/my-training-course/confirm.html">Confirm Email</a>
       `,
     };
 
