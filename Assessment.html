@@ -244,24 +244,28 @@
         // --- Global variable for admin status ---
         let IS_ADMIN_USER = false;
 
-        // --- IMMEDIATE REDIRECTION LOGIC ---
+        // ***** ---> IMMEDIATE REDIRECTION LOGIC (Checks if user should be here) <--- *****
         console.log("%cAssessment Page: Running IMMEDIATE redirection check...", "color: purple; font-weight: bold;");
         function quickCheckCurrentUserFormat() {
             const data = localStorage.getItem(CURRENT_USER_KEY);
+            // Basic check for non-empty, JSON-like string
             return data && data.length > 2 && data.startsWith('{') && data.endsWith('}');
         }
         const isLoggedIn_immediate = localStorage.getItem(LOGGED_IN_KEY) === 'true' && quickCheckCurrentUserFormat();
         const hasSignedUp_immediate = localStorage.getItem(SIGNUP_FLAG_KEY) === 'true';
 
         if (!isLoggedIn_immediate) {
+            // If not logged in or data format is wrong, redirect to login or signup
             const targetUrl = hasSignedUp_immediate ? 'login.html' : 'signup.html';
             console.error(`%cAssessment Page IMMEDIATE Redirect: Not logged in or user data invalid. Redirecting to ${targetUrl}...`, "color: orange;");
-            window.location.replace(`${targetUrl}?redirect=${encodeURIComponent(window.location.pathname)}`);
-            throw new Error("Redirecting user: Not logged in or invalid user data.");
+            // Include current page as redirect parameter for login page to handle
+            window.location.replace(`${targetUrl}?redirect=${encodeURIComponent(window.location.pathname + window.location.search)}`);
+            throw new Error("Redirecting user: Not logged in or invalid user data."); // Stop script execution
         } else {
-            console.log("%cAssessment Page IMMEDIATE Check: User IS logged in. Proceeding.", "color: green;");
+            console.log("%cAssessment Page IMMEDIATE Check: User IS logged in and data format seems ok. Proceeding.", "color: green;");
         }
-        // --- END IMMEDIATE REDIRECTION ---
+        // ***** ---> END IMMEDIATE REDIRECTION LOGIC <--- *****
+
 
         document.addEventListener('DOMContentLoaded', function() {
             console.log("Assessment page DOM loaded.");
@@ -274,38 +278,40 @@
             const popupOverlay = document.getElementById('popupOverlay');
             const startJourneyBtn = document.getElementById('startJourneyBtn');
 
-             // Get current user data
+             // --- DOMContentLoaded User Check (Failsafe) ---
             const currentUser = getCurrentUser();
-
             if (!currentUser) {
-                console.error("Assessment DOMContentLoaded: Critical - User data missing/invalid. Forcing logout.");
-                logout(); // Force logout if user data is corrupt/missing
+                // This handles cases where immediate check passed but parsing/validation inside getCurrentUser failed
+                console.error("Assessment DOMContentLoaded: Critical - User data missing or invalid after initial load! Forcing logout.");
+                logout(); // Force logout and redirect to login
                 return; // Stop further execution
             }
+            // --- End Failsafe Check ---
 
-            console.log("Current User Data (Assessment):", currentUser);
+            console.log("Current User Data (Assessment - DOMContentLoaded):", currentUser);
 
-            // *** Determine if the current user is the admin ***
+            // Determine if the current user is the admin
             IS_ADMIN_USER = currentUser.email.toLowerCase() === ADMIN_EMAIL.toLowerCase();
             console.log(`User is admin: ${IS_ADMIN_USER}`);
 
             // Populate user info in the top bar immediately
             populateTopBar(currentUser);
 
-            // --- Assessment Check ---
-            // THIS IS WHERE THE REDIRECT HAPPENS IF assessmentCompleted IS TRUE
+            // --- Assessment Completion Check ---
+            // This logic correctly redirects if the assessment is marked as completed in the user's data
             if (currentUser.assessmentCompleted) {
-                console.log("Assessment already completed. Redirecting to Dashboard.");
-                window.location.replace(DASHBOARD_URL); // Redirect immediately
+                console.log("Assessment already completed according to user data. Redirecting to Dashboard.");
+                window.location.replace(DASHBOARD_URL); // Use replace to avoid adding Assessment page to history
             } else {
-                console.log("Assessment not completed. Displaying assessment form.");
-                setupAssessmentForm(); // Setup the form (knows about IS_ADMIN_USER)
-                loadingMessage.style.display = 'none';
-                assessmentSection.style.display = 'block';
-                setTimeout(() => assessmentSection.classList.add('fade-in'), 50); // Fade in effect
+                // Only show the form if the assessment is NOT completed
+                console.log("Assessment not completed. Setting up and displaying assessment form.");
+                setupAssessmentForm(); // Setup the form content and validation
+                loadingMessage.style.display = 'none'; // Hide loading message
+                assessmentSection.style.display = 'block'; // Show assessment section
+                setTimeout(() => assessmentSection.classList.add('fade-in'), 50); // Apply fade-in effect
             }
 
-             // Attach listener for the success popup button
+             // Attach listener for the success popup button (after successful submission)
              startJourneyBtn.addEventListener('click', () => {
                  console.log("Start Journey button clicked. Redirecting to Dashboard.");
                  window.location.href = DASHBOARD_URL; // Redirect to the main dashboard page
@@ -315,80 +321,87 @@
         // --- Helper Functions ---
 
         function getCurrentUser() {
+            // Retrieves and validates user data from localStorage
             try {
                 const userData = localStorage.getItem(CURRENT_USER_KEY);
                 if (!userData) {
-                    console.warn("getCurrentUser: No current user data found.");
+                    console.warn("getCurrentUser: No current user data found in localStorage.");
                     return null;
                 }
                 const parsedUser = JSON.parse(userData);
 
-                // Basic validation of parsed object structure
+                // Validate essential properties
                 if (parsedUser && typeof parsedUser === 'object' && parsedUser.name && parsedUser.email) {
-                     // Initialize assessment status/answers if needed
+                    // Initialize missing optional properties if necessary
                      if (parsedUser.assessmentCompleted === undefined) {
                          parsedUser.assessmentCompleted = false;
-                         // Don't save here immediately, let the calling function decide if save is needed
                      }
                      if (typeof parsedUser.assessmentAnswers !== 'object' || parsedUser.assessmentAnswers === null) {
-                        parsedUser.assessmentAnswers = {};
+                         parsedUser.assessmentAnswers = {};
                      }
-                     // Ensure progress object exists
                      if (typeof parsedUser.progress !== 'object' || parsedUser.progress === null) {
                          parsedUser.progress = {};
                      }
-                    return parsedUser;
+                    return parsedUser; // Return the valid (and potentially initialized) user object
                 } else {
-                    console.error("getCurrentUser: Parsed user data is invalid.", parsedUser);
-                    logout(); // Force logout if data is bad
-                    return null;
+                    console.error("getCurrentUser: Parsed user data is invalid or missing essential properties (name, email).", parsedUser);
+                    return null; // Indicate invalid data
                 }
             } catch (error) {
-                console.error("Error parsing current user data:", error);
-                logout(); // Force logout on parsing error
-                return null;
+                console.error("Error parsing current user data from localStorage:", error);
+                return null; // Indicate parsing failure
             }
         }
 
         function saveCurrentUser(userObject) {
+            // Saves the user object to localStorage after validation
              try {
-                 if (!userObject || typeof userObject !== 'object') { throw new Error("Invalid user object."); }
+                 // Basic validation before saving
+                 if (!userObject || typeof userObject !== 'object' || !userObject.email || !userObject.name) {
+                     throw new Error("Attempted to save invalid user object.");
+                 }
                  localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(userObject));
-                 console.log("Saved user data to localStorage:", userObject);
+                 console.log("Saved user data to localStorage.");
              } catch (error) {
                  console.error("Error saving current user data:", error);
              }
         }
 
         function populateTopBar(user) {
+            // Populates user info in the header bar
             const userNameBar = document.getElementById('userNameBar');
             const userEmailBar = document.getElementById('userEmailBar');
-            if (userNameBar) userNameBar.textContent = user.name;
-            if (userEmailBar) userEmailBar.textContent = user.email;
+            if (userNameBar && user?.name) userNameBar.textContent = user.name;
+            if (userEmailBar && user?.email) userEmailBar.textContent = user.email;
         }
 
         function setupAssessmentForm() {
+            // Sets up the dynamic parts of the assessment form (random question, admin notes, validation)
              const form = document.getElementById('assessmentForm');
              const q1Textarea = document.getElementById('q1_coaching_meaning');
              const q3Textarea = document.getElementById('q3_expectations');
              const q4Rating = document.getElementById('q4_confidence_rating');
              const q4Explanation = document.getElementById('q4_confidence_explanation');
              const randomQuestionContainer = document.getElementById('randomQuestionContainer');
+             const adminNoteSpan = document.getElementById('adminAssessmentNote');
 
-             // Show admin note if applicable
-             if (IS_ADMIN_USER) {
-                document.getElementById('adminAssessmentNote').style.display = 'inline';
+             // Show admin-specific notes and adjust placeholders
+             if (IS_ADMIN_USER && adminNoteSpan) {
+                adminNoteSpan.style.display = 'inline';
                 q1Textarea.placeholder = "Admin: No word count required.";
                 q3Textarea.placeholder = "Admin: No word count required.";
                 q4Explanation.placeholder = "Admin: No word count required.";
              } else {
-                q1Textarea.placeholder = `Describe your understanding of coaching... (min ${q1Textarea.getAttribute('data-min-words')} words)`;
-                q3Textarea.placeholder = `What do you hope to learn or achieve? (min ${q3Textarea.getAttribute('data-min-words')} words)`;
-                q4Explanation.placeholder = `Why did you choose this rating? (min ${q4Explanation.getAttribute('data-min-words')} words)`;
+                 // Ensure placeholders show requirements for non-admins
+                const q1MinWords = q1Textarea.getAttribute('data-min-words') || '20';
+                const q3MinWords = q3Textarea.getAttribute('data-min-words') || '15';
+                const q4ExpMinWords = q4Explanation.getAttribute('data-min-words') || '10';
+                q1Textarea.placeholder = `Describe your understanding of coaching... (min ${q1MinWords} words)`;
+                q3Textarea.placeholder = `What do you hope to learn or achieve? (min ${q3MinWords} words)`;
+                q4Explanation.placeholder = `Why did you choose this rating? (min ${q4ExpMinWords} words)`;
              }
 
-
-             // --- Select and Inject Random Question ---
+             // Select and Inject Random Question
              selectedRandomQuestion = randomQuestionPool[Math.floor(Math.random() * randomQuestionPool.length)];
              const randomPlaceholder = IS_ADMIN_USER ? "Admin: No word count required." : `Please provide your thoughts... (min ${selectedRandomQuestion.minWords} words)`;
              const randomWordCountDisplay = IS_ADMIN_USER ? '' : `/${selectedRandomQuestion.minWords}`;
@@ -402,9 +415,10 @@
                  </div>
                  <div class="error-message" id="${selectedRandomQuestion.id}_error"></div>
              `;
-             const qRandomTextarea = document.getElementById(selectedRandomQuestion.id);
+             const qRandomTextarea = document.getElementById(selectedRandomQuestion.id); // Get reference after injection
 
-             // --- Setup Conditional Validation/Restrictions ---
+             // Setup Validation and Paste Prevention (Conditional based on IS_ADMIN_USER)
+             // These functions now correctly handle the isAdmin flag internally
              setupWordCountValidation(q1Textarea, document.getElementById('q1_word_count'), document.getElementById('q1_error'), document.getElementById('q1_word_count_container'), IS_ADMIN_USER);
              setupWordCountValidation(qRandomTextarea, document.getElementById(`${selectedRandomQuestion.id}_word_count`), document.getElementById(`${selectedRandomQuestion.id}_error`), document.getElementById(`${selectedRandomQuestion.id}_word_count_container`), IS_ADMIN_USER);
              setupWordCountValidation(q3Textarea, document.getElementById('q3_word_count'), document.getElementById('q3_error'), document.getElementById('q3_word_count_container'), IS_ADMIN_USER);
@@ -415,64 +429,90 @@
              setupPastePrevention(q3Textarea, document.getElementById('q3_paste_warning'), IS_ADMIN_USER);
              setupPastePrevention(q4Explanation, document.getElementById('q4_exp_paste_warning'), IS_ADMIN_USER);
 
-             // --- Form Submission ---
-             form.addEventListener('submit', handleAssessmentSubmit);
+             // Attach Form Submission Handler
+             if (form) {
+                 form.addEventListener('submit', handleAssessmentSubmit);
+             } else {
+                 console.error("Assessment form element not found for attaching submit listener.");
+             }
         }
 
         function countWords(text) {
+            // Counts words in a given string
             return text ? text.trim().split(/\s+/).filter(Boolean).length : 0;
         }
 
        function setupWordCountValidation(textarea, countSpan, errorElement, countContainer, isAdmin) {
-             const minWords = parseInt(textarea.getAttribute('data-min-words'), 10);
-
-             if (isAdmin) {
-                 countContainer.style.display = 'none';
+             // Sets up real-time word count display and validation, skipping for admin
+             if (!textarea || !countSpan || !errorElement || !countContainer) {
+                 console.warn("Word count setup missing required elements for:", textarea?.id);
                  return;
              }
+             const minWords = parseInt(textarea.getAttribute('data-min-words') || '0', 10);
 
+             if (isAdmin) {
+                 countContainer.style.display = 'none'; // Hide word count elements for admin
+                 return; // No listener needed for admin
+             }
+
+             // Add listener for non-admins
              textarea.addEventListener('input', () => {
                  const words = countWords(textarea.value);
                  countSpan.textContent = words;
-                 validateWordCount(textarea, minWords, errorElement, isAdmin);
+                 validateWordCount(textarea, minWords, errorElement, isAdmin); // Validate on input
              });
+             // Initial check in case field is pre-filled (though unlikely here)
              validateWordCount(textarea, minWords, errorElement, isAdmin);
          }
 
         function validateWordCount(textarea, minWords, errorElement, isAdmin) {
+            // Validates if the word count meets the minimum, returns true/false. Skips for admin.
              if (isAdmin) {
-                 errorElement.style.display = 'none';
-                 textarea.classList.remove('invalid');
-                 return true;
+                 if(errorElement) errorElement.style.display = 'none';
+                 if(textarea) textarea.classList.remove('invalid');
+                 return true; // Always valid for admin regarding word count
+             }
+
+             if (!textarea || !errorElement || minWords <= 0) {
+                  // Don't validate if elements are missing or no minimum is set
+                  if(errorElement) errorElement.style.display = 'none';
+                  if(textarea) textarea.classList.remove('invalid');
+                  return true;
              }
 
              const words = countWords(textarea.value);
              const isFieldEmpty = !textarea.value.trim();
 
+             // Show error only if user has typed something but not enough words
              if (!isFieldEmpty && words < minWords) {
                  errorElement.textContent = `Minimum ${minWords} words required.`;
                  errorElement.style.display = 'block';
                  textarea.classList.add('invalid');
-                 return false;
+                 return false; // Invalid
              } else {
+                 // Valid if enough words OR if field is empty (required validation is separate)
                  errorElement.style.display = 'none';
                  textarea.classList.remove('invalid');
-                 return true;
+                 return true; // Valid
              }
         }
 
         function setupPastePrevention(textarea, warningElement, isAdmin) {
+            // Prevents pasting into textarea for non-admins and shows a warning
+            if (!textarea || !warningElement) return;
+
             if (!isAdmin) {
                 textarea.addEventListener('paste', (event) => {
-                    event.preventDefault();
+                    event.preventDefault(); // Block the paste
                     warningElement.textContent = 'Pasting is disabled. Please type your answer.';
                     warningElement.style.display = 'block';
+                    // Hide warning after a delay
                     setTimeout(() => { warningElement.style.display = 'none'; }, 4000);
                 });
+            } else {
+                // Ensure warning is hidden for admin
+                warningElement.style.display = 'none';
             }
-             else {
-                 warningElement.style.display = 'none';
-             }
         }
 
 
@@ -481,92 +521,95 @@
             console.log("Assessment submit triggered.");
             const form = event.target;
             const submitButton = document.getElementById('assessmentSubmitBtn');
-            submitButton.disabled = true;
+             if (!form || !submitButton) {
+                 console.error("Form or submit button not found in handleAssessmentSubmit.");
+                 return;
+             }
+            submitButton.disabled = true; // Disable button immediately
 
+            // --- Clear Previous Errors ---
             form.querySelectorAll('.error-message').forEach(el => el.style.display = 'none');
             form.querySelectorAll('.invalid').forEach(el => el.classList.remove('invalid'));
 
+            // --- Get References to Form Elements ---
             const q1Textarea = document.getElementById('q1_coaching_meaning');
-            const qRandomTextarea = document.getElementById(selectedRandomQuestion.id);
+            const qRandomTextarea = document.getElementById(selectedRandomQuestion?.id); // Use optional chaining
             const q3Textarea = document.getElementById('q3_expectations');
             const q4Rating = document.getElementById('q4_confidence_rating');
             const q4Explanation = document.getElementById('q4_confidence_explanation');
 
-             const q1Error = document.getElementById('q1_error');
-             const qRandomError = document.getElementById(`${selectedRandomQuestion.id}_error`);
-             const q3Error = document.getElementById('q3_error');
-             const q4RatingError = document.getElementById('q4_rating_error');
-             const q4ExpError = document.getElementById('q4_exp_error');
+            // --- Get References to Error Elements ---
+            const q1Error = document.getElementById('q1_error');
+            const qRandomError = document.getElementById(`${selectedRandomQuestion?.id}_error`);
+            const q3Error = document.getElementById('q3_error');
+            const q4RatingError = document.getElementById('q4_rating_error');
+            const q4ExpError = document.getElementById('q4_exp_error');
 
             let isValid = true;
 
-            // Q1 Textarea
-            if (!q1Textarea.value.trim()) {
-                q1Error.textContent = 'This field is required.'; q1Error.style.display = 'block'; q1Textarea.classList.add('invalid'); isValid = false;
-            } else if (!validateWordCount(q1Textarea, parseInt(q1Textarea.getAttribute('data-min-words'), 10), q1Error, IS_ADMIN_USER)) {
-                 isValid = false;
-            }
+            // --- Run Validation Checks ---
 
-             // Random Q Textarea
-             if (!qRandomTextarea.value.trim()) {
-                 qRandomError.textContent = 'This field is required.'; qRandomError.style.display = 'block'; qRandomTextarea.classList.add('invalid'); isValid = false;
-             } else if (!validateWordCount(qRandomTextarea, selectedRandomQuestion.minWords, qRandomError, IS_ADMIN_USER)) {
-                  isValid = false;
+            // Check Required Fields (Apply to all users)
+            if (!q1Textarea?.value.trim()) { q1Error.textContent = 'This field is required.'; q1Error.style.display = 'block'; q1Textarea.classList.add('invalid'); isValid = false; }
+            if (!qRandomTextarea?.value.trim()) { qRandomError.textContent = 'This field is required.'; qRandomError.style.display = 'block'; qRandomTextarea.classList.add('invalid'); isValid = false; }
+            if (!q3Textarea?.value.trim()) { q3Error.textContent = 'This field is required.'; q3Error.style.display = 'block'; q3Textarea.classList.add('invalid'); isValid = false; }
+            if (!q4Rating?.value) { q4RatingError.textContent = 'Rating is required.'; q4RatingError.style.display = 'block'; q4Rating.classList.add('invalid'); isValid = false; }
+            if (!q4Explanation?.value.trim()) { q4ExpError.textContent = 'This field is required.'; q4ExpError.style.display = 'block'; q4Explanation.classList.add('invalid'); isValid = false; }
+
+            // Check Word Count (Only if fields are not empty and user is not admin)
+            if (q1Textarea?.value.trim() && !validateWordCount(q1Textarea, parseInt(q1Textarea.getAttribute('data-min-words') || '0', 10), q1Error, IS_ADMIN_USER)) { isValid = false; }
+            if (qRandomTextarea?.value.trim() && !validateWordCount(qRandomTextarea, selectedRandomQuestion?.minWords || 0, qRandomError, IS_ADMIN_USER)) { isValid = false; }
+            if (q3Textarea?.value.trim() && !validateWordCount(q3Textarea, parseInt(q3Textarea.getAttribute('data-min-words') || '0', 10), q3Error, IS_ADMIN_USER)) { isValid = false; }
+            if (q4Explanation?.value.trim() && !validateWordCount(q4Explanation, parseInt(q4Explanation.getAttribute('data-min-words') || '0', 10), q4ExpError, IS_ADMIN_USER)) { isValid = false; }
+
+             // Check Rating Range (Apply to all users)
+             const ratingVal = parseInt(q4Rating?.value, 10);
+             if (q4Rating?.value && (isNaN(ratingVal) || ratingVal < 1 || ratingVal > 5)) {
+                 q4RatingError.textContent = 'Please enter a valid rating between 1 and 5.';
+                 q4RatingError.style.display = 'block';
+                 q4Rating.classList.add('invalid');
+                 isValid = false;
              }
 
-            // Q3 Textarea
-            if (!q3Textarea.value.trim()) {
-                q3Error.textContent = 'This field is required.'; q3Error.style.display = 'block'; q3Textarea.classList.add('invalid'); isValid = false;
-            } else if (!validateWordCount(q3Textarea, parseInt(q3Textarea.getAttribute('data-min-words'), 10), q3Error, IS_ADMIN_USER)) {
-                 isValid = false;
-            }
-
-            // Q4 Rating
-            const ratingVal = parseInt(q4Rating.value, 10);
-            if (!q4Rating.value || isNaN(ratingVal) || ratingVal < 1 || ratingVal > 5) {
-                q4RatingError.textContent = 'Please enter a valid rating between 1 and 5.'; q4RatingError.style.display = 'block'; q4Rating.classList.add('invalid'); isValid = false;
-            }
-
-            // Q4 Explanation Textarea
-             if (!q4Explanation.value.trim()) {
-                q4ExpError.textContent = 'This field is required.'; q4ExpError.style.display = 'block'; q4Explanation.classList.add('invalid'); isValid = false;
-            } else if (!validateWordCount(q4Explanation, parseInt(q4Explanation.getAttribute('data-min-words'), 10), q4ExpError, IS_ADMIN_USER)) {
-                 isValid = false;
-            }
-
+            // --- Process if Valid ---
             if (isValid) {
-                console.log("Assessment form is valid.");
-                const currentUser = getCurrentUser();
+                console.log("Assessment form is valid. Saving data...");
+                const currentUser = getCurrentUser(); // Re-fetch user data to ensure it's current
                 if (!currentUser) {
-                    console.error("Cannot save assessment, user data lost.");
+                    console.error("Cannot save assessment, user data lost or invalid before saving.");
                     alert("An error occurred saving your data. Please try logging out and back in.");
-                     submitButton.disabled = false;
+                     submitButton.disabled = false; // Re-enable button on error
                     return;
                 }
 
-                // Save answers
+                // Structure and save answers
                 currentUser.assessmentAnswers = {
                     [q1Textarea.name]: q1Textarea.value.trim(),
-                    [qRandomTextarea.name]: qRandomTextarea.value.trim(),
+                    [qRandomTextarea.name]: qRandomTextarea.value.trim(), // Use name attribute from element
                     [q3Textarea.name]: q3Textarea.value.trim(),
                     [q4Rating.name]: ratingVal,
                     [q4Explanation.name]: q4Explanation.value.trim()
                 };
-                currentUser.assessmentCompleted = true; // <-- Set flag to true
+                currentUser.assessmentCompleted = true; // Mark assessment as completed
 
-                saveCurrentUser(currentUser); // Save updated data
+                saveCurrentUser(currentUser); // Save the updated user object
 
                 // Show success popup
-                document.getElementById('assessmentSuccessPopup').style.display = 'block';
-                document.getElementById('popupOverlay').style.display = 'block';
+                const successPopup = document.getElementById('assessmentSuccessPopup');
+                const overlay = document.getElementById('popupOverlay');
+                if (successPopup) successPopup.style.display = 'block';
+                if (overlay) overlay.style.display = 'block';
+                // Button remains disabled, user clicks 'Start Course' in popup
 
             } else {
-                console.log("Assessment form is invalid.");
-                 submitButton.disabled = false;
-                 const firstError = form.querySelector('.invalid');
-                 if (firstError) {
-                     firstError.focus();
-                     firstError.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                console.log("Assessment form is invalid. Please review errors.");
+                 submitButton.disabled = false; // Re-enable button if validation fails
+                 // Scroll to the first element with an error
+                 const firstErrorElement = form.querySelector('.invalid');
+                 if (firstErrorElement) {
+                     firstErrorElement.focus(); // Focus the field
+                     // Scroll into view smoothly, centering if possible
+                     firstErrorElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
                  }
             }
         }
@@ -575,13 +618,18 @@
         function logout() {
             console.log("Logging out user from Assessment page...");
             try {
+                // Clear core session data
                 localStorage.removeItem(LOGGED_IN_KEY);
                 localStorage.removeItem(CURRENT_USER_KEY);
-                IS_ADMIN_USER = false;
+                // Optionally clear other related data if needed
+                // localStorage.removeItem(SIGNUP_FLAG_KEY); // Keep this if you want to remember if they ever signed up
+                IS_ADMIN_USER = false; // Reset global flag just in case
                 console.log("Local storage cleared for logout.");
+                // Redirect to login page using replace to avoid history issues
                 window.location.replace('login.html');
             } catch (e) {
                 console.error("Error during logout:", e);
+                // Fallback redirect even if clearing fails
                 window.location.replace('login.html');
             }
         }
