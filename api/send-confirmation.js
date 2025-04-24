@@ -8,12 +8,12 @@ export default async function handler(req, res) {
 
     const msg = {
       to: email,
-      from: 'M.elsayed@thechefz.co', // البريد المرسل
+      from: 'M.elsayed@thechefz.co',
       subject: 'Please confirm your email',
       html: `
         <h1>Hello, ${name}!</h1>
         <p>Thank you for signing up. Please click the link below to confirm your email address:</p>
-        <a href="https://mohamedelmenisy.github.io/my-training-course/confirm.html">Confirm Email</a>
+        <a href="https://your-deployed-app-url.com/confirm.html?email=${email}">Confirm Email</a>
       `,
     };
 
@@ -25,6 +25,7 @@ export default async function handler(req, res) {
       res.status(500).json({ error: 'Error sending email' });
     }
   } else {
+    // Return an error if the method is not POST
     res.status(405).json({ error: 'Method Not Allowed' });
   }
 }
