@@ -8,6 +8,10 @@
     <link rel="apple-touch-icon" sizes="180x180" href="https://cdn-icons-png.flaticon.com/512/3281/3281289.png">
     <link rel="icon" type="image/png" sizes="32x32" href="https://cdn-icons-png.flaticon.com/512/3281/3281289.png">
     <link rel="icon" type="image/png" sizes="16x16" href="https://cdn-icons-png.flaticon.com/512/3281/3281289.png">
+
+    <!-- Supabase JS Library (Added) -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
     <style>
         /* --- CSS (Minor Enhancements Added) --- */
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
@@ -194,9 +198,9 @@
                 Your information is kept confidential and secure.
             </p>
 
-            <!-- Error/Success Messages -->
+            <!-- General Signup Error/Success Messages -->
             <div id="signupError" class="error-message">An error occurred. Please try again.</div>
-            <div id="signupSuccess" class="success-message">Registration successful! Redirecting to login...</div>
+            <div id="signupSuccess" class="success-message">Registration successful! Please check your email to confirm your account.</div>
 
             <button type="submit" class="signup-button" id="submitButton">Create Account</button>
         </form>
@@ -242,14 +246,27 @@
          </div>
      </div>
 
-    <!-- JavaScript (Remains Exactly As Is) -->
+    <!-- JavaScript (MODIFIED FOR SUPABASE) -->
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            // --- Constants ---
-            const USERS_KEY = 'users';
-            const SIGNUP_FLAG_KEY = 'hasSignedUpBefore'; // <-- مفتاح علامة التسجيل
+            // --- Supabase Client Initialization (MODIFIED) ---
+            const SUPABASE_URL = 'https://lgcutmuspcaralydycmg.supabase.co';
+            const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxnY3V0bXVzcGNhcmFseWR5Y21nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU0NDY3MDEsImV4cCI6MjA2MTAyMjcwMX0.3u5Y7pkH2NNnnoGLMWVfAa5b8fq88o1itRYnG1K38tE';
+            let supabase = null;
+            try {
+                 supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+                 console.log('Supabase client initialized.');
+            } catch (error) {
+                console.error('Error initializing Supabase client:', error);
+                // Optionally display an error to the user that the service is unavailable
+                const generalError = document.getElementById('signupError');
+                if(generalError) {
+                    generalError.textContent = "Signup service unavailable. Please try again later.";
+                    generalError.style.display = 'block';
+                }
+            }
 
-            // --- DOM Elements ---
+            // --- DOM Elements (Keep as is) ---
             const signupForm = document.getElementById('signupForm');
             const nameInput = document.getElementById('name');
             const emailInput = document.getElementById('email');
@@ -263,17 +280,17 @@
             const passwordError = document.getElementById('passwordError');
             const confirmError = document.getElementById('confirmError');
             const termsError = document.getElementById('termsError');
-            const signupError = document.getElementById('signupError');
+            const signupError = document.getElementById('signupError'); // General error div
             const signupSuccess = document.getElementById('signupSuccess');
             const passwordStrength = document.getElementById('passwordStrength');
 
-            // --- Utility Functions ---
+            // --- Utility Functions (Keep as is, but showError/hideError used for general errors too) ---
             function showError(element, message) { if(element){ element.textContent = message; element.style.display = 'block';} }
             function hideError(element) { if(element) element.style.display = 'none'; }
             function updatePasswordStrength(password) {
                  if (!passwordStrength) return;
                  let strength = 0;
-                 if (password.length >= 6) strength++;
+                 if (password.length >= 6) strength++; // Basic check, Supabase might enforce stricter rules
                  if (password.length >= 8) strength++;
                  if (password.match(/[a-z]/) && password.match(/[A-Z]/)) strength++;
                  if (password.match(/\d/)) strength++;
@@ -298,16 +315,15 @@
                  toggleButton.setAttribute('aria-label', isPassword ? 'Hide password' : 'Show password');
              }
 
-            // --- Event Listeners ---
+            // --- Event Listeners (Keep as is) ---
             if(passwordInput) { passwordInput.addEventListener('input', (e) => updatePasswordStrength(e.target.value)); }
             if(confirmInput) { confirmInput.addEventListener('input', () => { if (passwordInput?.value !== confirmInput.value) { showError(confirmError, "Passwords don't match"); } else { hideError(confirmError); } }); }
             passwordToggles.forEach(toggle => {
-                 const input = toggle.previousElementSibling; // Input is now before the toggle span
-                 if(input && input.tagName === 'INPUT') { // Check if previous element is indeed the input
+                 const input = toggle.previousElementSibling;
+                 if(input && input.tagName === 'INPUT') {
                      toggle.addEventListener('click', () => togglePasswordVisibility(toggle, input));
                      toggle.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') togglePasswordVisibility(toggle, input); });
                  } else {
-                     // Fallback: find input by ID if structure changes slightly
                      const inputId = toggle.closest('.input-group')?.querySelector('input')?.id;
                      const inputElement = document.getElementById(inputId);
                      if(inputElement){
@@ -317,9 +333,9 @@
                  }
             });
 
-            // --- Form Submit Listener ---
-            if(signupForm) {
-                signupForm.addEventListener('submit', function(e) {
+            // --- Form Submit Listener (MODIFIED FOR SUPABASE) ---
+            if(signupForm && supabase) { // Only add listener if form and supabase client exist
+                signupForm.addEventListener('submit', async function(e) { // <-- Added async
                     e.preventDefault();
                     console.log("Signup form submitted.");
 
@@ -334,39 +350,19 @@
                     const confirmPassword = confirmInput?.value;
                     const termsAgreed = termsCheckbox?.checked;
 
-                    // Validation
+                    // --- Client-side Validation (Keep as is) ---
                     console.log("Validating input...");
                     let isValid = true;
                     if (!name) { showError(nameError, "Please enter your full name"); isValid = false; }
                     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showError(emailError, "Please enter a valid email address"); isValid = false; }
+                    // Note: Supabase default min password length is 6, but can be configured.
                     if (!password || password.length < 6) { showError(passwordError, "Password must be at least 6 characters"); isValid = false; }
                     if (password !== confirmPassword) { showError(confirmError, "Passwords don't match"); isValid = false; }
                     if (!termsAgreed) { showError(termsError, "You must agree to the terms"); isValid = false; }
-                    console.log(`Input validation result: ${isValid}`);
+                    console.log(`Client-side validation result: ${isValid}`);
 
-                    // Check if email exists
-                    let users = [];
-                    let emailExists = false;
-                    if (isValid) {
-                        try {
-                            users = JSON.parse(localStorage.getItem(USERS_KEY)) || [];
-                            if (!Array.isArray(users)) users = [];
-                            emailExists = users.some(user => user && typeof user.email === 'string' && user.email.toLowerCase() === email); // Case-insensitive check
-                            console.log(`Email exists check for ${email}: ${emailExists}`);
-                            if (emailExists) {
-                                showError(signupError, "This email address is already registered.");
-                                isValid = false;
-                            }
-                        } catch(err) {
-                            console.error("Error reading users from localStorage:", err);
-                            showError(signupError, "Could not verify email. Please try again.");
-                            isValid = false;
-                        }
-                    }
-
-                    // Handle Validation/Check Result
                     if (!isValid) {
-                        console.log("Form is invalid or email exists. Stopping submission.");
+                        console.log("Form is invalid based on client-side checks.");
                         if(submitButton) { submitButton.disabled = false; submitButton.textContent = 'Create Account'; }
                         const firstError = signupForm.querySelector('.error-message[style*="display: block"]');
                          if (firstError) {
@@ -374,57 +370,101 @@
                              const inputElement = document.getElementById(inputId);
                              if(inputElement && typeof inputElement.focus === 'function') inputElement.focus();
                          }
-                        return;
+                        return; // Stop submission
                     }
 
-                    // If ALL checks passed - Create user object
-                    console.log("Form is valid. Proceeding to create user object.");
-                    console.warn("SECURITY WARNING: Storing plaintext password in localStorage is highly insecure.");
-                    const newUser = {
-                        id: Date.now().toString(), // Simple unique ID
-                        name: name,
-                        email: email,
-                        password: password, // Save password (INSECURE - for demo only)
-                        createdAt: new Date().toISOString()
-                    };
+                    // --- Supabase Signup Logic (REPLACES localStorage logic) ---
+                    try {
+                        console.log("Attempting Supabase signup for:", email);
 
-                    // Add user and save to localStorage
-                    users.push(newUser);
-                     try {
-                        localStorage.setItem(USERS_KEY, JSON.stringify(users));
-                        console.log("User saved successfully to localStorage:", newUser.email);
+                        // Use Supabase auth.signUp
+                        const { data, error } = await supabase.auth.signUp({
+                            email: email,
+                            password: password,
+                            options: {
+                                data: {
+                                    full_name: name // Store the name in user_metadata
+                                }
+                            }
+                        });
 
-                        // ***** ---> !! الإضافة المطلوبة هنا !! <--- *****
-                        localStorage.setItem(SIGNUP_FLAG_KEY, 'true');
-                        console.log(`Signup Success: Set flag "${SIGNUP_FLAG_KEY}" to true.`);
-                        // ***** ---> !! نهاية الإضافة !! <--- *****
+                        if (error) {
+                            // Handle Supabase errors
+                            console.error("Supabase signup error:", error);
+                            let errorMessage = "Signup failed. Please try again.";
+                            if (error.message.includes("User already registered")) {
+                                errorMessage = "This email address is already registered.";
+                                showError(emailError, errorMessage); // Show error near email field
+                            } else if (error.message.includes("Password should be")){
+                                // Example: Show error specific to password rules if needed
+                                errorMessage = error.message; // Use Supabase's message
+                                showError(passwordError, errorMessage);
+                            } else {
+                                showError(signupError, errorMessage); // Show general error
+                            }
+                            isValid = false; // Mark as invalid to prevent further success steps
+                        } else if (data.user) {
+                             // Signup successful (data.user exists)
+                            console.log("Supabase signup successful for:", data.user.email);
+                            console.log("Full user data from Supabase:", data);
 
-                        // Show success message
-                        if(signupSuccess) signupSuccess.style.display = 'block';
-                        console.log("Signup success message displayed.");
+                            // Show success message (default message implies email confirmation needed)
+                            if (data.session === null) {
+                                // This is the typical case when Email Confirmation is ENABLED in Supabase
+                                console.log("Email confirmation likely required (session is null).")
+                                signupSuccess.textContent = "Registration successful! Please check your email to confirm your account.";
+                            } else {
+                                // Might happen if Email Confirmation is DISABLED
+                                console.log("User signed up and session created (confirmation might be disabled or auto-confirmed).")
+                                signupSuccess.textContent = "Registration successful! Redirecting...";
+                            }
+                            signupSuccess.style.display = 'block';
 
-                        // Redirect after a delay
-                        console.log("Setting timeout for redirect to login.html...");
-                        setTimeout(function() {
-                            console.log("Executing redirect now!");
-                            window.location.href = 'login.html?email=' + encodeURIComponent(email) + '&signedup=true';
-                        }, 1500); // 1.5 seconds delay
 
-                    } catch (storageError) {
-                         console.error("Error saving user data to localStorage:", storageError);
-                         showError(signupError, "Could not save user data. Storage might be full or disabled.");
+                            // Optional: Redirect after a delay (even if confirmation needed, can redirect to login)
+                            console.log("Setting timeout for redirect to login.html...");
+                            setTimeout(function() {
+                                console.log("Executing redirect now!");
+                                // Redirect to login page, maybe pre-fill email
+                                window.location.href = 'login.html?email=' + encodeURIComponent(email) + '&signedup=true';
+                            }, 2500); // 2.5 seconds delay
+
+                            // No need to re-enable button here as we are redirecting or showing success permantently until redirect
+                             return; // Success, exit function early
+
+                        } else {
+                            // Unexpected case: no error but no user data
+                            console.error("Supabase signup returned no error and no user data.");
+                            showError(signupError, "An unexpected issue occurred during signup. Please try again.");
+                            isValid = false;
+                        }
+
+                    } catch (err) {
+                        // Catch any other unexpected JS errors during the process
+                        console.error("Unexpected error during signup attempt:", err);
+                        showError(signupError, "An unexpected error occurred. Please check your connection and try again.");
+                        isValid = false;
+                    }
+
+                    // Re-enable button if any error occurred during Supabase interaction or unexpected issue
+                    if (!isValid) {
                          if(submitButton) { submitButton.disabled = false; submitButton.textContent = 'Create Account'; }
                     }
+
                 });
+            } else if (!supabase) {
+                 // If Supabase failed to initialize, ensure the button is disabled
+                 if(submitButton) submitButton.disabled = true;
+                 console.warn("Supabase client not available, signup form submit listener not attached.");
             }
 
-            // --- Modal Handling Logic ---
+            // --- Modal Handling Logic (Keep as is) ---
             const modalTriggers = document.querySelectorAll('[data-modal-target]');
             const closeButtons = document.querySelectorAll('[data-close-modal]');
 
             modalTriggers.forEach(button => {
                  button.addEventListener('click', function(event) {
-                     event.preventDefault(); // Prevent default link behavior
+                     event.preventDefault();
                      const modalId = this.dataset.modalTarget;
                      const modal = document.getElementById(modalId);
                      if (modal) {
@@ -442,7 +482,6 @@
                  });
              });
 
-             // Close modal if background is clicked
              window.addEventListener('click', function(event) {
                  document.querySelectorAll('.modal').forEach(modal => {
                      if (event.target == modal) {
@@ -454,7 +493,7 @@
             function openModal(modal) {
                  if (modal == null) return;
                  modal.style.display = 'block';
-                 document.body.classList.add('modal-open'); // Prevent background scrolling
+                 document.body.classList.add('modal-open');
             }
 
             function closeModal(modal) {
@@ -463,10 +502,10 @@
                  document.body.classList.remove('modal-open');
             }
 
-            // --- Auto-focus on first field ---
+            // --- Auto-focus on first field (Keep as is) ---
             if(nameInput) nameInput.focus();
 
-            console.log("Signup page script loaded and initialized.");
+            console.log("Signup page script loaded and initialized (Supabase integration attempted).");
         });
     </script>
 </body>
