@@ -31,7 +31,7 @@ module.exports = async (req, res) => {
     // 5. Define Confirmation Link URL
     // IMPORTANT: Replace 'https://your-deployed-app-url.com' with the *actual* URL
     // where your confirm.html page will be hosted after deployment.
-    const confirmationBaseUrl = 'https://your-deployed-app-url.com/confirm.html'; // <-- !!! REPLACE !!!
+    const confirmationBaseUrl = 'https://mohamedelmenisy.github.io/my-training-course/confirm.html'; // <-- !!! REPLACE !!!
     const confirmationLink = `${confirmationBaseUrl}?email=${encodeURIComponent(email)}`;
 
     // 6. Construct the SendGrid message object
