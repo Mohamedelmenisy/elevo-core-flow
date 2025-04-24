@@ -123,11 +123,12 @@
     <!-- Success/Redirect Modal -->
     <div id="successModal" class="modal-overlay">
          <div class="modal-content">
-            <!-- Content will be changed dynamically by JS -->
-            <button class="close-modal" onclick="closeModal()" aria-label="Close Modal" style="display: none;">×</button> <!-- Keep structure but hide -->
-            <h3 id="modalGreeting" style="color: #3498db;">Submission Received!</h3> <!-- Default/Placeholder -->
-            <p style="margin-top: 15px;">Loading...</p> <!-- Default/Placeholder -->
-            <button class="modal-button" style="display: none;">Dummy</button> <!-- Keep structure but hide -->
+            <!-- Content dynamically changed by JS for redirect confirmation -->
+            <h3 id="modalGreeting" style="color: #27ae60;">Submission Received!</h3> <!-- Success color -->
+            <p style="margin-top: 15px;">Loading...</p> <!-- Placeholder, will be updated -->
+            <!-- Buttons are hidden for automatic redirect -->
+            <button class="close-modal" onclick="closeModal()" aria-label="Close Modal" style="display: none;">×</button>
+            <button class="modal-button" style="display: none;">Dummy</button>
         </div>
     </div>
 
@@ -144,8 +145,9 @@
         const UNLOCK_ANSWER_KEY = 'introGoalAnswer';
         const UNLOCK_NAME_KEY = 'introGoalSubmitterName';
         const SECTION_ID = 'index';
-        const REDIRECT_DELAY_MS = 3000; // Delay before redirecting (in milliseconds)
-        const REDIRECT_URL = 'Assessment.html'; // Target page
+        const REDIRECT_DELAY_MS = 3000; // Delay before redirecting (in milliseconds), e.g., 3 seconds
+        // --- MODIFIED: Relative path for Assessment page ---
+        const REDIRECT_URL = 'Assessment.html'; // Use relative path if it's in the same directory/deployment
 
         // Initialize Supabase Client
         try {
@@ -217,7 +219,7 @@
 
         function initializePageContent(currentUser) { console.log("%cIndex page: Running initializePageContent()...", "color: blue;"); displayUserInfo(currentUser); checkUnlockStatus(); addEventListeners(); console.log("initializePageContent() finished successfully."); }
 
-        // --- Core Functions --- (Unchanged)
+        // --- Core Functions --- (Mostly Unchanged)
         function getCurrentUser() { try { const d = localStorage.getItem(CURRENT_USER_KEY); if (!d) return null; const p = JSON.parse(d); if (p && typeof p === 'object' && p.email && p.name) { if (typeof p.progress !== 'object' || p.progress === null) p.progress = {}; return p; } else { localStorage.removeItem(CURRENT_USER_KEY); localStorage.removeItem(LOGGED_IN_KEY); return null; } } catch (e) { console.error("GUC Error:", e); localStorage.removeItem(CURRENT_USER_KEY); localStorage.removeItem(LOGGED_IN_KEY); return null; } }
         function saveCurrentUser(userObject) { try { if (!userObject || typeof userObject !== 'object') throw new Error("Invalid user object"); localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(userObject)); console.log("Saved user data."); } catch (error) { console.error("SCU Error:", error); } }
         function displayUserInfo(currentUser) { try { let uN='User', uE=''; if(currentUser){uN=currentUser.name||uN; uE=currentUser.email||uE; if(nameInput)nameInput.value=uN;} if(userNameDisplay)userNameDisplay.textContent=`Welcome, ${uN}`; if(userEmailDisplay)userEmailDisplay.textContent=uE; } catch(err){console.error("Error in displayUserInfo:", err);} }
@@ -227,13 +229,13 @@
         function storeAnswersLocally(name, answer) { try { localStorage.setItem(UNLOCK_NAME_KEY, name); localStorage.setItem(UNLOCK_ANSWER_KEY, answer); console.log("Stored answer locally for unlock."); } catch (e) { console.error("Error storing unlock data:", e); showError("Could not save progress locally.");} }
         function logout() { try { localStorage.removeItem(LOGGED_IN_KEY); localStorage.removeItem(CURRENT_USER_KEY); localStorage.removeItem(UNLOCK_ANSWER_KEY); localStorage.removeItem(UNLOCK_NAME_KEY); window.location.href='login.html'; } catch (e) { console.error(e); window.location.href='login.html';} }
         function addEventListeners() { try { if(questionForm)questionForm.addEventListener('submit',handleFormSubmit); document.addEventListener('keydown',handleKeyDown); if(articleLink)articleLink.addEventListener('click',handleLockedLinkClick); if(nameInput)nameInput.addEventListener('input',()=>hideError()); if(answerInput)answerInput.addEventListener('input',()=>hideError()); } catch(err) {console.error("Error in addEventListeners:", err); } }
-        function handleKeyDown(e) { try { if(e.key === 'Escape' && successModal && successModal.style.display === 'flex'){ /* Maybe allow Esc close? Or prevent it during redirect? Let's prevent it */ /* closeModal(); */ console.log("Escape pressed during redirect modal - ignored."); } } catch(err){ console.error("Error in handleKeyDown:", err); } }
+        function handleKeyDown(e) { try { if(e.key === 'Escape' && successModal && successModal.style.display === 'flex'){ /* Prevent Escape from closing the auto-redirect modal */ console.log("Escape pressed during redirect modal - ignored."); } } catch(err){ console.error("Error in handleKeyDown:", err); } }
         function handleLockedLinkClick(e) { try { if(articleLink&&articleLink.classList.contains('locked')){e.preventDefault();if(lockMessage){lockMessage.style.animation='none';void lockMessage.offsetWidth;lockMessage.style.animation='pulse 0.5s 3';setTimeout(()=>{if(lockMessage)lockMessage.style.animation='pulse 2s infinite';},1500);}if(nameInput&&!nameInput.value){nameInput.focus();}else if(answerInput){answerInput.focus();}}} catch(err){ console.error("Error in handleLockedLinkClick:", err); } }
         function showError(message, field) { try { if(errorMessageDisplay){errorMessageDisplay.textContent=message;errorMessageDisplay.style.display="block";} if(field){field.classList.add('invalid-field-style');field.focus();} console.error("Displayed error to user:", message); } catch(err){ console.error("Error in showError:", err); } }
         function hideError() { try { if(errorMessageDisplay)errorMessageDisplay.style.display="none"; if(nameInput)nameInput.classList.remove('invalid-field-style'); if(answerInput)answerInput.classList.remove('invalid-field-style'); } catch(err){ console.error("Error in hideError:", err); } }
 
         // --- Modal Functions ---
-        // This function now specifically handles the REDIRECT confirmation
+        // --- MODIFIED: Function to show confirmation and handle redirect ---
         function showRedirectConfirmationModal() {
             try {
                 const modalContent = successModal.querySelector('.modal-content');
@@ -251,12 +253,14 @@
 
                 // Update modal content for redirection message
                 if (heading) {
-                    heading.textContent = "Submission Received!";
-                    heading.style.color = '#27ae60'; // Keep success color or change if desired
+                    heading.textContent = "Submission Received!"; // Keep this or customize
+                    heading.style.color = '#27ae60'; // Success color
                 } else { console.warn("Modal heading (h3#modalGreeting) not found."); }
 
                 if (paragraph) {
+                    // --- SETTING THE REQUIRED TEXT ---
                     paragraph.textContent = "Thank you for submitting your answers! You will be redirected to the Pre-Assessment page shortly.";
+                    paragraph.style.marginTop = '15px'; // Ensure spacing
                 } else { console.warn("Modal paragraph (p) not found."); }
 
                 // Hide buttons as redirect is automatic
@@ -285,9 +289,8 @@
             }
         }
 
-        // closeModal is likely not needed if Escape is disabled and button hidden, but keep it for potential future use.
+        // closeModal might not be actively used for this flow, but keep it.
         function closeModal() { try { if(successModal)successModal.style.display='none'; console.log("Modal closed."); } catch(err){ console.error("Error in closeModal:", err); } }
-        // REMOVED: function redirectToDashboard() { ... } as it's replaced by automatic redirect
 
         // --- Progress Bar Functions --- (Unchanged)
         function updateSectionProgress(sectionId) { const cU=getCurrentUser(); if(!cU)return 0; let pP=0; const a=localStorage.getItem(UNLOCK_ANSWER_KEY); if(a&&a.trim().length>=20)pP=100; else pP=0; if(!cU.progress)cU.progress={}; cU.progress[sectionId]=pP; saveCurrentUser(cU); console.log(`Section '${sectionId}' progress: ${pP}%`); return pP; }
@@ -350,11 +353,12 @@
 
                  if (submissionSuccessful) {
                      console.log("Supabase submission successful. Showing redirect confirmation modal.");
-                     showRedirectConfirmationModal(); // Show the NEW modal which handles the redirect
+                     // --- CALL THE NEW MODAL FUNCTION ---
+                     showRedirectConfirmationModal();
                      // Button remains disabled because we are redirecting
                  } else {
                      console.warn("Supabase submission failed. Error message should have been shown by sendToSupabase.");
-                     // Keep button disabled until user fixes the error? Or re-enable? Re-enable on failure.
+                     // Failure handled in finally block
                  }
 
              } catch (err) {
@@ -363,7 +367,7 @@
                  submissionSuccessful = false; // Ensure it's false if try block fails
              } finally {
                  console.log("handleFormSubmit: finally block.");
-                 // Only re-enable the button if the submission FAILED
+                 // --- MODIFIED: Only re-enable the button if the submission FAILED and we are NOT redirecting ---
                  if (!submissionSuccessful) {
                      setButtonLoading(false);
                      console.log("Button re-enabled after failed submission or error.");
