@@ -196,7 +196,7 @@
 
             <!-- Error/Success Messages -->
             <div id="signupError" class="error-message">An error occurred. Please try again.</div>
-            <div id="signupSuccess" class="success-message">Registration successful! Redirecting to login...</div>
+            <div id="signupSuccess" class="success-message">Registration successful! Check your email for confirmation. Redirecting to login...</div>
 
             <button type="submit" class="signup-button" id="submitButton">Create Account</button>
         </form>
@@ -242,12 +242,18 @@
          </div>
      </div>
 
-    <!-- JavaScript (Remains Exactly As Is) -->
+    <!-- Supabase CDN Script -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@1.35.1/dist/umd/supabase.min.js"></script>
+
+    <!-- Updated JavaScript with Supabase Integration -->
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            // --- Constants ---
-            const USERS_KEY = 'users';
-            const SIGNUP_FLAG_KEY = 'hasSignedUpBefore'; // <-- مفتاح علامة التسجيل
+
+            // --- Supabase Configuration ---
+            const supabaseUrl = 'https://lgcutmuspcaralydycmg.supabase.co';
+            const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxnY3V0bXVzcGNhcmFseWR5Y21nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU0NDY3MDEsImV4cCI6MjA2MTAyMjcwMX0.3u5Y7pkH2NNnnoGLMWVfAa5b8fq88o1itRYnG1K38tE';
+            const supabase = supabase.createClient(supabaseUrl, supabaseKey);
+            console.log("Supabase client initialized.");
 
             // --- DOM Elements ---
             const signupForm = document.getElementById('signupForm');
@@ -267,7 +273,7 @@
             const signupSuccess = document.getElementById('signupSuccess');
             const passwordStrength = document.getElementById('passwordStrength');
 
-            // --- Utility Functions ---
+            // --- Utility Functions (Unchanged from original) ---
             function showError(element, message) { if(element){ element.textContent = message; element.style.display = 'block';} }
             function hideError(element) { if(element) element.style.display = 'none'; }
             function updatePasswordStrength(password) {
@@ -298,7 +304,7 @@
                  toggleButton.setAttribute('aria-label', isPassword ? 'Hide password' : 'Show password');
              }
 
-            // --- Event Listeners ---
+            // --- Event Listeners (Unchanged from original except submit) ---
             if(passwordInput) { passwordInput.addEventListener('input', (e) => updatePasswordStrength(e.target.value)); }
             if(confirmInput) { confirmInput.addEventListener('input', () => { if (passwordInput?.value !== confirmInput.value) { showError(confirmError, "Passwords don't match"); } else { hideError(confirmError); } }); }
             passwordToggles.forEach(toggle => {
@@ -317,9 +323,9 @@
                  }
             });
 
-            // --- Form Submit Listener ---
+            // --- Form Submit Listener (MODIFIED FOR SUPABASE) ---
             if(signupForm) {
-                signupForm.addEventListener('submit', function(e) {
+                signupForm.addEventListener('submit', async function(e) { // Added async
                     e.preventDefault();
                     console.log("Signup form submitted.");
 
@@ -328,13 +334,13 @@
                     if(submitButton) { submitButton.disabled = true; submitButton.textContent = 'Creating Account...'; }
 
                     // Get values
-                    const name = nameInput?.value.trim();
+                    const name = nameInput?.value.trim(); // Keep name for potential future use or profile setup
                     const email = emailInput?.value.trim().toLowerCase();
                     const password = passwordInput?.value;
                     const confirmPassword = confirmInput?.value;
                     const termsAgreed = termsCheckbox?.checked;
 
-                    // Validation
+                    // Validation (Same as before)
                     console.log("Validating input...");
                     let isValid = true;
                     if (!name) { showError(nameError, "Please enter your full name"); isValid = false; }
@@ -344,29 +350,9 @@
                     if (!termsAgreed) { showError(termsError, "You must agree to the terms"); isValid = false; }
                     console.log(`Input validation result: ${isValid}`);
 
-                    // Check if email exists
-                    let users = [];
-                    let emailExists = false;
-                    if (isValid) {
-                        try {
-                            users = JSON.parse(localStorage.getItem(USERS_KEY)) || [];
-                            if (!Array.isArray(users)) users = [];
-                            emailExists = users.some(user => user && typeof user.email === 'string' && user.email.toLowerCase() === email); // Case-insensitive check
-                            console.log(`Email exists check for ${email}: ${emailExists}`);
-                            if (emailExists) {
-                                showError(signupError, "This email address is already registered.");
-                                isValid = false;
-                            }
-                        } catch(err) {
-                            console.error("Error reading users from localStorage:", err);
-                            showError(signupError, "Could not verify email. Please try again.");
-                            isValid = false;
-                        }
-                    }
-
-                    // Handle Validation/Check Result
+                    // Handle Validation Result
                     if (!isValid) {
-                        console.log("Form is invalid or email exists. Stopping submission.");
+                        console.log("Form is invalid. Stopping submission.");
                         if(submitButton) { submitButton.disabled = false; submitButton.textContent = 'Create Account'; }
                         const firstError = signupForm.querySelector('.error-message[style*="display: block"]');
                          if (firstError) {
@@ -377,48 +363,90 @@
                         return;
                     }
 
-                    // If ALL checks passed - Create user object
-                    console.log("Form is valid. Proceeding to create user object.");
-                    console.warn("SECURITY WARNING: Storing plaintext password in localStorage is highly insecure.");
-                    const newUser = {
-                        id: Date.now().toString(), // Simple unique ID
-                        name: name,
-                        email: email,
-                        password: password, // Save password (INSECURE - for demo only)
-                        createdAt: new Date().toISOString()
-                    };
+                    // --- Supabase Sign Up Logic ---
+                    console.log("Form is valid. Attempting Supabase sign up...");
+                    try {
+                        // 1. Sign up the user with Supabase Auth
+                        const { user, session, error } = await supabase.auth.signUp({
+                            email: email,
+                            password: password,
+                            // You can add user metadata here if needed, like the name:
+                            // options: {
+                            //  data: { full_name: name }
+                            // }
+                        });
 
-                    // Add user and save to localStorage
-                    users.push(newUser);
-                     try {
-                        localStorage.setItem(USERS_KEY, JSON.stringify(users));
-                        console.log("User saved successfully to localStorage:", newUser.email);
+                        if (error) {
+                            console.error('Supabase Sign Up Error:', error);
+                            showError(signupError, error.message || "Sign up failed. Please try again."); // Use Supabase error message
+                            // Specific check for existing user (adjust message if needed)
+                            if (error.message.includes("already registered")) {
+                                showError(emailError, "This email address is already registered.");
+                                if(emailInput) emailInput.focus();
+                            }
+                            throw error; // Stop execution if auth fails
+                        }
 
-                        // ***** ---> !! الإضافة المطلوبة هنا !! <--- *****
-                        localStorage.setItem(SIGNUP_FLAG_KEY, 'true');
-                        console.log(`Signup Success: Set flag "${SIGNUP_FLAG_KEY}" to true.`);
-                        // ***** ---> !! نهاية الإضافة !! <--- *****
+                        console.log('Supabase Auth Sign Up successful:', user);
 
-                        // Show success message
-                        if(signupSuccess) signupSuccess.style.display = 'block';
-                        console.log("Signup success message displayed.");
+                        // 2. Insert user data into the 'users' table (optional, based on request)
+                        // Note: A Supabase Function/Trigger is often a better place for this
+                        if (user) {
+                            const { data: insertData, error: insertError } = await supabase
+                                .from('users')
+                                .insert([
+                                    {
+                                        email: email,
+                                        user_id: user.id, // Link to the authenticated user
+                                        // Add other fields if your 'users' table has them, e.g.:
+                                        // full_name: name
+                                    }
+                                ]);
+
+                            if (insertError) {
+                                // Log this error, but don't necessarily stop the success flow
+                                // as the user *is* authenticated.
+                                console.error('Error inserting user data into DB:', insertError.message);
+                                // Optionally show a non-blocking warning?
+                                // showError(signupError, "Account created, but profile data couldn't be saved.");
+                            } else {
+                                console.log('User data inserted successfully:', insertData);
+                            }
+                        } else {
+                            // This case should ideally not happen if signup didn't error, but good to log.
+                             console.warn("Signup successful but user object was null, skipping DB insert.");
+                        }
+
+
+                        // --- Handle Success ---
+                        console.log("Signup fully successful.");
+                        if(signupSuccess) signupSuccess.style.display = 'block'; // Show success message
 
                         // Redirect after a delay
                         console.log("Setting timeout for redirect to login.html...");
                         setTimeout(function() {
                             console.log("Executing redirect now!");
+                             // Redirect to login, passing email and a success flag
                             window.location.href = 'login.html?email=' + encodeURIComponent(email) + '&signedup=true';
-                        }, 1500); // 1.5 seconds delay
+                        }, 2000); // 2 seconds delay to allow reading the success message
 
-                    } catch (storageError) {
-                         console.error("Error saving user data to localStorage:", storageError);
-                         showError(signupError, "Could not save user data. Storage might be full or disabled.");
-                         if(submitButton) { submitButton.disabled = false; submitButton.textContent = 'Create Account'; }
+                    } catch (err) {
+                         console.error("Caught error during signup process:", err);
+                         // Error already shown by specific checks, this catches unexpected ones.
+                         if (!signupError.style.display || signupError.style.display === 'none') {
+                             showError(signupError, "An unexpected error occurred. Please try again.");
+                         }
+                    } finally {
+                        // Re-enable button only if not redirecting immediately
+                         if (!signupSuccess.style.display || signupSuccess.style.display === 'none') {
+                            if(submitButton) { submitButton.disabled = false; submitButton.textContent = 'Create Account'; }
+                         }
+                         console.log("Signup process finished (success or error).");
                     }
                 });
             }
 
-            // --- Modal Handling Logic ---
+            // --- Modal Handling Logic (Unchanged from original) ---
             const modalTriggers = document.querySelectorAll('[data-modal-target]');
             const closeButtons = document.querySelectorAll('[data-close-modal]');
 
@@ -463,7 +491,7 @@
                  document.body.classList.remove('modal-open');
             }
 
-            // --- Auto-focus on first field ---
+            // --- Auto-focus on first field (Unchanged from original) ---
             if(nameInput) nameInput.focus();
 
             console.log("Signup page script loaded and initialized.");
