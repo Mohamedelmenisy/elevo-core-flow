@@ -275,7 +275,7 @@
             const startJourneyBtn = document.getElementById('startJourneyBtn');
 
              // Get current user data
-            const currentUser = getCurrentUser(); // <<<--- THIS GETS NAME/EMAIL FROM LOCALSTORAGE
+            const currentUser = getCurrentUser();
 
             if (!currentUser) {
                 console.error("Assessment DOMContentLoaded: Critical - User data missing/invalid. Forcing logout.");
@@ -283,16 +283,17 @@
                 return; // Stop further execution
             }
 
-            console.log("Current User Data (Assessment):", currentUser); // <<<--- NAME/EMAIL ARE HERE
+            console.log("Current User Data (Assessment):", currentUser);
 
             // *** Determine if the current user is the admin ***
             IS_ADMIN_USER = currentUser.email.toLowerCase() === ADMIN_EMAIL.toLowerCase();
             console.log(`User is admin: ${IS_ADMIN_USER}`);
 
             // Populate user info in the top bar immediately
-            populateTopBar(currentUser); // <<<--- DISPLAYS NAME/EMAIL
+            populateTopBar(currentUser);
 
             // --- Assessment Check ---
+            // THIS IS WHERE THE REDIRECT HAPPENS IF assessmentCompleted IS TRUE
             if (currentUser.assessmentCompleted) {
                 console.log("Assessment already completed. Redirecting to Dashboard.");
                 window.location.replace(DASHBOARD_URL); // Redirect immediately
@@ -323,23 +324,20 @@
                 const parsedUser = JSON.parse(userData);
 
                 // Basic validation of parsed object structure
-                // It already expects name and email from login/signup
                 if (parsedUser && typeof parsedUser === 'object' && parsedUser.name && parsedUser.email) {
                      // Initialize assessment status/answers if needed
                      if (parsedUser.assessmentCompleted === undefined) {
                          parsedUser.assessmentCompleted = false;
-                         saveCurrentUser(parsedUser); // Save if modified
+                         // Don't save here immediately, let the calling function decide if save is needed
                      }
                      if (typeof parsedUser.assessmentAnswers !== 'object' || parsedUser.assessmentAnswers === null) {
                         parsedUser.assessmentAnswers = {};
-                         saveCurrentUser(parsedUser); // Save if modified
                      }
                      // Ensure progress object exists
                      if (typeof parsedUser.progress !== 'object' || parsedUser.progress === null) {
                          parsedUser.progress = {};
-                         saveCurrentUser(parsedUser); // Save if modified
                      }
-                    return parsedUser; // <<<--- RETURNS OBJECT WITH NAME/EMAIL
+                    return parsedUser;
                 } else {
                     console.error("getCurrentUser: Parsed user data is invalid.", parsedUser);
                     logout(); // Force logout if data is bad
@@ -355,20 +353,18 @@
         function saveCurrentUser(userObject) {
              try {
                  if (!userObject || typeof userObject !== 'object') { throw new Error("Invalid user object."); }
-                 // <<<--- SAVES THE ENTIRE userObject (INCLUDING NAME/EMAIL) TO LOCALSTORAGE
                  localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(userObject));
                  console.log("Saved user data to localStorage:", userObject);
              } catch (error) {
                  console.error("Error saving current user data:", error);
-                 // Optionally notify the user or attempt recovery
              }
         }
 
         function populateTopBar(user) {
             const userNameBar = document.getElementById('userNameBar');
             const userEmailBar = document.getElementById('userEmailBar');
-            if (userNameBar) userNameBar.textContent = user.name; // <<<--- USES NAME FROM user OBJECT
-            if (userEmailBar) userEmailBar.textContent = user.email; // <<<--- USES EMAIL FROM user OBJECT
+            if (userNameBar) userNameBar.textContent = user.name;
+            if (userEmailBar) userEmailBar.textContent = user.email;
         }
 
         function setupAssessmentForm() {
@@ -429,10 +425,12 @@
 
        function setupWordCountValidation(textarea, countSpan, errorElement, countContainer, isAdmin) {
              const minWords = parseInt(textarea.getAttribute('data-min-words'), 10);
+
              if (isAdmin) {
                  countContainer.style.display = 'none';
                  return;
              }
+
              textarea.addEventListener('input', () => {
                  const words = countWords(textarea.value);
                  countSpan.textContent = words;
@@ -447,8 +445,10 @@
                  textarea.classList.remove('invalid');
                  return true;
              }
+
              const words = countWords(textarea.value);
              const isFieldEmpty = !textarea.value.trim();
+
              if (!isFieldEmpty && words < minWords) {
                  errorElement.textContent = `Minimum ${minWords} words required.`;
                  errorElement.style.display = 'block';
@@ -500,28 +500,43 @@
 
             let isValid = true;
 
-            // --- Validation ---
-            if (!q1Textarea.value.trim()) { q1Error.textContent = 'This field is required.'; q1Error.style.display = 'block'; q1Textarea.classList.add('invalid'); isValid = false;
-            } else if (!validateWordCount(q1Textarea, parseInt(q1Textarea.getAttribute('data-min-words'), 10), q1Error, IS_ADMIN_USER)) { isValid = false; }
+            // Q1 Textarea
+            if (!q1Textarea.value.trim()) {
+                q1Error.textContent = 'This field is required.'; q1Error.style.display = 'block'; q1Textarea.classList.add('invalid'); isValid = false;
+            } else if (!validateWordCount(q1Textarea, parseInt(q1Textarea.getAttribute('data-min-words'), 10), q1Error, IS_ADMIN_USER)) {
+                 isValid = false;
+            }
 
-             if (!qRandomTextarea.value.trim()) { qRandomError.textContent = 'This field is required.'; qRandomError.style.display = 'block'; qRandomTextarea.classList.add('invalid'); isValid = false;
-             } else if (!validateWordCount(qRandomTextarea, selectedRandomQuestion.minWords, qRandomError, IS_ADMIN_USER)) { isValid = false; }
+             // Random Q Textarea
+             if (!qRandomTextarea.value.trim()) {
+                 qRandomError.textContent = 'This field is required.'; qRandomError.style.display = 'block'; qRandomTextarea.classList.add('invalid'); isValid = false;
+             } else if (!validateWordCount(qRandomTextarea, selectedRandomQuestion.minWords, qRandomError, IS_ADMIN_USER)) {
+                  isValid = false;
+             }
 
-            if (!q3Textarea.value.trim()) { q3Error.textContent = 'This field is required.'; q3Error.style.display = 'block'; q3Textarea.classList.add('invalid'); isValid = false;
-            } else if (!validateWordCount(q3Textarea, parseInt(q3Textarea.getAttribute('data-min-words'), 10), q3Error, IS_ADMIN_USER)) { isValid = false; }
+            // Q3 Textarea
+            if (!q3Textarea.value.trim()) {
+                q3Error.textContent = 'This field is required.'; q3Error.style.display = 'block'; q3Textarea.classList.add('invalid'); isValid = false;
+            } else if (!validateWordCount(q3Textarea, parseInt(q3Textarea.getAttribute('data-min-words'), 10), q3Error, IS_ADMIN_USER)) {
+                 isValid = false;
+            }
 
+            // Q4 Rating
             const ratingVal = parseInt(q4Rating.value, 10);
             if (!q4Rating.value || isNaN(ratingVal) || ratingVal < 1 || ratingVal > 5) {
                 q4RatingError.textContent = 'Please enter a valid rating between 1 and 5.'; q4RatingError.style.display = 'block'; q4Rating.classList.add('invalid'); isValid = false;
             }
 
-             if (!q4Explanation.value.trim()) { q4ExpError.textContent = 'This field is required.'; q4ExpError.style.display = 'block'; q4Explanation.classList.add('invalid'); isValid = false;
-            } else if (!validateWordCount(q4Explanation, parseInt(q4Explanation.getAttribute('data-min-words'), 10), q4ExpError, IS_ADMIN_USER)) { isValid = false; }
+            // Q4 Explanation Textarea
+             if (!q4Explanation.value.trim()) {
+                q4ExpError.textContent = 'This field is required.'; q4ExpError.style.display = 'block'; q4Explanation.classList.add('invalid'); isValid = false;
+            } else if (!validateWordCount(q4Explanation, parseInt(q4Explanation.getAttribute('data-min-words'), 10), q4ExpError, IS_ADMIN_USER)) {
+                 isValid = false;
+            }
 
-            // --- Process if Valid ---
             if (isValid) {
                 console.log("Assessment form is valid.");
-                const currentUser = getCurrentUser(); // <<<--- GET THE CURRENT USER OBJECT AGAIN
+                const currentUser = getCurrentUser();
                 if (!currentUser) {
                     console.error("Cannot save assessment, user data lost.");
                     alert("An error occurred saving your data. Please try logging out and back in.");
@@ -529,7 +544,7 @@
                     return;
                 }
 
-                // Save answers TO THE EXISTING currentUser OBJECT
+                // Save answers
                 currentUser.assessmentAnswers = {
                     [q1Textarea.name]: q1Textarea.value.trim(),
                     [qRandomTextarea.name]: qRandomTextarea.value.trim(),
@@ -537,10 +552,9 @@
                     [q4Rating.name]: ratingVal,
                     [q4Explanation.name]: q4Explanation.value.trim()
                 };
-                currentUser.assessmentCompleted = true;
+                currentUser.assessmentCompleted = true; // <-- Set flag to true
 
-                // <<<--- SAVE THE UPDATED currentUser OBJECT (WHICH STILL CONTAINS NAME/EMAIL)
-                saveCurrentUser(currentUser);
+                saveCurrentUser(currentUser); // Save updated data
 
                 // Show success popup
                 document.getElementById('assessmentSuccessPopup').style.display = 'block';
@@ -562,7 +576,7 @@
             console.log("Logging out user from Assessment page...");
             try {
                 localStorage.removeItem(LOGGED_IN_KEY);
-                localStorage.removeItem(CURRENT_USER_KEY); // <<<--- REMOVES THE USER DATA
+                localStorage.removeItem(CURRENT_USER_KEY);
                 IS_ADMIN_USER = false;
                 console.log("Local storage cleared for logout.");
                 window.location.replace('login.html');
