@@ -25,7 +25,7 @@ export default async function handler(req, res) {
       res.status(500).json({ error: 'Error sending email' });
     }
   } else {
-    // Return an error if the method is not POST
+    // Handle incorrect request method (if not POST)
     res.status(405).json({ error: 'Method Not Allowed' });
   }
 }
