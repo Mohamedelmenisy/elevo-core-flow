@@ -242,7 +242,7 @@
          </div>
      </div>
 
-    <!-- JavaScript (Modified for Supabase POST Integration) -->
+    <!-- JavaScript (Modified for Supabase POST Integration + User Profile Creation) -->
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             // --- Constants ---
@@ -250,7 +250,8 @@
             const SIGNUP_FLAG_KEY = 'hasSignedUpBefore'; // Key for signup flag
             const SUPABASE_URL = 'https://lgcutmuspcaralydycmg.supabase.co';
             const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxnY3V0bXVzcGNhcmFseWR5Y21nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU0NDY3MDEsImV4cCI6MjA2MTAyMjcwMX0.3u5Y7pkH2NNnnoGLMWVfAa5b8fq88o1itRYnG1K38tE';
-            // Supabase Auth endpoint is standard: SUPABASE_URL + '/auth/v1/signup'
+            const AUTH_ENDPOINT = `${SUPABASE_URL}/auth/v1/signup`;
+            const USERS_TABLE_ENDPOINT = `${SUPABASE_URL}/rest/v1/users`; // Endpoint for the 'users' table
 
             // --- DOM Elements ---
             const signupForm = document.getElementById('signupForm');
@@ -270,7 +271,7 @@
             const signupSuccess = document.getElementById('signupSuccess');
             const passwordStrength = document.getElementById('passwordStrength');
 
-            // --- Utility Functions (Mostly unchanged) ---
+            // --- Utility Functions (Unchanged) ---
             function showError(element, message) { if(element){ element.textContent = message; element.style.display = 'block';} }
             function hideError(element) { if(element) element.style.display = 'none'; }
             function updatePasswordStrength(password) {
@@ -319,7 +320,7 @@
                  }
             });
 
-            // --- Form Submit Listener (MODIFIED FOR SUPABASE) ---
+            // --- Form Submit Listener (MODIFIED FOR SUPABASE AUTH + PROFILE INSERTION) ---
             if(signupForm) {
                 signupForm.addEventListener('submit', async function(e) { // Make function async for await
                     e.preventDefault();
@@ -341,7 +342,6 @@
                     let isValid = true;
                     if (!name) { showError(nameError, "Please enter your full name"); isValid = false; }
                     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showError(emailError, "Please enter a valid email address"); isValid = false; }
-                    // Use Supabase default password policy (min 6 chars) or enforce stronger here if needed
                     if (!password || password.length < 6) { showError(passwordError, "Password must be at least 6 characters"); isValid = false; }
                     if (password !== confirmPassword) { showError(confirmError, "Passwords don't match"); isValid = false; }
                     if (!termsAgreed) { showError(termsError, "You must agree to the terms"); isValid = false; }
@@ -359,59 +359,113 @@
                         return;
                     }
 
-                    // --- Attempt Signup with Supabase ---
-                    console.log("Form is valid. Attempting Supabase signup...");
-                    const authEndpoint = `${SUPABASE_URL}/auth/v1/signup`;
-                    const userData = {
+                    // --- Attempt Signup with Supabase Auth ---
+                    console.log("Attempting Supabase Auth signup...");
+                    const authPayload = {
                         email: email,
                         password: password,
-                        data: { // Optional: Store extra info like name in auth.users.raw_user_meta_data
-                           full_name: name
-                        }
+                        // Supabase Auth doesn't directly store the name in the primary user object via REST signup.
+                        // We'll add it to the 'users' table later.
+                        // You *could* add it to options.data for metadata if needed:
+                        // options: { data: { full_name: name } }
                     };
 
+                    let authResponseData; // To store auth response data for later use
+
                     try {
-                        const response = await fetch(authEndpoint, {
+                        const response = await fetch(AUTH_ENDPOINT, {
                             method: 'POST',
                             headers: {
                                 'apikey': SUPABASE_ANON_KEY,
                                 'Content-Type': 'application/json'
                             },
-                            body: JSON.stringify(userData)
+                            body: JSON.stringify(authPayload)
                         });
 
-                        const data = await response.json(); // Always try to parse JSON
+                        authResponseData = await response.json(); // Parse JSON regardless of status
 
                         if (!response.ok) {
-                            // Handle Supabase specific errors (e.g., user already exists)
-                            console.error('Supabase signup error:', data);
-                            showError(signupError, data.msg || data.message || `Signup failed (status ${response.status})`);
+                            console.error('Supabase Auth signup error:', authResponseData);
+                            const errorMsg = authResponseData.msg || authResponseData.message || `Signup failed (status ${response.status})`;
+                            showError(signupError, errorMsg);
+                            if (response.status === 400 && errorMsg.toLowerCase().includes("already registered")) {
+                                showError(emailError, "This email address is already registered."); // More specific error
+                                if(emailInput) emailInput.focus();
+                            } else if (emailInput) {
+                                emailInput.focus();
+                            }
                             if(submitButton) { submitButton.disabled = false; submitButton.textContent = 'Create Account'; }
-                            if(emailInput) emailInput.focus(); // Focus email field on error like duplicate email
                             return;
                         }
 
-                        // --- Signup Successful ---
-                        console.log("Supabase signup successful:", data); // Data might contain user info or confirmation details
+                        // --- Auth Signup Successful ---
+                        console.log("Supabase Auth signup successful:", authResponseData);
+                        const userId = authResponseData.user?.id;
+
+                        if (!userId) {
+                             console.error("Auth signup success, but no user ID returned from Supabase.");
+                             showError(signupError, "Signup partially failed (could not get user ID). Please try again.");
+                             if(submitButton) { submitButton.disabled = false; submitButton.textContent = 'Create Account'; }
+                             return;
+                        }
+
+                         // ***** ---> !! الإضافة المطلوبة هنا: إضافة المستخدم إلى جدول users !! <--- *****
+                        console.log(`Attempting to insert profile into 'users' table for user ID: ${userId}`);
+                        const profileData = {
+                            id: userId, // Match the auth user ID
+                            name: name,
+                            email: email
+                        };
+
+                        try {
+                            const profileResponse = await fetch(USERS_TABLE_ENDPOINT, {
+                                method: 'POST',
+                                headers: {
+                                    'apikey': SUPABASE_ANON_KEY,
+                                    'Authorization': `Bearer ${SUPABASE_ANON_KEY}`, // Use anon key as Bearer token
+                                    'Content-Type': 'application/json',
+                                    'Prefer': 'return=representation' // Get the inserted row back
+                                },
+                                body: JSON.stringify(profileData)
+                            });
+
+                            const profileResult = await profileResponse.json();
+
+                            if (!profileResponse.ok) {
+                                // Profile insertion failed, but auth succeeded. Log and continue.
+                                console.error("Failed to insert user profile into 'users' table:", profileResult);
+                                // Optionally: Notify user, but don't necessarily block signup
+                                // showError(signupError, "Account created, but failed to save profile details. Please contact support.");
+                            } else {
+                                console.log("Successfully inserted user profile:", profileResult);
+                            }
+
+                        } catch (profileInsertError) {
+                            console.error("Network or other error inserting user profile:", profileInsertError);
+                             // Optionally: Notify user, but don't necessarily block signup
+                            // showError(signupError, "Account created, but network error saving profile. Please contact support.");
+                        }
+                        // ***** ---> !! نهاية الإضافة !! <--- *****
+
 
                         // --- Save Backup to localStorage (as requested) ---
                         console.warn("SECURITY WARNING: Saving plaintext password to localStorage is insecure. Included per requirement.");
-                        const newUser = {
-                            id: data.user?.id || Date.now().toString(), // Use Supabase ID if available
+                        const newUserLocalStorage = {
+                            id: userId, // Use Supabase ID
                             name: name,
                             email: email,
                             password: password, // Storing raw password - NOT RECOMMENDED
-                            createdAt: data.user?.created_at || new Date().toISOString()
+                            createdAt: authResponseData.user?.created_at || new Date().toISOString()
                         };
 
                         try {
                             let users = JSON.parse(localStorage.getItem(USERS_KEY)) || [];
                             if (!Array.isArray(users)) users = [];
-                            users.push(newUser);
+                            users.push(newUserLocalStorage);
                             localStorage.setItem(USERS_KEY, JSON.stringify(users));
                             localStorage.setItem(SIGNUP_FLAG_KEY, 'true'); // Set the signup flag
-                            console.log("User backup saved to localStorage:", newUser.email);
-                            console.log(`Signup Success: Set flag "${SIGNUP_FLAG_KEY}" to true.`);
+                            console.log("User backup saved to localStorage:", newUserLocalStorage.email);
+                            console.log(`Set flag "${SIGNUP_FLAG_KEY}" to true.`);
 
                         } catch (storageError) {
                             console.error("Error saving user data to localStorage:", storageError);
@@ -420,19 +474,18 @@
 
                         // Show success message
                         if(signupSuccess) signupSuccess.style.display = 'block';
-                        console.log("Signup success message displayed.");
+                        console.log("Signup process completed. Displaying success message.");
 
                         // Redirect after a delay (NO DATA IN URL)
                         console.log("Setting timeout for redirect to login.html...");
                         setTimeout(function() {
                             console.log("Executing redirect now!");
-                            // Redirect without exposing email in URL
                             window.location.href = 'login.html?signedup=true';
                         }, 1500); // 1.5 seconds delay
 
                     } catch (networkError) {
-                        // Handle network errors (fetch failed to connect)
-                        console.error("Network error during signup:", networkError);
+                        // Handle network errors during Auth signup
+                        console.error("Network error during auth signup:", networkError);
                         showError(signupError, "Could not connect to the server. Please check your internet connection and try again.");
                         if(submitButton) { submitButton.disabled = false; submitButton.textContent = 'Create Account'; }
                     }
@@ -480,7 +533,7 @@
             // --- Auto-focus on first field (Unchanged) ---
             if(nameInput) nameInput.focus();
 
-            console.log("Signup page script loaded and initialized with Supabase integration.");
+            console.log("Signup page script loaded and initialized with Supabase auth and profile insertion.");
         });
     </script>
 </body>
