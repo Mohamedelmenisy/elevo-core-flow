@@ -109,7 +109,7 @@ p { margin-bottom: 15px; color: #34495e; line-height: 1.6; }
 <!-- User Bar -->
 <div class="user-bar"> <div class="user-info"> <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"> <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path> <circle cx="12" cy="7" r="4"></circle> </svg> <div class="user-details"> <span class="user-name" id="userName">Loading...</span> <span class="user-email" id="userEmail"></span> </div> </div> <button class="logout-button" onclick="logout()"> <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"> <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path> <polyline points="16 17 21 12 16 7"></polyline> <line x1="21" y1="12" x2="9" y2="12"></line> </svg> Logout </button> </div>
 <!-- Main Content -->
-<main class="container" id="mainContainer" style="display: none;">
+<main class="container" id="mainContainer" style="display: none;"> <!-- Initially hidden -->
 <h2>Welcome to the Coaching & Leadership Course!</h2>
 <p>This comprehensive course, expertly developed by <span class="course-author">Mohamed Elmenisy</span>, integrates insightful articles, relevant visuals, and interactive questions designed to sharpen your leadership skills.</p>
 <div class="author-info">
@@ -125,7 +125,7 @@ p { margin-bottom: 15px; color: #34495e; line-height: 1.6; }
 <div class="question">
 <!-- Added ID here -->
 <h3 id="questionTitle">Interactive Question</h3>
-<p>What is your goal for taking this Coaching & Leadership course?</p>
+<p id="questionPrompt">What is your goal for taking this Coaching & Leadership course?</p> <!-- Added ID for easy access -->
 <form id="questionForm" novalidate>
 <label for="name" class="sr-only">Your Name</label>
 <input type="text" id="name" class="input-field" placeholder="Enter your name" required>
@@ -141,7 +141,7 @@ p { margin-bottom: 15px; color: #34495e; line-height: 1.6; }
 <div class="submission-info" id="submissionInfo">
     <p><strong>Goal Submitted Successfully!</strong></p>
     <p id="submissionTimestamp">Submitted at: Loading...</p>
-    <!-- Note: 'Score' and 'Correctness' are not applicable to this introductory goal question -->
+    <!-- Note: 'Score' and 'Correctness' are inherent in completion here -->
 </div>
 
 </div>
@@ -171,23 +171,26 @@ let supabase = null;
 const LOGGED_IN_KEY = 'isUserLoggedIn';
 const CURRENT_USER_KEY = 'currentUser';
 const SIGNUP_FLAG_KEY = 'hasSignedUpBefore';
-const UNLOCK_ANSWER_KEY = 'introGoalAnswer';
-const UNLOCK_NAME_KEY = 'introGoalSubmitterName';
-const SECTION_ID = 'index'; // Used for progress tracking
+const UNLOCK_ANSWER_KEY = 'introGoalAnswer'; // Stores the goal text
+const UNLOCK_NAME_KEY = 'introGoalSubmitterName'; // Stores the user's name for this submission
+const UNLOCK_TIMESTAMP_KEY = 'introGoalSubmissionTime'; // Stores the timestamp locally
+const SECTION_ID = 'index'; // Identifier for this page/section
+const QUESTION_ID = 'intro-goal'; // Unique ID for this specific question
+const QUESTION_TEXT_INTRO_GOAL = "What is your goal for taking this Coaching & Leadership course?"; // Store question text
 const REDIRECT_DELAY_MS = 3000;
 const REDIRECT_URL = 'Assessment.html';
 
 // Initialize Supabase Client
 try {
-if (window.supabase && window.supabase.createClient) {
-supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-console.log("Supabase client initialized successfully.");
-} else {
-throw new Error("Supabase library (supabase-js) not found or failed to load.");
-}
+    if (window.supabase && window.supabase.createClient) {
+        supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        console.log("Supabase client initialized successfully.");
+    } else {
+        throw new Error("Supabase library (supabase-js) not found or failed to load.");
+    }
 } catch (error) {
-console.error("CRITICAL ERROR initializing Supabase client:", error);
-alert("Error connecting to the assessment service. Submissions might fail. Please refresh or contact support.");
+    console.error("CRITICAL ERROR initializing Supabase client:", error);
+    alert("Error connecting to the assessment service. Submissions might fail. Please refresh or contact support.");
 }
 
 // ***** ---> IMMEDIATE REDIRECTION LOGIC <--- *****
@@ -211,94 +214,117 @@ if (!isLoggedIn_immediate && (currentPage_immediate === 'index.html' || currentP
     const targetUrl = hasSignedUp_immediate ? 'login.html' : 'signup.html';
     console.error(`%cIndex Page IMMEDIATE Redirect: Not logged in or missing user data. Redirecting to ${targetUrl}...`, "color: orange;");
     window.location.replace(targetUrl);
-    throw new Error("Redirecting user based on initial check."); // Stop script execution
+    // Stop script execution if redirecting
+    // No need for throw new Error here, the replace call handles it.
 } else if (isLoggedIn_immediate) {
     console.log("%cIndex Page IMMEDIATE Check: User IS logged in and has data. Proceeding.", "color: green;");
+    // Ensure main content is displayed only if logged in and on the right page
+    document.addEventListener('DOMContentLoaded', () => {
+      const mainContainerCheck = document.getElementById('mainContainer');
+      if (mainContainerCheck) {
+        mainContainerCheck.style.display = 'block'; // Show main content
+        console.log("Main container displayed after successful login check.");
+      }
+    });
 } else {
     console.log(`%cIndex Page IMMEDIATE Check: Not logged in/missing data, but not on index.html (${currentPage_immediate}). No redirect needed by index.html.`, "color: grey;");
 }
 
 
 // --- DOM Element References ---
-let userNameDisplay, userEmailDisplay, questionForm, nameInput, answerInput, errorMessageDisplay, lockMessage, articleLink, successModal, modalGreeting, submitBtn, mainContainer, progressBarContainer, progressBar, progressText, questionTitleElement, submissionInfoDiv, submissionTimestampElement;
+let userNameDisplay, userEmailDisplay, questionForm, nameInput, answerInput, errorMessageDisplay, lockMessage, articleLink, successModal, modalGreeting, submitBtn, mainContainer, progressBarContainer, progressBar, progressText, questionTitleElement, questionPromptElement, submissionInfoDiv, submissionTimestampElement;
 
 // --- Initialization ---
 document.addEventListener('DOMContentLoaded', function() {
+    // This function will run *after* the immediate redirect check has potentially happened
     console.log("%cIndex page: DOMContentLoaded event fired.", "color: green;");
     mainContainer = document.getElementById('mainContainer');
-    try {
-        // Assign elements
-        userNameDisplay = document.getElementById('userName');
-        userEmailDisplay = document.getElementById('userEmail');
-        questionForm = document.getElementById('questionForm');
-        nameInput = document.getElementById('name');
-        answerInput = document.getElementById('answer');
-        errorMessageDisplay = document.getElementById('error-message');
-        lockMessage = document.getElementById('lockMessage');
-        articleLink = document.getElementById('articleLink');
-        successModal = document.getElementById('successModal');
-        modalGreeting = document.getElementById('modalGreeting');
-        submitBtn = document.getElementById('submitBtn');
-        // Existing progress bar elements
-        progressBarContainer = document.getElementById('progress-container-intro-goal');
-        progressBar = document.getElementById('progress-bar-intro-goal');
-        progressText = document.getElementById('progress-text-intro-goal');
-        // New/referenced elements
-        questionTitleElement = document.getElementById('questionTitle'); // Added ID to h3
-        submissionInfoDiv = document.getElementById('submissionInfo'); // New div for post-submission info
-        submissionTimestampElement = document.getElementById('submissionTimestamp'); // New p for timestamp
 
-        // Validate essential elements
-        if (!mainContainer || !userNameDisplay || !userEmailDisplay || !questionForm || !nameInput || !answerInput || !errorMessageDisplay || !lockMessage || !articleLink || !successModal || !modalGreeting || !submitBtn || !progressBarContainer || !progressBar || !progressText || !questionTitleElement || !submissionInfoDiv || !submissionTimestampElement) {
-            console.error("Essential DOM elements for initialization not found!", {
-                mainContainer: !!mainContainer, userNameDisplay: !!userNameDisplay, userEmailDisplay: !!userEmailDisplay, questionForm: !!questionForm, nameInput: !!nameInput, answerInput: !!answerInput, errorMessageDisplay: !!errorMessageDisplay, lockMessage: !!lockMessage, articleLink: !!articleLink, successModal: !!successModal, modalGreeting: !!modalGreeting, submitBtn: !!submitBtn, progressBarContainer: !!progressBarContainer, progressBar: !!progressBar, progressText: !!progressText, questionTitleElement: !!questionTitleElement, submissionInfoDiv: !!submissionInfoDiv, submissionTimestampElement: !!submissionTimestampElement
-            });
-            throw new Error("Essential DOM elements for initialization not found!");
-        }
+    // Only proceed with initialization if the user wasn't redirected
+    if (isLoggedIn_immediate) {
+        try {
+            // Assign elements
+            userNameDisplay = document.getElementById('userName');
+            userEmailDisplay = document.getElementById('userEmail');
+            questionForm = document.getElementById('questionForm');
+            nameInput = document.getElementById('name');
+            answerInput = document.getElementById('answer');
+            errorMessageDisplay = document.getElementById('error-message');
+            lockMessage = document.getElementById('lockMessage');
+            articleLink = document.getElementById('articleLink');
+            successModal = document.getElementById('successModal');
+            modalGreeting = document.getElementById('modalGreeting');
+            submitBtn = document.getElementById('submitBtn');
+            // Existing progress bar elements
+            progressBarContainer = document.getElementById('progress-container-intro-goal');
+            progressBar = document.getElementById('progress-bar-intro-goal');
+            progressText = document.getElementById('progress-text-intro-goal');
+            // New/referenced elements
+            questionTitleElement = document.getElementById('questionTitle');
+            questionPromptElement = document.getElementById('questionPrompt'); // Get question prompt p tag
+            submissionInfoDiv = document.getElementById('submissionInfo');
+            submissionTimestampElement = document.getElementById('submissionTimestamp');
+
+            // Validate essential elements needed AFTER login check
+            if (!mainContainer || !userNameDisplay || !userEmailDisplay || !questionForm || !nameInput || !answerInput || !errorMessageDisplay || !lockMessage || !articleLink || !successModal || !modalGreeting || !submitBtn || !progressBarContainer || !progressBar || !progressText || !questionTitleElement || !questionPromptElement || !submissionInfoDiv || !submissionTimestampElement) {
+               console.error("Essential DOM elements for initialization not found AFTER login check!", {
+                   mainContainer: !!mainContainer, userNameDisplay: !!userNameDisplay, userEmailDisplay: !!userEmailDisplay, questionForm: !!questionForm, nameInput: !!nameInput, answerInput: !!answerInput, errorMessageDisplay: !!errorMessageDisplay, lockMessage: !!lockMessage, articleLink: !!articleLink, successModal: !!successModal, modalGreeting: !!modalGreeting, submitBtn: !!submitBtn, progressBarContainer: !!progressBarContainer, progressBar: !!progressBar, progressText: !!progressText, questionTitleElement: !!questionTitleElement, questionPromptElement: !!questionPromptElement, submissionInfoDiv: !!submissionInfoDiv, submissionTimestampElement: !!submissionTimestampElement
+               });
+               throw new Error("Essential DOM elements for initialization not found!");
+            }
 
 
-        if (!supabase && submitBtn) {
-            console.warn("Supabase client not available on DOMContentLoaded. Disabling submit button.");
-            submitBtn.disabled = true;
-            submitBtn.textContent = 'Submission Unavailable';
-            submitBtn.style.backgroundColor = '#95a5a6';
-        }
+            if (!supabase && submitBtn) {
+                console.warn("Supabase client not available on DOMContentLoaded. Disabling submit button.");
+                submitBtn.disabled = true;
+                submitBtn.textContent = 'Submission Unavailable';
+                submitBtn.style.backgroundColor = '#95a5a6';
+            }
 
-        // Get current user data *after* the immediate redirect check has passed
-        const currentUser = getCurrentUser();
-        if (!currentUser) {
-            console.error("Index DOMContentLoaded: Failsafe check - User data missing after initial check! Redirecting.");
-            const failsafeTarget = localStorage.getItem(SIGNUP_FLAG_KEY) === 'true' ? 'login.html' : 'signup.html';
-            window.location.replace(failsafeTarget);
-            return; // Stop further execution
-        }
+            // Get current user data (should exist if we got here)
+            const currentUser = getCurrentUser();
+            if (!currentUser) {
+                // This is a secondary failsafe
+                console.error("Index DOMContentLoaded: Failsafe check - User data unexpectedly missing! Redirecting.");
+                const failsafeTarget = localStorage.getItem(SIGNUP_FLAG_KEY) === 'true' ? 'login.html' : 'signup.html';
+                window.location.replace(failsafeTarget);
+                return; // Stop further execution
+            }
 
-        console.log(`%cIndex DOMContentLoaded: User verified (${currentUser.email}). Initializing page content.`, "color: green;");
-        initializePageContent(currentUser);
-        if(mainContainer) mainContainer.style.display = 'block'; // Show content only after checks pass
-        console.log("Index page content successfully initialized and displayed.");
+            console.log(`%cIndex DOMContentLoaded: User verified (${currentUser.email}). Initializing page content.`, "color: green;");
+            initializePageContent(currentUser);
+            // Main container display is handled by the immediate check logic now
+            console.log("Index page content successfully initialized.");
 
-    } catch (error) {
-        // Avoid showing content if there was a critical error (like redirecting)
-        if (error.message !== "Redirecting user based on initial check.") {
+        } catch (error) {
              console.error("CRITICAL ERROR during DOMContentLoaded or initializePageContent:", error);
              if(mainContainer){
+                 // Show error within the main container if possible
                  mainContainer.innerHTML = `<p style="color: red; font-weight: bold; text-align: center; padding: 30px;">An error occurred loading page content. Please refresh. Error: ${error.message}</p>`;
-                 mainContainer.style.display = 'block';
+                 mainContainer.style.display = 'block'; // Make sure error is visible
              } else {
+                 // Fallback if main container itself is missing
                  document.body.innerHTML = `<p style="color: red; padding: 20px;">Critical Error: Page structure incomplete or major script error. (${error.message})</p>`;
              }
-        } else {
-            console.log("Redirection initiated, suppressing further page initialization errors.");
         }
+    } else {
+      console.log("DOMContentLoaded: User not logged in, skipping content initialization as redirect should have occurred.");
+       // Ensure main content remains hidden if the redirect somehow failed but user isn't logged in
+       if (mainContainer) mainContainer.style.display = 'none';
     }
-});
+}); // End DOMContentLoaded
 
 function initializePageContent(currentUser) {
     console.log("%cIndex page: Running initializePageContent()...", "color: blue;");
+    if (!currentUser) {
+        console.error("initializePageContent called without currentUser!");
+        return;
+    }
     displayUserInfo(currentUser);
-    // Set the question title (although it's static here)
-    if(questionTitleElement) questionTitleElement.textContent = "Interactive Question"; // Example, could be dynamic later
+    // Set the question title and prompt (can be dynamic later if needed)
+    if(questionTitleElement) questionTitleElement.textContent = "Interactive Question";
+    if(questionPromptElement) questionPromptElement.textContent = QUESTION_TEXT_INTRO_GOAL;
+
     checkUnlockStatus(); // This will potentially show progress bar and submission info if already submitted
     addEventListeners();
     console.log("initializePageContent() finished successfully.");
@@ -315,19 +341,17 @@ function getCurrentUser() {
         const p = JSON.parse(d);
         if (p && typeof p === 'object' && p.email && p.name) {
             if (typeof p.progress !== 'object' || p.progress === null) {
-                p.progress = {};
+                p.progress = {}; // Ensure progress object exists
             }
             return p;
         } else {
             console.error("getCurrentUser: Parsed data is invalid or missing required fields:", p);
-            localStorage.removeItem(CURRENT_USER_KEY);
-            localStorage.removeItem(LOGGED_IN_KEY);
+            logout(); // Force logout if data is corrupted
             return null;
         }
     } catch (e) {
         console.error("getCurrentUser Error parsing JSON:", e);
-        localStorage.removeItem(CURRENT_USER_KEY);
-        localStorage.removeItem(LOGGED_IN_KEY);
+        logout(); // Force logout if data is corrupted
         return null;
     }
 }
@@ -346,12 +370,30 @@ function saveCurrentUser(userObject) {
         console.error("saveCurrentUser Error:", error);
     }
 }
-function displayUserInfo(currentUser) { try { let uN='User', uE=''; if(currentUser){uN=currentUser.name||uN; uE=currentUser.email||uE; if(nameInput && !nameInput.value) nameInput.value=uN; /* Pre-fill name if empty */} if(userNameDisplay)userNameDisplay.textContent=`Welcome, ${uN}`; if(userEmailDisplay)userEmailDisplay.textContent=uE; } catch(err){console.error("Error in displayUserInfo:", err);} }
+function displayUserInfo(currentUser) {
+    try {
+        let userName = 'User';
+        let userEmail = '';
+        if (currentUser) {
+            userName = currentUser.name || userName;
+            userEmail = currentUser.email || userEmail;
+            // Pre-fill name field only if it's currently empty
+            if (nameInput && !nameInput.value) {
+                nameInput.value = userName;
+            }
+        }
+        if (userNameDisplay) userNameDisplay.textContent = `Welcome, ${userName}`;
+        if (userEmailDisplay) userEmailDisplay.textContent = userEmail;
+    } catch (err) {
+        console.error("Error in displayUserInfo:", err);
+    }
+ }
 
 function checkUnlockStatus() {
     try {
         const answer = localStorage.getItem(UNLOCK_ANSWER_KEY);
         const name = localStorage.getItem(UNLOCK_NAME_KEY);
+        const timestamp = localStorage.getItem(UNLOCK_TIMESTAMP_KEY);
         const questionContainer = questionForm.closest('.question');
 
         if (answer && answer.trim().length >= 20) {
@@ -364,10 +406,10 @@ function checkUnlockStatus() {
             const currentProgress = updateSectionProgress(SECTION_ID); // Should return 100
             if(questionContainer) showQuestionProgressBar(questionContainer, currentProgress);
 
-            // Show submission info (timestamp might be missing if only local data exists)
-            showSubmissionInfo(localStorage.getItem('introGoalSubmissionTime')); // Try to get stored time
+            // Show submission info using locally stored timestamp
+            showSubmissionInfo(timestamp);
 
-            // Optionally disable the form if already submitted
+            // Disable the form as it's already submitted
             disableFormInputs();
 
         } else {
@@ -390,23 +432,37 @@ function storeAnswersLocally(name, answer, submissionTime) {
         localStorage.setItem(UNLOCK_NAME_KEY, name);
         localStorage.setItem(UNLOCK_ANSWER_KEY, answer);
         if (submissionTime) {
-             localStorage.setItem('introGoalSubmissionTime', submissionTime); // Store timestamp
+             localStorage.setItem(UNLOCK_TIMESTAMP_KEY, submissionTime); // Store timestamp
+        } else {
+             localStorage.removeItem(UNLOCK_TIMESTAMP_KEY); // Clear timestamp if submission failed
         }
-        console.log("Stored answer and time locally for unlock.");
+        console.log("Stored answer and timestamp locally for unlock.");
     } catch (e) {
         console.error("Error storing unlock data:", e);
         showError("Could not save progress locally.");
     }
 }
 
-// NEW/MODIFIED: Functions to show/hide submission info
+// --- UI Update Functions ---
 function showSubmissionInfo(timestamp) {
     if (submissionInfoDiv && submissionTimestampElement) {
-        const displayTime = timestamp ? new Date(timestamp).toLocaleString() : 'Not available (local save)';
+        // Format timestamp nicely if available
+        let displayTime = 'N/A';
+        if (timestamp) {
+            try {
+                 displayTime = new Date(timestamp).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+            } catch (e) {
+                 console.warn("Could not format timestamp:", timestamp, e);
+                 displayTime = timestamp; // Show raw timestamp if formatting fails
+            }
+        } else {
+             displayTime = 'Saved locally (submission pending/failed)';
+        }
+
         submissionTimestampElement.textContent = `Submitted at: ${displayTime}`;
         submissionInfoDiv.style.display = 'block';
-         // Optionally, disable the form again here if needed
-         disableFormInputs();
+        // Ensure form is disabled when submission info is shown
+        disableFormInputs();
     } else {
          console.warn("Submission info elements not found when trying to show.");
     }
@@ -417,14 +473,15 @@ function hideSubmissionInfo() {
         submissionInfoDiv.style.display = 'none';
     }
 }
-// NEW: Functions to disable/enable form inputs after submission
+
 function disableFormInputs() {
     if(nameInput) nameInput.disabled = true;
     if(answerInput) answerInput.disabled = true;
     if(submitBtn) {
         submitBtn.disabled = true;
         submitBtn.textContent = 'Submitted';
-        submitBtn.style.background = '#95a5a6'; // Grey out
+        submitBtn.style.background = '#bdc3c7'; // Use disabled style background
+        submitBtn.style.cursor = 'not-allowed';
     }
 }
 function enableFormInputs() {
@@ -432,70 +489,91 @@ function enableFormInputs() {
      if(answerInput) answerInput.disabled = false;
      if(submitBtn) {
         setButtonLoading(false); // Use the existing function to reset button state
+        submitBtn.style.cursor = 'pointer';
      }
 }
 
+function logout() {
+    try {
+        if(supabase && supabase.auth) {
+            supabase.auth.signOut();
+            console.log("Supabase sign out called.");
+        }
+        // Clear all relevant local storage keys
+        localStorage.removeItem(LOGGED_IN_KEY);
+        localStorage.removeItem(CURRENT_USER_KEY);
+        localStorage.removeItem(UNLOCK_ANSWER_KEY);
+        localStorage.removeItem(UNLOCK_NAME_KEY);
+        localStorage.removeItem(UNLOCK_TIMESTAMP_KEY);
+        localStorage.removeItem(SIGNUP_FLAG_KEY); // Clear signup flag too
+        console.log("Local storage cleared for logout.");
+        window.location.href = 'login.html'; // Redirect to login page
+    } catch (e) {
+        console.error("Logout error:", e);
+        // Redirect even if Supabase signout fails
+        window.location.href = 'login.html';
+    }
+}
 
-function logout() { try { if(supabase && supabase.auth) { supabase.auth.signOut(); console.log("Supabase sign out called."); } localStorage.removeItem(LOGGED_IN_KEY); localStorage.removeItem(CURRENT_USER_KEY); localStorage.removeItem(UNLOCK_ANSWER_KEY); localStorage.removeItem(UNLOCK_NAME_KEY); localStorage.removeItem('introGoalSubmissionTime'); // Clear timestamp localStorage.removeItem(SIGNUP_FLAG_KEY); /* Clear signup flag too */ console.log("Local storage cleared for logout."); window.location.href='login.html'; } catch (e) { console.error("Logout error:", e); window.location.href='login.html';} }
 function addEventListeners() { try { if(questionForm)questionForm.addEventListener('submit',handleFormSubmit); document.addEventListener('keydown',handleKeyDown); if(articleLink)articleLink.addEventListener('click',handleLockedLinkClick); if(nameInput)nameInput.addEventListener('input',()=>hideError()); if(answerInput)answerInput.addEventListener('input',()=>hideError()); } catch(err) {console.error("Error in addEventListeners:", err); } }
 function handleKeyDown(e) { try { if(e.key === 'Escape' && successModal && successModal.style.display === 'flex'){ console.log("Escape pressed during redirect modal - ignored."); } } catch(err){ console.error("Error in handleKeyDown:", err); } }
-function handleLockedLinkClick(e) { try { if(articleLink&&articleLink.classList.contains('locked')){e.preventDefault();if(lockMessage){lockMessage.style.animation='none';void lockMessage.offsetWidth;lockMessage.style.animation='pulse 0.5s 3';setTimeout(()=>{if(lockMessage)lockMessage.style.animation='pulse 2s infinite';},1500);}if(nameInput&&!nameInput.value){nameInput.focus();}else if(answerInput){answerInput.focus();}}} catch(err){ console.error("Error in handleLockedLinkClick:", err); } }
+function handleLockedLinkClick(e) { try { if(articleLink&&articleLink.classList.contains('locked')){e.preventDefault();if(lockMessage){lockMessage.style.animation='none';void lockMessage.offsetWidth;lockMessage.style.animation='pulse 0.5s 3';setTimeout(()=>{if(lockMessage)lockMessage.style.animation='pulse 2s infinite';},1500);}if(nameInput&&!nameInput.value){nameInput.focus();}else if(answerInput && !answerInput.value){answerInput.focus();}}} catch(err){ console.error("Error in handleLockedLinkClick:", err); } }
 function showError(message, field) { try { if(errorMessageDisplay){errorMessageDisplay.textContent=message;errorMessageDisplay.style.display="block";} if(field){field.classList.add('invalid-field-style');field.focus();} console.error("Displayed error to user:", message); } catch(err){ console.error("Error in showError:", err); } }
 function hideError() { try { if(errorMessageDisplay)errorMessageDisplay.style.display="none"; if(nameInput)nameInput.classList.remove('invalid-field-style'); if(answerInput)answerInput.classList.remove('invalid-field-style'); } catch(err){ console.error("Error in hideError:", err); } }
 
 // --- Modal Functions ---
 function showRedirectConfirmationModal() {
 try {
-if (!successModal) { console.error("Success modal element not found! Redirecting immediately."); window.location.href = REDIRECT_URL; return; }
-const modalContent = successModal.querySelector('.modal-content');
-if (!modalContent) { console.error("Modal content area not found! Redirecting immediately."); window.location.href = REDIRECT_URL; return; }
+    if (!successModal) { console.error("Success modal element not found! Redirecting immediately."); window.location.href = REDIRECT_URL; return; }
+    const modalContent = successModal.querySelector('.modal-content');
+    if (!modalContent) { console.error("Modal content area not found! Redirecting immediately."); window.location.href = REDIRECT_URL; return; }
 
-const heading = modalContent.querySelector('h3#modalGreeting');
-const paragraph = modalContent.querySelector('p');
-const mainButton = modalContent.querySelector('.modal-button');
-const closeButton = modalContent.querySelector('.close-modal');
+    const heading = modalContent.querySelector('h3#modalGreeting');
+    const paragraph = modalContent.querySelector('p');
+    const mainButton = modalContent.querySelector('.modal-button');
+    const closeButton = modalContent.querySelector('.close-modal');
 
-if (heading) { heading.textContent = "Submission Received!"; heading.style.color = '#27ae60'; } else { console.warn("Modal heading (h3#modalGreeting) not found."); }
-if (paragraph) { paragraph.textContent = "Thank you for submitting your answers! You will be redirected to the Pre-Assessment page shortly."; paragraph.style.marginTop = '15px'; } else { console.warn("Modal paragraph (p) not found."); }
-if (mainButton) mainButton.style.display = 'none';
-if (closeButton) closeButton.style.display = 'none';
+    if (heading) { heading.textContent = "Submission Received!"; heading.style.color = '#27ae60'; }
+    if (paragraph) { paragraph.textContent = "Thank you for submitting your goal! You will be redirected to the Pre-Assessment page shortly."; paragraph.style.marginTop = '15px'; }
+    if (mainButton) mainButton.style.display = 'none';
+    if (closeButton) closeButton.style.display = 'none';
 
-successModal.style.display = 'flex';
-console.log(`Redirect confirmation modal shown. Redirecting to ${REDIRECT_URL} in ${REDIRECT_DELAY_MS}ms.`);
+    successModal.style.display = 'flex';
+    console.log(`Redirect confirmation modal shown. Redirecting to ${REDIRECT_URL} in ${REDIRECT_DELAY_MS}ms.`);
 
-setTimeout(() => { console.log(`Redirecting now to ${REDIRECT_URL}...`); window.location.href = REDIRECT_URL; }, REDIRECT_DELAY_MS);
+    setTimeout(() => { console.log(`Redirecting now to ${REDIRECT_URL}...`); window.location.href = REDIRECT_URL; }, REDIRECT_DELAY_MS);
 } catch (err) { console.error("Error in showRedirectConfirmationModal:", err); alert("Submission successful! Redirecting to the Pre-Assessment page now..."); window.location.href = REDIRECT_URL; }
 }
 function closeModal() { try { if(successModal)successModal.style.display='none'; console.log("Modal closed."); } catch(err){ console.error("Error in closeModal:", err); } }
 
 // --- Progress Bar Functions (for Goal Completion) ---
-// Update progress: For this intro goal, it's 100% on completion, 0% otherwise.
 function updateSectionProgress(sectionId) {
     const currentUser = getCurrentUser();
     if (!currentUser) return 0;
     let sectionProgress = 0;
     const answer = localStorage.getItem(UNLOCK_ANSWER_KEY);
+    // Check if a valid answer is stored locally
     if (answer && answer.trim().length >= 20) {
-        sectionProgress = 100; // Mark as complete
+        sectionProgress = 100; // Mark as 100% complete
     } else {
         sectionProgress = 0;
     }
     if (!currentUser.progress) currentUser.progress = {};
     currentUser.progress[sectionId] = sectionProgress;
-    saveCurrentUser(currentUser);
-    console.log(`Section '${sectionId}' progress updated: ${sectionProgress}%`);
+    saveCurrentUser(currentUser); // Save updated progress back to user object
+    console.log(`Section '${sectionId}' progress updated in local storage: ${sectionProgress}%`);
     return sectionProgress;
 }
-// Show/Hide the specific progress bar for the goal question
+
 function showQuestionProgressBar(containerElement, percentage) {
     if (!containerElement) return;
-    const progressContainer = containerElement.querySelector('.question-progress-container'); // Use the specific ID if needed, but class is fine here
+    const progressContainer = containerElement.querySelector('.question-progress-container');
     const bar = progressContainer?.querySelector('.question-progress-bar');
     const text = progressContainer?.querySelector('.question-progress-text');
     if (progressContainer && bar && text) {
         percentage = Math.max(0, Math.min(100, Math.round(percentage)));
         bar.style.width = `${percentage}%`;
-        text.textContent = `${percentage}% Complete`; // Text indicates completion
+        text.textContent = `${percentage}% Complete`; // Indicate completion
         progressContainer.style.display = 'block';
     } else {
         console.warn("Progress elements missing in:", containerElement);
@@ -508,35 +586,48 @@ function hideQuestionProgressBar(containerElement) {
 }
 
 
-// --- Supabase Submission ---
-async function sendToSupabase(name, email, answer) {
+// --- Supabase Submission (Enhanced) ---
+async function sendToSupabase(submissionData) {
     if (!supabase) {
         console.error("Supabase client is not initialized. Cannot submit.");
         showError("Database connection error. Your progress is saved locally, but submission failed. Please try refreshing later or contact support.");
         return { success: false, submitted_at: null }; // Return object indicating failure
     }
-    console.log("Sending to Supabase:", { name, email, goal_answer_length: answer.length });
+
+    console.log("Sending enhanced data to Supabase:", submissionData);
+
+    // Prepare data for Supabase, matching your table columns
+    // **IMPORTANT**: Adjust column names (`goal_answer`, `question_text`, etc.)
+    //              to match your actual Supabase table schema!
+    const dataToSend = {
+        name: submissionData.name,
+        email: submissionData.email,
+        goal_answer: submissionData.answer, // Assuming column name is 'goal_answer'
+        question_id: submissionData.questionId, // Assuming 'question_id' column exists
+        question_text: submissionData.questionText, // Assuming 'question_text' column exists
+        section_id: submissionData.sectionId, // Assuming 'section_id' column exists
+        score: submissionData.score, // Assuming 'score' column exists (Number)
+        // Assuming 'completion_status' column exists (Text: e.g., 'Complete')
+        // Use 'is_correct' if that's your column name (Text or Boolean)
+        completion_status: submissionData.completionStatus,
+        // 'created_at' or 'submitted_at' is usually handled automatically by Supabase
+    };
+
     try {
-        // Insert data, Supabase automatically adds 'created_at' timestamp
+        // Insert data
         const { data, error } = await supabase
-            .from('assessments') // Ensure 'assessments' is your table name
-            .insert([{
-                name: name,
-                email: email,
-                goal_answer: answer, // Using 'goal_answer' column
-                // No 'score' or 'is_correct' needed for this entry
-                // 'submitted_at' or 'created_at' will be handled by Supabase
-            }])
+            .from('assessments') // Make sure 'assessments' is your actual table name
+            .insert([dataToSend])
             .select('created_at') // Select the timestamp generated by Supabase
-            .single(); // Expecting a single row back
+            .single(); // Expecting a single row back after insert
 
         if (error) {
             console.error('%cSupabase Insert Error:', 'color: red;', error);
             let userMessage = `Database submission failed: ${error.message}.`;
-            // Example: Check for unique constraint violation if email + goal needs to be unique (adjust constraint name)
-            // if (error.code === '23505' && error.message.includes('your_unique_constraint_name')) {
-            //     userMessage = "It seems you might have already submitted this goal. Your progress is saved.";
-            // }
+            // Example: Check for unique constraint violation (adjust constraint name)
+            if (error.code === '23505' /* && error.message.includes('your_unique_constraint_name') */) {
+                 userMessage = "It seems you might have already submitted this goal. Your progress is saved.";
+            }
             showError(`${userMessage} Your progress is saved locally.`);
             return { success: false, submitted_at: null };
         }
@@ -553,16 +644,16 @@ async function sendToSupabase(name, email, answer) {
 }
 
 
-// --- Form Submit Handler ---
+// --- Form Submit Handler (Enhanced) ---
 async function handleFormSubmit(event) {
     event.preventDefault();
-    console.log("handleFormSubmit: Starting...");
+    console.log("handleFormSubmit: Starting enhanced submission...");
     let submissionSuccessful = false; // Track success for finally block
     let submissionTime = null; // To store the timestamp
 
     try {
-        // Re-validate essential elements (good practice)
-        if (!nameInput || !answerInput || !userEmailDisplay || !submitBtn || !errorMessageDisplay || !questionForm) {
+        // Re-validate essential elements
+        if (!nameInput || !answerInput || !userEmailDisplay || !submitBtn || !errorMessageDisplay || !questionForm || !questionPromptElement) {
             throw new Error("Essential form elements are missing!");
         }
         if (!supabase) {
@@ -574,6 +665,7 @@ async function handleFormSubmit(event) {
         const answer = answerInput.value.trim();
         let email = userEmailDisplay.textContent.trim(); // Get email from display
         const questionContainer = questionForm.closest('.question');
+        const questionText = questionPromptElement.textContent.trim() || QUESTION_TEXT_INTRO_GOAL; // Get text from prompt or constant
 
         hideError();
         let isValid = true;
@@ -583,11 +675,11 @@ async function handleFormSubmit(event) {
             const currentUser = getCurrentUser();
             const backupEmail = currentUser?.email;
             if (!backupEmail) {
-                showError("User email not found. Please log out and log back in.", userEmailDisplay); // Error shown near email display ideally
+                showError("User email not found. Please log out and log back in.", userEmailDisplay);
                 isValid = false;
             } else {
                 console.warn("Using backup email from currentUser object for submission.");
-                email = backupEmail; // Reassign validated email
+                email = backupEmail; // Use validated email
             }
         }
         if (!questionContainer) { console.error("Could not find '.question' container for progress bar."); showError("Internal page error (code: QC_NF). Cannot proceed."); isValid = false; }
@@ -597,19 +689,31 @@ async function handleFormSubmit(event) {
         console.log("Validation passed. Disabling button.");
         setButtonLoading(true); // Disable button before async operation
 
-        // Attempt Supabase submission using the validated/retrieved email
-        console.log("Starting async sendToSupabase with email:", email);
-        const { success, submitted_at } = await sendToSupabase(name, email, answer);
+        // Prepare all data for Supabase
+        const submissionData = {
+            name: name,
+            email: email,
+            answer: answer,
+            questionId: QUESTION_ID,
+            questionText: questionText,
+            sectionId: SECTION_ID,
+            score: 100, // Score 100 for completing the goal question
+            completionStatus: 'Complete' // Status for this goal question
+        };
+
+        // Attempt Supabase submission
+        console.log("Starting async sendToSupabase with enhanced data for email:", email);
+        const { success, submitted_at } = await sendToSupabase(submissionData);
         submissionSuccessful = success; // Update tracker variable
         submissionTime = submitted_at; // Store the returned timestamp
         console.log(`sendToSupabase returned: success=${submissionSuccessful}, submitted_at=${submissionTime}`);
 
-        if (submissionSuccessful) {
+        // Update UI and Local Storage based on submission result
+        if (submissionSuccessful && submissionTime) {
             console.log("Supabase submission successful.");
-            // Store answers and the confirmed submission time locally
+            // Store answers and the *confirmed* submission time locally
             storeAnswersLocally(name, answer, submissionTime);
             unlockContent();
-            console.log("Content unlocked locally.");
             const currentProgress = updateSectionProgress(SECTION_ID); // Update progress to 100%
             showQuestionProgressBar(questionContainer, currentProgress);
             showSubmissionInfo(submissionTime); // Show timestamp and confirmation message
@@ -618,19 +722,16 @@ async function handleFormSubmit(event) {
             console.log("Showing redirect confirmation modal.");
             showRedirectConfirmationModal(); // Handles redirect popup and timer
 
-            // Button remains disabled as we are redirecting
         } else {
-            console.warn("Supabase submission failed. Error message should have been shown by sendToSupabase.");
-            // Failure handled in finally block (button re-enabled)
-            // NOTE: Local storage might have happened *before* the failed Supabase call.
-            // We still store locally even if DB fails, so progress is saved.
-            // Let's ensure local storage is updated even on failure, but without a timestamp
-             storeAnswersLocally(name, answer, null); // Save locally without timestamp on DB fail
-             unlockContent(); // Still unlock based on local save
-             const currentProgress = updateSectionProgress(SECTION_ID);
-             showQuestionProgressBar(questionContainer, currentProgress); // Show local progress
-             hideSubmissionInfo(); // Hide DB submission info as it failed
-             // Button re-enabled in finally
+            console.warn("Supabase submission failed or timestamp missing. Error message should have been shown.");
+            // Even if DB fails, save locally to preserve user input, but clear DB timestamp
+            storeAnswersLocally(name, answer, null);
+            unlockContent(); // Unlock based on local save
+            const currentProgress = updateSectionProgress(SECTION_ID);
+            showQuestionProgressBar(questionContainer, currentProgress); // Show local progress (100%)
+            // Show submission info indicating local save only
+            showSubmissionInfo(null);
+            // Button re-enabled in finally block
         }
 
     } catch (err) {
@@ -641,23 +742,24 @@ async function handleFormSubmit(event) {
         console.log("handleFormSubmit: finally block.");
         // Only re-enable the button if the submission FAILED and we are NOT redirecting
         if (!submissionSuccessful) {
-            // Check if inputs should be re-enabled (e.g., maybe they were already submitted before this attempt)
-            const alreadySubmitted = localStorage.getItem(UNLOCK_ANSWER_KEY) && localStorage.getItem(UNLOCK_ANSWER_KEY).trim().length >= 20;
-            if (!alreadySubmitted) {
-                enableFormInputs(); // Re-enable only if not already considered submitted locally
-                 console.log("Button and form re-enabled after failed submission (and not previously submitted).");
-            } else {
-                disableFormInputs(); // Keep disabled if already submitted locally before this failed attempt
-                 console.log("Button kept disabled as goal was already submitted locally before this failed attempt.");
-            }
-
+             // Check if it was already submitted locally before this failed attempt
+            const alreadySubmittedLocally = localStorage.getItem(UNLOCK_ANSWER_KEY) && localStorage.getItem(UNLOCK_ANSWER_KEY).trim().length >= 20;
+             if (!alreadySubmittedLocally) {
+                enableFormInputs(); // Re-enable only if not previously submitted
+                console.log("Button and form re-enabled after failed submission (and not previously submitted).");
+             } else {
+                // It was already submitted locally, keep it disabled even though the *current* attempt failed
+                disableFormInputs();
+                console.log("Button kept disabled as goal was already submitted locally before this failed attempt.");
+             }
         } else {
             console.log("Submission successful, redirecting soon. Button remains disabled.");
             // Ensure form remains disabled during redirect modal display
              disableFormInputs();
         }
-    }
-}
+    } // End finally
+} // End handleFormSubmit
+
 // Helper to set button state
 function setButtonLoading(isLoading) {
     if (!submitBtn) return;
@@ -665,10 +767,22 @@ function setButtonLoading(isLoading) {
     submitBtn.textContent = isLoading ? 'Submitting...' : 'Submit Your Answer';
     // Optional: Add a class for styling loading state
     // submitBtn.classList.toggle('loading', isLoading);
-    if (!isLoading) {
-        // Reset background on enable
-        submitBtn.style.background = 'linear-gradient(90deg, #3498db, #2980b9)';
+    if (isLoading) {
+         submitBtn.style.background = '#bdc3c7'; // Use disabled style when loading
+         submitBtn.style.cursor = 'wait';
+    } else {
+         // Reset background only if NOT disabled due to prior submission
+         const alreadySubmittedLocally = localStorage.getItem(UNLOCK_ANSWER_KEY) && localStorage.getItem(UNLOCK_ANSWER_KEY).trim().length >= 20;
+         if (!alreadySubmittedLocally) {
+            submitBtn.style.background = 'linear-gradient(90deg, #3498db, #2980b9)';
+            submitBtn.style.cursor = 'pointer';
+         } else {
+             // Keep disabled style if already submitted
+             disableFormInputs();
+         }
     }
-</script>
+}
+
+</script> <!-- Added the missing closing script tag -->
 </body>
 </html>
