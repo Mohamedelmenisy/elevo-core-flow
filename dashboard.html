@@ -1599,5 +1599,74 @@ function applyFilters() {
 }
 </script>
 
+
+<script>
+document.addEventListener('DOMContentLoaded', async () => {
+  const { data: users, error: usersError } = await supabaseClient.from('users').select('id, name, email');
+  const { data: progressData, error: progressError } = await supabaseClient.from('user_progress').select('email, progress_percent, updated_at');
+
+  if (usersError || progressError) {
+    console.error('Supabase fetch error:', usersError || progressError);
+    return;
+  }
+
+  const userMap = {};
+  users.forEach(user => {
+    userMap[user.email] = {
+      name: user.name || 'N/A',
+      email: user.email || 'N/A',
+      progressList: [],
+      lastUpdate: null
+    };
+  });
+
+  progressData.forEach(entry => {
+    const email = entry.email;
+    const percent = parseFloat(entry.progress_percent || 0);
+    if (!userMap[email]) return;
+
+    userMap[email].progressList.push(percent);
+    const updateTime = new Date(entry.updated_at);
+    if (!userMap[email].lastUpdate || updateTime > new Date(userMap[email].lastUpdate)) {
+      userMap[email].lastUpdate = updateTime.toISOString();
+    }
+  });
+
+  const usersArray = Object.values(userMap);
+  const tableBody = document.getElementById('allUsersTableBody');
+  tableBody.innerHTML = '';
+
+  usersArray.forEach(user => {
+    const avg = user.progressList.length
+      ? user.progressList.reduce((a, b) => a + b, 0) / user.progressList.length
+      : 0;
+    const progress = avg.toFixed(1);
+    let status = 'Not Started';
+    let statusClass = 'status-not-started';
+    if (avg >= 100) {
+      status = 'Completed';
+      statusClass = 'status-completed';
+    } else if (avg > 0) {
+      status = 'In Progress';
+      statusClass = 'status-in-progress';
+    }
+
+    const lastUpdate = user.lastUpdate
+      ? new Date(user.lastUpdate).toLocaleString()
+      : 'N/A';
+
+    const row = document.createElement('tr');
+    row.innerHTML = `
+      <td>${user.name}</td>
+      <td>${user.email}</td>
+      <td>${progress}%</td>
+      <td class="${statusClass}">${status}</td>
+      <td>${lastUpdate}</td>
+    `;
+    tableBody.appendChild(row);
+  });
+});
+</script>
+
 </body>
 </html>
