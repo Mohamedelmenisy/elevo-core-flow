@@ -516,6 +516,10 @@
         const ADMIN_EMAIL = 'm.elsayed@thechefz.co'; // Case-insensitive comparison
 
         // --- SUPABASE Setup ---
+        // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        // !!! IMPORTANT: REPLACE THESE PLACEHOLDERS BELOW           !!!
+        // !!! with your actual Supabase Project URL and Anon Key.   !!!
+        // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         const SUPABASE_URL = 'YOUR_SUPABASE_URL'; // <-- Replace with your Supabase URL
         const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY'; // <-- Replace with your Supabase Anon Key
 
@@ -527,6 +531,7 @@
              const errorMsg = document.getElementById('errorMessage');
              if (loadingMsg) loadingMsg.style.display = 'none';
              if (errorMsg) {
+                 // This is the error message you are seeing because the placeholders above were not replaced.
                  errorMsg.textContent = 'Configuration Error: Supabase connection details are missing. Please contact support.';
                  errorMsg.style.display = 'block';
              }
@@ -534,6 +539,8 @@
              throw new Error("Supabase configuration missing.");
         }
 
+        // This part is CORRECT and uses the constants defined above.
+        // Ensure the @supabase/supabase-js library is included in the <head> (which it is).
         const { createClient } = supabase; // Ensure Supabase is loaded
         const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
         console.log("Supabase client initialized.");
@@ -965,31 +972,139 @@
              const q4Rating = document.getElementById('q4_confidence_rating');
              const q4Explanation = document.getElementById('q4_confidence_explanation');
              const randomQuestionContainer = document.getElementById('randomQuestionContainer');
+             const qRandomMinWordsDisplay = document.getElementById('q_random_min_words_display'); // Reference for min words display
+             const qRandomWordCountContainer = document.getElementById('q_random_word_count_container'); // Reference for word count container
+             const qRandomPasteWarning = document.getElementById('q_random_paste_warning');
+             const qRandomError = document.getElementById('q_random_error');
+
 
              if (IS_ADMIN_USER) {
                 document.getElementById('adminAssessmentNote').style.display = 'inline';
                 // Adjust placeholders if needed
              }
 
-             // Select and Inject Random Question (Same as before)
+             // Select and Inject Random Question
              selectedRandomQuestion = randomQuestionPool[Math.floor(Math.random() * randomQuestionPool.length)];
-             const randomPlaceholder = IS_ADMIN_USER ? "Admin: No word count required." : `Please provide your thoughts... (min ${selectedRandomQuestion.minWords} words)`;
-             const randomQuestionHTML = `...`; // Same HTML structure as before
-             randomQuestionContainer.innerHTML = randomQuestionHTML;
-             // Get references to injected elements (qRandomTextarea, etc.)
 
-             // Setup Conditional Validation/Restrictions (Same as before)
-             // setupWordCountValidation(...)
-             // setupPastePrevention(...)
+             // Update Label
+            const randomLabel = document.createElement('label');
+            randomLabel.htmlFor = selectedRandomQuestion.id;
+            randomLabel.textContent = selectedRandomQuestion.label;
+            randomQuestionContainer.insertBefore(randomLabel, randomQuestionContainer.firstChild); // Insert label at the beginning
+
+            // Create and Insert Textarea
+            const randomTextarea = document.createElement('textarea');
+            randomTextarea.id = selectedRandomQuestion.id;
+            randomTextarea.name = selectedRandomQuestion.id; // Use ID as name for form submission
+            randomTextarea.required = true;
+            randomTextarea.dataset.minWords = selectedRandomQuestion.minWords;
+            randomTextarea.placeholder = IS_ADMIN_USER ? "Admin: No word count required." : `Please provide your thoughts... (min ${selectedRandomQuestion.minWords} words)`;
+            randomQuestionContainer.insertBefore(randomTextarea, randomQuestionContainer.querySelector('.input-meta-info')); // Insert textarea before meta info
+
+             // Update min words display
+             if (qRandomMinWordsDisplay) {
+                 qRandomMinWordsDisplay.textContent = IS_ADMIN_USER ? 'N/A' : selectedRandomQuestion.minWords;
+             }
+
+             // Setup validation and paste prevention for the *newly added* random question textarea
+             const qRandomWordCountSpan = document.getElementById('q_random_word_count');
+             if (randomTextarea && qRandomWordCountSpan && qRandomError && qRandomWordCountContainer) {
+                 setupWordCountValidation(randomTextarea, qRandomWordCountSpan, qRandomError, qRandomWordCountContainer, IS_ADMIN_USER);
+             }
+             if (randomTextarea && qRandomPasteWarning) {
+                 setupPastePrevention(randomTextarea, qRandomPasteWarning, IS_ADMIN_USER);
+             }
+
+             // Setup validation for static questions (Q1, Q3, Q4)
+             const q1WordCount = document.getElementById('q1_word_count');
+             const q1Error = document.getElementById('q1_error');
+             const q1WordCountContainer = document.getElementById('q1_word_count_container');
+             const q1PasteWarning = document.getElementById('q1_paste_warning');
+             if (q1Textarea && q1WordCount && q1Error && q1WordCountContainer) {
+                 setupWordCountValidation(q1Textarea, q1WordCount, q1Error, q1WordCountContainer, IS_ADMIN_USER);
+             }
+             if (q1Textarea && q1PasteWarning) {
+                 setupPastePrevention(q1Textarea, q1PasteWarning, IS_ADMIN_USER);
+             }
+
+
+             const q3WordCount = document.getElementById('q3_word_count');
+             const q3Error = document.getElementById('q3_error');
+             const q3WordCountContainer = document.getElementById('q3_word_count_container');
+             const q3PasteWarning = document.getElementById('q3_paste_warning');
+             if (q3Textarea && q3WordCount && q3Error && q3WordCountContainer) {
+                 setupWordCountValidation(q3Textarea, q3WordCount, q3Error, q3WordCountContainer, IS_ADMIN_USER);
+             }
+             if (q3Textarea && q3PasteWarning) {
+                setupPastePrevention(q3Textarea, q3PasteWarning, IS_ADMIN_USER);
+             }
+
+             const q4ExpWordCount = document.getElementById('q4_exp_word_count');
+             const q4ExpError = document.getElementById('q4_exp_error');
+             const q4ExpWordCountContainer = document.getElementById('q4_exp_word_count_container');
+             const q4ExpPasteWarning = document.getElementById('q4_exp_paste_warning');
+             if (q4Explanation && q4ExpWordCount && q4ExpError && q4ExpWordCountContainer) {
+                 setupWordCountValidation(q4Explanation, q4ExpWordCount, q4ExpError, q4ExpWordCountContainer, IS_ADMIN_USER);
+             }
+             if (q4Explanation && q4ExpPasteWarning) {
+                setupPastePrevention(q4Explanation, q4ExpPasteWarning, IS_ADMIN_USER);
+             }
 
              // --- Form Submission ---
              form.addEventListener('submit', handleAssessmentSubmit); // Point to the updated submit handler
         }
 
-        function countWords(text) { /* ... (same as before) ... */ return text ? text.trim().split(/\s+/).filter(Boolean).length : 0; }
-        function setupWordCountValidation(textarea, countSpan, errorElement, countContainer, isAdmin) { /* ... (same as before) ... */ }
-        function validateWordCount(textarea, minWords, errorElement, isAdmin) { /* ... (same as before) ... */ return true; }
-        function setupPastePrevention(textarea, warningElement, isAdmin) { /* ... (same as before) ... */ }
+        function countWords(text) { return text ? text.trim().split(/\s+/).filter(Boolean).length : 0; }
+
+        function setupWordCountValidation(textarea, countSpan, errorElement, countContainer, isAdmin) {
+            if (isAdmin) {
+                 countContainer.style.display = 'none'; // Hide word count for admin
+                 return; // Don't attach listeners
+            }
+             const minWords = parseInt(textarea.dataset.minWords, 10);
+             countContainer.style.display = 'flex'; // Ensure it's visible for non-admins
+
+             function updateCount() {
+                 const words = countWords(textarea.value);
+                 countSpan.textContent = words;
+                 if (words >= minWords) {
+                     countSpan.style.color = '#10b981'; // Green
+                 } else {
+                     countSpan.style.color = '#ef4444'; // Red
+                 }
+             }
+             textarea.addEventListener('input', updateCount);
+             updateCount(); // Initial count
+        }
+
+        function validateWordCount(textarea, minWords, errorElement, isAdmin) {
+             if (isAdmin) return true; // Always valid for admin
+             const words = countWords(textarea.value);
+             if (words < minWords) {
+                 errorElement.textContent = `Please enter at least ${minWords} words.`;
+                 errorElement.style.display = 'block';
+                 textarea.classList.add('invalid');
+                 return false;
+             }
+             errorElement.style.display = 'none';
+             textarea.classList.remove('invalid');
+             return true;
+        }
+
+        function setupPastePrevention(textarea, warningElement, isAdmin) {
+             if (isAdmin) {
+                warningElement.style.display = 'none'; // Hide paste warning for admin
+                return; // Don't attach listener
+             }
+             warningElement.style.display = 'block'; // Make sure it's potentially visible
+
+             textarea.addEventListener('paste', (e) => {
+                warningElement.style.color = '#dc2626'; // Make it more prominent on paste
+                setTimeout(() => {
+                    warningElement.style.color = '#f97316'; // Revert color after a short delay
+                }, 2000);
+             });
+         }
 
 
         async function handleAssessmentSubmit(event) {
@@ -1000,25 +1115,48 @@
             submitButton.disabled = true;
             submitButton.textContent = 'Submitting...';
 
-            // Clear previous errors (Same as before)
+            // Clear previous errors
             form.querySelectorAll('.error-message').forEach(el => el.style.display = 'none');
             form.querySelectorAll('.invalid').forEach(el => el.classList.remove('invalid'));
 
-            // Get form elements (Same as before)
+            // Get form elements
             const q1Textarea = document.getElementById('q1_coaching_meaning');
-            const qRandomTextarea = document.getElementById(selectedRandomQuestion.id);
+            const qRandomTextarea = document.getElementById(selectedRandomQuestion.id); // Use the dynamic ID
             const q3Textarea = document.getElementById('q3_expectations');
             const q4Rating = document.getElementById('q4_confidence_rating');
             const q4Explanation = document.getElementById('q4_confidence_explanation');
+
+            // Get error elements
             const q1Error = document.getElementById('q1_error');
-            // ... other error elements
+            const qRandomError = document.getElementById('q_random_error'); // Use the dynamic ID's error element
+            const q3Error = document.getElementById('q3_error');
+            const q4RatingError = document.getElementById('q4_rating_error');
+            const q4ExpError = document.getElementById('q4_exp_error');
 
             let isValid = true;
-            // Perform Validation (Same checks as before)
-            // ... required field checks ...
-            // ... word count checks ...
-            // ... Q4 rating range check ...
-            const ratingVal = parseInt(q4Rating.value, 10); // Need this value later
+
+            // Perform Validation
+            // Required checks
+            if (!q1Textarea.value.trim()) { isValid = false; q1Textarea.classList.add('invalid'); q1Error.textContent = 'This field is required.'; q1Error.style.display = 'block'; }
+            if (!qRandomTextarea.value.trim()) { isValid = false; qRandomTextarea.classList.add('invalid'); qRandomError.textContent = 'This field is required.'; qRandomError.style.display = 'block'; }
+            if (!q3Textarea.value.trim()) { isValid = false; q3Textarea.classList.add('invalid'); q3Error.textContent = 'This field is required.'; q3Error.style.display = 'block'; }
+            if (!q4Rating.value) { isValid = false; q4Rating.classList.add('invalid'); q4RatingError.textContent = 'Please select a rating.'; q4RatingError.style.display = 'block'; }
+            if (!q4Explanation.value.trim()) { isValid = false; q4Explanation.classList.add('invalid'); q4ExpError.textContent = 'This field is required.'; q4ExpError.style.display = 'block'; }
+
+            // Word count checks (if validation is enabled for the user)
+            if (!validateWordCount(q1Textarea, parseInt(q1Textarea.dataset.minWords, 10), q1Error, IS_ADMIN_USER)) { isValid = false; }
+            if (!validateWordCount(qRandomTextarea, parseInt(qRandomTextarea.dataset.minWords, 10), qRandomError, IS_ADMIN_USER)) { isValid = false; }
+            if (!validateWordCount(q3Textarea, parseInt(q3Textarea.dataset.minWords, 10), q3Error, IS_ADMIN_USER)) { isValid = false; }
+            if (!validateWordCount(q4Explanation, parseInt(q4Explanation.dataset.minWords, 10), q4ExpError, IS_ADMIN_USER)) { isValid = false; }
+
+            // Q4 Rating range check
+            const ratingVal = parseInt(q4Rating.value, 10);
+             if (q4Rating.value && (isNaN(ratingVal) || ratingVal < 1 || ratingVal > 5)) {
+                 isValid = false;
+                 q4Rating.classList.add('invalid');
+                 q4RatingError.textContent = 'Please enter a number between 1 and 5.';
+                 q4RatingError.style.display = 'block';
+             }
 
             if (isValid) {
                 console.log("Assessment form is valid. Saving to Supabase...");
@@ -1037,7 +1175,7 @@
                 // Prepare assessment data object
                 const assessmentAnswers = {
                     [q1Textarea.name]: q1Textarea.value.trim(),
-                    [selectedRandomQuestion.id]: qRandomTextarea.value.trim(),
+                    [selectedRandomQuestion.id]: qRandomTextarea.value.trim(), // Use dynamic ID/name
                     [q3Textarea.name]: q3Textarea.value.trim(),
                     [q4Rating.name]: ratingVal,
                     [q4Explanation.name]: q4Explanation.value.trim()
@@ -1066,7 +1204,7 @@
 
                     console.log("Assessment saved successfully to Supabase.");
 
-                    // Show success popup (Same as before)
+                    // Show success popup
                     document.getElementById('assessmentSuccessPopup').style.display = 'block';
                     document.getElementById('popupOverlay').style.display = 'block';
                     // Button remains disabled until popup is closed by user
@@ -1075,16 +1213,16 @@
                     console.error("Error saving assessment to Supabase:", error);
                     alert(`Failed to save assessment: ${error.message}. Please try again.`);
                     isValid = false; // Mark as invalid to prevent UI changes if save fails
+                    submitButton.disabled = false; // Re-enable button on error
+                    submitButton.textContent = 'Submit Assessment';
                 }
 
-            }
-
-            // Re-enable button if validation failed or save failed
-            if (!isValid) {
-                console.log("Assessment form invalid or save failed.");
+            } else {
+                // Re-enable button if validation failed
+                console.log("Assessment form invalid.");
                 submitButton.disabled = false;
                 submitButton.textContent = 'Submit Assessment';
-                // Scroll to the first error (Same as before)
+                // Scroll to the first error
                 const firstError = form.querySelector('.invalid');
                 if (firstError) {
                      firstError.focus();
@@ -1157,24 +1295,47 @@
 
                 const sectionElement = document.createElement('div');
                 sectionElement.className = 'course-section';
-                // ... (innerHTML structure is the same as before)
-                sectionElement.innerHTML = `...`; // Same HTML structure
+                sectionElement.innerHTML = `
+                    <span class="section-title">${section.title}</span>
+                    <div class="section-progress">
+                        <div class="progress-bar-container">
+                            <div class="progress-bar"></div>
+                        </div>
+                        <span class="progress-text">${progressPercentage}% Complete</span>
+                        <a href="${section.link}?sectionId=${section.id}" class="section-link" data-section-id="${section.id}">Start</a>
+                    </div>
+                `;
 
                 const progressBar = sectionElement.querySelector('.progress-bar');
                 const linkButton = sectionElement.querySelector('.section-link');
 
-                // Set button text and style (Same logic as before)
-                // ...
+                // Set button text and style based on progress
+                 if (progressPercentage >= 100) {
+                     linkButton.textContent = 'Review';
+                     linkButton.classList.add('status-review');
+                 } else if (progressPercentage > 0) {
+                     linkButton.textContent = 'Continue';
+                     linkButton.classList.add('status-continue');
+                 } else {
+                     linkButton.textContent = 'Start';
+                 }
+
 
                 containerElement.appendChild(sectionElement);
-                 // Animate progress bar (Same logic as before)
-                 setTimeout(() => { /* ... */ }, 100);
+
+                 // Animate progress bar after element is added to DOM
+                 setTimeout(() => {
+                     if (progressBar) {
+                        progressBar.style.width = `${progressPercentage}%`;
+                     }
+                 }, 100); // Small delay for transition
             });
         }
 
          // Updated function to display all admin data components (Now Async)
          async function displayAdminData(adminUser) {
              const adminCourseProgressContainer = document.getElementById('adminCourseProgressContainer');
+              const adminAssessmentDetailsContainer = document.getElementById('adminAssessmentDetails');
 
              if (!adminUser) {
                  console.error("Admin user data is missing for displayAdminData.");
@@ -1198,6 +1359,8 @@
              if (preConfidenceScore > 0) { // Only simulate if pre-score exists
                  postConfidenceScore = preConfidenceScore >= 5 ? 5 : Math.min(5, preConfidenceScore + Math.floor(Math.random() * (5 - preConfidenceScore + 1)));
                  console.log(`Simulating post-course confidence for admin: ${postConfidenceScore} (pre-score was ${preConfidenceScore})`);
+             } else {
+                 console.log("Admin pre-confidence score not found or zero, cannot simulate post-score.");
              }
 
 
@@ -1205,7 +1368,14 @@
              renderConfidenceChart(preConfidenceScore, postConfidenceScore);
 
              // 4. Display Admin's Own Assessment Details and Progress Analysis
-             displayAssessmentDetails(preAssessmentAnswers, preConfidenceScore, postConfidenceScore); // Pass fetched/simulated data
+              if (adminAssessmentDetailsContainer && Object.keys(preAssessmentAnswers).length > 0) {
+                 displayAssessmentDetails(preAssessmentAnswers, preConfidenceScore, postConfidenceScore); // Pass fetched/simulated data
+                 adminAssessmentDetailsContainer.style.display = 'block';
+              } else if (adminAssessmentDetailsContainer) {
+                   adminAssessmentDetailsContainer.innerHTML = '<h5>Your (Admin) Pre-Course Assessment Answers & Progress</h5><p>No assessment data found for your account.</p>';
+                   adminAssessmentDetailsContainer.style.display = 'block';
+              }
+
 
              // 5. Fetch and Display the "All Users" table and charts (calls the data fetching function)
              await fetchAllUsersAdminData(); // Initial load without filters
@@ -1222,15 +1392,19 @@
                      <thead> <tr> <th>Section</th> <th>Progress (%)</th> <th>Status</th> </tr> </thead>
                      <tbody>`;
 
-              if (Object.keys(adminProgress).length === 0) {
-                   tableHTML += `<tr><td colspan="3">No progress data found.</td></tr>`;
+              if (!courseSections || courseSections.length === 0) {
+                   tableHTML += `<tr><td colspan="3">Course sections not defined.</td></tr>`;
+              } else if (Object.keys(adminProgress).length === 0 && !courseSections.some(s => adminProgress.hasOwnProperty(s.id))) {
+                  // Check if the progress map is truly empty OR if it doesn't contain any of the defined section IDs
+                   tableHTML += `<tr><td colspan="3">No progress data found for your account.</td></tr>`;
               } else {
                   courseSections.forEach(section => {
                       const progress = adminProgress[section.id] || 0;
                       const progressPercentage = Math.max(0, Math.min(100, Math.round(progress)));
                       let status = 'Not Started';
-                      if (progress >= 100) status = 'Completed';
-                      else if (progress > 0) status = 'In Progress';
+                      if (progressPercentage >= 100) status = '<span class="status-completed">Completed</span>';
+                      else if (progressPercentage > 0) status = '<span class="status-in-progress">In Progress</span>';
+                      else status = '<span class="status-not-started">Not Started</span>';
                       tableHTML += `<tr><td>${section.title}</td><td>${progressPercentage}%</td><td>${status}</td></tr>`;
                   });
               }
@@ -1243,17 +1417,25 @@
          // Render Confidence Chart (No changes needed here, just uses the data passed)
          function renderConfidenceChart(preScore, postScore) {
               const ctx = document.getElementById('confidenceChart');
-              if (!ctx) {
-                  console.error("Canvas element 'confidenceChart' not found.");
-                  document.getElementById('adminChartContainer').style.display = 'none';
+              const container = document.getElementById('adminChartContainer'); // Get container too
+              if (!ctx || !container) {
+                  console.error("Canvas element 'confidenceChart' or its container not found.");
+                  if(container) container.style.display = 'none'; // Hide container if canvas missing
                   return;
               }
               const context = ctx.getContext('2d');
-              document.getElementById('adminChartContainer').style.display = 'block';
+              container.style.display = 'block'; // Ensure container is visible
 
               if (confidenceChartInstance) {
                   confidenceChartInstance.destroy();
               }
+
+              // Only display chart if there's at least a pre-score
+             if (!preScore && !postScore) {
+                 container.innerHTML = '<p style="text-align: center; padding: 20px; color: #78350f;">Confidence data not available.</p>';
+                 return;
+             }
+
 
               confidenceChartInstance = new Chart(context, {
                   type: 'bar',
@@ -1279,26 +1461,81 @@
                       }
                   }
               });
+              // Add the note below the chart (make sure it exists)
+              const note = container.querySelector('p');
+              if (!note) {
+                const p = document.createElement('p');
+                p.style = "text-align: center; font-size: 12px; color: #78350f; margin-top: 5px;";
+                p.innerHTML = "<em>Confidence Score Comparison (Pre vs Post*)</em>";
+                container.appendChild(p);
+              }
          }
 
          // Display Admin's *Own* Assessment Details (Unchanged logic, uses passed data)
          function displayAssessmentDetails(answers, preScore, postScore) {
               const answersContainer = document.getElementById('adminAssessmentAnswersDisplay');
               const progressContainer = document.getElementById('adminProgressAnalysis');
-              if (!answersContainer || !progressContainer) { /* ... error handling ... */ return; }
-              document.getElementById('adminAssessmentDetails').style.display = 'block';
+              if (!answersContainer || !progressContainer) { console.error("Admin assessment display elements missing."); return; }
 
-              // --- Display Answers --- (Keep existing logic, iterates through answerLabels)
+              // Clear previous content
+              answersContainer.innerHTML = '';
+              progressContainer.innerHTML = '';
+
+
+              // --- Display Answers ---
+              const answerLabels = {
+                  'coaching_meaning': 'Q1: Meaning of Coaching',
+                  [selectedRandomQuestion?.id || 'random_question']: selectedRandomQuestion?.label || 'Q2: Random Question', // Handle case where random question might not be set?
+                  'expectations': 'Q3: Course Expectations',
+                  'confidence_rating': 'Q4: Confidence Rating (1-5)',
+                  'confidence_explanation': 'Q4: Confidence Explanation'
+              };
+
               let answersHTML = '<dl>';
-              // ... (same loop as before using answerLabels and checking answers object)
-              answersHTML += '</dl>';
-              answersContainer.innerHTML = answersHTML || '<p>No assessment answers found.</p>';
+              let answersFound = false;
+              for (const key in answerLabels) {
+                   if (answers && answers.hasOwnProperty(key)) {
+                       answersFound = true;
+                       const label = answerLabels[key];
+                       let value = answers[key];
+                       // Use <pre> for textareas to preserve formatting
+                       const isTextArea = key === 'coaching_meaning' || key === selectedRandomQuestion?.id || key === 'expectations' || key === 'confidence_explanation';
+                       const formattedValue = isTextArea ? `<pre>${value || 'N/A'}</pre>` : (value || 'N/A');
 
+                       answersHTML += `<dt>${label}:</dt><dd>${formattedValue}</dd>`;
+                   }
+              }
+               answersHTML += '</dl>';
 
-              // --- Calculate and Display Progress --- (Keep existing logic)
+              if (answersFound) {
+                  answersContainer.innerHTML = answersHTML;
+              } else {
+                  answersContainer.innerHTML = '<p>No assessment answers found for your account.</p>';
+              }
+
+              // --- Calculate and Display Progress (Confidence Score Change) ---
               let progressHTML = '';
-              // ... (same calculation for scoreChange, progressPercentage)
-              // ... (same feedback logic: Excellent, Positive, Maintained, Decreased)
+              if (preScore > 0 && postScore > 0) {
+                  const scoreChange = postScore - preScore;
+                  const progressPercentage = ((postScore - 1) / 4) * 100; // Scale 1-5 to 0-100%
+
+                  progressHTML += `<p>Pre-Course Confidence: <span class="progress-value">${preScore}/5</span></p>`;
+                  progressHTML += `<p>Post-Course Confidence: <span class="progress-value">${postScore}/5</span></p>`;
+
+                  if (scoreChange > 0) {
+                      progressHTML += `<p><span class="feedback-good">Improvement: +${scoreChange} point(s)</span></p>`;
+                  } else if (scoreChange === 0) {
+                      progressHTML += `<p><span class="feedback-neutral">Confidence level maintained.</span></p>`;
+                  } else {
+                      progressHTML += `<p><span class="feedback-warning">Decrease: ${scoreChange} point(s)</span></p>`; // Consider adding a warning style
+                  }
+               } else if (preScore > 0) {
+                   progressHTML += `<p>Pre-Course Confidence: <span class="progress-value">${preScore}/5</span></p>`;
+                   progressHTML += `<p><span class="feedback-neutral">Post-course score not available yet.</span></p>`;
+               } else {
+                   progressHTML = `<p><span class="feedback-neutral">Confidence scores not available.</span></p>`;
+               }
+
               progressContainer.innerHTML = progressHTML;
          }
 
@@ -1327,7 +1564,7 @@
                 const avgProgress = user.avgProgress || 0;
                 const lastUpdateFormatted = formatTimestamp(user.lastUpdate); // Use new formatting
 
-                let status = '<span class="status-not-started">Not Started</span>';
+                let status = 'Not Started';
                 let statusClass = 'status-not-started';
                 if (avgProgress >= 100) {
                     status = 'Completed';
@@ -1354,18 +1591,22 @@
             const ctx = document.getElementById('progressDistributionChart');
              const container = document.getElementById('progressDistributionChartContainer');
             if (!ctx || !container) {
-                console.error("Canvas element 'progressDistributionChart' not found.");
+                console.error("Canvas element 'progressDistributionChart' or its container not found.");
                  if(container) container.style.display = 'none';
                 return;
             }
              container.style.display = 'block'; // Make sure it's visible
+             container.innerHTML = '<canvas id="progressDistributionChart"></canvas>'; // Clear potential old messages/notes and ensure canvas exists
+             const newCtx = document.getElementById('progressDistributionChart').getContext('2d'); // Get context from new/cleared canvas
 
             // Categorize users based on average progress
             let completed = 0;
             let inProgress = 0;
             let notStarted = 0;
 
-            (usersData || []).forEach(user => {
+            const validUsersData = usersData || []; // Ensure it's an array
+
+            validUsersData.forEach(user => {
                 const avgProgress = user.avgProgress || 0;
                  // Refined categorization: Consider assessment completed status for "Not Started"
                  if (avgProgress >= 100) {
@@ -1384,7 +1625,13 @@
                 progressDistributionChartInstance.destroy();
             }
 
-            progressDistributionChartInstance = new Chart(ctx.getContext('2d'), {
+             if (totalUsers === 0) {
+                 container.innerHTML = '<p style="text-align: center; padding: 20px; color: #78350f;">No user data available for progress distribution chart.</p>';
+                 return; // Don't render chart if no data
+             }
+
+
+            progressDistributionChartInstance = new Chart(newCtx, { // Use the potentially new context
                 type: 'pie',
                 data: {
                     labels: [
@@ -1458,32 +1705,49 @@
                   if(user.lastUpdate) {
                       try {
                          const d = new Date(user.lastUpdate);
-                         lastUpdateFormatted = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+                         // Check if date is valid before formatting
+                         if (!isNaN(d.getTime())) {
+                             lastUpdateFormatted = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+                         } else {
+                              lastUpdateFormatted = 'Invalid Date';
+                         }
                       } catch { lastUpdateFormatted = 'Invalid Date';}
                   }
 
 
-                 // Escape commas within fields by wrapping in double quotes
-                 const name = `"${String(user.name || 'N/A').replace(/"/g, '""')}"`;
-                 const email = `"${String(user.email || 'N/A').replace(/"/g, '""')}"`;
+                 // Escape commas and double quotes within fields
+                 const escapeCSV = (field) => {
+                     const stringField = String(field || 'N/A'); // Ensure it's a string, default to 'N/A'
+                     // If field contains comma, newline, or double quote, wrap in double quotes and escape internal double quotes
+                     if (stringField.includes(',') || stringField.includes('\n') || stringField.includes('"')) {
+                         return `"${stringField.replace(/"/g, '""')}"`;
+                     }
+                     return stringField;
+                 };
 
-                 return [name, email, avgProgress, status, lastUpdateFormatted];
+                 const name = escapeCSV(user.name);
+                 const email = escapeCSV(user.email);
+
+                 return [name, email, avgProgress, status, lastUpdateFormatted]; // Already strings or numbers
              });
 
              // Combine headers and rows into CSV string
-             let csvContent = "data:text/csv;charset=utf-8,"
-                 + headers.join(",") + "\n"
+             let csvContent = headers.join(",") + "\n"
                  + rows.map(e => e.join(",")).join("\n");
 
-             // Create download link
-             const encodedUri = encodeURI(csvContent);
+            // Add BOM for better Excel compatibility with UTF-8 characters
+            const blob = new Blob(["\ufeff" + csvContent], { type: 'text/csv;charset=utf-8;' });
+
+             // Create download link using Blob URL
              const link = document.createElement("a");
-             link.setAttribute("href", encodedUri);
+             const url = URL.createObjectURL(blob);
+             link.setAttribute("href", url);
              const timestamp = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
              link.setAttribute("download", `user_progress_report_${timestamp}.csv`);
              document.body.appendChild(link); // Required for Firefox
              link.click();
              document.body.removeChild(link);
+             URL.revokeObjectURL(url); // Clean up blob URL
              console.log("CSV download initiated.");
         }
 
