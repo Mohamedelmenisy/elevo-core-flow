@@ -510,48 +510,25 @@
     <script>
         // --- Constants ---
         const LOGGED_IN_KEY = 'isUserLoggedIn';
-        const CURRENT_USER_KEY = 'currentUser'; // Still used for initial email/name retrieval
+        const CURRENT_USER_KEY = 'currentUser';
         const SIGNUP_FLAG_KEY = 'hasSignedUpBefore';
-        const ADMIN_EMAIL = 'm.elsayed@thechefz.co'; // Case-insensitive comparison
+        const ADMIN_EMAIL = 'm.elsayed@thechefz.co'; // Case-insensitive comparison target
 
         // --- SUPABASE Setup ---
-        const SUPABASE_URL = 'https://lgcutmuspcaralydycmg.supabase.co'; // <-- Updated URL
-        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxnY3V0bXVzcGNhcmFseWR5Y21nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU0NDY3MDEsImV4cCI6MjA2MTAyMjcwMX0.3u5Y7pkH2NNnnoGLMWVfAa5b8fq88o1itRYnG1K38tE'; // <-- Updated Anon Key
+        const SUPABASE_URL = 'https://lgcutmuspcaralydycmg.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxnY3V0bXVzcGNhcmFseWR5Y21nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU0NDY3MDEsImV4cCI6MjA2MTAyMjcwMX0.3u5Y7pkH2NNnnoGLMWVfAa5b8fq88o1itRYnG1K38tE';
 
-        // Check if placeholders are still present (less likely now, but good check)
         if (SUPABASE_URL === 'YOUR_SUPABASE_URL' || SUPABASE_ANON_KEY === 'YOUR_SUPABASE_ANON_KEY') {
-            console.warn("Supabase URL or Key not set. Please replace placeholders in the script.");
-             const loadingMsg = document.getElementById('loadingMessage');
-             const errorMsg = document.getElementById('errorMessage');
-             if (loadingMsg) loadingMsg.style.display = 'none';
-             if (errorMsg) {
-                 errorMsg.textContent = 'Configuration Error: Supabase connection details are missing. Please contact support.';
-                 errorMsg.style.display = 'block';
-             }
-             throw new Error("Supabase configuration missing.");
+            console.warn("Supabase URL/Key placeholders detected."); /* ... error handling ... */ throw new Error("Supabase config missing.");
         }
-
         const { createClient } = supabase;
         const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-        console.log("Supabase client initialized with provided credentials.");
+        console.log("Supabase client initialized.");
 
-        // Assessment Question Pool
-        const randomQuestionPool = [
-            { id: 'q_leadership_vs_management', label: 'How do you differentiate leadership from management?', minWords: 20 },
-            { id: 'q_coaching_challenge', label: 'What do you see as the biggest challenge in coaching others?', minWords: 20 },
-            { id: 'q_leadership_style', label: 'Briefly describe your ideal leadership style.', minWords: 15 }
-        ];
+        // Assessment Question Pool & Course Sections (Static Data)
+        const randomQuestionPool = [ /* ... questions ... */ { id: 'q_leadership_vs_management', label: 'How do you differentiate leadership from management?', minWords: 20 }, { id: 'q_coaching_challenge', label: 'What do you see as the biggest challenge in coaching others?', minWords: 20 }, { id: 'q_leadership_style', label: 'Briefly describe your ideal leadership style.', minWords: 15 }];
         let selectedRandomQuestion = null;
-
-        const courseSections = [
-            { id: 'index', title: 'Course Introduction Goal', link: 'index.html' },
-            { id: 'article1', title: 'Introduction to Coaching and Leadership', link: 'article1.html' },
-            { id: 'skills', title: 'Coaching Skills', link: 'coaching-skills.html' },
-            { id: 'individuals', title: 'Coaching Individuals', link: 'coaching-individuals.html' },
-            { id: 'team', title: 'Team Coaching', link: 'coaching-team.html' },
-            { id: 'self', title: 'Self Coaching', link: 'coaching-yourself.html' },
-            { id: 'action', title: 'Action Plan', link: 'action-plan.html' },
-        ];
+        const courseSections = [ /* ... sections ... */ { id: 'index', title: 'Course Introduction Goal', link: 'index.html' }, { id: 'article1', title: 'Introduction to Coaching and Leadership', link: 'article1.html' }, { id: 'skills', title: 'Coaching Skills', link: 'coaching-skills.html' }, { id: 'individuals', title: 'Coaching Individuals', link: 'coaching-individuals.html' }, { id: 'team', title: 'Team Coaching', link: 'coaching-team.html' }, { id: 'self', title: 'Self Coaching', link: 'coaching-yourself.html' }, { id: 'action', title: 'Action Plan', link: 'action-plan.html' },];
 
         // --- Global Variables ---
         let IS_ADMIN_USER = false;
@@ -560,648 +537,185 @@
         let currentAdminTableData = [];
 
         // --- IMMEDIATE REDIRECTION LOGIC ---
-        console.log("%cDashboard Page: Running IMMEDIATE redirection check...", "color: purple; font-weight: bold;");
-        function quickCheckCurrentUserFormat() {
-            const data = localStorage.getItem(CURRENT_USER_KEY);
-            return data && data.length > 2 && data.startsWith('{') && data.endsWith('}');
-        }
+        console.log("%cDashboard: Immediate redirection check...", "color: purple;");
+        function quickCheckCurrentUserFormat() { /* ... check format ... */ const data = localStorage.getItem(CURRENT_USER_KEY); return data && data.length > 2 && data.startsWith('{') && data.endsWith('}'); }
         const isLoggedIn_immediate = localStorage.getItem(LOGGED_IN_KEY) === 'true' && quickCheckCurrentUserFormat();
         const hasSignedUp_immediate = localStorage.getItem(SIGNUP_FLAG_KEY) === 'true';
-
-        if (!isLoggedIn_immediate) {
-            const targetUrl = hasSignedUp_immediate ? 'login.html' : 'signup.html';
-            console.error(`%cDashboard Page IMMEDIATE Redirect: Not logged in or user data invalid. Redirecting to ${targetUrl}...`, "color: orange;");
-            window.location.replace(`${targetUrl}?redirect=${encodeURIComponent(window.location.pathname)}`);
-            throw new Error("Redirecting user: Not logged in or invalid user data.");
-        } else {
-            console.log("%cDashboard Page IMMEDIATE Check: User IS logged in. Proceeding.", "color: green;");
-        }
+        if (!isLoggedIn_immediate) { /* ... redirect logic ... */ const targetUrl = hasSignedUp_immediate ? 'login.html' : 'signup.html'; console.error(`%cDashboard: Not logged in/invalid data. Redirecting to ${targetUrl}...`, "color: orange;"); window.location.replace(`${targetUrl}?redirect=${encodeURIComponent(window.location.pathname)}`); throw new Error("Redirecting user."); }
+        else { console.log("%cDashboard: User IS logged in. Proceeding.", "color: green;"); }
         // --- END IMMEDIATE REDIRECTION ---
 
         // --- DOMContentLoaded Event Listener ---
         document.addEventListener('DOMContentLoaded', async function() {
-            console.log("Dashboard page DOM loaded.");
+            console.log("Dashboard DOM loaded.");
 
-            // --- Element References ---
-            const loadingMessage = document.getElementById('loadingMessage');
-            const errorMessage = document.getElementById('errorMessage');
-            const assessmentSection = document.getElementById('assessmentSection');
-            const userDashboardContent = document.getElementById('userDashboardContent');
-            const adminSection = document.getElementById('adminSection');
-            const assessmentForm = document.getElementById('assessmentForm');
-            const assessmentSuccessPopup = document.getElementById('assessmentSuccessPopup');
-            const popupOverlay = document.getElementById('popupOverlay');
-            const startJourneyBtn = document.getElementById('startJourneyBtn');
-            const applyFiltersBtn = document.getElementById('applyFiltersBtn');
-            const downloadCsvBtn = document.getElementById('adminDownloadCsvBtn');
-            const filterSectionSelect = document.getElementById('filterSection');
+            // --- Element Refs ---
+            const loadingMessage = document.getElementById('loadingMessage'); const errorMessage = document.getElementById('errorMessage'); const assessmentSection = document.getElementById('assessmentSection'); const userDashboardContent = document.getElementById('userDashboardContent'); const adminSection = document.getElementById('adminSection'); const assessmentForm = document.getElementById('assessmentForm'); const assessmentSuccessPopup = document.getElementById('assessmentSuccessPopup'); const popupOverlay = document.getElementById('popupOverlay'); const startJourneyBtn = document.getElementById('startJourneyBtn'); const applyFiltersBtn = document.getElementById('applyFiltersBtn'); const downloadCsvBtn = document.getElementById('adminDownloadCsvBtn'); const filterSectionSelect = document.getElementById('filterSection');
 
-            // Populate section filter dropdown
-            courseSections.forEach(section => {
-                const option = document.createElement('option');
-                option.value = section.id;
-                option.textContent = section.title;
-                filterSectionSelect.appendChild(option);
-            });
+            // Populate filter dropdown
+            courseSections.forEach(section => { /* ... populate options ... */ const option = document.createElement('option'); option.value = section.id; option.textContent = section.title; filterSectionSelect.appendChild(option); });
 
-            // --- Get Initial User Info (from localStorage) and NORMALIZE EMAIL ---
+            // --- Get Initial User Info & NORMALIZE EMAIL ---
             let initialUserData = null;
-            let normalizedUserEmail = null; // Variable to hold the normalized email
+            let normalizedUserEmail = null; // Holds normalized email
             try {
                 const storedUser = localStorage.getItem(CURRENT_USER_KEY);
                 if (storedUser) {
                     initialUserData = JSON.parse(storedUser);
-                    // **** MODIFICATION: Normalize email right after retrieving ****
-                    if (initialUserData && initialUserData.email) {
+                    if (initialUserData?.email) { // Check if email exists before normalizing
                         normalizedUserEmail = initialUserData.email.toLowerCase().trim();
-                        // Optionally update initialUserData itself if needed elsewhere, but primarily use normalizedUserEmail for lookups
-                        initialUserData.email = normalizedUserEmail; // Update the object too
+                        initialUserData.email = normalizedUserEmail; // Update object as well
                         console.log("Normalized initial user email:", normalizedUserEmail);
+                    } else {
+                        console.warn("Email missing in localStorage user data.");
                     }
-                    // **** END MODIFICATION ****
                 }
-            } catch (e) {
-                console.error("Error parsing initial user data from localStorage:", e);
-            }
+            } catch (e) { console.error("Error parsing user data from localStorage:", e); }
 
-            // Check if normalized email is valid
-            if (!initialUserData || !normalizedUserEmail) { // Check normalizedUserEmail
-                console.error("Dashboard DOMContentLoaded: Critical - Initial user email missing or invalid after normalization. Forcing logout.");
-                showErrorMessage("Failed to load user identity. Please log in again.");
-                logout();
-                return; // Stop execution
+            if (!initialUserData || !normalizedUserEmail) { // Check normalized email
+                console.error("Dashboard: Critical - User email missing/invalid after normalization. Forcing logout.");
+                showErrorMessage("Failed to load user identity. Please log in again."); logout(); return;
             }
 
             console.log("Initial User Data (object):", initialUserData);
-            populateTopBar(initialUserData); // Populate top bar early using the potentially updated object
+            populateTopBar(initialUserData); // Uses the potentially updated object
 
-            // Determine if admin based on NORMALIZED email
-            IS_ADMIN_USER = normalizedUserEmail === ADMIN_EMAIL.toLowerCase(); // Compare normalized against lowercase admin email
+            // Determine admin status using NORMALIZED email
+            IS_ADMIN_USER = normalizedUserEmail === ADMIN_EMAIL.toLowerCase();
             console.log(`User is admin: ${IS_ADMIN_USER}`);
 
-            // --- Fetch Full User Data from Supabase using NORMALIZED email ---
-            loadingMessage.style.display = 'block';
-            errorMessage.style.display = 'none';
+            // --- Fetch Full User Data using NORMALIZED email ---
+            loadingMessage.style.display = 'block'; errorMessage.style.display = 'none';
             try {
-                // Pass the already normalized email to the fetch function
-                const currentUserData = await fetchCurrentUserFromSupabase(normalizedUserEmail);
+                const currentUserData = await fetchCurrentUserFromSupabase(normalizedUserEmail); // Use normalized email
 
                 if (!currentUserData) {
-                    // This case means user not found in Supabase EVEN AFTER using normalized email
-                    console.error(`Failed to fetch user data from Supabase for normalized email: ${normalizedUserEmail}. Check if user exists in DB.`);
-                    // **** IMPROVED MESSAGE ****
-                    // Display a specific message suggesting the user might not be in the DB
+                    console.error(`Failed to fetch user data from Supabase for normalized email: ${normalizedUserEmail}. User might not exist in DB.`);
                     showErrorMessage(`Could not retrieve your data from the server for email ${normalizedUserEmail}. Please ensure your account exists or contact support.`);
                     loadingMessage.style.display = 'none';
-                    // Consider logging out if DB record is essential
+                    // Decide whether to logout or show limited view
                     // logout();
                     return;
                 }
                 console.log("Current User Data (from Supabase):", currentUserData);
 
-                // --- Assessment Check ---
+                // --- Assessment Check & Display ---
                 if (!currentUserData.assessment_completed) {
-                    console.log("Assessment not completed. Displaying assessment form.");
+                    console.log("Assessment not completed. Showing form.");
                     setupAssessmentForm();
-                    loadingMessage.style.display = 'none';
-                    assessmentSection.style.display = 'block';
-                    setTimeout(() => assessmentSection.classList.add('fade-in'), 50);
+                    loadingMessage.style.display = 'none'; assessmentSection.style.display = 'block'; setTimeout(() => assessmentSection.classList.add('fade-in'), 50);
                 } else {
-                    console.log("Assessment completed. Displaying main dashboard.");
-                    await displayMainDashboard(currentUserData);
+                    console.log("Assessment completed. Showing dashboard.");
+                    await displayMainDashboard(currentUserData); // displayMainDashboard is async
                 }
 
             } catch (error) {
-                console.error("Error during initial data fetch:", error);
-                let displayError = `An error occurred: ${error.message}. Please try again later.`;
-                 if (error.message.includes('fetch')) {
-                     displayError = 'Network error: Could not connect to the server. Please check your internet connection.';
-                 } else if (error.message.includes('JWT') || error.message.includes('Unauthorized')) {
-                      displayError = 'Authentication error: Your session might have expired. Please try logging out and back in.';
-                 } else if (error.code) {
-                      displayError = `Database error (${error.code}): ${error.message}. Please contact support if the issue persists.`;
-                 }
-                showErrorMessage(displayError);
-                loadingMessage.style.display = 'none';
+                 console.error("Error during initial data fetch:", error);
+                 let displayError = `An error occurred: ${error.message}. Please try again later.`;
+                 if (error.message.includes('fetch')) { displayError = 'Network error. Check connection.'; }
+                 else if (error.message.includes('JWT') || error.message.includes('Unauthorized')) { displayError = 'Authentication error. Please log in again.'; }
+                 else if (error.code) { displayError = `Database error (${error.code}): ${error.message}. Contact support.`; }
+                 showErrorMessage(displayError); loadingMessage.style.display = 'none';
             }
 
-             // Attach listener for the success popup button
-             startJourneyBtn.addEventListener('click', async () => {
-                 assessmentSuccessPopup.style.display = 'none';
-                 popupOverlay.style.display = 'none';
-                 assessmentSection.style.display = 'none';
-                 assessmentSection.classList.remove('fade-in');
-                 loadingMessage.style.display = 'block';
-                 try {
-                      // Use the *same normalized email* for re-fetching
-                     const updatedUserData = await fetchCurrentUserFromSupabase(normalizedUserEmail);
-                     if (updatedUserData) {
-                        await displayMainDashboard(updatedUserData);
-                     } else {
-                         showErrorMessage("Could not refresh dashboard after assessment.");
-                     }
-                 } catch (error) {
-                    showErrorMessage(`Error refreshing dashboard: ${error.message}`);
-                 } finally {
-                     loadingMessage.style.display = 'none';
-                 }
-             });
-
-             // Attach listener for Admin filter button
-             if (applyFiltersBtn) {
-                 applyFiltersBtn.addEventListener('click', () => {
-                    if (IS_ADMIN_USER) {
-                        fetchAllUsersAdminData();
-                    }
-                 });
-             }
-             // Attach listener for CSV download button
-             if (downloadCsvBtn) {
-                 downloadCsvBtn.addEventListener('click', () => {
-                     if (IS_ADMIN_USER && currentAdminTableData.length > 0) {
-                         downloadAdminTableAsCSV(currentAdminTableData);
-                     } else {
-                         alert("No data available to download or you are not an admin.");
-                     }
-                 });
-             }
+            // --- Event Listeners ---
+            startJourneyBtn.addEventListener('click', async () => { /* ... hide popup, load dashboard ... */ assessmentSuccessPopup.style.display = 'none'; popupOverlay.style.display = 'none'; assessmentSection.style.display = 'none'; assessmentSection.classList.remove('fade-in'); loadingMessage.style.display = 'block'; try { const updatedUserData = await fetchCurrentUserFromSupabase(normalizedUserEmail); if (updatedUserData) { await displayMainDashboard(updatedUserData); } else { showErrorMessage("Could not refresh dashboard."); } } catch (error) { showErrorMessage(`Error refreshing dashboard: ${error.message}`); } finally { loadingMessage.style.display = 'none'; } });
+            if (applyFiltersBtn) { applyFiltersBtn.addEventListener('click', () => { if (IS_ADMIN_USER) { fetchAllUsersAdminData(); } }); }
+            if (downloadCsvBtn) { downloadCsvBtn.addEventListener('click', () => { if (IS_ADMIN_USER && currentAdminTableData.length > 0) { downloadAdminTableAsCSV(currentAdminTableData); } else { alert("No data to download or not admin."); } }); }
         });
 
-        // --- Supabase Data Fetching Functions ---
+        // --- Supabase Data Fetching ---
 
-        async function fetchCurrentUserFromSupabase(normalizedEmail) { // Parameter name reflects it's normalized
-            // email parameter is expected to be pre-normalized (lowercase, trimmed)
+        async function fetchCurrentUserFromSupabase(normalizedEmail) { // Expects pre-normalized email
             console.log(`Fetching data for normalized user email: ${normalizedEmail}`);
-            if (!normalizedEmail) {
-                console.error("fetchCurrentUserFromSupabase: Normalized email is required.");
-                return null;
-            }
-
+            if (!normalizedEmail) { console.error("fetchCurrentUserFromSupabase: Normalized email required."); return null; }
             try {
-                // **** MODIFICATION: Query using the pre-normalized email ****
-                // Supabase's .eq() might be case-sensitive depending on DB collation.
-                // Querying with a guaranteed lowercase email handles app-side variations.
-                // If DB contains mixed cases and you need case-insensitive DB search, use .ilike():
-                // const { data: userData, error: userError } = await supabaseClient.from('users').select(...).ilike('email', normalizedEmail).maybeSingle();
+                // Query using the normalized email
                 const { data: userData, error: userError } = await supabaseClient
                     .from('users')
                     .select('name, email, assessment_completed, is_admin')
-                    .eq('email', normalizedEmail) // Querying with the lowercase, trimmed email
+                    .eq('email', normalizedEmail) // Use normalized email for lookup
                     .maybeSingle();
-                // **** END MODIFICATION ****
 
-                if (userError) {
-                    console.error("Supabase error fetching user data:", userError);
-                    throw userError;
-                }
-
-                // **** MODIFICATION: Handle case where user is genuinely not found ****
+                if (userError) { console.error("Supabase error fetching user:", userError); throw userError; }
                 if (!userData) {
-                     // Log clearly that the user wasn't found *using the normalized email*
-                     console.warn(`User with normalized email ${normalizedEmail} not found in 'users' table.`);
-                     // Return null to indicate failure to find in DB. The calling function will handle the error message.
-                     return null;
+                    // User genuinely not found with normalized email
+                    console.warn(`User with normalized email ${normalizedEmail} not found in 'users' table.`);
+                    return null; // Indicate user not found in DB
                 }
-                // **** END MODIFICATION ****
-
-                // User *was* found, proceed to fetch progress and assessment
                 console.log("User found in DB:", userData);
 
-                // 2. Fetch user progress (using the exact email found in DB, which should match normalizedEmail)
-                const { data: progressData, error: progressError } = await supabaseClient
-                    .from('user_progress')
-                    .select('section_id, progress_percentage')
-                    .eq('user_email', userData.email); // Use email from userData for consistency
+                // Fetch progress using the email found in DB (should match normalizedEmail)
+                const { data: progressData, error: progressError } = await supabaseClient.from('user_progress').select('section_id, progress_percentage').eq('user_email', userData.email);
+                if (progressError) { console.error("Supabase error fetching progress:", progressError); throw progressError; }
+                const progressMap = (progressData || []).reduce((acc, item) => { acc[item.section_id] = item.progress_percentage; return acc; }, {});
+                courseSections.forEach(section => { if (progressMap[section.id] === undefined) { progressMap[section.id] = 0; } });
 
-                if (progressError) {
-                     console.error("Supabase error fetching user progress:", progressError);
-                     throw progressError;
-                 }
+                // Fetch assessment using the email found in DB
+                const { data: assessmentData, error: assessmentError } = await supabaseClient.from('assessments').select('answers, type').eq('user_email', userData.email).eq('type', 'pre').maybeSingle();
+                if (assessmentError) { console.error("Supabase error fetching assessment:", assessmentError); throw assessmentError; }
 
-                const progressMap = (progressData || []).reduce((acc, item) => {
-                    acc[item.section_id] = item.progress_percentage;
-                    return acc;
-                }, {});
-                courseSections.forEach(section => {
-                    if (progressMap[section.id] === undefined) {
-                        progressMap[section.id] = 0;
-                    }
-                });
-
-                // 3. Fetch pre-assessment answers
-                const { data: assessmentData, error: assessmentError } = await supabaseClient
-                    .from('assessments')
-                    .select('answers, type')
-                    .eq('user_email', userData.email) // Use email from userData
-                    .eq('type', 'pre')
-                    .maybeSingle();
-
-                if (assessmentError) {
-                     console.error("Supabase error fetching assessment data:", assessmentError);
-                     throw assessmentError;
-                 }
-
-                // Combine into a single user object
-                const fullUserData = {
-                    ...userData,
-                    progress: progressMap,
-                    assessmentAnswers: assessmentData ? assessmentData.answers : {},
-                };
-
+                const fullUserData = { ...userData, progress: progressMap, assessmentAnswers: assessmentData ? assessmentData.answers : {}, };
                 return fullUserData;
-
-            } catch (error) {
-                // Log the specific error during the fetch process
-                console.error(`Error in fetchCurrentUserFromSupabase for ${normalizedEmail}:`, error);
-                throw error; // Re-throw to be caught by the main try/catch in DOMContentLoaded
-            }
+            } catch (error) { console.error(`Error in fetchCurrentUserFromSupabase for ${normalizedEmail}:`, error); throw error; }
         }
 
-        // NEW: Fetch data for the Admin Panel (All Users)
         async function fetchAllUsersAdminData() {
-            const spinner = document.getElementById('adminDataLoadingSpinner');
-            const tableBody = document.getElementById('allUsersTableBody');
-            const noUsersMessage = document.getElementById('noUsersMessage');
-            const filterNameEmail = document.getElementById('filterNameEmail').value.trim().toLowerCase();
-            const filterSection = document.getElementById('filterSection').value;
-            const filterProgress = parseInt(document.getElementById('filterProgress').value, 10);
+            const spinner = document.getElementById('adminDataLoadingSpinner'); const tableBody = document.getElementById('allUsersTableBody'); const noUsersMessage = document.getElementById('noUsersMessage');
+            const filterNameEmail = document.getElementById('filterNameEmail').value.trim().toLowerCase(); const filterSection = document.getElementById('filterSection').value; const filterProgress = parseInt(document.getElementById('filterProgress').value, 10);
 
-            if (spinner) spinner.style.display = 'inline-block';
-            if (tableBody) tableBody.innerHTML = `<tr><td colspan="5" style="text-align: center; padding: 30px;">Applying filters and loading data... <div class="loading-spinner"></div></td></tr>`;
-            noUsersMessage.style.display = 'none';
+            if (spinner) spinner.style.display = 'inline-block'; if (tableBody) tableBody.innerHTML = `<tr><td colspan="5" style="text-align: center; padding: 30px;">Loading data... <div class="loading-spinner"></div></td></tr>`; noUsersMessage.style.display = 'none';
 
             try {
-                // Use ilike for case-insensitive filtering in the admin panel search
-                let userQuery = supabaseClient
-                    .from('users')
-                    .select(`
-                        email,
-                        name,
-                        assessment_completed,
-                        user_progress ( section_id, progress_percentage, updated_at )
-                    `);
-
-                // Apply Name/Email Filter (using case-insensitive ilike)
-                if (filterNameEmail) {
-                    // Use ilike for potentially partial, case-insensitive matches on name OR email
-                    userQuery = userQuery.or(`name.ilike.%${filterNameEmail}%,email.ilike.%${filterNameEmail}%`);
-                }
+                let userQuery = supabaseClient.from('users').select(`email, name, assessment_completed, user_progress ( section_id, progress_percentage, updated_at )`);
+                if (filterNameEmail) { userQuery = userQuery.or(`name.ilike.%${filterNameEmail}%,email.ilike.%${filterNameEmail}%`); } // Use ilike for admin search
 
                 const { data: users, error: usersError } = await userQuery;
+                if (usersError) { console.error("Supabase error fetching all users:", usersError); throw usersError; }
 
-                if (usersError) {
-                     console.error("Supabase error fetching all users:", usersError);
-                     throw usersError;
-                 }
+                if (!users || users.length === 0) { /* ... handle no users found ... */ currentAdminTableData = []; displayAllUsersTable([]); await generateProgressDistributionChart([]); if (spinner) spinner.style.display = 'none'; return; }
+                console.log("Raw users fetched for admin:", users);
 
-                if (!users || users.length === 0) {
-                    currentAdminTableData = [];
-                    displayAllUsersTable([]);
-                    await generateProgressDistributionChart([]);
-                    if (spinner) spinner.style.display = 'none';
-                    return;
-                }
-
-                console.log("Raw users fetched for admin panel:", users);
-
-                // Process fetched data (calculating averages, filtering) - No change needed here
-                const processedUsers = users.map(user => {
-                    const progressEntries = user.user_progress || [];
-                    const progressMap = progressEntries.reduce((acc, item) => {
-                        acc[item.section_id] = item.progress_percentage;
-                        return acc;
-                    }, {});
-                     courseSections.forEach(section => {
-                        if (progressMap[section.id] === undefined) {
-                            progressMap[section.id] = 0;
-                        }
-                     });
-                    const averageProgress = calculateAverageProgress(progressMap);
-                    let latestUpdate = null;
-                    if (progressEntries.length > 0) {
-                         latestUpdate = progressEntries.reduce((latest, entry) => {
-                            const entryDate = entry.updated_at ? new Date(entry.updated_at) : null;
-                            if (!entryDate || isNaN(entryDate.getTime())) return latest;
-                            return latest === null || entryDate > latest ? entryDate : latest;
-                         }, null);
-                    }
-                    return {
-                        name: user.name,
-                        email: user.email,
-                        avgProgress: averageProgress,
-                        lastUpdate: latestUpdate,
-                        assessmentCompleted: user.assessment_completed,
-                        progressEntries: progressEntries
-                    };
-                }).filter(user => {
-                    let sectionMatch = true;
-                    if (filterSection) {
-                        const sectionProgress = user.progressEntries.find(p => p.section_id === filterSection)?.progress_percentage ?? 0;
-                        sectionMatch = sectionProgress >= filterProgress;
-                    } else {
-                        sectionMatch = user.avgProgress >= filterProgress;
-                    }
-                    return sectionMatch;
-                });
+                const processedUsers = users.map(user => { /* ... process data ... */ const progressEntries = user.user_progress || []; const progressMap = progressEntries.reduce((acc, item) => { acc[item.section_id] = item.progress_percentage; return acc; }, {}); courseSections.forEach(section => { if (progressMap[section.id] === undefined) { progressMap[section.id] = 0; } }); const averageProgress = calculateAverageProgress(progressMap); let latestUpdate = null; if (progressEntries.length > 0) { latestUpdate = progressEntries.reduce((latest, entry) => { const entryDate = entry.updated_at ? new Date(entry.updated_at) : null; if (!entryDate || isNaN(entryDate.getTime())) return latest; return latest === null || entryDate > latest ? entryDate : latest; }, null); } return { name: user.name, email: user.email, avgProgress: averageProgress, lastUpdate: latestUpdate, assessmentCompleted: user.assessment_completed, progressEntries: progressEntries }; }).filter(user => { /* ... apply filters ... */ let sectionMatch = true; if (filterSection) { const sectionProgress = user.progressEntries.find(p => p.section_id === filterSection)?.progress_percentage ?? 0; sectionMatch = sectionProgress >= filterProgress; } else { sectionMatch = user.avgProgress >= filterProgress; } return sectionMatch; });
 
                 console.log("Processed & Filtered users for admin:", processedUsers);
-
-                currentAdminTableData = processedUsers;
-                displayAllUsersTable(processedUsers);
-                await generateProgressDistributionChart(processedUsers);
-
-            } catch (error) {
-                console.error("Error fetching all users admin data:", error);
-                tableBody.innerHTML = `<tr><td colspan="5" style="color: red; text-align: center;">Error loading data: ${error.message}</td></tr>`;
-                noUsersMessage.style.display = 'none';
-                currentAdminTableData = [];
-                await generateProgressDistributionChart([]);
-            } finally {
-                if (spinner) spinner.style.display = 'none';
-            }
+                currentAdminTableData = processedUsers; displayAllUsersTable(processedUsers); await generateProgressDistributionChart(processedUsers);
+            } catch (error) { /* ... handle error ... */ console.error("Error fetching all users admin data:", error); if (tableBody) tableBody.innerHTML = `<tr><td colspan="5" style="color: red; text-align: center;">Error: ${error.message}</td></tr>`; noUsersMessage.style.display = 'none'; currentAdminTableData = []; await generateProgressDistributionChart([]); }
+            finally { if (spinner) spinner.style.display = 'none'; }
         }
 
 
         // --- Helper & Utility Functions ---
-        // (showErrorMessage, calculateAverageProgress, formatTimestamp, populateTopBar - unchanged)
-        function showErrorMessage(message) {
-            const errorMessage = document.getElementById('errorMessage');
-            const loadingMessage = document.getElementById('loadingMessage');
-            if (errorMessage) {
-                errorMessage.textContent = message;
-                errorMessage.style.display = 'block';
-            }
-             if (loadingMessage) loadingMessage.style.display = 'none'; // Hide loading msg
-            console.error("Error Displayed:", message);
-        }
-        function calculateAverageProgress(userProgressMap) {
-            if (!userProgressMap || typeof userProgressMap !== 'object') return 0;
-            const relevantProgressValues = courseSections
-                .map(section => userProgressMap[section.id] || 0);
-            if (relevantProgressValues.length === 0) return 0;
-            const total = relevantProgressValues.reduce((sum, val) => sum + (Number(val) || 0), 0);
-            return total / relevantProgressValues.length;
-        }
-        function formatTimestamp(timestamp) {
-            if (!timestamp) return 'N/A';
-            try {
-                const date = new Date(timestamp);
-                if (isNaN(date.getTime())) return 'Invalid Date';
-                return date.toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' });
-            } catch (e) {
-                console.warn("Could not format date:", timestamp, e); return 'Invalid Date';
-            }
-        }
-        function populateTopBar(user) {
-            const userNameBar = document.getElementById('userNameBar');
-            const userEmailBar = document.getElementById('userEmailBar');
-             // Use the (potentially normalized) email from the user object
-            if (userNameBar) userNameBar.textContent = user.name || 'User';
-            if (userEmailBar) userEmailBar.textContent = user.email || 'No email';
-        }
+        function showErrorMessage(message) { /* ... show error ... */ const errorMessage = document.getElementById('errorMessage'); const loadingMessage = document.getElementById('loadingMessage'); if (errorMessage) { errorMessage.textContent = message; errorMessage.style.display = 'block'; } if (loadingMessage) loadingMessage.style.display = 'none'; console.error("Error Displayed:", message); }
+        function calculateAverageProgress(userProgressMap) { /* ... calc avg ... */ if (!userProgressMap || typeof userProgressMap !== 'object') return 0; const relevantProgressValues = courseSections.map(section => userProgressMap[section.id] || 0); if (relevantProgressValues.length === 0) return 0; const total = relevantProgressValues.reduce((sum, val) => sum + (Number(val) || 0), 0); return total / relevantProgressValues.length; }
+        function formatTimestamp(timestamp) { /* ... format date ... */ if (!timestamp) return 'N/A'; try { const date = new Date(timestamp); if (isNaN(date.getTime())) return 'Invalid Date'; return date.toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }); } catch (e) { console.warn("Date format error:", timestamp, e); return 'Invalid Date'; } }
+        function populateTopBar(user) { /* ... populate user bar ... */ const userNameBar = document.getElementById('userNameBar'); const userEmailBar = document.getElementById('userEmailBar'); if (userNameBar) userNameBar.textContent = user.name || 'User'; if (userEmailBar) userEmailBar.textContent = user.email || 'No email'; }
 
 
         // --- Assessment Form Logic ---
-        // (setupAssessmentForm, countWords, setupWordCountValidation, validateWordCount, setupPastePrevention - unchanged)
-        // ... (These functions remain the same as in the previous correct version) ...
-        function setupAssessmentForm() {
-             const form = document.getElementById('assessmentForm');
-             const q1Textarea = document.getElementById('q1_coaching_meaning');
-             const q3Textarea = document.getElementById('q3_expectations');
-             const q4Rating = document.getElementById('q4_confidence_rating');
-             const q4Explanation = document.getElementById('q4_confidence_explanation');
-             const randomQuestionContainer = document.getElementById('randomQuestionContainer');
-             const existingLabel = randomQuestionContainer.querySelector('label');
-             const existingTextarea = randomQuestionContainer.querySelector('textarea');
-             if(existingLabel) existingLabel.remove();
-             if(existingTextarea) existingTextarea.remove();
-             const qRandomMinWordsDisplay = document.getElementById('q_random_min_words_display');
-             const qRandomWordCountContainer = document.getElementById('q_random_word_count_container');
-             const qRandomPasteWarning = document.getElementById('q_random_paste_warning');
-             const qRandomError = document.getElementById('q_random_error');
-
-             if (IS_ADMIN_USER) { document.getElementById('adminAssessmentNote').style.display = 'inline'; }
-
-             selectedRandomQuestion = randomQuestionPool[Math.floor(Math.random() * randomQuestionPool.length)];
-             const randomLabel = document.createElement('label');
-             randomLabel.htmlFor = selectedRandomQuestion.id;
-             randomLabel.textContent = selectedRandomQuestion.label;
-             randomQuestionContainer.insertBefore(randomLabel, randomQuestionContainer.firstChild);
-             const randomTextarea = document.createElement('textarea');
-             randomTextarea.id = selectedRandomQuestion.id; randomTextarea.name = selectedRandomQuestion.id;
-             randomTextarea.required = true; randomTextarea.dataset.minWords = selectedRandomQuestion.minWords;
-             randomTextarea.placeholder = IS_ADMIN_USER ? "Admin: No word count required." : `Please provide your thoughts... (min ${selectedRandomQuestion.minWords} words)`;
-             randomQuestionContainer.insertBefore(randomTextarea, randomQuestionContainer.querySelector('.input-meta-info'));
-             if (qRandomMinWordsDisplay) { qRandomMinWordsDisplay.textContent = IS_ADMIN_USER ? 'N/A' : selectedRandomQuestion.minWords; }
-             const qRandomWordCountSpan = document.getElementById('q_random_word_count');
-             if (randomTextarea && qRandomWordCountSpan && qRandomError && qRandomWordCountContainer) { setupWordCountValidation(randomTextarea, qRandomWordCountSpan, qRandomError, qRandomWordCountContainer, IS_ADMIN_USER); }
-             if (randomTextarea && qRandomPasteWarning) { setupPastePrevention(randomTextarea, qRandomPasteWarning, IS_ADMIN_USER); }
-             const q1WordCount = document.getElementById('q1_word_count'); const q1Error = document.getElementById('q1_error'); const q1WordCountContainer = document.getElementById('q1_word_count_container'); const q1PasteWarning = document.getElementById('q1_paste_warning');
-             if (q1Textarea && q1WordCount && q1Error && q1WordCountContainer) { setupWordCountValidation(q1Textarea, q1WordCount, q1Error, q1WordCountContainer, IS_ADMIN_USER); }
-             if (q1Textarea && q1PasteWarning) { setupPastePrevention(q1Textarea, q1PasteWarning, IS_ADMIN_USER); }
-             const q3WordCount = document.getElementById('q3_word_count'); const q3Error = document.getElementById('q3_error'); const q3WordCountContainer = document.getElementById('q3_word_count_container'); const q3PasteWarning = document.getElementById('q3_paste_warning');
-             if (q3Textarea && q3WordCount && q3Error && q3WordCountContainer) { setupWordCountValidation(q3Textarea, q3WordCount, q3Error, q3WordCountContainer, IS_ADMIN_USER); }
-             if (q3Textarea && q3PasteWarning) { setupPastePrevention(q3Textarea, q3PasteWarning, IS_ADMIN_USER); }
-             const q4ExpWordCount = document.getElementById('q4_exp_word_count'); const q4ExpError = document.getElementById('q4_exp_error'); const q4ExpWordCountContainer = document.getElementById('q4_exp_word_count_container'); const q4ExpPasteWarning = document.getElementById('q4_exp_paste_warning');
-             if (q4Explanation && q4ExpWordCount && q4ExpError && q4ExpWordCountContainer) { setupWordCountValidation(q4Explanation, q4ExpWordCount, q4ExpError, q4ExpWordCountContainer, IS_ADMIN_USER); }
-             if (q4Explanation && q4ExpPasteWarning) { setupPastePrevention(q4Explanation, q4ExpPasteWarning, IS_ADMIN_USER); }
-             form.removeEventListener('submit', handleAssessmentSubmit); form.addEventListener('submit', handleAssessmentSubmit);
-        }
-        function countWords(text) { return text ? text.trim().split(/\s+/).filter(Boolean).length : 0; }
-        function setupWordCountValidation(textarea, countSpan, errorElement, countContainer, isAdmin) {
-            if (!textarea || !countSpan || !errorElement || !countContainer) return;
-            const updateCount = () => { const words = countWords(textarea.value); countSpan.textContent = words; countSpan.style.color = words >= minWords ? '#10b981' : '#ef4444'; };
-            textarea.removeEventListener('input', updateCount); // Ensure no duplicates
-            if (isAdmin) { countContainer.style.display = 'none'; return; }
-            const minWords = parseInt(textarea.dataset.minWords, 10);
-            countContainer.style.display = 'flex';
-            textarea.addEventListener('input', updateCount);
-            updateCount();
-        }
-        function validateWordCount(textarea, minWords, errorElement, isAdmin) {
-             if (isAdmin) return true; if (!textarea || !errorElement) return true;
-             const words = countWords(textarea.value);
-             if (words < minWords) { errorElement.textContent = `Please enter at least ${minWords} words.`; errorElement.style.display = 'block'; textarea.classList.add('invalid'); return false; }
-             errorElement.style.display = 'none'; textarea.classList.remove('invalid'); return true;
-        }
-        function setupPastePrevention(textarea, warningElement, isAdmin) {
-             if (!textarea || !warningElement) return;
-             const pasteHandler = () => { warningElement.style.color = '#dc2626'; setTimeout(() => { warningElement.style.color = '#f97316'; }, 2000); };
-             textarea.removeEventListener('paste', pasteHandler); // Ensure no duplicates
-             if (isAdmin) { warningElement.style.display = 'none'; return; }
-             warningElement.style.display = 'block'; textarea.addEventListener('paste', pasteHandler);
-         }
-
-         async function handleAssessmentSubmit(event) {
-            event.preventDefault();
-            console.log("Assessment submit triggered.");
-            const form = event.target;
-            const submitButton = document.getElementById('assessmentSubmitBtn');
-
-            if (!selectedRandomQuestion || !selectedRandomQuestion.id) { console.error("Critical Error: Random assessment question not selected properly."); alert("An internal error occurred. Please refresh."); return; }
-
-            submitButton.disabled = true; submitButton.textContent = 'Submitting...';
-            form.querySelectorAll('.error-message').forEach(el => el.style.display = 'none'); form.querySelectorAll('.invalid').forEach(el => el.classList.remove('invalid'));
-
-            const q1Textarea = document.getElementById('q1_coaching_meaning'); const qRandomTextarea = document.getElementById(selectedRandomQuestion.id); const q3Textarea = document.getElementById('q3_expectations'); const q4Rating = document.getElementById('q4_confidence_rating'); const q4Explanation = document.getElementById('q4_confidence_explanation');
-            const q1Error = document.getElementById('q1_error'); const qRandomError = document.getElementById('q_random_error'); const q3Error = document.getElementById('q3_error'); const q4RatingError = document.getElementById('q4_rating_error'); const q4ExpError = document.getElementById('q4_exp_error');
-
-             if (!q1Textarea || !qRandomTextarea || !q3Textarea || !q4Rating || !q4Explanation || !q1Error || !qRandomError || !q3Error || !q4RatingError || !q4ExpError) { console.error("Form elements missing!"); alert("Form error. Please refresh."); submitButton.disabled = false; submitButton.textContent = 'Submit Assessment'; return; }
-
-            let isValid = true;
-            if (!q1Textarea.value.trim()) { isValid = false; q1Textarea.classList.add('invalid'); q1Error.textContent = 'Required.'; q1Error.style.display = 'block'; }
-            if (!qRandomTextarea.value.trim()) { isValid = false; qRandomTextarea.classList.add('invalid'); qRandomError.textContent = 'Required.'; qRandomError.style.display = 'block'; }
-            if (!q3Textarea.value.trim()) { isValid = false; q3Textarea.classList.add('invalid'); q3Error.textContent = 'Required.'; q3Error.style.display = 'block'; }
-            if (!q4Rating.value) { isValid = false; q4Rating.classList.add('invalid'); q4RatingError.textContent = 'Required.'; q4RatingError.style.display = 'block'; }
-            if (!q4Explanation.value.trim()) { isValid = false; q4Explanation.classList.add('invalid'); q4ExpError.textContent = 'Required.'; q4ExpError.style.display = 'block'; }
-            if (!validateWordCount(q1Textarea, parseInt(q1Textarea.dataset.minWords || '0', 10), q1Error, IS_ADMIN_USER)) { isValid = false; }
-            if (!validateWordCount(qRandomTextarea, parseInt(qRandomTextarea.dataset.minWords || '0', 10), qRandomError, IS_ADMIN_USER)) { isValid = false; }
-            if (!validateWordCount(q3Textarea, parseInt(q3Textarea.dataset.minWords || '0', 10), q3Error, IS_ADMIN_USER)) { isValid = false; }
-            if (!validateWordCount(q4Explanation, parseInt(q4Explanation.dataset.minWords || '0', 10), q4ExpError, IS_ADMIN_USER)) { isValid = false; }
-            const ratingVal = parseInt(q4Rating.value, 10);
-             if (q4Rating.value && (isNaN(ratingVal) || ratingVal < 1 || ratingVal > 5)) { isValid = false; q4Rating.classList.add('invalid'); q4RatingError.textContent = '1-5 only.'; q4RatingError.style.display = 'block'; }
-
-            if (isValid) {
-                console.log("Assessment form is valid. Saving to Supabase...");
-                // **** Use the NORMALIZED email fetched earlier ****
-                const initialUserData = JSON.parse(localStorage.getItem(CURRENT_USER_KEY) || '{}');
-                const userEmail = initialUserData?.email?.toLowerCase().trim(); // Get normalized email again just in case
-
-                if (!userEmail) { console.error("Cannot save assessment, user email not found/normalized."); alert("Critical Error: User identity lost. Please log out and back in."); submitButton.disabled = false; submitButton.textContent = 'Submit Assessment'; return; }
-
-                const assessmentAnswers = { [q1Textarea.name]: q1Textarea.value.trim(), [selectedRandomQuestion.id]: qRandomTextarea.value.trim(), [q3Textarea.name]: q3Textarea.value.trim(), [q4Rating.name]: ratingVal, [q4Explanation.name]: q4Explanation.value.trim() };
-
-                try {
-                    const { error: assessmentError } = await supabaseClient.from('assessments').upsert({ user_email: userEmail, type: 'pre', answers: assessmentAnswers, submitted_at: new Date().toISOString() }, { onConflict: 'user_email, type' });
-                    if (assessmentError) { console.error("Supabase error saving assessment:", assessmentError); throw assessmentError; }
-
-                    const { error: userUpdateError } = await supabaseClient.from('users').update({ assessment_completed: true }).eq('email', userEmail); // Use normalized email
-                    if (userUpdateError) { console.error("Supabase error updating user status:", userUpdateError); /* Optionally throw */ }
-
-                    console.log("Assessment saved successfully to Supabase.");
-                    document.getElementById('assessmentSuccessPopup').style.display = 'block'; document.getElementById('popupOverlay').style.display = 'block';
-
-                } catch (error) {
-                     console.error("Error saving assessment to Supabase:", error);
-                     let submitErrorMsg = `Failed to save assessment: ${error.message}. Please try again.`;
-                     if (error.code === '23505') { submitErrorMsg = "Already submitted."; } else if (error.message.includes('RLS')) { submitErrorMsg = "Permission denied."; }
-                     alert(submitErrorMsg);
-                     isValid = false; submitButton.disabled = false; submitButton.textContent = 'Submit Assessment';
-                }
-            } else {
-                 console.log("Assessment form invalid."); submitButton.disabled = false; submitButton.textContent = 'Submit Assessment';
-                 const firstError = form.querySelector('.invalid'); if (firstError) { firstError.focus(); firstError.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
-            }
-        }
+        function setupAssessmentForm() { /* ... setup form ... */ const form = document.getElementById('assessmentForm'); const q1Textarea = document.getElementById('q1_coaching_meaning'); const q3Textarea = document.getElementById('q3_expectations'); const q4Rating = document.getElementById('q4_confidence_rating'); const q4Explanation = document.getElementById('q4_confidence_explanation'); const randomQuestionContainer = document.getElementById('randomQuestionContainer'); const existingLabel = randomQuestionContainer.querySelector('label'); const existingTextarea = randomQuestionContainer.querySelector('textarea'); if(existingLabel) existingLabel.remove(); if(existingTextarea) existingTextarea.remove(); const qRandomMinWordsDisplay = document.getElementById('q_random_min_words_display'); const qRandomWordCountContainer = document.getElementById('q_random_word_count_container'); const qRandomPasteWarning = document.getElementById('q_random_paste_warning'); const qRandomError = document.getElementById('q_random_error'); if (IS_ADMIN_USER) { document.getElementById('adminAssessmentNote').style.display = 'inline'; } selectedRandomQuestion = randomQuestionPool[Math.floor(Math.random() * randomQuestionPool.length)]; const randomLabel = document.createElement('label'); randomLabel.htmlFor = selectedRandomQuestion.id; randomLabel.textContent = selectedRandomQuestion.label; randomQuestionContainer.insertBefore(randomLabel, randomQuestionContainer.firstChild); const randomTextarea = document.createElement('textarea'); randomTextarea.id = selectedRandomQuestion.id; randomTextarea.name = selectedRandomQuestion.id; randomTextarea.required = true; randomTextarea.dataset.minWords = selectedRandomQuestion.minWords; randomTextarea.placeholder = IS_ADMIN_USER ? "Admin: No word count required." : `Min ${selectedRandomQuestion.minWords} words...`; randomQuestionContainer.insertBefore(randomTextarea, randomQuestionContainer.querySelector('.input-meta-info')); if (qRandomMinWordsDisplay) { qRandomMinWordsDisplay.textContent = IS_ADMIN_USER ? 'N/A' : selectedRandomQuestion.minWords; } const qRandomWordCountSpan = document.getElementById('q_random_word_count'); if (randomTextarea && qRandomWordCountSpan && qRandomError && qRandomWordCountContainer) { setupWordCountValidation(randomTextarea, qRandomWordCountSpan, qRandomError, qRandomWordCountContainer, IS_ADMIN_USER); } if (randomTextarea && qRandomPasteWarning) { setupPastePrevention(randomTextarea, qRandomPasteWarning, IS_ADMIN_USER); } const q1WordCount = document.getElementById('q1_word_count'); const q1Error = document.getElementById('q1_error'); const q1WordCountContainer = document.getElementById('q1_word_count_container'); const q1PasteWarning = document.getElementById('q1_paste_warning'); if (q1Textarea && q1WordCount && q1Error && q1WordCountContainer) { setupWordCountValidation(q1Textarea, q1WordCount, q1Error, q1WordCountContainer, IS_ADMIN_USER); } if (q1Textarea && q1PasteWarning) { setupPastePrevention(q1Textarea, q1PasteWarning, IS_ADMIN_USER); } const q3WordCount = document.getElementById('q3_word_count'); const q3Error = document.getElementById('q3_error'); const q3WordCountContainer = document.getElementById('q3_word_count_container'); const q3PasteWarning = document.getElementById('q3_paste_warning'); if (q3Textarea && q3WordCount && q3Error && q3WordCountContainer) { setupWordCountValidation(q3Textarea, q3WordCount, q3Error, q3WordCountContainer, IS_ADMIN_USER); } if (q3Textarea && q3PasteWarning) { setupPastePrevention(q3Textarea, q3PasteWarning, IS_ADMIN_USER); } const q4ExpWordCount = document.getElementById('q4_exp_word_count'); const q4ExpError = document.getElementById('q4_exp_error'); const q4ExpWordCountContainer = document.getElementById('q4_exp_word_count_container'); const q4ExpPasteWarning = document.getElementById('q4_exp_paste_warning'); if (q4Explanation && q4ExpWordCount && q4ExpError && q4ExpWordCountContainer) { setupWordCountValidation(q4Explanation, q4ExpWordCount, q4ExpError, q4ExpWordCountContainer, IS_ADMIN_USER); } if (q4Explanation && q4ExpPasteWarning) { setupPastePrevention(q4Explanation, q4ExpPasteWarning, IS_ADMIN_USER); } form.removeEventListener('submit', handleAssessmentSubmit); form.addEventListener('submit', handleAssessmentSubmit); }
+        function countWords(text) { /* ... count words ... */ return text ? text.trim().split(/\s+/).filter(Boolean).length : 0; }
+        function setupWordCountValidation(textarea, countSpan, errorElement, countContainer, isAdmin) { /* ... setup wc validation ... */ if (!textarea || !countSpan || !errorElement || !countContainer) return; const updateCount = () => { const words = countWords(textarea.value); countSpan.textContent = words; countSpan.style.color = words >= minWords ? '#10b981' : '#ef4444'; }; textarea.removeEventListener('input', updateCount); if (isAdmin) { countContainer.style.display = 'none'; return; } const minWords = parseInt(textarea.dataset.minWords, 10); countContainer.style.display = 'flex'; textarea.addEventListener('input', updateCount); updateCount(); }
+        function validateWordCount(textarea, minWords, errorElement, isAdmin) { /* ... validate wc ... */ if (isAdmin) return true; if (!textarea || !errorElement) return true; const words = countWords(textarea.value); if (words < minWords) { errorElement.textContent = `Min ${minWords} words.`; errorElement.style.display = 'block'; textarea.classList.add('invalid'); return false; } errorElement.style.display = 'none'; textarea.classList.remove('invalid'); return true; }
+        function setupPastePrevention(textarea, warningElement, isAdmin) { /* ... setup paste prevention ... */ if (!textarea || !warningElement) return; const pasteHandler = () => { warningElement.style.color = '#dc2626'; setTimeout(() => { warningElement.style.color = '#f97316'; }, 2000); }; textarea.removeEventListener('paste', pasteHandler); if (isAdmin) { warningElement.style.display = 'none'; return; } warningElement.style.display = 'block'; textarea.addEventListener('paste', pasteHandler); }
+        async function handleAssessmentSubmit(event) { /* ... handle submit ... */ event.preventDefault(); const form = event.target; const submitButton = document.getElementById('assessmentSubmitBtn'); if (!selectedRandomQuestion?.id) { console.error("Random question not set!"); alert("Internal error. Refresh."); return; } submitButton.disabled = true; submitButton.textContent = 'Submitting...'; form.querySelectorAll('.error-message').forEach(el => el.style.display = 'none'); form.querySelectorAll('.invalid').forEach(el => el.classList.remove('invalid')); const q1Textarea = document.getElementById('q1_coaching_meaning'); const qRandomTextarea = document.getElementById(selectedRandomQuestion.id); const q3Textarea = document.getElementById('q3_expectations'); const q4Rating = document.getElementById('q4_confidence_rating'); const q4Explanation = document.getElementById('q4_confidence_explanation'); const q1Error = document.getElementById('q1_error'); const qRandomError = document.getElementById('q_random_error'); const q3Error = document.getElementById('q3_error'); const q4RatingError = document.getElementById('q4_rating_error'); const q4ExpError = document.getElementById('q4_exp_error'); if (!q1Textarea || !qRandomTextarea || !q3Textarea || !q4Rating || !q4Explanation || !q1Error || !qRandomError || !q3Error || !q4RatingError || !q4ExpError) { console.error("Form elements missing!"); alert("Form error. Refresh."); submitButton.disabled = false; submitButton.textContent = 'Submit Assessment'; return; } let isValid = true; if (!q1Textarea.value.trim()) { isValid = false; q1Textarea.classList.add('invalid'); q1Error.textContent = 'Required.'; q1Error.style.display = 'block'; } if (!qRandomTextarea.value.trim()) { isValid = false; qRandomTextarea.classList.add('invalid'); qRandomError.textContent = 'Required.'; qRandomError.style.display = 'block'; } if (!q3Textarea.value.trim()) { isValid = false; q3Textarea.classList.add('invalid'); q3Error.textContent = 'Required.'; q3Error.style.display = 'block'; } if (!q4Rating.value) { isValid = false; q4Rating.classList.add('invalid'); q4RatingError.textContent = 'Required.'; q4RatingError.style.display = 'block'; } if (!q4Explanation.value.trim()) { isValid = false; q4Explanation.classList.add('invalid'); q4ExpError.textContent = 'Required.'; q4ExpError.style.display = 'block'; } if (!validateWordCount(q1Textarea, parseInt(q1Textarea.dataset.minWords || '0', 10), q1Error, IS_ADMIN_USER)) { isValid = false; } if (!validateWordCount(qRandomTextarea, parseInt(qRandomTextarea.dataset.minWords || '0', 10), qRandomError, IS_ADMIN_USER)) { isValid = false; } if (!validateWordCount(q3Textarea, parseInt(q3Textarea.dataset.minWords || '0', 10), q3Error, IS_ADMIN_USER)) { isValid = false; } if (!validateWordCount(q4Explanation, parseInt(q4Explanation.dataset.minWords || '0', 10), q4ExpError, IS_ADMIN_USER)) { isValid = false; } const ratingVal = parseInt(q4Rating.value, 10); if (q4Rating.value && (isNaN(ratingVal) || ratingVal < 1 || ratingVal > 5)) { isValid = false; q4Rating.classList.add('invalid'); q4RatingError.textContent = '1-5 only.'; q4RatingError.style.display = 'block'; } if (isValid) { console.log("Saving assessment..."); const initialUserData = JSON.parse(localStorage.getItem(CURRENT_USER_KEY) || '{}'); const userEmail = initialUserData?.email?.toLowerCase().trim(); if (!userEmail) { console.error("User email missing/invalid for saving."); alert("User identity error. Log out/in."); submitButton.disabled = false; submitButton.textContent = 'Submit Assessment'; return; } const assessmentAnswers = { [q1Textarea.name]: q1Textarea.value.trim(), [selectedRandomQuestion.id]: qRandomTextarea.value.trim(), [q3Textarea.name]: q3Textarea.value.trim(), [q4Rating.name]: ratingVal, [q4Explanation.name]: q4Explanation.value.trim() }; try { const { error: assessmentError } = await supabaseClient.from('assessments').upsert({ user_email: userEmail, type: 'pre', answers: assessmentAnswers, submitted_at: new Date().toISOString() }, { onConflict: 'user_email, type' }); if (assessmentError) throw assessmentError; const { error: userUpdateError } = await supabaseClient.from('users').update({ assessment_completed: true }).eq('email', userEmail); if (userUpdateError) console.error("Error updating user status:", userUpdateError); console.log("Assessment saved."); document.getElementById('assessmentSuccessPopup').style.display = 'block'; document.getElementById('popupOverlay').style.display = 'block'; } catch (error) { console.error("Error saving assessment:", error); let submitErrorMsg = `Failed to save: ${error.message}. Try again.`; if (error.code === '23505') { submitErrorMsg = "Already submitted."; } else if (error.message.includes('RLS')) { submitErrorMsg = "Permission denied."; } alert(submitErrorMsg); isValid = false; submitButton.disabled = false; submitButton.textContent = 'Submit Assessment'; } } else { console.log("Assessment invalid."); submitButton.disabled = false; submitButton.textContent = 'Submit Assessment'; const firstError = form.querySelector('.invalid'); if (firstError) { firstError.focus(); firstError.scrollIntoView({ behavior: 'smooth', block: 'center' }); } } }
 
 
         // --- Dashboard Display Functions ---
-        // (displayMainDashboard, displayCourseSections, displayAdminData, displayAdminOwnProgressTable, renderConfidenceChart, displayAssessmentDetails, displayAllUsersTable, generateProgressDistributionChart - unchanged logic, rely on correct data being passed)
-        // ... (These functions remain the same as in the previous correct version) ...
-        async function displayMainDashboard(user) {
-            console.log("Displaying main dashboard content for:", user.email);
-            const loadingMessage = document.getElementById('loadingMessage'); const userDashboardContent = document.getElementById('userDashboardContent'); const adminSection = document.getElementById('adminSection'); const courseSectionsList = document.getElementById('courseSectionsList'); const welcomeMessage = document.getElementById('welcomeMessage'); const dashboardUserName = document.getElementById('dashboardUserName'); const dashboardUserEmail = document.getElementById('dashboardUserEmail');
-            loadingMessage.style.display = 'none';
-            if (welcomeMessage) welcomeMessage.textContent = `Welcome back, ${user.name || 'User'}!`; if (dashboardUserName) dashboardUserName.textContent = user.name || 'N/A'; if (dashboardUserEmail) dashboardUserEmail.textContent = user.email || 'N/A';
-            if (courseSectionsList) { displayCourseSections(user, courseSectionsList); } else { console.error("Course sections list container not found!"); }
-            if (IS_ADMIN_USER) {
-                console.log("Admin user detected. Displaying admin panel.");
-                if (adminSection) {
-                    document.getElementById('adminPanelName').textContent = user.name || 'N/A'; document.getElementById('adminPanelEmail').textContent = user.email || 'N/A';
-                    await displayAdminData(user);
-                    adminSection.style.display = 'block'; setTimeout(() => adminSection.classList.add('fade-in'), 50);
-                } else { console.error("Admin section not found!"); }
-            } else { console.log("Regular user detected. Admin panel hidden."); if (adminSection) adminSection.style.display = 'none'; }
-            if (userDashboardContent) { userDashboardContent.style.display = 'block'; setTimeout(() => userDashboardContent.classList.add('fade-in'), 50); } else { console.error("User dashboard content container not found!");}
-        }
-        function displayCourseSections(user, containerElement) {
-            if (!user || !containerElement) { console.error("Invalid user or container for course sections."); return; } containerElement.innerHTML = ''; const userProgress = user.progress || {};
-            courseSections.forEach(section => {
-                const progress = userProgress[section.id] || 0; const progressPercentage = Math.max(0, Math.min(100, Math.round(progress)));
-                const sectionElement = document.createElement('div'); sectionElement.className = 'course-section';
-                sectionElement.innerHTML = `<span class="section-title">${section.title}</span> <div class="section-progress"> <div class="progress-bar-container"><div class="progress-bar"></div></div> <span class="progress-text">${progressPercentage}% Complete</span> <a href="${section.link}?sectionId=${section.id}" class="section-link" data-section-id="${section.id}">Start</a> </div>`;
-                const progressBar = sectionElement.querySelector('.progress-bar'); const linkButton = sectionElement.querySelector('.section-link');
-                if (progressPercentage >= 100) { linkButton.textContent = 'Review'; linkButton.classList.add('status-review'); } else if (progressPercentage > 0) { linkButton.textContent = 'Continue'; linkButton.classList.add('status-continue'); } else { linkButton.textContent = 'Start'; }
-                containerElement.appendChild(sectionElement); setTimeout(() => { if (progressBar) { progressBar.style.width = `${progressPercentage}%`; } }, 100);
-            });
-        }
-         async function displayAdminData(adminUser) {
-             const adminCourseProgressContainer = document.getElementById('adminCourseProgressContainer'); const adminAssessmentDetailsContainer = document.getElementById('adminAssessmentDetails');
-             if (!adminUser) { console.error("Admin user data is missing for displayAdminData."); if(adminCourseProgressContainer) adminCourseProgressContainer.innerHTML = '<p>Error: Admin data unavailable.</p>'; if(adminAssessmentDetailsContainer) adminAssessmentDetailsContainer.innerHTML = '<p>Error: Admin data unavailable.</p>'; return; }
-             displayAdminOwnProgressTable(adminUser, adminCourseProgressContainer);
-             const preAssessmentAnswers = adminUser.assessmentAnswers || {}; const preConfidenceScore = preAssessmentAnswers?.confidence_rating || 0;
-             let postConfidenceScore = 0;
-             try {
-                 // Simulation/Placeholder for post-score
-                 if (preConfidenceScore > 0) { postConfidenceScore = preConfidenceScore >= 5 ? 5 : Math.min(5, preConfidenceScore + Math.floor(Math.random() * (5 - preConfidenceScore + 1))); console.log(`Simulating post-course confidence for admin: ${postConfidenceScore}`); } else { console.log("Cannot simulate post-score for admin."); }
-             } catch (error) { console.error("Error simulating post-assessment score:", error); }
-             renderConfidenceChart(preConfidenceScore, postConfidenceScore);
-              if (adminAssessmentDetailsContainer) { displayAssessmentDetails(preAssessmentAnswers, preConfidenceScore, postConfidenceScore); adminAssessmentDetailsContainer.style.display = 'block'; } else { console.error("Admin assessment details container not found."); }
-             await fetchAllUsersAdminData();
-         }
-         function displayAdminOwnProgressTable(adminUser, container) {
-              if (!container) { console.error("Admin course progress container element not found."); return; } const adminProgress = adminUser.progress || {};
-              let tableHTML = `<h4>Your (Admin) Course Section Progress</h4> <table class="admin-user-table"> <thead> <tr> <th>Section</th> <th>Progress (%)</th> <th>Status</th> </tr> </thead> <tbody>`;
-              if (!courseSections || courseSections.length === 0) { tableHTML += `<tr><td colspan="3">Course sections not defined.</td></tr>`; } else if (Object.keys(adminProgress).length === 0 && !courseSections.some(s => adminProgress.hasOwnProperty(s.id))) { tableHTML += `<tr><td colspan="3">No progress data found. Start a section.</td></tr>`; } else {
-                  courseSections.forEach(section => { const progress = adminProgress[section.id] || 0; const progressPercentage = Math.max(0, Math.min(100, Math.round(progress))); let status = '<span class="status-not-started">Not Started</span>'; if (progressPercentage >= 100) status = '<span class="status-completed">Completed</span>'; else if (progressPercentage > 0) status = '<span class="status-in-progress">In Progress</span>'; tableHTML += `<tr><td>${section.title}</td><td>${progressPercentage}%</td><td>${status}</td></tr>`; });
-              } tableHTML += `</tbody></table>`; container.innerHTML = tableHTML;
-         }
-         function renderConfidenceChart(preScore, postScore) {
-              const ctx = document.getElementById('confidenceChart'); const container = document.getElementById('adminChartContainer'); if (!ctx || !container) { console.error("Confidence chart canvas/container missing."); if(container) container.style.display = 'none'; return; }
-              container.innerHTML = '<canvas id="confidenceChart"></canvas>'; const newCtx = document.getElementById('confidenceChart').getContext('2d'); container.style.display = 'block';
-              if (confidenceChartInstance) { confidenceChartInstance.destroy(); }
-              if (!preScore && !postScore) { container.innerHTML = '<p style="text-align: center; padding: 20px; color: #78350f;">Confidence data unavailable.</p>'; return; }
-              confidenceChartInstance = new Chart(newCtx, { type: 'bar', data: { labels: ['Pre-Course', 'Post-Course*'], datasets: [{ label: 'Confidence Level (1-5)', data: [preScore || 0, postScore || 0], backgroundColor: [ 'rgba(245, 158, 11, 0.6)', 'rgba(16, 185, 129, 0.6)' ], borderColor: [ 'rgba(217, 119, 6, 1)', 'rgba(5, 150, 105, 1)' ], borderWidth: 1 }] }, options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, max: 5, ticks: { stepSize: 1 } } }, plugins: { legend: { display: false }, title: { display: true, text: 'Admin Confidence Score Comparison' } } } });
-              const p = document.createElement('p'); p.style = "text-align: center; font-size: 12px; color: #78350f; margin-top: 5px;"; p.innerHTML = "<em>Confidence Score Comparison (Pre vs Post*)</em>"; container.appendChild(p);
-         }
-         function displayAssessmentDetails(answers, preScore, postScore) {
-              const answersContainer = document.getElementById('adminAssessmentAnswersDisplay'); const progressContainer = document.getElementById('adminProgressAnalysis'); const mainContainer = document.getElementById('adminAssessmentDetails'); if (!answersContainer || !progressContainer || !mainContainer) { console.error("Assessment details elements missing."); return; }
-              answersContainer.innerHTML = ''; progressContainer.innerHTML = ''; mainContainer.querySelector('h5').style.display = 'block';
-              const answerLabels = { 'coaching_meaning': 'Q1: Meaning of Coaching', [selectedRandomQuestion?.id || 'random_question']: selectedRandomQuestion?.label || 'Q2: Additional Question', 'expectations': 'Q3: Course Expectations', 'confidence_rating': 'Q4: Confidence Rating (1-5)', 'confidence_explanation': 'Q4: Confidence Explanation' };
-              let answersHTML = '<dl>'; let answersFound = false;
-              for (const key in answerLabels) { if (answers && answers.hasOwnProperty(key)) { answersFound = true; const label = answerLabels[key]; let value = answers[key]; const isTextArea = key === 'coaching_meaning' || key === selectedRandomQuestion?.id || key === 'expectations' || key === 'confidence_explanation'; const sanitizedValue = String(value || 'N/A').replace(/</g, "<").replace(/>/g, ">"); const formattedValue = isTextArea ? `<pre>${sanitizedValue}</pre>` : sanitizedValue; answersHTML += `<dt>${label}:</dt><dd>${formattedValue}</dd>`; } } answersHTML += '</dl>';
-              if (answersFound) { answersContainer.innerHTML = answersHTML; progressContainer.style.display = 'block'; } else { answersContainer.innerHTML = '<p>No assessment answers found.</p>'; progressContainer.style.display = 'none'; return; }
-              let progressHTML = '';
-              if (preScore > 0 && postScore > 0) { const scoreChange = postScore - preScore; progressHTML += `<p>Pre-Course Confidence: <span class="progress-value">${preScore}/5</span></p>`; progressHTML += `<p>Post-Course Confidence: <span class="progress-value">${postScore}/5*</span></p>`; if (scoreChange > 0) { progressHTML += `<p><span class="feedback-good">Improvement: +${scoreChange} point(s)</span></p>`; } else if (scoreChange === 0) { progressHTML += `<p><span class="feedback-neutral">Confidence level maintained.</span></p>`; } else { progressHTML += `<p><span class="feedback-decrease" style="color: #ef4444; background-color: #fee2e2; padding: 4px 8px; border-radius: 4px;">Decrease: ${scoreChange} point(s)</span></p>`; } } else if (preScore > 0) { progressHTML += `<p>Pre-Course Confidence: <span class="progress-value">${preScore}/5</span></p>`; progressHTML += `<p><span class="feedback-neutral">Post-course score not available yet.</span></p>`; } else { progressHTML = `<p><span class="feedback-neutral">Confidence scores not available.</span></p>`; }
-              progressContainer.innerHTML = progressHTML;
-         }
-         function displayAllUsersTable(usersData) {
-            const tableBody = document.getElementById('allUsersTableBody'); const noUsersMessage = document.getElementById('noUsersMessage'); if (!tableBody || !noUsersMessage) { console.error("Missing 'All Users' table elements."); return; } tableBody.innerHTML = '';
-            if (!usersData || usersData.length === 0) { noUsersMessage.style.display = 'block'; tableBody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 20px;">No users match filters.</td></tr>'; return; } else { noUsersMessage.style.display = 'none'; }
-            usersData.forEach(user => { const avgProgress = user.avgProgress || 0; const lastUpdateFormatted = formatTimestamp(user.lastUpdate); let status = 'Not Started'; let statusClass = 'status-not-started'; if (avgProgress >= 100) { status = 'Completed'; statusClass = 'status-completed'; } else if (avgProgress > 0 || (user.assessmentCompleted && avgProgress === 0)) { status = 'In Progress'; statusClass = 'status-in-progress'; } const row = document.createElement('tr'); const escapeHtml = (unsafe) => { if (unsafe === null || typeof unsafe === 'undefined') return 'N/A'; return String(unsafe).replace(/&/g, "&").replace(/</g, "<").replace(/>/g, ">").replace(/"/g, """).replace(/'/g, "'"); }
-                row.innerHTML = `<td>${escapeHtml(user.name)}</td> <td>${escapeHtml(user.email)}</td> <td>${avgProgress.toFixed(1)}%</td> <td class="${statusClass}">${status}</td> <td>${escapeHtml(lastUpdateFormatted)}</td>`; tableBody.appendChild(row); });
-        }
-         async function generateProgressDistributionChart(usersData) {
-            const ctx = document.getElementById('progressDistributionChart'); const container = document.getElementById('progressDistributionChartContainer'); if (!ctx || !container) { console.error("Progress chart canvas/container missing."); if(container) container.style.display = 'none'; return; }
-             container.innerHTML = '<canvas id="progressDistributionChart"></canvas>'; const newCtx = document.getElementById('progressDistributionChart').getContext('2d'); container.style.display = 'block';
-            let completed = 0; let inProgress = 0; let notStarted = 0; const validUsersData = usersData || [];
-            validUsersData.forEach(user => { const avgProgress = user.avgProgress || 0; if (avgProgress >= 100) { completed++; } else if (avgProgress > 0 || (user.assessmentCompleted && avgProgress === 0)) { inProgress++; } else { notStarted++; } });
-            const totalUsers = completed + inProgress + notStarted;
-            if (progressDistributionChartInstance) { progressDistributionChartInstance.destroy(); }
-             if (totalUsers === 0) { container.innerHTML = '<p style="text-align: center; padding: 20px; color: #78350f;">No user data for chart.</p>'; return; }
-            progressDistributionChartInstance = new Chart(newCtx, { type: 'pie', data: { labels: [`Completed (${completed})`, `In Progress (${inProgress})`, `Not Started (${notStarted})`], datasets: [{ label: 'User Progress Status', data: [completed, inProgress, notStarted], backgroundColor: ['rgba(16, 185, 129, 0.7)', 'rgba(245, 158, 11, 0.7)', 'rgba(156, 163, 175, 0.7)'], borderColor: ['rgba(5, 150, 105, 1)', 'rgba(217, 119, 6, 1)', 'rgba(107, 114, 128, 1)'], borderWidth: 1 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top' }, title: { display: true, text: `Progress Distribution (${totalUsers} Users Shown)` }, tooltip: { callbacks: { label: function(context) { let label = context.dataset.label || ''; let valueLabel = context.label || ''; if (valueLabel) { label += ': '; } const value = context.raw; const percentage = totalUsers > 0 ? ((value / totalUsers) * 100).toFixed(1) : 0; const statusText = valueLabel.substring(0, valueLabel.lastIndexOf('(')).trim(); label = `${statusText}: ${value} (${percentage}%)`; return label; } } } } } });
-        }
+        // (displayMainDashboard, displayCourseSections, displayAdminData, displayAdminOwnProgressTable, renderConfidenceChart, displayAssessmentDetails, displayAllUsersTable, generateProgressDistributionChart - logic assumed correct, focuses on data handling)
+        async function displayMainDashboard(user) { /* ... as before ... */ console.log("Displaying main dashboard for:", user.email); const loadingMessage = document.getElementById('loadingMessage'); const userDashboardContent = document.getElementById('userDashboardContent'); const adminSection = document.getElementById('adminSection'); const courseSectionsList = document.getElementById('courseSectionsList'); const welcomeMessage = document.getElementById('welcomeMessage'); const dashboardUserName = document.getElementById('dashboardUserName'); const dashboardUserEmail = document.getElementById('dashboardUserEmail'); loadingMessage.style.display = 'none'; if (welcomeMessage) welcomeMessage.textContent = `Welcome back, ${user.name || 'User'}!`; if (dashboardUserName) dashboardUserName.textContent = user.name || 'N/A'; if (dashboardUserEmail) dashboardUserEmail.textContent = user.email || 'N/A'; if (courseSectionsList) { displayCourseSections(user, courseSectionsList); } else { console.error("Course sections list missing!"); } if (IS_ADMIN_USER) { if (adminSection) { document.getElementById('adminPanelName').textContent = user.name || 'N/A'; document.getElementById('adminPanelEmail').textContent = user.email || 'N/A'; await displayAdminData(user); adminSection.style.display = 'block'; setTimeout(() => adminSection.classList.add('fade-in'), 50); } else { console.error("Admin section missing!"); } } else { if (adminSection) adminSection.style.display = 'none'; } if (userDashboardContent) { userDashboardContent.style.display = 'block'; setTimeout(() => userDashboardContent.classList.add('fade-in'), 50); } else { console.error("User dashboard container missing!");} }
+        function displayCourseSections(user, containerElement) { /* ... as before ... */ if (!user || !containerElement) return; containerElement.innerHTML = ''; const userProgress = user.progress || {}; courseSections.forEach(section => { const progress = userProgress[section.id] || 0; const progressPercentage = Math.max(0, Math.min(100, Math.round(progress))); const sectionElement = document.createElement('div'); sectionElement.className = 'course-section'; sectionElement.innerHTML = `<span class="section-title">${section.title}</span> <div class="section-progress"> <div class="progress-bar-container"><div class="progress-bar"></div></div> <span class="progress-text">${progressPercentage}% Complete</span> <a href="${section.link}?sectionId=${section.id}" class="section-link" data-section-id="${section.id}">Start</a> </div>`; const progressBar = sectionElement.querySelector('.progress-bar'); const linkButton = sectionElement.querySelector('.section-link'); if (progressPercentage >= 100) { linkButton.textContent = 'Review'; linkButton.classList.add('status-review'); } else if (progressPercentage > 0) { linkButton.textContent = 'Continue'; linkButton.classList.add('status-continue'); } else { linkButton.textContent = 'Start'; } containerElement.appendChild(sectionElement); setTimeout(() => { if (progressBar) { progressBar.style.width = `${progressPercentage}%`; } }, 100); }); }
+        async function displayAdminData(adminUser) { /* ... as before ... */ const adminCourseProgressContainer = document.getElementById('adminCourseProgressContainer'); const adminAssessmentDetailsContainer = document.getElementById('adminAssessmentDetails'); if (!adminUser) { console.error("Admin data missing."); /* handle error */ return; } displayAdminOwnProgressTable(adminUser, adminCourseProgressContainer); const preAssessmentAnswers = adminUser.assessmentAnswers || {}; const preConfidenceScore = preAssessmentAnswers?.confidence_rating || 0; let postConfidenceScore = 0; try { if (preConfidenceScore > 0) { postConfidenceScore = preConfidenceScore >= 5 ? 5 : Math.min(5, preConfidenceScore + Math.floor(Math.random() * (5 - preConfidenceScore + 1))); } } catch (error) { console.error("Error simulating post-score:", error); } renderConfidenceChart(preConfidenceScore, postConfidenceScore); if (adminAssessmentDetailsContainer) { displayAssessmentDetails(preAssessmentAnswers, preConfidenceScore, postConfidenceScore); adminAssessmentDetailsContainer.style.display = 'block'; } else { console.error("Admin assessment container missing."); } await fetchAllUsersAdminData(); }
+        function displayAdminOwnProgressTable(adminUser, container) { /* ... as before ... */ if (!container) return; const adminProgress = adminUser.progress || {}; let tableHTML = `<h4>Your (Admin) Progress</h4> <table class="admin-user-table"> <thead> <tr> <th>Section</th> <th>Progress (%)</th> <th>Status</th> </tr> </thead> <tbody>`; if (!courseSections?.length) { tableHTML += `<tr><td colspan="3">Sections undefined.</td></tr>`; } else if (!Object.keys(adminProgress).length && !courseSections.some(s => adminProgress.hasOwnProperty(s.id))) { tableHTML += `<tr><td colspan="3">No progress data.</td></tr>`; } else { courseSections.forEach(section => { const progress = adminProgress[section.id] || 0; const progressPercentage = Math.max(0, Math.min(100, Math.round(progress))); let status = '<span class="status-not-started">Not Started</span>'; if (progressPercentage >= 100) status = '<span class="status-completed">Completed</span>'; else if (progressPercentage > 0) status = '<span class="status-in-progress">In Progress</span>'; tableHTML += `<tr><td>${section.title}</td><td>${progressPercentage}%</td><td>${status}</td></tr>`; }); } tableHTML += `</tbody></table>`; container.innerHTML = tableHTML; }
+        function renderConfidenceChart(preScore, postScore) { /* ... as before ... */ const ctx = document.getElementById('confidenceChart'); const container = document.getElementById('adminChartContainer'); if (!ctx || !container) { if(container) container.style.display = 'none'; return; } container.innerHTML = '<canvas id="confidenceChart"></canvas>'; const newCtx = document.getElementById('confidenceChart').getContext('2d'); container.style.display = 'block'; if (confidenceChartInstance) { confidenceChartInstance.destroy(); } if (!preScore && !postScore) { container.innerHTML = '<p style="text-align: center; padding: 20px; color: #78350f;">Confidence data unavailable.</p>'; return; } confidenceChartInstance = new Chart(newCtx, { type: 'bar', data: { labels: ['Pre-Course', 'Post-Course*'], datasets: [{ label: 'Confidence (1-5)', data: [preScore || 0, postScore || 0], backgroundColor: [ 'rgba(245, 158, 11, 0.6)', 'rgba(16, 185, 129, 0.6)' ], borderColor: [ 'rgba(217, 119, 6, 1)', 'rgba(5, 150, 105, 1)' ], borderWidth: 1 }] }, options: { /* ... options ... */ responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, max: 5, ticks: { stepSize: 1 } } }, plugins: { legend: { display: false }, title: { display: true, text: 'Admin Confidence Comparison' } } } }); const p = document.createElement('p'); p.style = "text-align: center; font-size: 12px; color: #78350f; margin-top: 5px;"; p.innerHTML = "<em>Confidence Score Comparison (Pre vs Post*)</em>"; container.appendChild(p); }
+        function displayAssessmentDetails(answers, preScore, postScore) { /* ... as before ... */ const answersContainer = document.getElementById('adminAssessmentAnswersDisplay'); const progressContainer = document.getElementById('adminProgressAnalysis'); const mainContainer = document.getElementById('adminAssessmentDetails'); if (!answersContainer || !progressContainer || !mainContainer) return; answersContainer.innerHTML = ''; progressContainer.innerHTML = ''; mainContainer.querySelector('h5').style.display = 'block'; const answerLabels = { 'coaching_meaning': 'Q1: Meaning of Coaching', [selectedRandomQuestion?.id || 'random_question']: selectedRandomQuestion?.label || 'Q2: Additional Question', 'expectations': 'Q3: Course Expectations', 'confidence_rating': 'Q4: Rating (1-5)', 'confidence_explanation': 'Q4: Explanation' }; let answersHTML = '<dl>'; let answersFound = false; const escapeHtml = (unsafe) => String(unsafe || 'N/A').replace(/</g, "<").replace(/>/g, ">"); for (const key in answerLabels) { if (answers?.[key] !== undefined) { answersFound = true; const label = answerLabels[key]; let value = answers[key]; const isTextArea = ['coaching_meaning', selectedRandomQuestion?.id, 'expectations', 'confidence_explanation'].includes(key); const formattedValue = isTextArea ? `<pre>${escapeHtml(value)}</pre>` : escapeHtml(value); answersHTML += `<dt>${label}:</dt><dd>${formattedValue}</dd>`; } } answersHTML += '</dl>'; if (answersFound) { answersContainer.innerHTML = answersHTML; progressContainer.style.display = 'block'; } else { answersContainer.innerHTML = '<p>No assessment answers found.</p>'; progressContainer.style.display = 'none'; return; } let progressHTML = ''; if (preScore > 0 && postScore > 0) { const scoreChange = postScore - preScore; progressHTML += `<p>Pre: <span class="progress-value">${preScore}/5</span> | Post: <span class="progress-value">${postScore}/5*</span></p>`; if (scoreChange > 0) progressHTML += `<p><span class="feedback-good">Improvement: +${scoreChange}</span></p>`; else if (scoreChange === 0) progressHTML += `<p><span class="feedback-neutral">Maintained</span></p>`; else progressHTML += `<p><span class="feedback-decrease" style="color:#ef4444;background:#fee2e2;padding:4px 8px;border-radius:4px;">Decrease: ${scoreChange}</span></p>`; } else if (preScore > 0) { progressHTML += `<p>Pre: <span class="progress-value">${preScore}/5</span></p><p><span class="feedback-neutral">Post score unavailable.</span></p>`; } else { progressHTML = `<p><span class="feedback-neutral">Confidence scores unavailable.</span></p>`; } progressContainer.innerHTML = progressHTML; }
+        function displayAllUsersTable(usersData) { /* ... as before, includes escapeHtml */ const tableBody = document.getElementById('allUsersTableBody'); const noUsersMessage = document.getElementById('noUsersMessage'); if (!tableBody || !noUsersMessage) return; tableBody.innerHTML = ''; if (!usersData?.length) { noUsersMessage.style.display = 'block'; tableBody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:20px;">No users match filters.</td></tr>'; return; } noUsersMessage.style.display = 'none'; const escapeHtml = (unsafe) => { if (unsafe === null || typeof unsafe === 'undefined') return 'N/A'; return String(unsafe).replace(/&/g, "&").replace(/</g, "<").replace(/>/g, ">").replace(/"/g, """).replace(/'/g, "'"); }; usersData.forEach(user => { const avgProgress = user.avgProgress || 0; const lastUpdateFormatted = formatTimestamp(user.lastUpdate); let status = 'Not Started'; let statusClass = 'status-not-started'; if (avgProgress >= 100) { status = 'Completed'; statusClass = 'status-completed'; } else if (avgProgress > 0 || (user.assessmentCompleted && avgProgress === 0)) { status = 'In Progress'; statusClass = 'status-in-progress'; } const row = document.createElement('tr'); row.innerHTML = `<td>${escapeHtml(user.name)}</td> <td>${escapeHtml(user.email)}</td> <td>${avgProgress.toFixed(1)}%</td> <td class="${statusClass}">${status}</td> <td>${escapeHtml(lastUpdateFormatted)}</td>`; tableBody.appendChild(row); }); }
+        async function generateProgressDistributionChart(usersData) { /* ... as before ... */ const ctx = document.getElementById('progressDistributionChart'); const container = document.getElementById('progressDistributionChartContainer'); if (!ctx || !container) { if(container) container.style.display = 'none'; return; } container.innerHTML = '<canvas id="progressDistributionChart"></canvas>'; const newCtx = document.getElementById('progressDistributionChart').getContext('2d'); container.style.display = 'block'; let completed = 0, inProgress = 0, notStarted = 0; const validUsersData = usersData || []; validUsersData.forEach(user => { const avgProgress = user.avgProgress || 0; if (avgProgress >= 100) completed++; else if (avgProgress > 0 || (user.assessmentCompleted && avgProgress === 0)) inProgress++; else notStarted++; }); const totalUsers = completed + inProgress + notStarted; if (progressDistributionChartInstance) progressDistributionChartInstance.destroy(); if (totalUsers === 0) { container.innerHTML = '<p style="text-align:center;padding:20px;color:#78350f;">No data for chart.</p>'; return; } progressDistributionChartInstance = new Chart(newCtx, { type: 'pie', data: { labels: [`Completed (${completed})`, `In Progress (${inProgress})`, `Not Started (${notStarted})`], datasets: [{ label: 'User Progress Status', data: [completed, inProgress, notStarted], backgroundColor: ['rgba(16, 185, 129, 0.7)', 'rgba(245, 158, 11, 0.7)', 'rgba(156, 163, 175, 0.7)'], borderColor: ['rgba(5, 150, 105, 1)', 'rgba(217, 119, 6, 1)', 'rgba(107, 114, 128, 1)'], borderWidth: 1 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top' }, title: { display: true, text: `Progress Distribution (${totalUsers} Users Shown)` }, tooltip: { callbacks: { label: function(context) { let label = context.dataset.label || ''; let valueLabel = context.label || ''; const value = context.raw; const percentage = totalUsers > 0 ? ((value / totalUsers) * 100).toFixed(1) : 0; const statusText = valueLabel.substring(0, valueLabel.lastIndexOf('(')).trim(); label = `${statusText}: ${value} (${percentage}%)`; return label; } } } } } }); }
 
 
         // --- Utility & Logout Functions ---
-        // (downloadAdminTableAsCSV, logout - unchanged)
-        function downloadAdminTableAsCSV(data) {
-             if (!data || data.length === 0) { alert("No data to download."); return; }
-             const headers = ["Name", "Email", "Average Progress (%)", "Status", "Last Update"];
-             const rows = data.map(user => { const avgProgress = (user.avgProgress || 0).toFixed(1); let status = 'Not Started'; if (avgProgress >= 100) status = 'Completed'; else if (avgProgress > 0 || (user.assessmentCompleted && avgProgress === 0)) status = 'In Progress'; let lastUpdateFormatted = 'N/A'; if(user.lastUpdate) { try { const d = new Date(user.lastUpdate); if (!isNaN(d.getTime())) { lastUpdateFormatted = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; } else { lastUpdateFormatted = 'Invalid Date';} } catch { lastUpdateFormatted = 'Invalid Date';} }
-                 const escapeCSV = (field) => { const stringField = String(field === null || typeof field === 'undefined' ? 'N/A' : field); if (stringField.includes(',') || stringField.includes('\n') || stringField.includes('"')) { return `"${stringField.replace(/"/g, '""')}"`; } return stringField; };
-                 const name = escapeCSV(user.name); const email = escapeCSV(user.email); return [name, email, avgProgress, status, lastUpdateFormatted]; });
-             let csvContent = headers.join(",") + "\n" + rows.map(e => e.join(",")).join("\n");
-             const blob = new Blob(["\ufeff" + csvContent], { type: 'text/csv;charset=utf-8;' }); const link = document.createElement("a"); const url = URL.createObjectURL(blob); link.setAttribute("href", url); const timestamp = new Date().toISOString().slice(0, 10); link.setAttribute("download", `user_progress_report_${timestamp}.csv`); document.body.appendChild(link); link.click(); document.body.removeChild(link); URL.revokeObjectURL(url); console.log("CSV download initiated.");
-        }
-        function logout() {
-            console.log("Logging out user...");
-            try {
-                localStorage.removeItem(LOGGED_IN_KEY); localStorage.removeItem(CURRENT_USER_KEY); localStorage.removeItem(SIGNUP_FLAG_KEY); IS_ADMIN_USER = false;
-                if (confidenceChartInstance) confidenceChartInstance.destroy(); if (progressDistributionChartInstance) progressDistributionChartInstance.destroy(); confidenceChartInstance = null; progressDistributionChartInstance = null;
-                console.log("User logged out, relevant keys removed."); window.location.href = 'login.html';
-            } catch (e) { console.error("Error during logout:", e); window.location.href = 'login.html'; }
-        }
+        function downloadAdminTableAsCSV(data) { /* ... as before ... */ if (!data?.length) { alert("No data."); return; } const headers = ["Name", "Email", "Average Progress (%)", "Status", "Last Update"]; const rows = data.map(user => { const avgProgress = (user.avgProgress || 0).toFixed(1); let status = 'Not Started'; if (avgProgress >= 100) status = 'Completed'; else if (avgProgress > 0 || (user.assessmentCompleted && avgProgress === 0)) status = 'In Progress'; let lastUpdateFormatted = 'N/A'; if(user.lastUpdate) { try { const d = new Date(user.lastUpdate); if (!isNaN(d.getTime())) { lastUpdateFormatted = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; } else { lastUpdateFormatted = 'Invalid Date';} } catch { lastUpdateFormatted = 'Invalid Date';} } const escapeCSV = (field) => { const stringField = String(field ?? 'N/A'); if (stringField.includes(',') || stringField.includes('\n') || stringField.includes('"')) { return `"${stringField.replace(/"/g, '""')}"`; } return stringField; }; const name = escapeCSV(user.name); const email = escapeCSV(user.email); return [name, email, avgProgress, status, lastUpdateFormatted]; }); let csvContent = headers.join(",") + "\n" + rows.map(e => e.join(",")).join("\n"); const blob = new Blob(["\ufeff" + csvContent], { type: 'text/csv;charset=utf-8;' }); const link = document.createElement("a"); const url = URL.createObjectURL(blob); link.setAttribute("href", url); const timestamp = new Date().toISOString().slice(0, 10); link.setAttribute("download", `user_progress_report_${timestamp}.csv`); document.body.appendChild(link); link.click(); document.body.removeChild(link); URL.revokeObjectURL(url); console.log("CSV download initiated."); }
+        function logout() { /* ... as before ... */ console.log("Logging out..."); try { localStorage.removeItem(LOGGED_IN_KEY); localStorage.removeItem(CURRENT_USER_KEY); localStorage.removeItem(SIGNUP_FLAG_KEY); IS_ADMIN_USER = false; if (confidenceChartInstance) confidenceChartInstance.destroy(); if (progressDistributionChartInstance) progressDistributionChartInstance.destroy(); confidenceChartInstance = null; progressDistributionChartInstance = null; console.log("Logged out, keys removed."); window.location.href = 'login.html'; } catch (e) { console.error("Logout error:", e); window.location.href = 'login.html'; } }
     </script>
 </body>
 </html>
