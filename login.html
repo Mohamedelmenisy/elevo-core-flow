@@ -120,7 +120,8 @@
         console.log("Login page script starting...");
 
         // --- Unified Keys ---
-        const LOGGED_IN_KEY = 'isUserLoggedIn'; // Optional: For simple UI checks if needed
+        const LOGGED_IN_KEY = 'isUserLoggedIn';
+        const CURRENT_USER_KEY = 'currentUser'; // Key for user data object
         const REMEMBERED_EMAIL_KEY = 'rememberedEmail';
 
         // --- DOM Elements ---
@@ -140,60 +141,97 @@
         // --- Supabase Client Initialization ---
         let supabase = null; // Initialize as null
         try {
-            // *** CORRECTED CHECK: Use 'supabase' (global object from v2 library) ***
             if (typeof window.supabase === 'undefined' || typeof window.supabase.createClient !== 'function') {
                 throw new Error("Supabase library (supabase-js) not found or not loaded correctly. Make sure the script tag is in the <head>.");
             }
-
-            // *** REPLACE WITH YOUR ACTUAL SUPABASE URL AND ANON KEY ***
             const supabaseUrl = 'https://lgcutmuspcaralydycmg.supabase.co'; // <--- PUT YOUR URL HERE
             const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxnY3V0bXVzcGNhcmFseWR5Y21nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU0NDY3MDEsImV4cCI6MjA2MTAyMjcwMX0.3u5Y7pkH2NNnnoGLMWVfAa5b8fq88o1itRYnG1K38tE'; // <--- PUT YOUR ANON KEY HERE
-
-            // *** CORRECT INITIALIZATION: Use the global 'supabase' object ***
             supabase = window.supabase.createClient(supabaseUrl, supabaseAnonKey);
             console.log("Supabase client initialized successfully.");
 
         } catch (error) {
              console.error("FATAL: Supabase client initialization failed:", error.message);
-             // Show the dedicated error message div
              if(supabaseErrorMessageDiv) supabaseErrorMessageDiv.style.display = 'block';
-             // Disable the form as login won't work
              if(loginForm) loginForm.style.display = 'none';
-             if(document.querySelector('.links')) document.querySelector('.links').style.display = 'none'; // Hide links too
-             // Stop further script execution for login logic (implicit as 'supabase' remains null)
+             if(document.querySelector('.links')) document.querySelector('.links').style.display = 'none';
         }
 
-
         // --- Utility Functions ---
-        // (Keep these functions as they are)
         function showMessage(element, message, isError = true) { if (!element) return; element.textContent = message; element.style.color = isError ? '#e74c3c' : '#27ae60'; element.style.display = 'block'; }
         function hideMessage(element) { if (!element) return; element.style.display = 'none'; element.textContent = ''; }
         function togglePasswordVisibility(toggleButton, inputElement) { if (!toggleButton || !inputElement) return; const isPassword = inputElement.type === 'password'; inputElement.type = isPassword ? 'text' : 'password'; toggleButton.innerHTML = isPassword ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>' : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>'; toggleButton.setAttribute('aria-label', isPassword ? 'Hide password' : 'Show password'); }
         function setButtonLoading(isLoading) { if (!loginButton) return; console.log(`Setting button loading: ${isLoading}`); loginButton.disabled = isLoading; loginButton.classList.toggle('loading', isLoading); }
 
+        // *** NEW: Function to store user data ***
+        function storeUserData(user) {
+            if (!user || !user.id || !user.email) {
+                console.error("storeUserData: Invalid user object received:", user);
+                return;
+            }
+            try {
+                // Prepare data structure similar to what index.html expects
+                const currentUserData = {
+                    id: user.id,
+                    email: user.email,
+                    // Attempt to get name from metadata, fallback to email prefix
+                    name: user.user_metadata?.full_name || user.email.split('@')[0],
+                    progress: {} // Initialize progress object
+                };
+                localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(currentUserData));
+                localStorage.setItem(LOGGED_IN_KEY, 'true'); // Ensure this is also set
+                console.log("User data stored in localStorage:", currentUserData);
+            } catch (e) {
+                console.error("Error storing user data in localStorage:", e);
+                // Clear potentially corrupted data
+                localStorage.removeItem(CURRENT_USER_KEY);
+                localStorage.removeItem(LOGGED_IN_KEY);
+            }
+        }
+
         // --- Initial Checks & Setup (Only run if Supabase initialized) ---
-        if (supabase) { // Check if supabase client was successfully created
-             supabase.auth.getSession().then(({ data: { session } }) => {
-                 if (session) {
-                     console.log("Supabase session found, user is likely logged in.", session);
-                     if(alreadyLoggedInMessageDiv) alreadyLoggedInMessageDiv.style.display = 'block';
-                     hideMessage(loginMessage);
-                     // Optionally hide the form if already logged in and Supabase is working
-                     if (loginForm) loginForm.style.display = 'none';
-                     if(document.querySelector('.links')) document.querySelector('.links').style.display = 'none';
-                 } else {
-                     console.log("No active Supabase session found.");
-                     if(alreadyLoggedInMessageDiv) alreadyLoggedInMessageDiv.style.display = 'none';
-                     handleUrlParamsAndFocus(); // Handle params only if not logged in
-                 }
-             }).catch(error => {
-                 console.error("Error checking Supabase session:", error);
-                 // Proceed cautiously if session check fails but supabase object exists
-                 handleUrlParamsAndFocus();
-             });
+        if (supabase) {
+            supabase.auth.getSession().then(async ({ data: { session } }) => { // Make async to potentially fetch user
+                if (session) {
+                    console.log("Supabase session found.", session);
+                    // *** NEW: Check if local data exists, if not, fetch and store ***
+                    const localUserExists = localStorage.getItem(CURRENT_USER_KEY) && localStorage.getItem(LOGGED_IN_KEY) === 'true';
+                    if (!localUserExists) {
+                        console.log("Local user data missing despite session. Fetching user...");
+                        try {
+                            const { data: { user }, error: userError } = await supabase.auth.getUser();
+                            if (userError) {
+                                console.error("Error fetching user data for existing session:", userError);
+                            } else if (user) {
+                                console.log("User data fetched for existing session:", user);
+                                storeUserData(user); // Store fetched user data
+                            } else {
+                                console.warn("No user object returned for existing session.");
+                            }
+                        } catch (fetchError) {
+                            console.error("Unexpected error fetching user data:", fetchError);
+                        }
+                    } else {
+                        console.log("Local user data found for existing session.");
+                    }
+
+                    // Now, show the "already logged in" message regardless of fetch success
+                    if(alreadyLoggedInMessageDiv) alreadyLoggedInMessageDiv.style.display = 'block';
+                    hideMessage(loginMessage);
+                    if (loginForm) loginForm.style.display = 'none';
+                    if(document.querySelector('.links')) document.querySelector('.links').style.display = 'none';
+
+                } else {
+                    console.log("No active Supabase session found.");
+                    if(alreadyLoggedInMessageDiv) alreadyLoggedInMessageDiv.style.display = 'none';
+                    handleUrlParamsAndFocus(); // Handle params only if not logged in
+                }
+            }).catch(error => {
+                console.error("Error checking Supabase session:", error);
+                // Proceed cautiously if session check fails but supabase object exists
+                handleUrlParamsAndFocus();
+            });
          } else {
               console.warn("Supabase client not available. Login functionality disabled.");
-              // Ensure form is hidden if initialization failed earlier
               if(loginForm && loginForm.style.display !== 'none') loginForm.style.display = 'none';
                if(document.querySelector('.links') && document.querySelector('.links').style.display !== 'none') {
                     document.querySelector('.links').style.display = 'none';
@@ -201,7 +239,6 @@
          }
 
          function handleUrlParamsAndFocus() {
-             // This function READS parameters but DOES NOT ADD them during final redirect
              const urlParams = new URLSearchParams(window.location.search);
              const emailParam = urlParams.get('email');
              const signedUpParam = urlParams.get('signedup');
@@ -212,17 +249,15 @@
              }
              if (signedUpParam && (!alreadyLoggedInMessageDiv || alreadyLoggedInMessageDiv.style.display === 'none')) {
                   showMessage(loginMessage, "Account created successfully! Please log in.", false);
-                  // Clean the URL visually *after* reading the params
                   window.history.replaceState({}, document.title, window.location.pathname);
               }
 
              const rememberedEmail = localStorage.getItem(REMEMBERED_EMAIL_KEY);
-             if (rememberedEmail && emailInput && !emailInput.value) { // Only fill if not filled by param
+             if (rememberedEmail && emailInput && !emailInput.value) {
                  console.log("Pre-filling email from localStorage:", rememberedEmail);
                  emailInput.value = rememberedEmail;
                  if(rememberCheckbox) rememberCheckbox.checked = true;
              }
-             // Only focus if the form is visible
              if (loginForm && loginForm.style.display !== 'none' && emailInput && passwordInput) {
                  if (emailInput.value === '') { emailInput.focus(); } else { passwordInput.focus(); }
              }
@@ -234,7 +269,7 @@
             if (passwordToggle && passwordInput) { passwordToggle.addEventListener('click', () => togglePasswordVisibility(passwordToggle, passwordInput)); passwordToggle.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') togglePasswordVisibility(passwordToggle, passwordInput); }); }
 
             if(loginForm) {
-                loginForm.addEventListener('submit', async function(e) { // Make handler async
+                loginForm.addEventListener('submit', async function(e) {
                     e.preventDefault();
                     console.log("Login form submitted.");
 
@@ -256,13 +291,12 @@
                     else { localStorage.removeItem(REMEMBERED_EMAIL_KEY); }
 
                     console.log(`Authenticating with Supabase: ${email}`);
-                    await authenticateUserWithSupabase(email, password); // This handles the secure redirect
+                    await authenticateUserWithSupabase(email, password); // Handles storage + redirect
                 });
             } else if (loginForm && loginForm.style.display !== 'none') {
                  console.error("Login form element not found!");
             }
 
-             // Forgot password link placeholder
              const forgotPasswordLink = document.getElementById('forgotPasswordLink');
              if(forgotPasswordLink) {
                   forgotPasswordLink.addEventListener('click', function(e) {
@@ -273,7 +307,7 @@
 
          } // End if(supabase) for event listeners
 
-         // --- Supabase Authentication Function (Handles Secure Redirect) ---
+         // --- Supabase Authentication Function (Handles Storage + Secure Redirect) ---
          async function authenticateUserWithSupabase(email, password) {
               if (!supabase) {
                    console.error("Cannot authenticate: Supabase client not initialized.");
@@ -281,7 +315,7 @@
                    setButtonLoading(false);
                    return;
               }
-             console.log(`Running authenticateUserWithSupabase for ${email}. Will redirect securely on success.`);
+             console.log(`Running authenticateUserWithSupabase for ${email}. Will store data and redirect securely on success.`);
 
              try {
                  const { data, error } = await supabase.auth.signInWithPassword({
@@ -290,7 +324,6 @@
                  });
 
                  if (error) {
-                     // ... [Error Handling] ...
                      console.error("Supabase Login Error:", error.message);
                      let userMessage = 'Incorrect email or password.';
                      if (error.message.toLowerCase().includes('invalid login credentials')) { userMessage = 'Incorrect email or password.'; }
@@ -302,22 +335,35 @@
                  }
 
                  // --- Login Successful ---
-                 console.log("Supabase Login Successful.");
+                 console.log("Supabase Login Successful. User data:", data.user);
 
-                 localStorage.setItem(LOGGED_IN_KEY, 'true'); // Optional flag
+                 // *** NEW: Store user data BEFORE redirecting ***
+                 if (data.user) {
+                     storeUserData(data.user); // This now also sets LOGGED_IN_KEY
+                 } else {
+                     console.error("Login succeeded but no user data received!");
+                     // Handle this case - maybe show an error and don't redirect?
+                     showMessage(loginError, 'Login partially successful, but user data missing. Please try again.', true);
+                     setButtonLoading(false);
+                     return; // Prevent redirect
+                 }
+
+                 // Show success message (optional, as redirect is quick)
                  showMessage(loginMessage, "Login successful! Redirecting...", false);
 
                  // *** THE SECURE REDIRECT HAPPENS HERE ***
-                 const destination = 'index.html'; // Target page without parameters
+                 const destination = 'index.html'; // Target page
                  console.log(`Redirecting securely to: ${destination}`);
                  setTimeout(() => {
-                     // This navigates cleanly without adding email/password to URL
                      window.location.href = destination;
-                 }, 1000);
+                 }, 1000); // Keep a short delay for the message
 
              } catch (unexpectedError) {
                  console.error("Unexpected error during Supabase login:", unexpectedError);
                  showMessage(loginError, 'An unexpected error occurred. Please try again.', true);
+                 // Clear potentially inconsistent state
+                 localStorage.removeItem(CURRENT_USER_KEY);
+                 localStorage.removeItem(LOGGED_IN_KEY);
                  setButtonLoading(false);
              }
          }
