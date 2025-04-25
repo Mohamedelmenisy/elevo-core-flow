@@ -765,5 +765,72 @@ button:hover {
   });
 </script>
 
+
+<script>
+  const SUPABASE_URL = 'https://lgcutmuspcaralydycmg.supabase.co';
+  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxnY3V0bXVzcGNhcmFseWR5Y21nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU0NDY3MDEsImV4cCI6MjA2MTAyMjcwMX0.3u5Y7pkH2NNnnoGLMWVfAa5b8fq88o1itRYnG1K38tE';
+  const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  const CURRENT_USER_KEY = 'currentUser';
+  const getCurrentUser = () => JSON.parse(localStorage.getItem(CURRENT_USER_KEY));
+  const saveCurrentUser = (u) => localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(u));
+
+  document.getElementById('assessmentForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const user = getCurrentUser();
+    if (!user) return alert('User not found');
+
+    const form = e.target;
+    const answers = new FormData(form);
+    const full_name = user.name;
+    const email = user.email;
+
+    const questionData = [
+      { id: 'q1_coaching_meaning', text: 'What does coaching mean to you?', section: 'pre-assessment', type: 'text' },
+      { id: 'q3_expectations', text: 'What are your expectations from this course?', section: 'pre-assessment', type: 'text' },
+      { id: 'q4_confidence_rating', text: 'Rate your current coaching confidence (1=Low, 5=High)', section: 'pre-assessment', type: 'rating' },
+      { id: 'q4_confidence_explanation', text: 'Briefly explain your rating', section: 'pre-assessment', type: 'text' }
+    ];
+
+    const randomId = document.querySelector('#randomQuestionContainer textarea')?.id;
+    const randomLabel = document.querySelector(`#randomQuestionContainer label`)?.textContent;
+    if (randomId && randomLabel) {
+      questionData.splice(1, 0, { id: randomId, text: randomLabel, section: 'pre-assessment', type: 'text' });
+    }
+
+    const entries = questionData.map(q => {
+      const ans = answers.get(q.id);
+      return {
+        question_id: q.id,
+        question_text: q.text,
+        section_id: q.section,
+        page: 'assessment.html',
+        completion_status: 'completed',
+        user_email: email,
+        full_name,
+        answer: ans,
+        is_correct: null,
+        score: 1,
+        type: q.type
+      };
+    });
+
+    const { error: insertError } = await supabase.from('user_progress').insert(entries);
+    if (insertError) return alert('Error saving answers');
+
+    await supabase.from('users').update({
+      assessment_completed: true,
+      is_admin: email.toLowerCase() === 'm.elsayed@thechefz.co'
+    }).eq('email', email);
+
+    document.getElementById('assessmentSuccessPopup').style.display = 'block';
+    document.getElementById('popupOverlay').style.display = 'block';
+
+    user.assessmentCompleted = true;
+    user.assessmentAnswers = Object.fromEntries(answers);
+    saveCurrentUser(user);
+  });
+</script>
+
 </body>
 </html>
