@@ -1,3 +1,5 @@
+--- START OF FILE index.txt ---
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -355,7 +357,8 @@ p { margin-bottom: 15px; color: #555e68; /* Slightly softer black */ line-height
     <div class="lock-message" id="quizLockMessage">Complete the goal question above to unlock the first quiz.</div>
     <h3>Next Step: Leadership Knowledge Check</h3>
     <p>Test your foundational knowledge of leadership principles before diving deeper.</p>
-    <a href="Assessment.html" id="startQuiz1Button" class="quiz-start-button locked">Start Quiz 1</a>
+    <!-- ✅ CORRECTED: Changed href to lowercase 'assessment.html' -->
+    <a href="assessment.html" id="startQuiz1Button" class="quiz-start-button locked">Start Quiz 1</a>
 </div>
 
 </main>
@@ -388,7 +391,8 @@ const QUESTION_ID = 'intro-goal';
 const QUESTION_TEXT_INTRO_GOAL = "What is your goal for taking this Coaching & Leadership course?";
 const SECTION_TITLE_INTRO_GOAL = 'Coaching & Leadership - Intro';
 const CURRENT_PAGE = 'index.html';
-const QUIZ_REDIRECT_URL = 'Assessment.html';
+// ✅ CORRECTED: Changed QUIZ_REDIRECT_URL to lowercase 'assessment.html'
+const QUIZ_REDIRECT_URL = 'assessment.html';
 const REMINDER_TIMEOUT_MS = 15000;
 const REDIRECT_DELAY_MS = 2500;
 
@@ -495,13 +499,18 @@ function checkUnlockStatus() {
 }
 
 function lockQuizButton() {
-    if (startQuiz1Button) { startQuiz1Button.classList.add('locked'); startQuiz1Button.classList.remove('unlocked-success'); startQuiz1Button.href = '#'; }
+    if (startQuiz1Button) { startQuiz1Button.classList.add('locked'); startQuiz1Button.classList.remove('unlocked-success'); startQuiz1Button.href = '#'; } // Keep href as # when locked
     if (quizLockMessage) { quizLockMessage.style.display = 'block'; }
     console.log("Quiz button locked.");
 }
 
 function unlockQuizButton() {
-    if (startQuiz1Button) { startQuiz1Button.classList.remove('locked'); startQuiz1Button.classList.add('unlocked-success'); startQuiz1Button.href = QUIZ_REDIRECT_URL; }
+    if (startQuiz1Button) {
+        startQuiz1Button.classList.remove('locked');
+        startQuiz1Button.classList.add('unlocked-success');
+        // Set href using the corrected constant
+        startQuiz1Button.href = QUIZ_REDIRECT_URL;
+     }
     if (quizLockMessage) { quizLockMessage.style.display = 'none'; }
     console.log("Quiz button unlocked.");
 }
@@ -644,6 +653,7 @@ function showRedirectConfirmationModal() {
         if (heading) { heading.textContent = "Goal Submitted!"; heading.style.color = '#27ae60'; }
         if (paragraph) { paragraph.textContent = `Thank you! You've completed the first step and unlocked the quiz. Redirecting you now...`; paragraph.style.marginTop = '15px'; }
         successModal.style.display = 'flex'; successModal.style.opacity = '1';
+        // ✅ Uses the corrected QUIZ_REDIRECT_URL constant
         console.log(`Modal shown. Redirecting to ${QUIZ_REDIRECT_URL} in ${REDIRECT_DELAY_MS}ms.`);
         setTimeout(() => { window.location.href = QUIZ_REDIRECT_URL; }, REDIRECT_DELAY_MS);
     } catch (err) { console.error("Error displaying redirect confirmation modal:", err); alert("Success! Your goal has been submitted. Redirecting to the first quiz..."); window.location.href = QUIZ_REDIRECT_URL; }
@@ -657,63 +667,51 @@ function closeModal() {
 async function sendToSupabase(submissionData) {
     if (!supabase) {
         console.error("sendToSupabase: Supabase client not available.");
-        // Keep existing showError call, but also return failure explicitly
         showError("Database connection error. Progress saved locally only.");
         return { success: false, submitted_at: null };
     }
 
-    // ✅ Prepare data with correct snake_case column names matching the database
     const clientTimestamp = new Date().toISOString();
     const dataToSend = {
         name: submissionData.name,
         email: submissionData.email,
-        // answer: submissionData.answer, // Keep if general 'answer' column exists
         goal_answer: submissionData.answer, // Specific column for the goal answer
         is_correct: null,
         score: submissionData.score,
         submitted_at: clientTimestamp, // Use client timestamp for consistency
-        // Removed section_title here, assuming it's not in 'assessments' based on previous context
-        // Add it back if 'assessments' *does* have section_title
-        section_id: submissionData.sectionId, // Ensure snake_case
-        completion_status: submissionData.completionStatus, // Ensure snake_case
-        question_id: submissionData.questionId, // Ensure snake_case
-        question_text: submissionData.questionText, // Ensure snake_case
+        section_id: submissionData.sectionId,
+        completion_status: submissionData.completionStatus,
+        question_id: submissionData.questionId,
+        question_text: submissionData.questionText,
         page: CURRENT_PAGE // Keep page identifier
     };
 
     console.log("Attempting to send data to 'assessments' table:", JSON.stringify(dataToSend, null, 2));
 
     try {
-        // Use insert without select
         const { error } = await supabase
             .from('assessments')
             .insert([dataToSend]);
 
-        // ✅ Improved Error Handling
         if (error) {
-            // Log the detailed error object
             console.error('Supabase insert error details:', error);
-            // Show a user-friendly message, potentially derived from the error
             let userMessage = `Database Error saving assessment: ${error.message}. Your progress has been saved locally.`;
-            if (error.code === '23505') { // Handle potential unique constraint violation
+            if (error.code === '23505') {
                  userMessage = "You seem to have already submitted this goal. Your progress is saved.";
-                 // Optionally, treat this as a "success" scenario for the user flow
-                 // return { success: true, submitted_at: clientTimestamp }; // Treat duplicate as success? Decide based on desired UX. For now, treat as failure to prevent accidental progress overwrite logic later? Let's stick to returning failure.
             }
-            showError(userMessage); // Show error in the UI
-            alert('Error submitting to Supabase: ' + (error.message || 'Unknown error')); // Alert for immediate visibility
-            return { success: false, submitted_at: null }; // Indicate failure
+            showError(userMessage);
+            alert('Error submitting to Supabase: ' + (error.message || 'Unknown error'));
+            return { success: false, submitted_at: null };
         }
 
-        // If no error:
         console.log('Supabase assessment submission successful. Client Timestamp:', clientTimestamp);
-        return { success: true, submitted_at: clientTimestamp }; // Return success and the timestamp used
+        return { success: true, submitted_at: clientTimestamp };
 
     } catch (networkError) {
         console.error('Network Error during assessment submission:', networkError);
         showError(`Network Error: ${networkError.message}. Your progress has been saved locally.`);
-        alert('Network error submitting assessment. Progress saved locally.'); // Alert for network errors too
-        return { success: false, submitted_at: null }; // Indicate network failure
+        alert('Network error submitting assessment. Progress saved locally.');
+        return { success: false, submitted_at: null };
     }
 }
 
@@ -729,25 +727,23 @@ async function updateUserProgress(userEmail, sectionId, questionId, questionText
          return false;
     }
 
-    // ✅ Prepare comprehensive data with snake_case matching DB columns
     const now = new Date().toISOString();
     const progressData = {
       email: userEmail,
       section_id: sectionId,
-      section_type: 'goal',                 // Specific type
-      section_title: SECTION_TITLE_INTRO_GOAL, // Specific title
-      question_id: questionId,              // Use passed question ID
-      question_text: questionText,          // Use passed question text
-      page: CURRENT_PAGE,                   // Specific page
-      progress_percent: 100,                // Correct snake_case
-      progress: 100,                        // Correct snake_case
+      section_type: 'goal',
+      section_title: SECTION_TITLE_INTRO_GOAL,
+      question_id: questionId,
+      question_text: questionText,
+      page: CURRENT_PAGE,
+      progress_percent: 100,
+      progress: 100,
       score: 100,
       status: 'complete',
-      submitted_at: now,                    // Correct snake_case
-      updated_at: now,                      // Correct snake_case
-      is_passed: true,                      // Correct snake_case
-      user_id: null                         // Placeholder
-      // id: Automatically generated by DB
+      submitted_at: now,
+      updated_at: now,
+      is_passed: true,
+      user_id: null
     };
 
 
@@ -760,23 +756,17 @@ async function updateUserProgress(userEmail, sectionId, questionId, questionText
                  onConflict: 'email,section_id' // Ensure this constraint exists in DB
              });
 
-        // ✅ Improved Error Handling
         if (error) {
-            // Log the detailed error object
             console.error('Supabase upsert error details:', error);
-            // Optionally show an error or alert, but maybe not necessary if assessment error was already shown
-            // alert('Error updating progress: ' + (error.message || 'Unknown error')); // Uncomment if separate alert is desired
-            return false; // Indicate failure
+            return false;
         }
 
         console.log(`Successfully upserted user_progress for section ${sectionId}.`);
-        return true; // Indicate success
+        return true;
 
     } catch (networkError) {
         console.error('Network Error during user_progress update:', networkError);
-        // Optionally alert user about progress update network error
-        // alert('Network error updating progress.');
-        return false; // Indicate failure
+        return false;
     }
 }
 
@@ -835,7 +825,6 @@ async function handleFormSubmit(event) {
     if (!supabase) {
         console.error("handleFormSubmit Error: Supabase client is not available.");
         showError("Cannot connect to service. Please check connection and refresh.");
-        // Don't show alert here, showError is sufficient
         return;
     }
 
@@ -867,42 +856,36 @@ async function handleFormSubmit(event) {
 
     try {
         // --- 5. Prepare Assessment Data ---
-        // Use snake_case for keys passed to sendToSupabase if they correspond to DB columns
         const assessmentData = {
             name: name,
             email: email,
             answer: answer,
-            questionId: QUESTION_ID, // Keep camelCase here if sendToSupabase expects it
-            questionText: questionText, // Keep camelCase here
-            sectionId: SECTION_ID, // Keep camelCase here
+            questionId: QUESTION_ID,
+            questionText: questionText,
+            sectionId: SECTION_ID,
             score: 100,
-            completionStatus: 'Complete' // Keep camelCase here
+            completionStatus: 'Complete'
         };
         console.log("Prepared assessment data:", JSON.stringify(assessmentData, null, 2));
 
         // --- 6. Send Assessment Data to Supabase ---
         console.log("Attempting to send assessment data to Supabase...");
         const { success: assessmentSuccess, submitted_at } = await sendToSupabase(assessmentData);
-        // 'submitted_at' here is the client timestamp if DB insert succeeded
 
         // --- 7. Save Locally (Always attempt, use DB timestamp if available) ---
         console.log("Attempting to save data locally...");
-        // If assessment failed, submitted_at will be null. storeAnswersLocally handles this.
         storeAnswersLocally(name, answer, submitted_at);
         isLocallySaved = true;
-        submissionTimestamp = submitted_at; // Store the timestamp for UI update
+        submissionTimestamp = submitted_at;
         console.log(`Local save completed. Timestamp used for local storage: ${submitted_at}`);
 
 
         // --- 8. Update Progress (Conditional based on assessment success?) ---
-        // Decide if progress should be updated even if assessment insert failed (e.g., duplicate entry)
-        // For robustness, let's attempt progress update if Supabase is available.
-        if (supabase) { // Check again, though unlikely to change
+        if (supabase) {
             console.log("Attempting to update user_progress table in Supabase...");
             const progressUpdateSuccess = await updateUserProgress(email, SECTION_ID, QUESTION_ID, questionText);
             if (!progressUpdateSuccess) {
                 console.warn("Failed to update user_progress table in Supabase. Local progress is saved.");
-                // Maybe show a subtle non-blocking warning? For now, just log.
             } else {
                 console.log("Successfully updated user_progress table.");
             }
@@ -910,20 +893,18 @@ async function handleFormSubmit(event) {
              console.warn("Supabase client not available, skipping user_progress update.");
         }
 
-        // Update local user object progress regardless of DB state
         updateLocalSectionProgress(SECTION_ID);
 
 
         // --- 9. Update UI (Based on Local Success) ---
         console.log("Updating UI elements...");
         showQuestionProgressBar(questionContainer, 100);
-        // ✅ Show timestamp IF the database call was successful (submissionTimestamp is not null)
-        // If submissionTimestamp is null, showSubmissionInfo will display the fallback message.
         showSubmissionInfo(submissionTimestamp);
         disableFormInputs();
         unlockQuizButton();
 
         // --- 10. Show Confirmation & Redirect (Only if DB assessment was successful) ---
+        // ✅ This is where the redirection to QUIZ_REDIRECT_URL ('assessment.html') happens
         if (assessmentSuccess) {
             console.log("Showing redirect confirmation modal...");
             showRedirectConfirmationModal();
@@ -959,12 +940,10 @@ async function handleFormSubmit(event) {
     } finally {
         // --- Final State Check ---
         console.log("Executing 'finally' block of form submission.");
-        // Re-enable button ONLY if the entire process failed *before* local save
         if (!isLocallySaved) {
              setButtonLoading(false);
              console.log("Submission failed AND local save didn't complete. Form re-enabled.");
         } else {
-             // If locally saved (even if DB failed), keep button disabled as action is complete from user perspective
              disableFormInputs();
              console.log("Submission process finished. Form remains disabled (locally saved).");
         }
@@ -977,12 +956,11 @@ function setButtonLoading(isLoading) {
     submitBtn.disabled = isLoading;
     if (isLoading) { submitBtn.textContent = 'Submitting...'; submitBtn.style.background = '#bdc3c7'; submitBtn.style.color = '#7f8c8d'; submitBtn.style.cursor = 'wait'; submitBtn.style.boxShadow = 'none'; submitBtn.style.transform = 'none'; }
     else {
-        // After loading finishes, decide final state based on whether goal is complete *locally*
         const isGoalCompleteLocally = localStorage.getItem(UNLOCK_ANSWER_KEY)?.trim().length >= 20;
         if (isGoalCompleteLocally) {
-            disableFormInputs(); // Keep disabled if completed
+            disableFormInputs();
         } else {
-            enableFormInputs(); // Re-enable if not completed (e.g., error before local save)
+            enableFormInputs();
         }
     }
 }
