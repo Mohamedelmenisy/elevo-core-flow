@@ -231,9 +231,7 @@
         const CURRENT_USER_KEY = 'currentUser';
         const SIGNUP_FLAG_KEY = 'hasSignedUpBefore';
         const ADMIN_EMAIL = 'm.elsayed@thechefz.co'; // Case-insensitive comparison
-        // ✅ MODIFICATION START: Changed 'Dashboard.html' to 'dashboard.html'
-        const DASHBOARD_URL = 'dashboard.html'; // URL for the main dashboard
-        // ✅ MODIFICATION END
+        const DASHBOARD_URL = 'dashboard.html'; // URL for the main dashboard (lowercase)
 
         // Assessment Question Pool
         const randomQuestionPool = [
@@ -300,25 +298,27 @@
             populateTopBar(currentUser);
 
             // --- Assessment Completion Check ---
-            // This logic correctly redirects if the assessment is marked as completed in the user's data
-            if (currentUser.assessmentCompleted) {
-                console.log("Assessment already completed according to user data. Redirecting to Dashboard.");
-                // ✅ Uses the corrected DASHBOARD_URL constant
-                window.location.replace(DASHBOARD_URL); // Use replace to avoid adding Assessment page to history
-            } else {
-                // Only show the form if the assessment is NOT completed
-                console.log("Assessment not completed. Setting up and displaying assessment form.");
+            // ✅ MODIFICATION START: Restructured this block based on user request for clarity.
+            // It checks if the assessment is NOT completed first, and only shows the form in that case.
+            // Otherwise, it redirects. This reinforces the protection against premature redirection.
+            if (!currentUser.assessmentCompleted) {
+                // Display the form ONLY if not completed
+                console.log("Assessment not completed according to user data. Setting up and displaying assessment form.");
                 setupAssessmentForm(); // Setup the form content and validation
                 loadingMessage.style.display = 'none'; // Hide loading message
                 assessmentSection.style.display = 'block'; // Show assessment section
                 setTimeout(() => assessmentSection.classList.add('fade-in'), 50); // Apply fade-in effect
+            } else {
+                // Redirect ONLY if already completed
+                console.log("Assessment already completed according to user data. Redirecting to Dashboard.");
+                window.location.replace(DASHBOARD_URL); // Use replace to avoid adding Assessment page to history
             }
+            // ✅ MODIFICATION END
 
              // Attach listener for the success popup button (after successful submission)
              startJourneyBtn.addEventListener('click', () => {
                  console.log("Start Journey button clicked. Redirecting to Dashboard.");
-                 // ✅ Uses the corrected DASHBOARD_URL constant
-                 window.location.href = DASHBOARD_URL; // Redirect to the main dashboard page
+                 window.location.href = DASHBOARD_URL; // Redirect to the main dashboard page (uses constant)
              });
         });
 
@@ -338,6 +338,7 @@
                 if (parsedUser && typeof parsedUser === 'object' && parsedUser.name && parsedUser.email) {
                     // Initialize missing optional properties if necessary
                      if (parsedUser.assessmentCompleted === undefined) {
+                         console.log("getCurrentUser: Initializing assessmentCompleted to false."); // Log initialization
                          parsedUser.assessmentCompleted = false;
                      }
                      if (typeof parsedUser.assessmentAnswers !== 'object' || parsedUser.assessmentAnswers === null) {
@@ -365,7 +366,7 @@
                      throw new Error("Attempted to save invalid user object.");
                  }
                  localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(userObject));
-                 console.log("Saved user data to localStorage.");
+                 console.log("Saved user data to localStorage:", userObject); // Log saved data for debugging
              } catch (error) {
                  console.error("Error saving current user data:", error);
              }
@@ -408,17 +409,24 @@
              // Select and Inject Random Question
              selectedRandomQuestion = randomQuestionPool[Math.floor(Math.random() * randomQuestionPool.length)];
              const randomPlaceholder = IS_ADMIN_USER ? "Admin: No word count required." : `Please provide your thoughts... (min ${selectedRandomQuestion.minWords} words)`;
-             const randomWordCountDisplay = IS_ADMIN_USER ? '' : `/${selectedRandomQuestion.minWords}`;
+             // Display min words next to count only for non-admins
+             const randomMinWordsDisplay = IS_ADMIN_USER ? '?' : selectedRandomQuestion.minWords;
+             const randomWordCountDenominator = IS_ADMIN_USER ? '' : `/${selectedRandomQuestion.minWords}`;
+
 
              randomQuestionContainer.innerHTML = `
                  <label for="${selectedRandomQuestion.id}">${selectedRandomQuestion.label}</label>
                  <textarea id="${selectedRandomQuestion.id}" name="${selectedRandomQuestion.id}" required data-min-words="${selectedRandomQuestion.minWords}" placeholder="${randomPlaceholder}"></textarea>
                  <div class="input-meta-info">
                      <div class="paste-warning" id="${selectedRandomQuestion.id}_paste_warning">Pasting content is discouraged. Please use your own words.</div>
-                     <div class="word-count-info" id="${selectedRandomQuestion.id}_word_count_container">Words: <span id="${selectedRandomQuestion.id}_word_count">0</span>${randomWordCountDisplay}</div>
+                     <div class="word-count-info" id="${selectedRandomQuestion.id}_word_count_container">Words: <span id="${selectedRandomQuestion.id}_word_count">0</span>${randomWordCountDenominator}</div>
                  </div>
                  <div class="error-message" id="${selectedRandomQuestion.id}_error"></div>
              `;
+             // Update the separate span for min words (if needed elsewhere, though now part of label)
+             const minWordsSpan = document.getElementById('q_random_min_words_display');
+             if(minWordsSpan) minWordsSpan.textContent = randomMinWordsDisplay;
+
              const qRandomTextarea = document.getElementById(selectedRandomQuestion.id); // Get reference after injection
 
              // Setup Validation and Paste Prevention (Conditional based on IS_ADMIN_USER)
@@ -456,6 +464,8 @@
 
              if (isAdmin) {
                  countContainer.style.display = 'none'; // Hide word count elements for admin
+                 errorElement.style.display = 'none'; // Ensure error is hidden too
+                 textarea.classList.remove('invalid'); // Ensure no invalid class
                  return; // No listener needed for admin
              }
 
@@ -544,7 +554,7 @@
 
             // --- Get References to Error Elements ---
             const q1Error = document.getElementById('q1_error');
-            const qRandomError = document.getElementById(`${selectedRandomQuestion?.id}_error`);
+            const qRandomError = document.getElementById(`${selectedRandomQuestion?.id}_error`); // Use optional chaining
             const q3Error = document.getElementById('q3_error');
             const q4RatingError = document.getElementById('q4_rating_error');
             const q4ExpError = document.getElementById('q4_exp_error');
@@ -553,25 +563,42 @@
 
             // --- Run Validation Checks ---
 
-            // Check Required Fields (Apply to all users)
-            if (!q1Textarea?.value.trim()) { q1Error.textContent = 'This field is required.'; q1Error.style.display = 'block'; q1Textarea.classList.add('invalid'); isValid = false; }
-            if (!qRandomTextarea?.value.trim()) { qRandomError.textContent = 'This field is required.'; qRandomError.style.display = 'block'; qRandomTextarea.classList.add('invalid'); isValid = false; }
-            if (!q3Textarea?.value.trim()) { q3Error.textContent = 'This field is required.'; q3Error.style.display = 'block'; q3Textarea.classList.add('invalid'); isValid = false; }
-            if (!q4Rating?.value) { q4RatingError.textContent = 'Rating is required.'; q4RatingError.style.display = 'block'; q4Rating.classList.add('invalid'); isValid = false; }
-            if (!q4Explanation?.value.trim()) { q4ExpError.textContent = 'This field is required.'; q4ExpError.style.display = 'block'; q4Explanation.classList.add('invalid'); isValid = false; }
+            // Helper function to simplify required field validation
+            const validateRequired = (element, errorElement, message = 'This field is required.') => {
+                 if (!element?.value.trim()) {
+                    if (errorElement) {
+                        errorElement.textContent = message;
+                        errorElement.style.display = 'block';
+                    }
+                    if (element) element.classList.add('invalid');
+                    return false;
+                 }
+                 return true;
+            };
 
-            // Check Word Count (Only if fields are not empty and user is not admin)
+            // Check Required Fields (Apply to all users)
+            if (!validateRequired(q1Textarea, q1Error)) isValid = false;
+            if (!validateRequired(qRandomTextarea, qRandomError)) isValid = false; // qRandomTextarea might be null if setup failed
+            if (!validateRequired(q3Textarea, q3Error)) isValid = false;
+            if (!validateRequired(q4Rating, q4RatingError, 'Rating is required.')) isValid = false; // Uses element.value check
+            if (!validateRequired(q4Explanation, q4ExpError)) isValid = false;
+
+
+            // Check Word Count (Only if fields are filled and user is not admin)
             if (q1Textarea?.value.trim() && !validateWordCount(q1Textarea, parseInt(q1Textarea.getAttribute('data-min-words') || '0', 10), q1Error, IS_ADMIN_USER)) { isValid = false; }
-            if (qRandomTextarea?.value.trim() && !validateWordCount(qRandomTextarea, selectedRandomQuestion?.minWords || 0, qRandomError, IS_ADMIN_USER)) { isValid = false; }
+            // Add null check for selectedRandomQuestion
+            if (qRandomTextarea?.value.trim() && selectedRandomQuestion && !validateWordCount(qRandomTextarea, selectedRandomQuestion.minWords || 0, qRandomError, IS_ADMIN_USER)) { isValid = false; }
             if (q3Textarea?.value.trim() && !validateWordCount(q3Textarea, parseInt(q3Textarea.getAttribute('data-min-words') || '0', 10), q3Error, IS_ADMIN_USER)) { isValid = false; }
             if (q4Explanation?.value.trim() && !validateWordCount(q4Explanation, parseInt(q4Explanation.getAttribute('data-min-words') || '0', 10), q4ExpError, IS_ADMIN_USER)) { isValid = false; }
 
-             // Check Rating Range (Apply to all users)
+             // Check Rating Range (Apply to all users, only if a value exists)
              const ratingVal = parseInt(q4Rating?.value, 10);
              if (q4Rating?.value && (isNaN(ratingVal) || ratingVal < 1 || ratingVal > 5)) {
-                 q4RatingError.textContent = 'Please enter a valid rating between 1 and 5.';
-                 q4RatingError.style.display = 'block';
-                 q4Rating.classList.add('invalid');
+                if (q4RatingError) {
+                    q4RatingError.textContent = 'Please enter a valid rating between 1 and 5.';
+                    q4RatingError.style.display = 'block';
+                }
+                 if (q4Rating) q4Rating.classList.add('invalid');
                  isValid = false;
              }
 
@@ -586,14 +613,16 @@
                     return;
                 }
 
+                // Ensure all elements exist before trying to read their values/names
+                const answers = {};
+                if (q1Textarea) answers[q1Textarea.name] = q1Textarea.value.trim();
+                if (qRandomTextarea) answers[qRandomTextarea.name] = qRandomTextarea.value.trim(); // Use name attribute
+                if (q3Textarea) answers[q3Textarea.name] = q3Textarea.value.trim();
+                if (q4Rating) answers[q4Rating.name] = ratingVal; // Use parsed ratingVal
+                if (q4Explanation) answers[q4Explanation.name] = q4Explanation.value.trim();
+
                 // Structure and save answers
-                currentUser.assessmentAnswers = {
-                    [q1Textarea.name]: q1Textarea.value.trim(),
-                    [qRandomTextarea.name]: qRandomTextarea.value.trim(), // Use name attribute from element
-                    [q3Textarea.name]: q3Textarea.value.trim(),
-                    [q4Rating.name]: ratingVal,
-                    [q4Explanation.name]: q4Explanation.value.trim()
-                };
+                currentUser.assessmentAnswers = answers;
                 currentUser.assessmentCompleted = true; // Mark assessment as completed
 
                 saveCurrentUser(currentUser); // Save the updated user object
@@ -630,11 +659,11 @@
                 IS_ADMIN_USER = false; // Reset global flag just in case
                 console.log("Local storage cleared for logout.");
                 // Redirect to login page using replace to avoid history issues
-                window.location.replace('login.html');
+                window.location.replace('login.html'); // Ensure lowercase
             } catch (e) {
                 console.error("Error during logout:", e);
                 // Fallback redirect even if clearing fails
-                window.location.replace('login.html');
+                window.location.replace('login.html'); // Ensure lowercase
             }
         }
     </script>
