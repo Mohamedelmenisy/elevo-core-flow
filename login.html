@@ -13,7 +13,7 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
     <style>
-        /* --- CSS Rules (Minor Enhancements Added) --- */
+        /* --- CSS Rules (Keep as is) --- */
          * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         body { background-color: #f5f7fa; display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 20px; background-image: linear-gradient(135deg, #f5f7fa 0%, #e4e8eb 100%); }
         .login-container { width: 100%; max-width: 420px; background: #ffffff; border-radius: 12px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08); padding: 40px; animation: fadeIn 0.5s ease-in-out; position: relative; overflow: hidden; }
@@ -117,217 +117,221 @@
 
     <!-- *** ADD 'defer' ATTRIBUTE HERE *** -->
     <script defer>
-        // Wait for the DOM to be fully loaded AND scripts (like Supabase) to be ready
-        // document.addEventListener('DOMContentLoaded', function() { // We can remove DOMContentLoaded if using defer
+        console.log("Login page script starting...");
 
-            console.log("Login page script starting...");
+        // --- Unified Keys ---
+        const LOGGED_IN_KEY = 'isUserLoggedIn'; // Optional: For simple UI checks if needed
+        const REMEMBERED_EMAIL_KEY = 'rememberedEmail';
 
-            // --- Unified Keys ---
-            const LOGGED_IN_KEY = 'isUserLoggedIn'; // Optional: For simple UI checks if needed
-            const REMEMBERED_EMAIL_KEY = 'rememberedEmail';
+        // --- DOM Elements ---
+        const loginForm = document.getElementById('loginForm');
+        const emailInput = document.getElementById('email');
+        const passwordInput = document.getElementById('password');
+        const rememberCheckbox = document.getElementById('remember');
+        const loginButton = document.getElementById('loginButton');
+        const passwordToggle = document.querySelector('.password-toggle');
+        const emailError = document.getElementById('emailError');
+        const passwordError = document.getElementById('passwordError');
+        const loginError = document.getElementById('loginError');
+        const loginMessage = document.getElementById('loginMessage');
+        const alreadyLoggedInMessageDiv = document.getElementById('alreadyLoggedInMessage');
+        const supabaseErrorMessageDiv = document.getElementById('supabaseErrorMessage'); // Get the new error div
 
-            // --- DOM Elements ---
-            const loginForm = document.getElementById('loginForm');
-            const emailInput = document.getElementById('email');
-            const passwordInput = document.getElementById('password');
-            const rememberCheckbox = document.getElementById('remember');
-            const loginButton = document.getElementById('loginButton');
-            const passwordToggle = document.querySelector('.password-toggle');
-            const emailError = document.getElementById('emailError');
-            const passwordError = document.getElementById('passwordError');
-            const loginError = document.getElementById('loginError');
-            const loginMessage = document.getElementById('loginMessage');
-            const alreadyLoggedInMessageDiv = document.getElementById('alreadyLoggedInMessage');
-            const supabaseErrorMessageDiv = document.getElementById('supabaseErrorMessage'); // Get the new error div
-
-            // --- Supabase Client Initialization ---
-            let supabase = null; // Initialize as null
-            try {
-                // *** CORRECTED CHECK: Use 'supabase' (global object from v2 library) ***
-                if (typeof window.supabase === 'undefined' || typeof window.supabase.createClient !== 'function') {
-                    throw new Error("Supabase library (supabase-js) not found or not loaded correctly. Make sure the script tag is in the <head>.");
-                }
-
-                // *** REPLACE WITH YOUR ACTUAL SUPABASE URL AND ANON KEY ***
-                const supabaseUrl = 'https://lgcutmuspcaralydycmg.supabase.co';
-                const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxnY3V0bXVzcGNhcmFseWR5Y21nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU0NDY3MDEsImV4cCI6MjA2MTAyMjcwMX0.3u5Y7pkH2NNnnoGLMWVfAa5b8fq88o1itRYnG1K38tE';
-
-                // *** CORRECT INITIALIZATION: Use the global 'supabase' object ***
-                supabase = window.supabase.createClient(supabaseUrl, supabaseAnonKey);
-                console.log("Supabase client initialized successfully.");
-
-            } catch (error) {
-                 console.error("FATAL: Supabase client initialization failed:", error.message);
-                 // Show the dedicated error message div
-                 if(supabaseErrorMessageDiv) supabaseErrorMessageDiv.style.display = 'block';
-                 // Disable the form as login won't work
-                 if(loginForm) loginForm.style.display = 'none';
-                 if(document.querySelector('.links')) document.querySelector('.links').style.display = 'none'; // Hide links too
-                 // Stop further script execution for login logic
-                 // No 'return' needed here as the rest of the code relies on 'supabase' being initialized
+        // --- Supabase Client Initialization ---
+        let supabase = null; // Initialize as null
+        try {
+            // *** CORRECTED CHECK: Use 'supabase' (global object from v2 library) ***
+            if (typeof window.supabase === 'undefined' || typeof window.supabase.createClient !== 'function') {
+                throw new Error("Supabase library (supabase-js) not found or not loaded correctly. Make sure the script tag is in the <head>.");
             }
 
+            // *** REPLACE WITH YOUR ACTUAL SUPABASE URL AND ANON KEY ***
+            const supabaseUrl = 'YOUR_SUPABASE_URL'; // <--- PUT YOUR URL HERE
+            const supabaseAnonKey = 'YOUR_SUPABASE_ANON_KEY'; // <--- PUT YOUR ANON KEY HERE
 
-            // --- Utility Functions ---
-            // (Keep these functions as they are)
-            function showMessage(element, message, isError = true) { if (!element) return; element.textContent = message; element.style.color = isError ? '#e74c3c' : '#27ae60'; element.style.display = 'block'; }
-            function hideMessage(element) { if (!element) return; element.style.display = 'none'; element.textContent = ''; }
-            function togglePasswordVisibility(toggleButton, inputElement) { if (!toggleButton || !inputElement) return; const isPassword = inputElement.type === 'password'; inputElement.type = isPassword ? 'text' : 'password'; toggleButton.innerHTML = isPassword ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>' : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>'; toggleButton.setAttribute('aria-label', isPassword ? 'Hide password' : 'Show password'); }
-            function setButtonLoading(isLoading) { if (!loginButton) return; console.log(`Setting button loading: ${isLoading}`); loginButton.disabled = isLoading; loginButton.classList.toggle('loading', isLoading); }
+            // *** CORRECT INITIALIZATION: Use the global 'supabase' object ***
+            supabase = window.supabase.createClient(supabaseUrl, supabaseAnonKey);
+            console.log("Supabase client initialized successfully.");
 
-            // --- Initial Checks & Setup (Only run if Supabase initialized) ---
-            if (supabase) { // Check if supabase client was successfully created
-                 supabase.auth.getSession().then(({ data: { session } }) => {
-                     if (session) {
-                         console.log("Supabase session found, user is likely logged in.", session);
-                         if(alreadyLoggedInMessageDiv) alreadyLoggedInMessageDiv.style.display = 'block';
-                         hideMessage(loginMessage);
-                         // Optionally hide the form if already logged in and Supabase is working
-                         if (loginForm) loginForm.style.display = 'none';
-                         if(document.querySelector('.links')) document.querySelector('.links').style.display = 'none';
-                     } else {
-                         console.log("No active Supabase session found.");
-                         if(alreadyLoggedInMessageDiv) alreadyLoggedInMessageDiv.style.display = 'none';
-                         handleUrlParamsAndFocus(); // Handle params only if not logged in
-                     }
-                 }).catch(error => {
-                     console.error("Error checking Supabase session:", error);
-                     // Proceed cautiously if session check fails but supabase object exists
-                     handleUrlParamsAndFocus();
+        } catch (error) {
+             console.error("FATAL: Supabase client initialization failed:", error.message);
+             // Show the dedicated error message div
+             if(supabaseErrorMessageDiv) supabaseErrorMessageDiv.style.display = 'block';
+             // Disable the form as login won't work
+             if(loginForm) loginForm.style.display = 'none';
+             if(document.querySelector('.links')) document.querySelector('.links').style.display = 'none'; // Hide links too
+             // Stop further script execution for login logic (implicit as 'supabase' remains null)
+        }
+
+
+        // --- Utility Functions ---
+        // (Keep these functions as they are)
+        function showMessage(element, message, isError = true) { if (!element) return; element.textContent = message; element.style.color = isError ? '#e74c3c' : '#27ae60'; element.style.display = 'block'; }
+        function hideMessage(element) { if (!element) return; element.style.display = 'none'; element.textContent = ''; }
+        function togglePasswordVisibility(toggleButton, inputElement) { if (!toggleButton || !inputElement) return; const isPassword = inputElement.type === 'password'; inputElement.type = isPassword ? 'text' : 'password'; toggleButton.innerHTML = isPassword ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>' : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>'; toggleButton.setAttribute('aria-label', isPassword ? 'Hide password' : 'Show password'); }
+        function setButtonLoading(isLoading) { if (!loginButton) return; console.log(`Setting button loading: ${isLoading}`); loginButton.disabled = isLoading; loginButton.classList.toggle('loading', isLoading); }
+
+        // --- Initial Checks & Setup (Only run if Supabase initialized) ---
+        if (supabase) { // Check if supabase client was successfully created
+             supabase.auth.getSession().then(({ data: { session } }) => {
+                 if (session) {
+                     console.log("Supabase session found, user is likely logged in.", session);
+                     if(alreadyLoggedInMessageDiv) alreadyLoggedInMessageDiv.style.display = 'block';
+                     hideMessage(loginMessage);
+                     // Optionally hide the form if already logged in and Supabase is working
+                     if (loginForm) loginForm.style.display = 'none';
+                     if(document.querySelector('.links')) document.querySelector('.links').style.display = 'none';
+                 } else {
+                     console.log("No active Supabase session found.");
+                     if(alreadyLoggedInMessageDiv) alreadyLoggedInMessageDiv.style.display = 'none';
+                     handleUrlParamsAndFocus(); // Handle params only if not logged in
+                 }
+             }).catch(error => {
+                 console.error("Error checking Supabase session:", error);
+                 // Proceed cautiously if session check fails but supabase object exists
+                 handleUrlParamsAndFocus();
+             });
+         } else {
+              console.warn("Supabase client not available. Login functionality disabled.");
+              // Ensure form is hidden if initialization failed earlier
+              if(loginForm && loginForm.style.display !== 'none') loginForm.style.display = 'none';
+               if(document.querySelector('.links') && document.querySelector('.links').style.display !== 'none') {
+                    document.querySelector('.links').style.display = 'none';
+               }
+         }
+
+         function handleUrlParamsAndFocus() {
+             // (Keep this function as it is)
+             const urlParams = new URLSearchParams(window.location.search);
+             const emailParam = urlParams.get('email');
+             const signedUpParam = urlParams.get('signedup');
+
+             if (emailParam && emailInput) { emailInput.value = emailParam; }
+             if (signedUpParam && (!alreadyLoggedInMessageDiv || alreadyLoggedInMessageDiv.style.display === 'none')) {
+                  showMessage(loginMessage, "Account created successfully! Please log in.", false);
+                  window.history.replaceState({}, document.title, window.location.pathname); // Clean URL
+              }
+
+             const rememberedEmail = localStorage.getItem(REMEMBERED_EMAIL_KEY);
+             if (rememberedEmail && emailInput && !emailInput.value) { // Only fill if not filled by param
+                 emailInput.value = rememberedEmail;
+                 if(rememberCheckbox) rememberCheckbox.checked = true;
+             }
+             // Only focus if the form is visible
+             if (loginForm && loginForm.style.display !== 'none' && emailInput && passwordInput) {
+                 if (emailInput.value === '') { emailInput.focus(); } else { passwordInput.focus(); }
+             }
+         }
+
+
+        // --- Event Listeners (Only add if Supabase initialized) ---
+        if (supabase) {
+            if (passwordToggle && passwordInput) { passwordToggle.addEventListener('click', () => togglePasswordVisibility(passwordToggle, passwordInput)); passwordToggle.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') togglePasswordVisibility(passwordToggle, passwordInput); }); }
+
+            if(loginForm) {
+                loginForm.addEventListener('submit', async function(e) { // Make handler async
+                    e.preventDefault();
+                    console.log("Login form submitted.");
+
+                    hideMessage(emailError); hideMessage(passwordError); hideMessage(loginError); hideMessage(loginMessage);
+                    // Don't hide alreadyLoggedInMessageDiv here, Supabase check handles it
+                    setButtonLoading(true);
+
+                    if (!emailInput || !passwordInput || !rememberCheckbox) { console.error("Form elements missing!"); showMessage(loginError, "Form error."); setButtonLoading(false); return; }
+
+                    const email = emailInput.value.trim().toLowerCase();
+                    const password = passwordInput.value;
+                    const rememberMe = rememberCheckbox.checked;
+
+                    let isValid = true;
+                    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showMessage(emailError, "Please enter a valid email address"); isValid = false; }
+                    if (!password) { showMessage(passwordError, "Password is required"); isValid = false; }
+                    if (!isValid) { console.log("Validation failed."); setButtonLoading(false); return; }
+
+                    if (rememberMe) { localStorage.setItem(REMEMBERED_EMAIL_KEY, email); }
+                    else { localStorage.removeItem(REMEMBERED_EMAIL_KEY); }
+
+                    console.log(`Authenticating with Supabase: ${email}`);
+                    await authenticateUserWithSupabase(email, password);
+                });
+            } else if (loginForm && loginForm.style.display !== 'none') { // Only log error if form was expected but not found
+                 console.error("Login form element not found!");
+            }
+
+             // Forgot password link placeholder
+             const forgotPasswordLink = document.getElementById('forgotPasswordLink');
+             if(forgotPasswordLink) {
+                  forgotPasswordLink.addEventListener('click', function(e) {
+                      e.preventDefault();
+                      alert('Forgot Password functionality needs to be implemented (e.g., using Supabase auth password reset).');
+                  });
+              }
+
+         } // End if(supabase) for event listeners
+
+         // --- Supabase Authentication Function (Only define if Supabase initialized) ---
+         async function authenticateUserWithSupabase(email, password) {
+              if (!supabase) {
+                   console.error("Cannot authenticate: Supabase client not initialized.");
+                   showMessage(loginError, 'Authentication service unavailable.', true);
+                   setButtonLoading(false);
+                   return;
+              }
+             console.log(`Running authenticateUserWithSupabase for ${email}. Will redirect to index.html on success.`);
+
+             try {
+                 // Use Supabase client to sign in
+                 const { data, error } = await supabase.auth.signInWithPassword({
+                     email: email,
+                     password: password,
                  });
-             } else {
-                  console.warn("Supabase client not available. Login functionality disabled.");
-                  // Ensure form is hidden if initialization failed earlier
-                  if(loginForm && loginForm.style.display !== 'none') loginForm.style.display = 'none';
-                   if(document.querySelector('.links') && document.querySelector('.links').style.display !== 'none') {
-                        document.querySelector('.links').style.display = 'none';
-                   }
-             }
 
-             function handleUrlParamsAndFocus() {
-                 // (Keep this function as it is)
-                 const urlParams = new URLSearchParams(window.location.search);
-                 const emailParam = urlParams.get('email');
-                 const signedUpParam = urlParams.get('signedup');
-
-                 if (emailParam && emailInput) { emailInput.value = emailParam; }
-                 if (signedUpParam && (!alreadyLoggedInMessageDiv || alreadyLoggedInMessageDiv.style.display === 'none')) {
-                      showMessage(loginMessage, "Account created successfully! Please log in.", false);
-                      window.history.replaceState({}, document.title, window.location.pathname); // Clean URL
-                  }
-
-                 const rememberedEmail = localStorage.getItem(REMEMBERED_EMAIL_KEY);
-                 if (rememberedEmail && emailInput && !emailInput.value) { // Only fill if not filled by param
-                     emailInput.value = rememberedEmail;
-                     if(rememberCheckbox) rememberCheckbox.checked = true;
-                 }
-                 // Only focus if the form is visible
-                 if (loginForm && loginForm.style.display !== 'none' && emailInput && passwordInput) {
-                     if (emailInput.value === '') { emailInput.focus(); } else { passwordInput.focus(); }
-                 }
-             }
-
-
-            // --- Event Listeners (Only add if Supabase initialized) ---
-            if (supabase) {
-                if (passwordToggle && passwordInput) { passwordToggle.addEventListener('click', () => togglePasswordVisibility(passwordToggle, passwordInput)); passwordToggle.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') togglePasswordVisibility(passwordToggle, passwordInput); }); }
-
-                if(loginForm) {
-                    loginForm.addEventListener('submit', async function(e) { // Make handler async
-                        e.preventDefault();
-                        console.log("Login form submitted.");
-
-                        hideMessage(emailError); hideMessage(passwordError); hideMessage(loginError); hideMessage(loginMessage);
-                        // Don't hide alreadyLoggedInMessageDiv here, Supabase check handles it
-                        setButtonLoading(true);
-
-                        if (!emailInput || !passwordInput || !rememberCheckbox) { console.error("Form elements missing!"); showMessage(loginError, "Form error."); setButtonLoading(false); return; }
-
-                        const email = emailInput.value.trim().toLowerCase();
-                        const password = passwordInput.value;
-                        const rememberMe = rememberCheckbox.checked;
-
-                        let isValid = true;
-                        if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showMessage(emailError, "Please enter a valid email address"); isValid = false; }
-                        if (!password) { showMessage(passwordError, "Password is required"); isValid = false; }
-                        if (!isValid) { console.log("Validation failed."); setButtonLoading(false); return; }
-
-                        if (rememberMe) { localStorage.setItem(REMEMBERED_EMAIL_KEY, email); }
-                        else { localStorage.removeItem(REMEMBERED_EMAIL_KEY); }
-
-                        console.log(`Authenticating with Supabase: ${email}`);
-                        await authenticateUserWithSupabase(email, password);
-                    });
-                } else if (loginForm && loginForm.style.display !== 'none') { // Only log error if form was expected but not found
-                     console.error("Login form element not found!");
-                }
-
-                 // Forgot password link placeholder
-                 const forgotPasswordLink = document.getElementById('forgotPasswordLink');
-                 if(forgotPasswordLink) {
-                      forgotPasswordLink.addEventListener('click', function(e) {
-                          e.preventDefault();
-                          alert('Forgot Password functionality needs to be implemented (e.g., using Supabase auth password reset).');
-                      });
-                  }
-
-             } // End if(supabase) for event listeners
-
-             // --- Supabase Authentication Function (Only define if Supabase initialized) ---
-             async function authenticateUserWithSupabase(email, password) {
-                  if (!supabase) {
-                       console.error("Cannot authenticate: Supabase client not initialized.");
-                       showMessage(loginError, 'Authentication service unavailable.', true);
-                       setButtonLoading(false);
-                       return;
-                  }
-                 console.log(`Running authenticateUserWithSupabase for ${email}. Will redirect to index.html on success.`);
-
-                 try {
-                     const { data, error } = await supabase.auth.signInWithPassword({
-                         email: email,
-                         password: password,
-                     });
-
-                     if (error) {
-                         console.error("Supabase Login Error:", error);
-                         let userMessage = 'Incorrect email or password.';
-                         if (error.message.toLowerCase().includes('invalid login credentials')) {
-                             userMessage = 'Incorrect email or password.';
-                         } else if (error.message.toLowerCase().includes('email not confirmed')) {
-                             userMessage = 'Please check your inbox to confirm your email address first.';
-                         } else {
-                             console.error("Unhandled Supabase auth error:", error.message);
-                             userMessage = 'Login failed. Please try again later.'; // More generic for other errors
-                         }
-                         showMessage(loginError, userMessage, true);
-                         setButtonLoading(false);
-                         return;
+                 if (error) {
+                     console.error("Supabase Login Error:", error);
+                     // Provide user-friendly error messages
+                     let userMessage = 'Incorrect email or password.'; // Default
+                     if (error.message.toLowerCase().includes('invalid login credentials')) {
+                         userMessage = 'Incorrect email or password.';
+                     } else if (error.message.toLowerCase().includes('email not confirmed')) {
+                         userMessage = 'Please check your inbox to confirm your email address first.';
+                     } else {
+                         // Log the specific error for debugging but show a general message
+                         console.error("Unhandled Supabase auth error:", error.message);
+                         userMessage = 'Login failed. Please try again later.';
                      }
-
-                     console.log("Supabase Login Successful. User:", data.user);
-                     console.log("Session:", data.session);
-
-                     // Optional: Set simple flag
-                     localStorage.setItem(LOGGED_IN_KEY, 'true');
-
-                     showMessage(loginMessage, "Login successful! Redirecting...", false);
-
-                     const destination = 'index.html';
-                     console.log(`Redirecting to: ${destination}`);
-                     setTimeout(() => {
-                         window.location.href = destination;
-                     }, 1000);
-
-                 } catch (unexpectedError) {
-                     console.error("Unexpected error during Supabase login:", unexpectedError);
-                     showMessage(loginError, 'An unexpected error occurred during login. Please try again.', true);
+                     showMessage(loginError, userMessage, true);
                      setButtonLoading(false);
+                     return; // Stop execution on error
                  }
-             }
 
-             console.log("Login page script finished.");
-        // }); // End of DOMContentLoaded listener (removed as using defer)
+                 // --- Login Successful ---
+                 console.log("Supabase Login Successful. User:", data.user);
+                 console.log("Session:", data.session);
+
+                 // Optional: Set simple flag if needed elsewhere
+                 localStorage.setItem(LOGGED_IN_KEY, 'true');
+
+                 // Display success message
+                 showMessage(loginMessage, "Login successful! Redirecting...", false);
+
+                 // *** Redirect to index.html WITHOUT sensitive data in URL ***
+                 const destination = 'index.html'; // Clean destination page
+                 console.log(`Redirecting securely to: ${destination}`);
+                 setTimeout(() => {
+                     // *** This redirection is safe ***
+                     window.location.href = destination;
+                 }, 1000); // Delay for user message visibility
+
+                 // No need to call setButtonLoading(false) on success because we are redirecting
+
+             } catch (unexpectedError) {
+                 console.error("Unexpected error during Supabase login:", unexpectedError);
+                 showMessage(loginError, 'An unexpected error occurred during login. Please try again.', true);
+                 setButtonLoading(false);
+             }
+         }
+
+         console.log("Login page script finished.");
     </script>
 </body>
 </html>
