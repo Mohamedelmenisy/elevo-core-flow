@@ -517,13 +517,12 @@
 
         // --- SUPABASE Setup ---
         // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        // !!! IMPORTANT: REPLACE THESE PLACEHOLDERS BELOW           !!!
-        // !!! with your actual Supabase Project URL and Anon Key.   !!!
+        // !!! Values below have been replaced with your details.  !!!
         // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        const SUPABASE_URL = 'YOUR_SUPABASE_URL'; // <-- Replace with your Supabase URL
-        const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY'; // <-- Replace with your Supabase Anon Key
+        const SUPABASE_URL = 'https://lgcutmuspcaralydycmg.supabase.co'; // <-- YOUR URL HERE
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxnY3V0bXVzcGNhcmFseWR5Y21nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU0NDY3MDEsImV4cCI6MjA2MTAyMjcwMX0.3u5Y7pkH2NNnnoGLMWVfAa5b8fq88o1itRYnG1K38tE'; // <-- YOUR ANON KEY HERE
 
-        // Check if placeholders are still present
+        // Check if placeholders are still present (redundant now, but safe to keep)
         if (SUPABASE_URL === 'YOUR_SUPABASE_URL' || SUPABASE_ANON_KEY === 'YOUR_SUPABASE_ANON_KEY') {
             console.warn("Supabase URL or Key not set. Please replace placeholders in the script.");
             // Display error message to user
@@ -531,7 +530,7 @@
              const errorMsg = document.getElementById('errorMessage');
              if (loadingMsg) loadingMsg.style.display = 'none';
              if (errorMsg) {
-                 // This is the error message you are seeing because the placeholders above were not replaced.
+                 // This error *should not* appear now.
                  errorMsg.textContent = 'Configuration Error: Supabase connection details are missing. Please contact support.';
                  errorMsg.style.display = 'block';
              }
@@ -542,8 +541,8 @@
         // This part is CORRECT and uses the constants defined above.
         // Ensure the @supabase/supabase-js library is included in the <head> (which it is).
         const { createClient } = supabase; // Ensure Supabase is loaded
-        const supabaseClient = createClient('https://lgcutmuspcaralydycmg.supabase.co', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxnY3V0bXVzcGNhcmFseWR5Y21nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU0NDY3MDEsImV4cCI6MjA2MTAyMjcwMX0.3u5Y7pkH2NNnnoGLMWVfAa5b8fq88o1itRYnG1K38tE');
-        console.log("Supabase client initialized.");
+        const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        console.log("Supabase client initialized with provided credentials."); // Confirmation message
 
         // Assessment Question Pool (No changes needed)
         const randomQuestionPool = [
@@ -670,7 +669,16 @@
 
             } catch (error) {
                 console.error("Error during initial data fetch:", error);
-                showErrorMessage(`An error occurred: ${error.message}. Please try again later.`);
+                // Provide more specific Supabase error feedback if possible
+                let displayError = `An error occurred: ${error.message}. Please try again later.`;
+                 if (error.message.includes('fetch')) { // Basic check for network issues
+                     displayError = 'Network error: Could not connect to the server. Please check your internet connection.';
+                 } else if (error.message.includes('JWT') || error.message.includes('Unauthorized')) { // Basic check for auth issues
+                      displayError = 'Authentication error: Your session might have expired. Please try logging out and back in.';
+                 } else if (error.code) { // Use Supabase error code if available
+                      displayError = `Database error (${error.code}): ${error.message}. Please contact support if the issue persists.`;
+                 }
+                showErrorMessage(displayError);
                 loadingMessage.style.display = 'none';
             }
 
@@ -733,7 +741,10 @@
                     .eq('email', email)
                     .maybeSingle(); // Use maybeSingle in case user not found yet
 
-                if (userError) throw userError;
+                if (userError) {
+                    console.error("Supabase error fetching user data:", userError);
+                    throw userError; // Throw to be caught by the main try/catch
+                }
                 if (!userData) {
                      // If user not in 'users' table, maybe create them? Or handle as error.
                      // For now, we'll try to proceed with localStorage info if needed, but log warning.
@@ -756,7 +767,10 @@
                     .select('section_id, progress_percentage')
                     .eq('user_email', email);
 
-                if (progressError) throw progressError;
+                if (progressError) {
+                     console.error("Supabase error fetching user progress:", progressError);
+                     throw progressError;
+                 }
 
                 // Format progress data into an object { section_id: progress }
                 const progressMap = (progressData || []).reduce((acc, item) => {
@@ -780,7 +794,10 @@
                     .eq('type', 'pre') // Fetch only pre-assessment for now
                     .maybeSingle(); // Expecting only one 'pre' assessment
 
-                if (assessmentError) throw assessmentError;
+                if (assessmentError) {
+                     console.error("Supabase error fetching assessment data:", assessmentError);
+                     throw assessmentError;
+                 }
 
                 // Combine into a single user object
                 const fullUserData = {
@@ -835,11 +852,15 @@
                 // Execute the main user query
                 const { data: users, error: usersError } = await userQuery;
 
-                if (usersError) throw usersError;
+                if (usersError) {
+                     console.error("Supabase error fetching all users:", usersError);
+                     throw usersError;
+                 }
 
                 if (!users || users.length === 0) {
                     currentAdminTableData = []; // Reset data
                     displayAllUsersTable([]); // Display empty table
+                    await generateProgressDistributionChart([]); // Generate empty chart
                     if (spinner) spinner.style.display = 'none';
                     return;
                 }
@@ -868,7 +889,7 @@
                     if (progressEntries.length > 0) {
                          latestUpdate = progressEntries.reduce((latest, entry) => {
                             const entryDate = entry.updated_at ? new Date(entry.updated_at) : null;
-                            if (!entryDate) return latest;
+                            if (!entryDate || isNaN(entryDate.getTime())) return latest; // Ignore invalid dates
                             return latest === null || entryDate > latest ? entryDate : latest;
                          }, null);
                     }
@@ -907,6 +928,7 @@
                 tableBody.innerHTML = `<tr><td colspan="5" style="color: red; text-align: center;">Error loading data: ${error.message}</td></tr>`;
                 noUsersMessage.style.display = 'none';
                 currentAdminTableData = []; // Clear data on error
+                await generateProgressDistributionChart([]); // Show empty chart on error
             } finally {
                 if (spinner) spinner.style.display = 'none';
             }
@@ -935,7 +957,7 @@
 
             if (relevantProgressValues.length === 0) return 0;
 
-            const total = relevantProgressValues.reduce((sum, val) => sum + (val || 0), 0);
+            const total = relevantProgressValues.reduce((sum, val) => sum + (Number(val) || 0), 0); // Ensure values are numbers
             return total / relevantProgressValues.length;
         }
 
@@ -943,8 +965,10 @@
         function formatTimestamp(timestamp) {
             if (!timestamp) return 'N/A';
             try {
+                const date = new Date(timestamp);
+                if (isNaN(date.getTime())) return 'Invalid Date'; // Check validity
                 // Use 'en-GB' for dd/mm/yyyy or 'en-US' for mm/dd/yyyy
-                return new Date(timestamp).toLocaleString('en-US', {
+                return date.toLocaleString('en-US', {
                     dateStyle: 'medium', // e.g., "Sep 15, 2023"
                     timeStyle: 'short'   // e.g., "10:30 AM"
                 });
@@ -972,6 +996,14 @@
              const q4Rating = document.getElementById('q4_confidence_rating');
              const q4Explanation = document.getElementById('q4_confidence_explanation');
              const randomQuestionContainer = document.getElementById('randomQuestionContainer');
+
+             // Clear previous random question if any
+             const existingLabel = randomQuestionContainer.querySelector('label');
+             const existingTextarea = randomQuestionContainer.querySelector('textarea');
+             if(existingLabel) existingLabel.remove();
+             if(existingTextarea) existingTextarea.remove();
+
+
              const qRandomMinWordsDisplay = document.getElementById('q_random_min_words_display'); // Reference for min words display
              const qRandomWordCountContainer = document.getElementById('q_random_word_count_container'); // Reference for word count container
              const qRandomPasteWarning = document.getElementById('q_random_paste_warning');
@@ -1051,19 +1083,25 @@
              }
 
              // --- Form Submission ---
+             // Remove existing listener before adding a new one to prevent duplicates if setupAssessmentForm is called multiple times
+             form.removeEventListener('submit', handleAssessmentSubmit);
              form.addEventListener('submit', handleAssessmentSubmit); // Point to the updated submit handler
         }
 
         function countWords(text) { return text ? text.trim().split(/\s+/).filter(Boolean).length : 0; }
 
         function setupWordCountValidation(textarea, countSpan, errorElement, countContainer, isAdmin) {
+            if (!textarea || !countSpan || !errorElement || !countContainer) return; // Add checks
+
             if (isAdmin) {
                  countContainer.style.display = 'none'; // Hide word count for admin
+                 textarea.removeEventListener('input', updateCount); // Remove listener if previously added
                  return; // Don't attach listeners
             }
              const minWords = parseInt(textarea.dataset.minWords, 10);
              countContainer.style.display = 'flex'; // Ensure it's visible for non-admins
 
+             // Define updateCount inside so it has access to the correct elements
              function updateCount() {
                  const words = countWords(textarea.value);
                  countSpan.textContent = words;
@@ -1073,12 +1111,16 @@
                      countSpan.style.color = '#ef4444'; // Red
                  }
              }
+             // Remove previous listener before adding a new one
+             textarea.removeEventListener('input', updateCount);
              textarea.addEventListener('input', updateCount);
              updateCount(); // Initial count
         }
 
         function validateWordCount(textarea, minWords, errorElement, isAdmin) {
              if (isAdmin) return true; // Always valid for admin
+             if (!textarea || !errorElement) return true; // Skip if elements missing
+
              const words = countWords(textarea.value);
              if (words < minWords) {
                  errorElement.textContent = `Please enter at least ${minWords} words.`;
@@ -1092,18 +1134,25 @@
         }
 
         function setupPastePrevention(textarea, warningElement, isAdmin) {
+             if (!textarea || !warningElement) return; // Add checks
+
+             // Define the handler
+             const pasteHandler = (e) => {
+                warningElement.style.color = '#dc2626'; // Make it more prominent on paste
+                setTimeout(() => {
+                    warningElement.style.color = '#f97316'; // Revert color after a short delay
+                }, 2000);
+             };
+
+             // Remove existing listener
+             textarea.removeEventListener('paste', pasteHandler);
+
              if (isAdmin) {
                 warningElement.style.display = 'none'; // Hide paste warning for admin
                 return; // Don't attach listener
              }
              warningElement.style.display = 'block'; // Make sure it's potentially visible
-
-             textarea.addEventListener('paste', (e) => {
-                warningElement.style.color = '#dc2626'; // Make it more prominent on paste
-                setTimeout(() => {
-                    warningElement.style.color = '#f97316'; // Revert color after a short delay
-                }, 2000);
-             });
+             textarea.addEventListener('paste', pasteHandler); // Add listener
          }
 
 
@@ -1112,6 +1161,15 @@
             console.log("Assessment submit triggered.");
             const form = event.target;
             const submitButton = document.getElementById('assessmentSubmitBtn');
+
+             // Double-check selectedRandomQuestion is set
+             if (!selectedRandomQuestion || !selectedRandomQuestion.id) {
+                 console.error("Critical Error: Random assessment question not selected properly.");
+                 alert("An internal error occurred with the assessment form. Please refresh the page.");
+                 return;
+             }
+
+
             submitButton.disabled = true;
             submitButton.textContent = 'Submitting...';
 
@@ -1119,7 +1177,7 @@
             form.querySelectorAll('.error-message').forEach(el => el.style.display = 'none');
             form.querySelectorAll('.invalid').forEach(el => el.classList.remove('invalid'));
 
-            // Get form elements
+            // Get form elements (ensure dynamic elements are correctly referenced)
             const q1Textarea = document.getElementById('q1_coaching_meaning');
             const qRandomTextarea = document.getElementById(selectedRandomQuestion.id); // Use the dynamic ID
             const q3Textarea = document.getElementById('q3_expectations');
@@ -1133,6 +1191,17 @@
             const q4RatingError = document.getElementById('q4_rating_error');
             const q4ExpError = document.getElementById('q4_exp_error');
 
+             // Check if elements exist before proceeding
+             if (!q1Textarea || !qRandomTextarea || !q3Textarea || !q4Rating || !q4Explanation ||
+                 !q1Error || !qRandomError || !q3Error || !q4RatingError || !q4ExpError) {
+                 console.error("One or more assessment form elements not found!");
+                 alert("Error submitting form: A required element is missing. Please refresh.");
+                 submitButton.disabled = false;
+                 submitButton.textContent = 'Submit Assessment';
+                 return;
+             }
+
+
             let isValid = true;
 
             // Perform Validation
@@ -1144,10 +1213,10 @@
             if (!q4Explanation.value.trim()) { isValid = false; q4Explanation.classList.add('invalid'); q4ExpError.textContent = 'This field is required.'; q4ExpError.style.display = 'block'; }
 
             // Word count checks (if validation is enabled for the user)
-            if (!validateWordCount(q1Textarea, parseInt(q1Textarea.dataset.minWords, 10), q1Error, IS_ADMIN_USER)) { isValid = false; }
-            if (!validateWordCount(qRandomTextarea, parseInt(qRandomTextarea.dataset.minWords, 10), qRandomError, IS_ADMIN_USER)) { isValid = false; }
-            if (!validateWordCount(q3Textarea, parseInt(q3Textarea.dataset.minWords, 10), q3Error, IS_ADMIN_USER)) { isValid = false; }
-            if (!validateWordCount(q4Explanation, parseInt(q4Explanation.dataset.minWords, 10), q4ExpError, IS_ADMIN_USER)) { isValid = false; }
+            if (!validateWordCount(q1Textarea, parseInt(q1Textarea.dataset.minWords || '0', 10), q1Error, IS_ADMIN_USER)) { isValid = false; }
+            if (!validateWordCount(qRandomTextarea, parseInt(qRandomTextarea.dataset.minWords || '0', 10), qRandomError, IS_ADMIN_USER)) { isValid = false; }
+            if (!validateWordCount(q3Textarea, parseInt(q3Textarea.dataset.minWords || '0', 10), q3Error, IS_ADMIN_USER)) { isValid = false; }
+            if (!validateWordCount(q4Explanation, parseInt(q4Explanation.dataset.minWords || '0', 10), q4ExpError, IS_ADMIN_USER)) { isValid = false; }
 
             // Q4 Rating range check
             const ratingVal = parseInt(q4Rating.value, 10);
@@ -1192,7 +1261,10 @@
                             submitted_at: new Date().toISOString() // Use ISO string for DB consistency
                         }, { onConflict: 'user_email, type' }); // Upsert based on user and type
 
-                    if (assessmentError) throw assessmentError;
+                    if (assessmentError) {
+                         console.error("Supabase error saving assessment:", assessmentError);
+                         throw assessmentError;
+                     }
 
                     // 2. Update the 'users' table to mark assessment as completed
                     const { error: userUpdateError } = await supabaseClient
@@ -1200,7 +1272,12 @@
                         .update({ assessment_completed: true })
                         .eq('email', userEmail);
 
-                    if (userUpdateError) throw userUpdateError;
+                    if (userUpdateError) {
+                        console.error("Supabase error updating user assessment status:", userUpdateError);
+                         // Decide if this is critical enough to rollback or just warn
+                         // For now, we'll proceed but log the error.
+                         // throw userUpdateError; // Uncomment to make it critical
+                    }
 
                     console.log("Assessment saved successfully to Supabase.");
 
@@ -1211,7 +1288,13 @@
 
                 } catch (error) {
                     console.error("Error saving assessment to Supabase:", error);
-                    alert(`Failed to save assessment: ${error.message}. Please try again.`);
+                     let submitErrorMsg = `Failed to save assessment: ${error.message}. Please try again.`;
+                     if (error.code === '23505') { // Example: unique constraint violation
+                         submitErrorMsg = "It seems you have already submitted this assessment.";
+                     } else if (error.message.includes('RLS')) { // Example: Row Level Security issue
+                         submitErrorMsg = "Permission denied. Could not save assessment.";
+                     }
+                    alert(submitErrorMsg);
                     isValid = false; // Mark as invalid to prevent UI changes if save fails
                     submitButton.disabled = false; // Re-enable button on error
                     submitButton.textContent = 'Submit Assessment';
@@ -1247,9 +1330,9 @@
             loadingMessage.style.display = 'none'; // Hide loading message
 
             // Populate User Info in Dashboard Area
-            if (welcomeMessage) welcomeMessage.textContent = `Welcome back, ${user.name}!`;
-            if (dashboardUserName) dashboardUserName.textContent = user.name;
-            if (dashboardUserEmail) dashboardUserEmail.textContent = user.email;
+            if (welcomeMessage) welcomeMessage.textContent = `Welcome back, ${user.name || 'User'}!`;
+            if (dashboardUserName) dashboardUserName.textContent = user.name || 'N/A';
+            if (dashboardUserEmail) dashboardUserEmail.textContent = user.email || 'N/A';
 
             // Display Course Sections for the user (Uses fetched progress)
             if (courseSectionsList) {
@@ -1261,8 +1344,8 @@
                 console.log("Admin user detected. Displaying admin panel.");
                 if (adminSection) {
                     // Populate admin-specific info (using fetched user data)
-                    document.getElementById('adminPanelName').textContent = user.name;
-                    document.getElementById('adminPanelEmail').textContent = user.email;
+                    document.getElementById('adminPanelName').textContent = user.name || 'N/A';
+                    document.getElementById('adminPanelEmail').textContent = user.email || 'N/A';
 
                     // Display admin data (own progress, own analysis, all users table)
                     // This function now fetches data itself if needed or uses passed data
@@ -1339,7 +1422,8 @@
 
              if (!adminUser) {
                  console.error("Admin user data is missing for displayAdminData.");
-                 // Handle error display...
+                 if(adminCourseProgressContainer) adminCourseProgressContainer.innerHTML = '<p>Error: Admin data unavailable.</p>';
+                 if(adminAssessmentDetailsContainer) adminAssessmentDetailsContainer.innerHTML = '<p>Error: Admin data unavailable.</p>';
                  return;
              }
 
@@ -1352,15 +1436,31 @@
              const preConfidenceScore = preAssessmentAnswers?.confidence_rating || 0;
 
              // Fetch or simulate Post-Course Score
-             // TODO: Implement fetching actual post-assessment score from Supabase if available
-             // const { data: postAssessment, error: postError } = await supabaseClient... where type='post'
+             // Placeholder for actual post-course score fetch from Supabase
              let postConfidenceScore = 0; // Default if not found/implemented
-             // For demo, keep simulation if post-data fetch isn't implemented
-             if (preConfidenceScore > 0) { // Only simulate if pre-score exists
-                 postConfidenceScore = preConfidenceScore >= 5 ? 5 : Math.min(5, preConfidenceScore + Math.floor(Math.random() * (5 - preConfidenceScore + 1)));
-                 console.log(`Simulating post-course confidence for admin: ${postConfidenceScore} (pre-score was ${preConfidenceScore})`);
-             } else {
-                 console.log("Admin pre-confidence score not found or zero, cannot simulate post-score.");
+             try {
+                // Example: Fetch post-assessment (replace with your actual logic)
+                // const { data: postAssessment, error: postError } = await supabaseClient
+                //    .from('assessments')
+                //    .select('answers')
+                //    .eq('user_email', adminUser.email)
+                //    .eq('type', 'post')
+                //    .maybeSingle();
+                // if (postError) throw postError;
+                // if (postAssessment) {
+                //    postConfidenceScore = postAssessment.answers?.confidence_rating || 0;
+                // } else {
+                    // Simulate if no real post-assessment data yet
+                    if (preConfidenceScore > 0) {
+                         postConfidenceScore = preConfidenceScore >= 5 ? 5 : Math.min(5, preConfidenceScore + Math.floor(Math.random() * (5 - preConfidenceScore + 1)));
+                         console.log(`Simulating post-course confidence for admin: ${postConfidenceScore} (pre-score was ${preConfidenceScore})`);
+                    } else {
+                         console.log("Admin pre-confidence score not found or zero, cannot simulate post-score.");
+                    }
+                // }
+             } catch (error) {
+                 console.error("Error fetching/simulating post-assessment score:", error);
+                 // Keep postConfidenceScore at 0 or its pre-simulation value
              }
 
 
@@ -1368,12 +1468,11 @@
              renderConfidenceChart(preConfidenceScore, postConfidenceScore);
 
              // 4. Display Admin's Own Assessment Details and Progress Analysis
-              if (adminAssessmentDetailsContainer && Object.keys(preAssessmentAnswers).length > 0) {
+              if (adminAssessmentDetailsContainer) {
                  displayAssessmentDetails(preAssessmentAnswers, preConfidenceScore, postConfidenceScore); // Pass fetched/simulated data
                  adminAssessmentDetailsContainer.style.display = 'block';
-              } else if (adminAssessmentDetailsContainer) {
-                   adminAssessmentDetailsContainer.innerHTML = '<h5>Your (Admin) Pre-Course Assessment Answers & Progress</h5><p>No assessment data found for your account.</p>';
-                   adminAssessmentDetailsContainer.style.display = 'block';
+              } else {
+                  console.error("Admin assessment details container not found.");
               }
 
 
@@ -1396,7 +1495,7 @@
                    tableHTML += `<tr><td colspan="3">Course sections not defined.</td></tr>`;
               } else if (Object.keys(adminProgress).length === 0 && !courseSections.some(s => adminProgress.hasOwnProperty(s.id))) {
                   // Check if the progress map is truly empty OR if it doesn't contain any of the defined section IDs
-                   tableHTML += `<tr><td colspan="3">No progress data found for your account.</td></tr>`;
+                   tableHTML += `<tr><td colspan="3">No progress data found for your account. Start a section to see progress.</td></tr>`;
               } else {
                   courseSections.forEach(section => {
                       const progress = adminProgress[section.id] || 0;
@@ -1423,21 +1522,26 @@
                   if(container) container.style.display = 'none'; // Hide container if canvas missing
                   return;
               }
-              const context = ctx.getContext('2d');
+
+               // Clear previous content (canvas and paragraph)
+              container.innerHTML = '<canvas id="confidenceChart"></canvas>';
+              const newCtx = document.getElementById('confidenceChart').getContext('2d');
+
               container.style.display = 'block'; // Ensure container is visible
+
 
               if (confidenceChartInstance) {
                   confidenceChartInstance.destroy();
               }
 
-              // Only display chart if there's at least a pre-score
+              // Only display chart if there's at least a pre-score OR post-score
              if (!preScore && !postScore) {
                  container.innerHTML = '<p style="text-align: center; padding: 20px; color: #78350f;">Confidence data not available.</p>';
                  return;
              }
 
 
-              confidenceChartInstance = new Chart(context, {
+              confidenceChartInstance = new Chart(newCtx, { // Use the new context
                   type: 'bar',
                   data: {
                       labels: ['Pre-Course', 'Post-Course*'],
@@ -1461,31 +1565,34 @@
                       }
                   }
               });
-              // Add the note below the chart (make sure it exists)
-              const note = container.querySelector('p');
-              if (!note) {
+              // Add the note below the chart
                 const p = document.createElement('p');
                 p.style = "text-align: center; font-size: 12px; color: #78350f; margin-top: 5px;";
                 p.innerHTML = "<em>Confidence Score Comparison (Pre vs Post*)</em>";
                 container.appendChild(p);
-              }
          }
 
          // Display Admin's *Own* Assessment Details (Unchanged logic, uses passed data)
          function displayAssessmentDetails(answers, preScore, postScore) {
               const answersContainer = document.getElementById('adminAssessmentAnswersDisplay');
               const progressContainer = document.getElementById('adminProgressAnalysis');
-              if (!answersContainer || !progressContainer) { console.error("Admin assessment display elements missing."); return; }
+              const mainContainer = document.getElementById('adminAssessmentDetails'); // To show/hide header
+
+              if (!answersContainer || !progressContainer || !mainContainer) { console.error("Admin assessment display elements missing."); return; }
 
               // Clear previous content
               answersContainer.innerHTML = '';
               progressContainer.innerHTML = '';
 
+              // Ensure the header is visible
+              mainContainer.querySelector('h5').style.display = 'block';
+
 
               // --- Display Answers ---
               const answerLabels = {
                   'coaching_meaning': 'Q1: Meaning of Coaching',
-                  [selectedRandomQuestion?.id || 'random_question']: selectedRandomQuestion?.label || 'Q2: Random Question', // Handle case where random question might not be set?
+                   // Use selectedRandomQuestion if available, otherwise provide a fallback
+                  [selectedRandomQuestion?.id || 'random_question']: selectedRandomQuestion?.label || 'Q2: Additional Question',
                   'expectations': 'Q3: Course Expectations',
                   'confidence_rating': 'Q4: Confidence Rating (1-5)',
                   'confidence_explanation': 'Q4: Confidence Explanation'
@@ -1500,7 +1607,9 @@
                        let value = answers[key];
                        // Use <pre> for textareas to preserve formatting
                        const isTextArea = key === 'coaching_meaning' || key === selectedRandomQuestion?.id || key === 'expectations' || key === 'confidence_explanation';
-                       const formattedValue = isTextArea ? `<pre>${value || 'N/A'}</pre>` : (value || 'N/A');
+                       // Sanitize value before inserting as HTML (basic example)
+                       const sanitizedValue = String(value || 'N/A').replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                       const formattedValue = isTextArea ? `<pre>${sanitizedValue}</pre>` : sanitizedValue;
 
                        answersHTML += `<dt>${label}:</dt><dd>${formattedValue}</dd>`;
                    }
@@ -1511,7 +1620,12 @@
                   answersContainer.innerHTML = answersHTML;
               } else {
                   answersContainer.innerHTML = '<p>No assessment answers found for your account.</p>';
+                   // Hide the progress part if no answers
+                   progressContainer.style.display = 'none';
+                   return; // Exit early if no answers
               }
+              progressContainer.style.display = 'block'; // Ensure progress is visible if answers exist
+
 
               // --- Calculate and Display Progress (Confidence Score Change) ---
               let progressHTML = '';
@@ -1520,14 +1634,15 @@
                   const progressPercentage = ((postScore - 1) / 4) * 100; // Scale 1-5 to 0-100%
 
                   progressHTML += `<p>Pre-Course Confidence: <span class="progress-value">${preScore}/5</span></p>`;
-                  progressHTML += `<p>Post-Course Confidence: <span class="progress-value">${postScore}/5</span></p>`;
+                  progressHTML += `<p>Post-Course Confidence: <span class="progress-value">${postScore}/5*</span></p>`;
 
                   if (scoreChange > 0) {
                       progressHTML += `<p><span class="feedback-good">Improvement: +${scoreChange} point(s)</span></p>`;
                   } else if (scoreChange === 0) {
                       progressHTML += `<p><span class="feedback-neutral">Confidence level maintained.</span></p>`;
                   } else {
-                      progressHTML += `<p><span class="feedback-warning">Decrease: ${scoreChange} point(s)</span></p>`; // Consider adding a warning style
+                       // Add a class for potential styling
+                      progressHTML += `<p><span class="feedback-decrease" style="color: #ef4444; background-color: #fee2e2; padding: 4px 8px; border-radius: 4px;">Decrease: ${scoreChange} point(s)</span></p>`;
                   }
                } else if (preScore > 0) {
                    progressHTML += `<p>Pre-Course Confidence: <span class="progress-value">${preScore}/5</span></p>`;
@@ -1575,12 +1690,23 @@
                 }
 
                 const row = document.createElement('tr');
+                // Basic sanitization for display - escape HTML characters
+                const escapeHtml = (unsafe) => {
+                    if (unsafe === null || typeof unsafe === 'undefined') return 'N/A';
+                    return String(unsafe)
+                         .replace(/&/g, "&amp;")
+                         .replace(/</g, "&lt;")
+                         .replace(/>/g, "&gt;")
+                         .replace(/"/g, "&quot;")
+                         .replace(/'/g, "&#039;");
+                }
+
                 row.innerHTML = `
-                    <td>${user.name || 'N/A'}</td>
-                    <td>${user.email || 'N/A'}</td>
+                    <td>${escapeHtml(user.name)}</td>
+                    <td>${escapeHtml(user.email)}</td>
                     <td>${avgProgress.toFixed(1)}%</td>
                     <td class="${statusClass}">${status}</td>
-                    <td>${lastUpdateFormatted}</td>
+                    <td>${escapeHtml(lastUpdateFormatted)}</td>
                 `;
                 tableBody.appendChild(row);
             });
@@ -1595,9 +1721,10 @@
                  if(container) container.style.display = 'none';
                 return;
             }
-             container.style.display = 'block'; // Make sure it's visible
-             container.innerHTML = '<canvas id="progressDistributionChart"></canvas>'; // Clear potential old messages/notes and ensure canvas exists
+             // Clear potential old messages/notes and ensure canvas exists
+             container.innerHTML = '<canvas id="progressDistributionChart"></canvas>';
              const newCtx = document.getElementById('progressDistributionChart').getContext('2d'); // Get context from new/cleared canvas
+             container.style.display = 'block'; // Make sure it's visible
 
             // Categorize users based on average progress
             let completed = 0;
@@ -1669,13 +1796,17 @@
                         tooltip: {
                              callbacks: {
                                  label: function(context) {
-                                     let label = context.label || '';
-                                     if (label) {
+                                     let label = context.dataset.label || '';
+                                     let valueLabel = context.label || ''; // Gets the full label e.g., "Completed (5)"
+                                      if (valueLabel) {
                                          label += ': ';
                                      }
-                                     const value = context.raw;
+                                     const value = context.raw; // The numerical value
                                      const percentage = totalUsers > 0 ? ((value / totalUsers) * 100).toFixed(1) : 0;
-                                     label += `${value} (${percentage}%)`;
+
+                                      // Reconstruct label for clarity
+                                     const statusText = valueLabel.substring(0, valueLabel.lastIndexOf('(')).trim();
+                                     label = `${statusText}: ${value} (${percentage}%)`;
                                      return label;
                                  }
                              }
@@ -1717,7 +1848,7 @@
 
                  // Escape commas and double quotes within fields
                  const escapeCSV = (field) => {
-                     const stringField = String(field || 'N/A'); // Ensure it's a string, default to 'N/A'
+                     const stringField = String(field === null || typeof field === 'undefined' ? 'N/A' : field); // Ensure it's a string, default to 'N/A'
                      // If field contains comma, newline, or double quote, wrap in double quotes and escape internal double quotes
                      if (stringField.includes(',') || stringField.includes('\n') || stringField.includes('"')) {
                          return `"${stringField.replace(/"/g, '""')}"`;
