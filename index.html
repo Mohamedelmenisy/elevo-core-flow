@@ -388,7 +388,7 @@ const QUESTION_ID = 'intro-goal';
 const QUESTION_TEXT_INTRO_GOAL = "What is your goal for taking this Coaching & Leadership course?";
 const QUIZ_REDIRECT_URL = 'Assessment.html';
 const REMINDER_TIMEOUT_MS = 15000;
-const REDIRECT_DELAY_MS = 2500; // Slightly faster redirect
+const REDIRECT_DELAY_MS = 2500;
 
 // Initialize Supabase Client (Keep Existing)
 try { if (window.supabase && window.supabase.createClient) { supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY); console.log("Supabase client initialized successfully."); } else { throw new Error("Supabase library not found."); } } catch (error) { console.error("CRITICAL ERROR initializing Supabase client:", error); alert("Error connecting. Submissions might fail."); }
@@ -402,19 +402,82 @@ const currentPage_immediate = window.location.pathname.split('/').pop() || 'inde
 console.log(`Index Page IMMEDIATE Check: isLoggedIn=${isLoggedIn_immediate}, hasSignedUp=${hasSignedUp_immediate}`);
 if (!isLoggedIn_immediate && (currentPage_immediate === 'index.html' || currentPage_immediate === '')) { const targetUrl = hasSignedUp_immediate ? 'login.html' : 'signup.html'; console.error(`%cRedirecting to ${targetUrl}...`, "color: orange;"); window.location.replace(targetUrl); } else if (isLoggedIn_immediate) { console.log("%cUser logged in. Proceeding.", "color: green;"); document.addEventListener('DOMContentLoaded', () => { const mc = document.getElementById('mainContainer'); if(mc) mc.style.display = 'block'; }); } else { console.log(`%cNot logged in, not on index. No redirect.`, "color: grey;"); }
 
-// --- DOM Element References (Keep Existing, image is just HTML/CSS) ---
+// --- DOM Element References ---
 let userNameDisplay, userEmailDisplay, questionForm, nameInput, answerInput, errorMessageDisplay,
     successModal, modalGreeting, submitBtn, mainContainer, progressBarContainer, progressBar, progressText,
     questionTitleElement, questionPromptElement, submissionInfoDiv, submissionTimestampElement,
     quizReminderMessage, quizIntroContainer, startQuiz1Button, quizLockMessage;
 
+// --- Core Functions ---
+
+// *** RE-ADDED getCurrentUser FUNCTION DEFINITION ***
+function getCurrentUser() {
+    try {
+        const d = localStorage.getItem(CURRENT_USER_KEY);
+        if (!d) {
+            console.warn("getCurrentUser: No data found in localStorage for key:", CURRENT_USER_KEY);
+            return null;
+        }
+        const p = JSON.parse(d);
+        // More robust check for expected structure
+        if (p && typeof p === 'object' && p.email && p.name) {
+            // Ensure progress exists, initialize if not (important for later functions)
+            if (typeof p.progress !== 'object' || p.progress === null) {
+                p.progress = {};
+            }
+            return p;
+        } else {
+            console.error("getCurrentUser: Parsed data is invalid or missing required fields:", p);
+            // Trigger logout if data is bad, to force re-login and data refresh
+            logout(); // logout() handles redirection
+            return null;
+        }
+    } catch (e) {
+        console.error("getCurrentUser Error parsing JSON:", e);
+        // Trigger logout if data is corrupted
+        logout(); // logout() handles redirection
+        return null;
+    }
+}
+// *** END OF RE-ADDED getCurrentUser ***
+
+
+function saveCurrentUser(userObject) { try { if (!userObject || typeof userObject !== 'object' || !userObject.email || !userObject.name) { throw new Error("Invalid user object for saving"); } if (typeof userObject.progress !== 'object' || userObject.progress === null) { userObject.progress = {}; } localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(userObject)); console.log("Saved user data to localStorage."); } catch (error) { console.error("saveCurrentUser Error:", error); } }
+function displayUserInfo(currentUser) { try { let userName = 'User'; let userEmail = ''; if (currentUser) { userName = currentUser.name || userName; userEmail = currentUser.email || userEmail; if (nameInput && !nameInput.value) { nameInput.value = userName; } } if (userNameDisplay) userNameDisplay.textContent = `Welcome, ${userName}`; if (userEmailDisplay) userEmailDisplay.textContent = userEmail; } catch (err) { console.error("Error in displayUserInfo:", err); } }
+let reminderTimeoutId = null;
+function checkUnlockStatus() { try { const answer = localStorage.getItem(UNLOCK_ANSWER_KEY); const name = localStorage.getItem(UNLOCK_NAME_KEY); const timestamp = localStorage.getItem(UNLOCK_TIMESTAMP_KEY); const questionContainer = questionForm?.closest('.question'); const isGoalComplete = answer && answer.trim().length >= 20; if (isGoalComplete) { if (nameInput && !nameInput.value) nameInput.value = name || ''; if (answerInput) answerInput.value = answer; const currentProgress = updateSectionProgress(SECTION_ID); if(questionContainer) showQuestionProgressBar(questionContainer, currentProgress); showSubmissionInfo(timestamp); disableFormInputs(); unlockQuizButton(); hideReminder(); } else { if(questionContainer) hideQuestionProgressBar(questionContainer); hideSubmissionInfo(); enableFormInputs(); lockQuizButton(); showReminder(); } } catch (err) { console.error("Error in checkUnlockStatus:", err); } }
+function lockQuizButton() { if (startQuiz1Button) { startQuiz1Button.classList.add('locked'); startQuiz1Button.classList.remove('unlocked-success'); startQuiz1Button.href = '#'; } if (quizLockMessage) { quizLockMessage.style.display = 'block'; } console.log("Quiz locked."); }
+function unlockQuizButton() { if (startQuiz1Button) { startQuiz1Button.classList.remove('locked'); startQuiz1Button.classList.add('unlocked-success'); startQuiz1Button.href = QUIZ_REDIRECT_URL; } if (quizLockMessage) { quizLockMessage.style.display = 'none'; } console.log("Quiz unlocked."); }
+function showReminder() { if (quizReminderMessage && quizReminderMessage.style.display !== 'block') { console.log("Showing reminder."); quizReminderMessage.style.display = 'block'; if (reminderTimeoutId) { clearTimeout(reminderTimeoutId); } reminderTimeoutId = setTimeout(() => { hideReminder(); console.log("Reminder timed out."); }, REMINDER_TIMEOUT_MS); } }
+function hideReminder() { if (quizReminderMessage) { quizReminderMessage.style.display = 'none'; } if (reminderTimeoutId) { clearTimeout(reminderTimeoutId); reminderTimeoutId = null; } }
+function storeAnswersLocally(name, answer, submissionTime) { try { localStorage.setItem(UNLOCK_NAME_KEY, name); localStorage.setItem(UNLOCK_ANSWER_KEY, answer); if (submissionTime) { localStorage.setItem(UNLOCK_TIMESTAMP_KEY, submissionTime); } else { localStorage.removeItem(UNLOCK_TIMESTAMP_KEY); } console.log("Stored goal locally."); } catch (e) { console.error("Error storing local data:", e); showError("Could not save progress locally.");} }
+function showSubmissionInfo(timestamp) { if (submissionInfoDiv && submissionTimestampElement) { let displayTime = 'N/A'; if (timestamp) { try { displayTime = new Date(timestamp).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }); } catch (e) { displayTime = timestamp; } } else { displayTime = 'Saved locally only'; } submissionTimestampElement.textContent = `Submitted at: ${displayTime}`; submissionInfoDiv.style.display = 'block'; disableFormInputs(); } }
+function hideSubmissionInfo() { if (submissionInfoDiv) { submissionInfoDiv.style.display = 'none'; } }
+function disableFormInputs() { if(nameInput) nameInput.disabled = true; if(answerInput) answerInput.disabled = true; if(submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Goal Submitted'; submitBtn.style.background = '#bdc3c7'; submitBtn.style.cursor = 'not-allowed'; } }
+function enableFormInputs() { if(nameInput) nameInput.disabled = false; if(answerInput) answerInput.disabled = false; if(submitBtn) { setButtonLoading(false); submitBtn.textContent = 'Submit Your Goal'; submitBtn.style.cursor = 'pointer'; } }
+function logout() { try { if(supabase && supabase.auth) { supabase.auth.signOut(); console.log("Supabase sign out."); } localStorage.removeItem(LOGGED_IN_KEY); localStorage.removeItem(CURRENT_USER_KEY); localStorage.removeItem(UNLOCK_ANSWER_KEY); localStorage.removeItem(UNLOCK_NAME_KEY); localStorage.removeItem(UNLOCK_TIMESTAMP_KEY); localStorage.removeItem(SIGNUP_FLAG_KEY); console.log("Local storage cleared."); window.location.href = 'login.html'; } catch (e) { console.error("Logout error:", e); window.location.href = 'login.html';} }
+function addEventListeners() { try { if(questionForm) questionForm.addEventListener('submit', handleFormSubmit); document.addEventListener('keydown', handleKeyDown); if(nameInput) nameInput.addEventListener('input', () => hideError()); if(answerInput) answerInput.addEventListener('input', () => hideError()); if (startQuiz1Button) startQuiz1Button.addEventListener('click', handleQuizButtonClick); } catch(err) { console.error("Error adding listeners:", err); } }
+function handleKeyDown(e) { try { if(e.key === 'Escape' && successModal && successModal.style.display === 'flex'){ console.log("Esc ignored in modal."); } } catch(err){ console.error("Keydown error:", err); } }
+function handleQuizButtonClick(event) { if (startQuiz1Button && startQuiz1Button.classList.contains('locked')) { event.preventDefault(); if (quizLockMessage) { quizLockMessage.style.animation = 'none'; void quizLockMessage.offsetWidth; quizLockMessage.style.animation = 'pulseLock 0.5s 2'; setTimeout(() => { if(quizLockMessage) quizLockMessage.style.animation = 'pulseLock 2s infinite ease-in-out'; }, 1000); } console.log("Clicked locked quiz."); if(answerInput && !answerInput.value){ answerInput.focus(); } } else { console.log("Clicked unlocked quiz."); } }
+function showError(message, field) { try { if(errorMessageDisplay){errorMessageDisplay.textContent=message;errorMessageDisplay.style.display="block";} if(field){field.classList.add('invalid-field-style');field.focus();} console.error("Error shown:", message); } catch(err){ console.error("Error showing error:", err); } }
+function hideError() { try { if(errorMessageDisplay)errorMessageDisplay.style.display="none"; if(nameInput)nameInput.classList.remove('invalid-field-style'); if(answerInput)answerInput.classList.remove('invalid-field-style'); } catch(err){ console.error("Error hiding error:", err); } }
+function showRedirectConfirmationModal() { try { if (!successModal) { window.location.href = QUIZ_REDIRECT_URL; return; } const modalContent = successModal.querySelector('.modal-content'); if (!modalContent) { window.location.href = QUIZ_REDIRECT_URL; return; } const heading = modalContent.querySelector('h3#modalGreeting'); const paragraph = modalContent.querySelector('p'); const mainButton = modalContent.querySelector('.modal-button'); const closeButton = modalContent.querySelector('.close-modal'); if (heading) { heading.textContent = "Goal Submitted!"; heading.style.color = '#27ae60'; } if (paragraph) { paragraph.textContent = `Thank you! You've unlocked the first quiz. Redirecting...`; paragraph.style.marginTop = '15px'; } if (mainButton) mainButton.style.display = 'none'; if (closeButton) closeButton.style.display = 'none'; successModal.style.display = 'flex'; console.log(`Redirecting to ${QUIZ_REDIRECT_URL} in ${REDIRECT_DELAY_MS}ms.`); setTimeout(() => { window.location.href = QUIZ_REDIRECT_URL; }, REDIRECT_DELAY_MS); } catch (err) { console.error("Redirect modal error:", err); alert("Success! Redirecting to quiz..."); window.location.href = QUIZ_REDIRECT_URL; } }
+function closeModal() { try { if(successModal)successModal.style.display='none'; console.log("Modal closed."); } catch(err){ console.error("Modal close error:", err); } }
+function updateSectionProgress(sectionId) { const currentUser = getCurrentUser(); if (!currentUser) return 0; let sectionProgress = 0; const answer = localStorage.getItem(UNLOCK_ANSWER_KEY); if (answer && answer.trim().length >= 20) { sectionProgress = 100; } else { sectionProgress = 0; } if (!currentUser.progress) currentUser.progress = {}; currentUser.progress[sectionId] = sectionProgress; saveCurrentUser(currentUser); console.log(`Section '${sectionId}' progress: ${sectionProgress}%`); return sectionProgress; }
+function showQuestionProgressBar(containerElement, percentage) { if (!containerElement) return; const pC = containerElement.querySelector('.question-progress-container'); const bar = pC?.querySelector('.question-progress-bar'); const text = pC?.querySelector('.question-progress-text'); if (pC && bar && text) { percentage = Math.max(0, Math.min(100, Math.round(percentage))); bar.style.width = `${percentage}%`; text.textContent = `${percentage}% Complete`; pC.style.display='block';} }
+function hideQuestionProgressBar(containerElement) { if (!containerElement) return; const pC=containerElement.querySelector('.question-progress-container'); if(pC) pC.style.display='none'; }
+async function sendToSupabase(submissionData) { if (!supabase) { showError("Database connection error. Progress saved locally."); return { success: false, submitted_at: null }; } console.log("Sending to Supabase:", submissionData.questionId); const dataToSend = { name: submissionData.name, email: submissionData.email, goal_answer: submissionData.answer, question_id: submissionData.questionId, question_text: submissionData.questionText, section_id: submissionData.sectionId, score: submissionData.score, completion_status: submissionData.completionStatus, }; try { const { data, error } = await supabase .from('assessments') .insert([dataToSend]) .select('created_at') .single(); if (error) { console.error('Supabase Error:', error); let msg = `DB Error: ${error.message}. Progress saved locally.`; if (error.code === '23505') { msg = "Goal already submitted. Progress saved."; } showError(msg); return { success: false, submitted_at: null }; } console.log('Supabase Success:', data); return { success: true, submitted_at: data?.created_at }; } catch (networkError) { console.error('Network Error:', networkError); showError(`Network Error: ${networkError.message}. Progress saved locally.`); return { success: false, submitted_at: null }; } }
+async function handleFormSubmit(event) { event.preventDefault(); console.log("Submitting goal..."); let submissionSuccessful = false; let submissionTime = null; try { if (!nameInput || !answerInput || !userEmailDisplay || !submitBtn || !errorMessageDisplay || !questionForm || !questionPromptElement) { throw new Error("Form elements missing!"); } if (!supabase) { showError("DB connection not ready."); return; } const name = nameInput.value.trim(); const answer = answerInput.value.trim(); let email = userEmailDisplay.textContent.trim(); const questionContainer = questionForm.closest('.question'); const questionText = questionPromptElement.textContent.trim() || QUESTION_TEXT_INTRO_GOAL; hideError(); hideReminder(); let isValid = true; if (!name) { showError("Name required.", nameInput); isValid = false; } if (answer.length < 20) { showError("Goal requires min 20 chars.", answerInput); isValid = false; } if (!email || !email.includes('@')) { const currentUser = getCurrentUser(); const backupEmail = currentUser?.email; if (!backupEmail) { showError("Email not found. Re-login.", userEmailDisplay); isValid = false; } else { email = backupEmail; } } if (!questionContainer) { showError("Page error (QC_NF)."); isValid = false; } if (!isValid) { return; } console.log("Validation OK."); setButtonLoading(true); const submissionData = { name, email, answer, questionId: QUESTION_ID, questionText, sectionId: SECTION_ID, score: 100, completionStatus: 'Complete' }; const { success, submitted_at } = await sendToSupabase(submissionData); submissionSuccessful = success; submissionTime = submitted_at; console.log(`DB Submit: ${success}, Time: ${submissionTime}`); if (submissionSuccessful && submissionTime) { console.log("DB success."); storeAnswersLocally(name, answer, submissionTime); const currentProgress = updateSectionProgress(SECTION_ID); if(questionContainer) showQuestionProgressBar(questionContainer, currentProgress); showSubmissionInfo(submissionTime); disableFormInputs(); unlockQuizButton(); showRedirectConfirmationModal(); } else { console.warn("DB fail/no timestamp."); storeAnswersLocally(name, answer, null); const currentProgress = updateSectionProgress(SECTION_ID); if(questionContainer) showQuestionProgressBar(questionContainer, currentProgress); showSubmissionInfo(null); unlockQuizButton(); /* Unlock even on DB fail */ } } catch (err) { console.error("Submit Error:", err); showError(`Error: ${err.message}. Progress saved locally.`); submissionSuccessful = false; } finally { console.log("Submit finally."); if (!submissionSuccessful) { const alreadyDone = localStorage.getItem(UNLOCK_ANSWER_KEY)?.trim().length >= 20; if (!alreadyDone) { enableFormInputs(); console.log("Form re-enabled."); } else { disableFormInputs(); console.log("Form kept disabled (already done)."); } } else { console.log("Redirecting soon. Form disabled."); disableFormInputs(); } } }
+function setButtonLoading(isLoading) { if (!submitBtn) return; submitBtn.disabled = isLoading; submitBtn.textContent = isLoading ? 'Submitting...' : 'Submit Your Goal'; if (isLoading) { submitBtn.style.background = '#bdc3c7'; submitBtn.style.cursor = 'wait'; } else { const alreadyDone = localStorage.getItem(UNLOCK_ANSWER_KEY)?.trim().length >= 20; if (!alreadyDone) { submitBtn.style.background = 'linear-gradient(90deg, #3498db, #2980b9)'; submitBtn.style.cursor = 'pointer'; } else { disableFormInputs(); } } }
+
+
 // --- Initialization (Keep Existing structure) ---
 document.addEventListener('DOMContentLoaded', function() {
     console.log("%cDOM Content Loaded.", "color: green;");
     mainContainer = document.getElementById('mainContainer');
-    if (isLoggedIn_immediate && mainContainer) { // Check mainContainer exists here too
+    if (isLoggedIn_immediate && mainContainer) {
         try {
-            // Assign ALL elements (important after DOM loaded)
+            // Assign ALL elements
             userNameDisplay = document.getElementById('userName');
             userEmailDisplay = document.getElementById('userEmail');
             questionForm = document.getElementById('questionForm');
@@ -442,78 +505,50 @@ document.addEventListener('DOMContentLoaded', function() {
              for (const [key, element] of Object.entries(essentialElements)) {
                  if (!element) {
                      missingElement = key;
-                     break;
+                     break; // Stop on first missing element
                  }
              }
              if (missingElement) {
-                 throw new Error(`Essential DOM element '${missingElement}' not found!`);
+                 // Throw error if any essential element is missing
+                 throw new Error(`Essential DOM element '${missingElement}' not found! Cannot initialize page.`);
              }
 
-
-            if (!supabase && submitBtn) { // Check Supabase status
+            // Check Supabase client status AFTER element checks
+            if (!supabase) {
                 console.warn("Supabase client unavailable. Disabling forms.");
-                submitBtn.disabled = true; submitBtn.textContent = 'Unavailable';
+                if(submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Unavailable'; }
                 if(startQuiz1Button) { startQuiz1Button.classList.add('locked'); startQuiz1Button.classList.remove('unlocked-success'); }
                 if(quizLockMessage) quizLockMessage.textContent = "Service unavailable.";
+                // Display a general error if Supabase failed to init?
+                 showError("Cannot connect to course service. Please try again later.");
             }
 
-            const currentUser = getCurrentUser(); // Get user data
-            if (!currentUser) { throw new Error("User data missing unexpectedly!"); }
+            // Get user data *after* assigning elements and checking Supabase
+            const currentUser = getCurrentUser();
+            // Check if currentUser is valid (getCurrentUser handles redirect/logout on critical errors)
+            if (!currentUser) {
+                 // If getCurrentUser returned null but didn't redirect (e.g., logout failed), throw error.
+                 throw new Error("User data missing or invalid after checks. Cannot proceed.");
+            }
 
             console.log(`Initializing content for ${currentUser.email}.`);
-            initializePageContent(currentUser);
-            console.log("Content initialized.");
+            initializePageContent(currentUser); // Proceed with initialization
+            console.log("Content initialized successfully.");
 
-        } catch (error) { // Catch initialization errors
-             console.error("CRITICAL ERROR during DOMContentLoaded/Init:", error);
-             mainContainer.innerHTML = `<p style="color: red; font-weight: bold; padding: 30px;">Error loading content. Please refresh. (${error.message})</p>`;
-             mainContainer.style.display = 'block'; // Show the error
+        } catch (error) { // Catch any error during initialization
+             console.error("CRITICAL ERROR during DOMContentLoaded/Initialization:", error);
+             // Display error within the main container
+             mainContainer.innerHTML = `<p style="color: red; font-weight: bold; text-align:center; padding: 30px;">Error loading page content. Please try refreshing. <br><small>(${error.message})</small></p>`;
+             mainContainer.style.display = 'block'; // Ensure error is visible
         }
     } else if (!isLoggedIn_immediate) {
       console.log("DOM Loaded: User not logged in, initialization skipped.");
-      if (mainContainer) mainContainer.style.display = 'none'; // Ensure hidden
+      if (mainContainer) mainContainer.style.display = 'none';
     } else if (!mainContainer) {
-        console.error("DOM Loaded: Main container not found even though user might be logged in.");
-        // Optionally display an error outside the container
+        console.error("DOM Loaded: Main container not found!");
         document.body.insertAdjacentHTML('afterbegin', '<p style="color: red; padding: 20px;">Critical Error: Page structure missing.</p>');
     }
-});
-
-// --- Keep all other JavaScript functions as they were in the previous correct version ---
-// initializePageContent, getCurrentUser, saveCurrentUser, displayUserInfo,
-// checkUnlockStatus, lockQuizButton, unlockQuizButton, showReminder, hideReminder,
-// storeAnswersLocally, showSubmissionInfo, hideSubmissionInfo, disableFormInputs,
-// enableFormInputs, logout, addEventListeners, handleKeyDown, handleQuizButtonClick,
-// showError, hideError, showRedirectConfirmationModal, closeModal,
-// updateSectionProgress, showQuestionProgressBar, hideQuestionProgressBar,
-// sendToSupabase, handleFormSubmit, setButtonLoading
-
-function initializePageContent(currentUser) { console.log("%cInitializing Page Content...", "color: blue;"); if (!currentUser) return; displayUserInfo(currentUser); if(questionTitleElement) questionTitleElement.textContent = "Your First Step: Set Your Goal"; if(questionPromptElement) questionPromptElement.textContent = QUESTION_TEXT_INTRO_GOAL; checkUnlockStatus(); addEventListeners(); console.log("initializePageContent() done."); }
-let reminderTimeoutId = null;
-function checkUnlockStatus() { try { const answer = localStorage.getItem(UNLOCK_ANSWER_KEY); const name = localStorage.getItem(UNLOCK_NAME_KEY); const timestamp = localStorage.getItem(UNLOCK_TIMESTAMP_KEY); const questionContainer = questionForm?.closest('.question'); const isGoalComplete = answer && answer.trim().length >= 20; if (isGoalComplete) { if (nameInput && !nameInput.value) nameInput.value = name || ''; if (answerInput) answerInput.value = answer; const currentProgress = updateSectionProgress(SECTION_ID); if(questionContainer) showQuestionProgressBar(questionContainer, currentProgress); showSubmissionInfo(timestamp); disableFormInputs(); unlockQuizButton(); hideReminder(); } else { if(questionContainer) hideQuestionProgressBar(questionContainer); hideSubmissionInfo(); enableFormInputs(); lockQuizButton(); showReminder(); } } catch (err) { console.error("Error in checkUnlockStatus:", err); } }
-function lockQuizButton() { if (startQuiz1Button) { startQuiz1Button.classList.add('locked'); startQuiz1Button.classList.remove('unlocked-success'); startQuiz1Button.href = '#'; } if (quizLockMessage) { quizLockMessage.style.display = 'block'; } console.log("Quiz locked."); }
-function unlockQuizButton() { if (startQuiz1Button) { startQuiz1Button.classList.remove('locked'); startQuiz1Button.classList.add('unlocked-success'); startQuiz1Button.href = QUIZ_REDIRECT_URL; } if (quizLockMessage) { quizLockMessage.style.display = 'none'; } console.log("Quiz unlocked."); }
-function showReminder() { if (quizReminderMessage && quizReminderMessage.style.display !== 'block') { console.log("Showing reminder."); quizReminderMessage.style.display = 'block'; if (reminderTimeoutId) { clearTimeout(reminderTimeoutId); } reminderTimeoutId = setTimeout(() => { hideReminder(); console.log("Reminder timed out."); }, REMINDER_TIMEOUT_MS); } }
-function hideReminder() { if (quizReminderMessage) { quizReminderMessage.style.display = 'none'; } if (reminderTimeoutId) { clearTimeout(reminderTimeoutId); reminderTimeoutId = null; } }
-function storeAnswersLocally(name, answer, submissionTime) { try { localStorage.setItem(UNLOCK_NAME_KEY, name); localStorage.setItem(UNLOCK_ANSWER_KEY, answer); if (submissionTime) { localStorage.setItem(UNLOCK_TIMESTAMP_KEY, submissionTime); } else { localStorage.removeItem(UNLOCK_TIMESTAMP_KEY); } console.log("Stored goal locally."); } catch (e) { console.error("Error storing local data:", e); showError("Could not save progress locally.");} }
-function showSubmissionInfo(timestamp) { if (submissionInfoDiv && submissionTimestampElement) { let displayTime = 'N/A'; if (timestamp) { try { displayTime = new Date(timestamp).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }); } catch (e) { displayTime = timestamp; } } else { displayTime = 'Saved locally only'; } submissionTimestampElement.textContent = `Submitted at: ${displayTime}`; submissionInfoDiv.style.display = 'block'; disableFormInputs(); } }
-function hideSubmissionInfo() { if (submissionInfoDiv) { submissionInfoDiv.style.display = 'none'; } }
-function disableFormInputs() { if(nameInput) nameInput.disabled = true; if(answerInput) answerInput.disabled = true; if(submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Goal Submitted'; submitBtn.style.background = '#bdc3c7'; submitBtn.style.cursor = 'not-allowed'; } }
-function enableFormInputs() { if(nameInput) nameInput.disabled = false; if(answerInput) answerInput.disabled = false; if(submitBtn) { setButtonLoading(false); submitBtn.textContent = 'Submit Your Goal'; submitBtn.style.cursor = 'pointer'; } }
-function logout() { try { if(supabase && supabase.auth) { supabase.auth.signOut(); console.log("Supabase sign out."); } localStorage.removeItem(LOGGED_IN_KEY); localStorage.removeItem(CURRENT_USER_KEY); localStorage.removeItem(UNLOCK_ANSWER_KEY); localStorage.removeItem(UNLOCK_NAME_KEY); localStorage.removeItem(UNLOCK_TIMESTAMP_KEY); localStorage.removeItem(SIGNUP_FLAG_KEY); console.log("Local storage cleared."); window.location.href = 'login.html'; } catch (e) { console.error("Logout error:", e); window.location.href = 'login.html';} }
-function addEventListeners() { try { if(questionForm) questionForm.addEventListener('submit', handleFormSubmit); document.addEventListener('keydown', handleKeyDown); if(nameInput) nameInput.addEventListener('input', () => hideError()); if(answerInput) answerInput.addEventListener('input', () => hideError()); if (startQuiz1Button) startQuiz1Button.addEventListener('click', handleQuizButtonClick); } catch(err) { console.error("Error adding listeners:", err); } }
-function handleKeyDown(e) { try { if(e.key === 'Escape' && successModal && successModal.style.display === 'flex'){ console.log("Esc ignored in modal."); } } catch(err){ console.error("Keydown error:", err); } }
-function handleQuizButtonClick(event) { if (startQuiz1Button && startQuiz1Button.classList.contains('locked')) { event.preventDefault(); if (quizLockMessage) { quizLockMessage.style.animation = 'none'; void quizLockMessage.offsetWidth; quizLockMessage.style.animation = 'pulseLock 0.5s 2'; setTimeout(() => { if(quizLockMessage) quizLockMessage.style.animation = 'pulseLock 2s infinite ease-in-out'; }, 1000); } console.log("Clicked locked quiz."); if(answerInput && !answerInput.value){ answerInput.focus(); } } else { console.log("Clicked unlocked quiz."); } }
-function showError(message, field) { try { if(errorMessageDisplay){errorMessageDisplay.textContent=message;errorMessageDisplay.style.display="block";} if(field){field.classList.add('invalid-field-style');field.focus();} console.error("Error shown:", message); } catch(err){ console.error("Error showing error:", err); } }
-function hideError() { try { if(errorMessageDisplay)errorMessageDisplay.style.display="none"; if(nameInput)nameInput.classList.remove('invalid-field-style'); if(answerInput)answerInput.classList.remove('invalid-field-style'); } catch(err){ console.error("Error hiding error:", err); } }
-function showRedirectConfirmationModal() { try { if (!successModal) { window.location.href = QUIZ_REDIRECT_URL; return; } const modalContent = successModal.querySelector('.modal-content'); if (!modalContent) { window.location.href = QUIZ_REDIRECT_URL; return; } const heading = modalContent.querySelector('h3#modalGreeting'); const paragraph = modalContent.querySelector('p'); const mainButton = modalContent.querySelector('.modal-button'); const closeButton = modalContent.querySelector('.close-modal'); if (heading) { heading.textContent = "Goal Submitted!"; heading.style.color = '#27ae60'; } if (paragraph) { paragraph.textContent = `Thank you! You've unlocked the first quiz. Redirecting...`; paragraph.style.marginTop = '15px'; } if (mainButton) mainButton.style.display = 'none'; if (closeButton) closeButton.style.display = 'none'; successModal.style.display = 'flex'; console.log(`Redirecting to ${QUIZ_REDIRECT_URL} in ${REDIRECT_DELAY_MS}ms.`); setTimeout(() => { window.location.href = QUIZ_REDIRECT_URL; }, REDIRECT_DELAY_MS); } catch (err) { console.error("Redirect modal error:", err); alert("Success! Redirecting to quiz..."); window.location.href = QUIZ_REDIRECT_URL; } }
-function closeModal() { try { if(successModal)successModal.style.display='none'; console.log("Modal closed."); } catch(err){ console.error("Modal close error:", err); } }
-function updateSectionProgress(sectionId) { const currentUser = getCurrentUser(); if (!currentUser) return 0; let sectionProgress = 0; const answer = localStorage.getItem(UNLOCK_ANSWER_KEY); if (answer && answer.trim().length >= 20) { sectionProgress = 100; } else { sectionProgress = 0; } if (!currentUser.progress) currentUser.progress = {}; currentUser.progress[sectionId] = sectionProgress; saveCurrentUser(currentUser); console.log(`Section '${sectionId}' progress: ${sectionProgress}%`); return sectionProgress; }
-function showQuestionProgressBar(containerElement, percentage) { if (!containerElement) return; const pC = containerElement.querySelector('.question-progress-container'); const bar = pC?.querySelector('.question-progress-bar'); const text = pC?.querySelector('.question-progress-text'); if (pC && bar && text) { percentage = Math.max(0, Math.min(100, Math.round(percentage))); bar.style.width = `${percentage}%`; text.textContent = `${percentage}% Complete`; pC.style.display='block';} }
-function hideQuestionProgressBar(containerElement) { if (!containerElement) return; const pC=containerElement.querySelector('.question-progress-container'); if(pC) pC.style.display='none'; }
-async function sendToSupabase(submissionData) { if (!supabase) { showError("Database connection error. Progress saved locally."); return { success: false, submitted_at: null }; } console.log("Sending to Supabase:", submissionData.questionId); const dataToSend = { name: submissionData.name, email: submissionData.email, goal_answer: submissionData.answer, question_id: submissionData.questionId, question_text: submissionData.questionText, section_id: submissionData.sectionId, score: submissionData.score, completion_status: submissionData.completionStatus, }; try { const { data, error } = await supabase .from('assessments') .insert([dataToSend]) .select('created_at') .single(); if (error) { console.error('Supabase Error:', error); let msg = `DB Error: ${error.message}. Progress saved locally.`; if (error.code === '23505') { msg = "Goal already submitted. Progress saved."; } showError(msg); return { success: false, submitted_at: null }; } console.log('Supabase Success:', data); return { success: true, submitted_at: data?.created_at }; } catch (networkError) { console.error('Network Error:', networkError); showError(`Network Error: ${networkError.message}. Progress saved locally.`); return { success: false, submitted_at: null }; } }
-async function handleFormSubmit(event) { event.preventDefault(); console.log("Submitting goal..."); let submissionSuccessful = false; let submissionTime = null; try { if (!nameInput || !answerInput || !userEmailDisplay || !submitBtn || !errorMessageDisplay || !questionForm || !questionPromptElement) { throw new Error("Form elements missing!"); } if (!supabase) { showError("DB connection not ready."); return; } const name = nameInput.value.trim(); const answer = answerInput.value.trim(); let email = userEmailDisplay.textContent.trim(); const questionContainer = questionForm.closest('.question'); const questionText = questionPromptElement.textContent.trim() || QUESTION_TEXT_INTRO_GOAL; hideError(); hideReminder(); let isValid = true; if (!name) { showError("Name required.", nameInput); isValid = false; } if (answer.length < 20) { showError("Goal requires min 20 chars.", answerInput); isValid = false; } if (!email || !email.includes('@')) { const currentUser = getCurrentUser(); const backupEmail = currentUser?.email; if (!backupEmail) { showError("Email not found. Re-login.", userEmailDisplay); isValid = false; } else { email = backupEmail; } } if (!questionContainer) { showError("Page error (QC_NF)."); isValid = false; } if (!isValid) { return; } console.log("Validation OK."); setButtonLoading(true); const submissionData = { name, email, answer, questionId: QUESTION_ID, questionText, sectionId: SECTION_ID, score: 100, completionStatus: 'Complete' }; const { success, submitted_at } = await sendToSupabase(submissionData); submissionSuccessful = success; submissionTime = submitted_at; console.log(`DB Submit: ${success}, Time: ${submissionTime}`); if (submissionSuccessful && submissionTime) { console.log("DB success."); storeAnswersLocally(name, answer, submissionTime); const currentProgress = updateSectionProgress(SECTION_ID); showQuestionProgressBar(questionContainer, currentProgress); showSubmissionInfo(submissionTime); disableFormInputs(); unlockQuizButton(); showRedirectConfirmationModal(); } else { console.warn("DB fail/no timestamp."); storeAnswersLocally(name, answer, null); const currentProgress = updateSectionProgress(SECTION_ID); showQuestionProgressBar(questionContainer, currentProgress); showSubmissionInfo(null); unlockQuizButton(); /* Unlock even on DB fail */ } } catch (err) { console.error("Submit Error:", err); showError(`Error: ${err.message}. Progress saved locally.`); submissionSuccessful = false; } finally { console.log("Submit finally."); if (!submissionSuccessful) { const alreadyDone = localStorage.getItem(UNLOCK_ANSWER_KEY)?.trim().length >= 20; if (!alreadyDone) { enableFormInputs(); console.log("Form re-enabled."); } else { disableFormInputs(); console.log("Form kept disabled (already done)."); } } else { console.log("Redirecting soon. Form disabled."); disableFormInputs(); } } }
-function setButtonLoading(isLoading) { if (!submitBtn) return; submitBtn.disabled = isLoading; submitBtn.textContent = isLoading ? 'Submitting...' : 'Submit Your Goal'; if (isLoading) { submitBtn.style.background = '#bdc3c7'; submitBtn.style.cursor = 'wait'; } else { const alreadyDone = localStorage.getItem(UNLOCK_ANSWER_KEY)?.trim().length >= 20; if (!alreadyDone) { submitBtn.style.background = 'linear-gradient(90deg, #3498db, #2980b9)'; submitBtn.style.cursor = 'pointer'; } else { disableFormInputs(); } } }
+}); // End DOMContentLoaded
 
 </script>
 </body>
