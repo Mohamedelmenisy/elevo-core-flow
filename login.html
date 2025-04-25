@@ -201,19 +201,24 @@
          }
 
          function handleUrlParamsAndFocus() {
-             // (Keep this function as it is)
+             // This function READS parameters but DOES NOT ADD them during final redirect
              const urlParams = new URLSearchParams(window.location.search);
              const emailParam = urlParams.get('email');
              const signedUpParam = urlParams.get('signedup');
 
-             if (emailParam && emailInput) { emailInput.value = emailParam; }
+             if (emailParam && emailInput) {
+                console.log("Pre-filling email from URL parameter:", emailParam);
+                emailInput.value = emailParam;
+             }
              if (signedUpParam && (!alreadyLoggedInMessageDiv || alreadyLoggedInMessageDiv.style.display === 'none')) {
                   showMessage(loginMessage, "Account created successfully! Please log in.", false);
-                  window.history.replaceState({}, document.title, window.location.pathname); // Clean URL
+                  // Clean the URL visually *after* reading the params
+                  window.history.replaceState({}, document.title, window.location.pathname);
               }
 
              const rememberedEmail = localStorage.getItem(REMEMBERED_EMAIL_KEY);
              if (rememberedEmail && emailInput && !emailInput.value) { // Only fill if not filled by param
+                 console.log("Pre-filling email from localStorage:", rememberedEmail);
                  emailInput.value = rememberedEmail;
                  if(rememberCheckbox) rememberCheckbox.checked = true;
              }
@@ -234,7 +239,6 @@
                     console.log("Login form submitted.");
 
                     hideMessage(emailError); hideMessage(passwordError); hideMessage(loginError); hideMessage(loginMessage);
-                    // Don't hide alreadyLoggedInMessageDiv here, Supabase check handles it
                     setButtonLoading(true);
 
                     if (!emailInput || !passwordInput || !rememberCheckbox) { console.error("Form elements missing!"); showMessage(loginError, "Form error."); setButtonLoading(false); return; }
@@ -252,9 +256,9 @@
                     else { localStorage.removeItem(REMEMBERED_EMAIL_KEY); }
 
                     console.log(`Authenticating with Supabase: ${email}`);
-                    await authenticateUserWithSupabase(email, password);
+                    await authenticateUserWithSupabase(email, password); // This handles the secure redirect
                 });
-            } else if (loginForm && loginForm.style.display !== 'none') { // Only log error if form was expected but not found
+            } else if (loginForm && loginForm.style.display !== 'none') {
                  console.error("Login form element not found!");
             }
 
@@ -269,7 +273,7 @@
 
          } // End if(supabase) for event listeners
 
-         // --- Supabase Authentication Function (Only define if Supabase initialized) ---
+         // --- Supabase Authentication Function (Handles Secure Redirect) ---
          async function authenticateUserWithSupabase(email, password) {
               if (!supabase) {
                    console.error("Cannot authenticate: Supabase client not initialized.");
@@ -277,56 +281,43 @@
                    setButtonLoading(false);
                    return;
               }
-             console.log(`Running authenticateUserWithSupabase for ${email}. Will redirect to index.html on success.`);
+             console.log(`Running authenticateUserWithSupabase for ${email}. Will redirect securely on success.`);
 
              try {
-                 // Use Supabase client to sign in
                  const { data, error } = await supabase.auth.signInWithPassword({
                      email: email,
                      password: password,
                  });
 
                  if (error) {
-                     console.error("Supabase Login Error:", error);
-                     // Provide user-friendly error messages
-                     let userMessage = 'Incorrect email or password.'; // Default
-                     if (error.message.toLowerCase().includes('invalid login credentials')) {
-                         userMessage = 'Incorrect email or password.';
-                     } else if (error.message.toLowerCase().includes('email not confirmed')) {
-                         userMessage = 'Please check your inbox to confirm your email address first.';
-                     } else {
-                         // Log the specific error for debugging but show a general message
-                         console.error("Unhandled Supabase auth error:", error.message);
-                         userMessage = 'Login failed. Please try again later.';
-                     }
+                     // ... [Error Handling] ...
+                     console.error("Supabase Login Error:", error.message);
+                     let userMessage = 'Incorrect email or password.';
+                     if (error.message.toLowerCase().includes('invalid login credentials')) { userMessage = 'Incorrect email or password.'; }
+                     else if (error.message.toLowerCase().includes('email not confirmed')) { userMessage = 'Please check your inbox to confirm your email address first.';}
+                     else { userMessage = 'Login failed. Please try again later.'; }
                      showMessage(loginError, userMessage, true);
                      setButtonLoading(false);
-                     return; // Stop execution on error
+                     return;
                  }
 
                  // --- Login Successful ---
-                 console.log("Supabase Login Successful. User:", data.user);
-                 console.log("Session:", data.session);
+                 console.log("Supabase Login Successful.");
 
-                 // Optional: Set simple flag if needed elsewhere
-                 localStorage.setItem(LOGGED_IN_KEY, 'true');
-
-                 // Display success message
+                 localStorage.setItem(LOGGED_IN_KEY, 'true'); // Optional flag
                  showMessage(loginMessage, "Login successful! Redirecting...", false);
 
-                 // *** Redirect to index.html WITHOUT sensitive data in URL ***
-                 const destination = 'index.html'; // Clean destination page
+                 // *** THE SECURE REDIRECT HAPPENS HERE ***
+                 const destination = 'index.html'; // Target page without parameters
                  console.log(`Redirecting securely to: ${destination}`);
                  setTimeout(() => {
-                     // *** This redirection is safe ***
+                     // This navigates cleanly without adding email/password to URL
                      window.location.href = destination;
-                 }, 1000); // Delay for user message visibility
-
-                 // No need to call setButtonLoading(false) on success because we are redirecting
+                 }, 1000);
 
              } catch (unexpectedError) {
                  console.error("Unexpected error during Supabase login:", unexpectedError);
-                 showMessage(loginError, 'An unexpected error occurred during login. Please try again.', true);
+                 showMessage(loginError, 'An unexpected error occurred. Please try again.', true);
                  setButtonLoading(false);
              }
          }
