@@ -263,7 +263,7 @@ p { margin-bottom: 15px; color: #555e68; /* Slightly softer black */ line-height
     white-space: nowrap;
 }
 
-/* --- Submission Info Styles (Now hidden on success by JS) --- */
+/* --- Submission Info Styles (Structure kept, content removed, hidden by JS) --- */
 .submission-info {
     margin-top: 25px;
     padding: 18px 20px;
@@ -272,16 +272,9 @@ p { margin-bottom: 15px; color: #555e68; /* Slightly softer black */ line-height
     border-radius: 0 8px 8px 0;
     font-size: 14px;
     display: none; /* Initially hidden, JS controls visibility */
+    min-height: 1em; /* Add min-height in case CSS is slow */
 }
-.submission-info p {
-    margin-bottom: 5px;
-    color: #1d8348; /* Darker green text */
-    font-family: 'Open Sans', sans-serif;
-}
-.submission-info strong {
-    color: #145a32; /* Even darker for emphasis */
-    font-weight: 600;
-}
+/* No inner p/strong styles needed as content is removed */
 
 /* --- Temporary Pop-up Styles --- */
 #temp-popup {
@@ -367,9 +360,9 @@ p { margin-bottom: 15px; color: #555e68; /* Slightly softer black */ line-height
             <span class="question-progress-text" id="progress-text-intro-goal">0% Complete</span>
         </div>
     </div>
-    <!-- Submission Info Area (Structure kept, content removed, hidden by JS on success) -->
+    <!-- Submission Info Area (Structure kept, empty, hidden by JS) -->
     <div class="submission-info" id="submissionInfo">
-        <!-- Content removed -->
+        <!-- Content removed: No "Goal Submitted Successfully!" or timestamp here -->
     </div>
 </div>
 
@@ -456,28 +449,24 @@ function getCurrentUser() {
         const d = localStorage.getItem(CURRENT_USER_KEY);
         if (!d) { console.warn("getCurrentUser: No data found in localStorage."); return null; }
         const p = JSON.parse(d);
-        if (p && typeof p === 'object' && p.email && p.name) {
-             // Ensure progress object exists
+        if (p && typeof p === 'object' && p.email && p.name && p.id) { // Check for ID too
              if (typeof p.progress !== 'object' || p.progress === null) { p.progress = {}; }
-             // Ensure user ID exists (important for DB relations)
-             if (!p.id) { console.warn("getCurrentUser: User ID missing from stored data."); }
             return p;
         } else {
-            console.error("getCurrentUser: Parsed data invalid or missing essential fields (email, name, id?).", p);
-            logout(); return null; // Logout if essential data is corrupt/missing
+            console.error("getCurrentUser: Parsed data invalid or missing fields (email, name, id).", p);
+            logout(); return null;
         }
     } catch (e) {
         console.error("getCurrentUser JSON Parse Error:", e);
-        logout(); return null; // Logout on parsing error
+        logout(); return null;
     }
 }
 
 
 function saveCurrentUser(userObject) {
     try {
-        // Add validation for user ID as well
         if (!userObject || typeof userObject !== 'object' || !userObject.email || !userObject.name || !userObject.id) {
-             throw new Error("Invalid user object provided for saving (missing email, name, or id).");
+             throw new Error("Invalid user object for saving (missing email, name, or id).");
          }
         if (typeof userObject.progress !== 'object' || userObject.progress === null) { userObject.progress = {}; }
         localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(userObject));
@@ -491,19 +480,15 @@ function displayUserInfo(currentUser) {
         if (currentUser) {
             userName = currentUser.name || userName;
             userEmail = currentUser.email || userEmail;
-            // Pre-fill name input only if it's empty
             if (nameInput && !nameInput.value) { nameInput.value = userName; }
         }
         if (userNameDisplay) {
             userNameDisplay.textContent = `Welcome, ${userName}`;
-            // Check for admin email
-            const isAdmin = currentUser?.email === "m.elsayed@thechefz.co"; // Optional chaining just in case
+            const isAdmin = currentUser?.email === "m.elsayed@thechefz.co";
             if (isAdmin) {
                 const adminBadge = document.createElement('span');
                 adminBadge.textContent = " (Admin)";
-                adminBadge.style.color = "#f39c12"; // Orange color for admin badge
-                adminBadge.style.fontWeight = "bold";
-                adminBadge.style.fontSize = "0.9em"; // Slightly smaller
+                adminBadge.style.cssText = "color:#f39c12; font-weight:bold; font-size:0.9em; margin-left: 4px;";
                 userNameDisplay.appendChild(adminBadge);
             }
         }
@@ -520,35 +505,29 @@ function checkUnlockStatus() {
         const questionContainer = questionForm?.closest('.question');
         const isGoalComplete = answer && answer.trim().length >= 20;
 
-        if (!questionContainer) { console.error("checkUnlockStatus: Could not find the parent '.question' container."); return; }
+        if (!questionContainer) { console.error("checkUnlockStatus: Could not find parent '.question' container."); return; }
 
         if (isGoalComplete) {
-            console.log("checkUnlockStatus: Goal previously completed. Setting UI state.");
-            if (nameInput && !nameInput.value && name) nameInput.value = name; // Pre-fill if name exists
+            console.log("checkUnlockStatus: Goal previously completed.");
+            if (nameInput && !nameInput.value && name) nameInput.value = name;
             if (answerInput) answerInput.value = answer;
             showQuestionProgressBar(questionContainer, 100);
-            hideSubmissionInfo(); // Ensure old submission info is hidden
-            disableFormInputs();
-            unlockQuizButton();
-            hideReminder();
+            hideSubmissionInfo(); // Ensure hidden
+            disableFormInputs(); unlockQuizButton(); hideReminder();
         } else {
-            console.log("checkUnlockStatus: Goal not completed. Setting initial UI state.");
+            console.log("checkUnlockStatus: Goal not completed.");
             hideQuestionProgressBar(questionContainer);
-            hideSubmissionInfo(); // Ensure submission info is hidden initially
-            enableFormInputs(); // Ensure form is enabled
-            lockQuizButton();
-            showReminder(); // Show reminder only if not completed
+            hideSubmissionInfo(); // Ensure hidden
+            enableFormInputs(); lockQuizButton(); showReminder();
         }
     } catch (err) { console.error("Error in checkUnlockStatus:", err); }
 }
 
 function lockQuizButton() {
     if (startQuiz1Button) {
-        startQuiz1Button.classList.add('locked');
-        startQuiz1Button.classList.remove('unlocked-success');
-        startQuiz1Button.href = '#'; // Prevent navigation when locked
-        startQuiz1Button.setAttribute('aria-disabled', 'true');
-        startQuiz1Button.style.pointerEvents = 'none'; // Explicitly disable pointer events
+        startQuiz1Button.classList.add('locked'); startQuiz1Button.classList.remove('unlocked-success');
+        startQuiz1Button.href = '#'; startQuiz1Button.setAttribute('aria-disabled', 'true');
+        startQuiz1Button.style.pointerEvents = 'none';
     }
     if (quizLockMessage) { quizLockMessage.style.display = 'block'; }
     console.log("Quiz button locked.");
@@ -556,12 +535,9 @@ function lockQuizButton() {
 
 function unlockQuizButton() {
     if (startQuiz1Button) {
-        startQuiz1Button.classList.remove('locked');
-        startQuiz1Button.classList.add('unlocked-success');
-        // ✅ Set href using the correct constant pointing to assessment.html
-        startQuiz1Button.href = QUIZ_REDIRECT_URL;
-        startQuiz1Button.removeAttribute('aria-disabled');
-        startQuiz1Button.style.pointerEvents = 'auto'; // Explicitly enable pointer events
+        startQuiz1Button.classList.remove('locked'); startQuiz1Button.classList.add('unlocked-success');
+        startQuiz1Button.href = QUIZ_REDIRECT_URL; startQuiz1Button.removeAttribute('aria-disabled');
+        startQuiz1Button.style.pointerEvents = 'auto';
      }
     if (quizLockMessage) { quizLockMessage.style.display = 'none'; }
     console.log("Quiz button unlocked.");
@@ -569,113 +545,64 @@ function unlockQuizButton() {
 
 
 function showReminder() {
-    // Ensure reminder message exists and goal is not complete
     const isGoalComplete = localStorage.getItem(UNLOCK_ANSWER_KEY)?.trim().length >= 20;
     if (quizReminderMessage && !isGoalComplete && quizReminderMessage.style.display !== 'block') {
-        console.log("Showing reminder message.");
+        console.log("Showing reminder.");
         quizReminderMessage.style.display = 'block';
-        // Trigger animation by setting opacity and transform
-        requestAnimationFrame(() => {
-             quizReminderMessage.style.opacity = '1';
-             quizReminderMessage.style.transform = 'translateY(0)';
-        });
-        // Clear any existing timeout
+        requestAnimationFrame(() => { quizReminderMessage.style.opacity = '1'; quizReminderMessage.style.transform = 'translateY(0)'; });
         if (reminderTimeoutId) clearTimeout(reminderTimeoutId);
-        // Set timeout to hide automatically
-        reminderTimeoutId = setTimeout(() => {
-            hideReminder();
-            console.log("Reminder automatically hidden after timeout.");
-        }, REMINDER_TIMEOUT_MS);
-    } else if (isGoalComplete) {
-        // If goal is already complete, ensure reminder is hidden
-        hideReminder();
-    }
+        reminderTimeoutId = setTimeout(() => { hideReminder(); console.log("Reminder auto-hidden."); }, REMINDER_TIMEOUT_MS);
+    } else if (isGoalComplete) { hideReminder(); }
 }
 
 
 function hideReminder() {
-    if (quizReminderMessage && quizReminderMessage.style.display === 'block') { // Only act if visible
-        quizReminderMessage.style.opacity = '0';
-        quizReminderMessage.style.transform = 'translateY(-15px)';
-        // Use transitionend event for hiding display property for better reliability
+    if (quizReminderMessage && quizReminderMessage.style.display === 'block') {
+        quizReminderMessage.style.opacity = '0'; quizReminderMessage.style.transform = 'translateY(-15px)';
         const handleTransitionEnd = (event) => {
-            // Ensure it's the opacity transition ending
-            if (event.propertyName === 'opacity') {
-                 // Check opacity again in case another showReminder was called quickly
-                if (quizReminderMessage.style.opacity === '0') {
-                    quizReminderMessage.style.display = 'none';
-                }
-                quizReminderMessage.removeEventListener('transitionend', handleTransitionEnd);
-            }
+            if (event.propertyName === 'opacity' && quizReminderMessage.style.opacity === '0') { quizReminderMessage.style.display = 'none'; }
+            quizReminderMessage.removeEventListener('transitionend', handleTransitionEnd);
         };
         quizReminderMessage.addEventListener('transitionend', handleTransitionEnd);
-        // Fallback timeout in case transitionend doesn't fire reliably
-        setTimeout(() => {
-             if (quizReminderMessage && quizReminderMessage.style.opacity === '0') {
-                  quizReminderMessage.style.display = 'none';
-             }
-         }, 750); // Slightly longer than animation duration (0.7s)
+        setTimeout(() => { if (quizReminderMessage && quizReminderMessage.style.opacity === '0') { quizReminderMessage.style.display = 'none'; } }, 750);
     }
-    // Clear the auto-hide timeout if manually hidden or goal completed
-    if (reminderTimeoutId) {
-        clearTimeout(reminderTimeoutId);
-        reminderTimeoutId = null;
-    }
+    if (reminderTimeoutId) { clearTimeout(reminderTimeoutId); reminderTimeoutId = null; }
 }
 
 
 function storeAnswersLocally(name, answer, submissionTime) {
     try {
-        localStorage.setItem(UNLOCK_NAME_KEY, name);
-        localStorage.setItem(UNLOCK_ANSWER_KEY, answer);
+        localStorage.setItem(UNLOCK_NAME_KEY, name); localStorage.setItem(UNLOCK_ANSWER_KEY, answer);
         if (submissionTime) { localStorage.setItem(UNLOCK_TIMESTAMP_KEY, submissionTime); }
-        else { localStorage.removeItem(UNLOCK_TIMESTAMP_KEY); } // Clear if no time provided
-        console.log("Stored goal answer locally.", { nameLength: name.length, answerLength: answer.length, submissionTime: submissionTime });
-    } catch (e) { console.error("Error storing local data:", e); showError("Could not save progress locally. Please check browser settings.");}
+        else { localStorage.removeItem(UNLOCK_TIMESTAMP_KEY); }
+        console.log("Stored goal locally.", { nameLen: name.length, answerLen: answer.length, time: submissionTime });
+    } catch (e) { console.error("Error storing local data:", e); showError("Could not save progress locally.");}
 }
 
 // This function is not needed for showing success anymore.
-function showSubmissionInfo(timestamp) {
-     // console.log("showSubmissionInfo called (now deprecated for success display)");
-}
+function showSubmissionInfo(timestamp) { /* Deprecated for success message */ }
 
 function hideSubmissionInfo() {
-    // Explicitly hide the old submission info area
-    if (submissionInfoDiv) {
-         submissionInfoDiv.style.display = 'none';
-         // console.log("Submission info area hidden."); // Keep log if needed
-     }
+    if (submissionInfoDiv) { submissionInfoDiv.style.display = 'none'; }
 }
 
 function disableFormInputs() {
-    if(nameInput) nameInput.disabled = true;
-    if(answerInput) answerInput.disabled = true;
+    if(nameInput) nameInput.disabled = true; if(answerInput) answerInput.disabled = true;
     if(submitBtn) {
-        submitBtn.disabled = true;
-        submitBtn.textContent = 'Goal Submitted';
-        // Apply disabled styles directly for consistency
-        submitBtn.style.background = '#bdc3c7';
-        submitBtn.style.color = '#7f8c8d';
-        submitBtn.style.cursor = 'not-allowed';
-        submitBtn.style.boxShadow = 'none';
-        submitBtn.style.transform = 'none';
+        submitBtn.disabled = true; submitBtn.textContent = 'Goal Submitted';
+        submitBtn.style.background = '#bdc3c7'; submitBtn.style.color = '#7f8c8d';
+        submitBtn.style.cursor = 'not-allowed'; submitBtn.style.boxShadow = 'none'; submitBtn.style.transform = 'none';
         submitBtn.setAttribute('aria-disabled', 'true');
     }
 }
 
 function enableFormInputs() {
-    if(nameInput) nameInput.disabled = false;
-    if(answerInput) answerInput.disabled = false;
+    if(nameInput) nameInput.disabled = false; if(answerInput) answerInput.disabled = false;
     if(submitBtn && submitBtn.textContent !== 'Submitting...') {
-        submitBtn.disabled = false;
-        submitBtn.textContent = 'Submit Your Goal';
-        // Restore original/active styles
-        submitBtn.style.background = 'linear-gradient(90deg, #3498db, #2980b9)';
-        submitBtn.style.color = 'white';
-        submitBtn.style.cursor = 'pointer';
-        submitBtn.style.boxShadow = '0 4px 10px rgba(52, 152, 219, 0.2)';
-        submitBtn.style.transform = 'none'; // Reset transform
-        submitBtn.removeAttribute('aria-disabled');
+        submitBtn.disabled = false; submitBtn.textContent = 'Submit Your Goal';
+        submitBtn.style.background = 'linear-gradient(90deg, #3498db, #2980b9)'; submitBtn.style.color = 'white';
+        submitBtn.style.cursor = 'pointer'; submitBtn.style.boxShadow = '0 4px 10px rgba(52, 152, 219, 0.2)';
+        submitBtn.style.transform = 'none'; submitBtn.removeAttribute('aria-disabled');
     }
 }
 
@@ -683,335 +610,242 @@ function enableFormInputs() {
 function logout() {
     try {
         console.log("Logging out...");
-        // Sign out from Supabase Auth
-        if (supabase && supabase.auth && typeof supabase.auth.signOut === 'function') {
-             supabase.auth.signOut().catch(err => console.error("Supabase signout error:", err));
-             console.log("Supabase sign out requested.");
-        } else {
-            console.warn("Supabase auth or signOut method not available.");
-        }
-        // Clear relevant local storage items
-        localStorage.removeItem(LOGGED_IN_KEY);
-        localStorage.removeItem(CURRENT_USER_KEY);
-        localStorage.removeItem(UNLOCK_ANSWER_KEY);
-        localStorage.removeItem(UNLOCK_NAME_KEY);
+        if (supabase?.auth) { supabase.auth.signOut().catch(err => console.error("Supabase signout error:", err)); }
+        else { console.warn("Supabase auth unavailable for signout."); }
+        localStorage.removeItem(LOGGED_IN_KEY); localStorage.removeItem(CURRENT_USER_KEY);
+        localStorage.removeItem(UNLOCK_ANSWER_KEY); localStorage.removeItem(UNLOCK_NAME_KEY);
         localStorage.removeItem(UNLOCK_TIMESTAMP_KEY);
-        // Keep SIGNUP_FLAG_KEY to remember if they signed up before
-        // localStorage.removeItem(SIGNUP_FLAG_KEY);
-        console.log("Local storage cleared for logout (kept signup flag).");
-        // Redirect to login page
+        console.log("Local storage cleared for logout.");
         window.location.replace('login.html');
-    } catch (e) {
-        console.error("Logout error:", e);
-        // Force redirect even on error
-        window.location.replace('login.html');
-    }
+    } catch (e) { console.error("Logout error:", e); window.location.replace('login.html'); }
 }
 
 
 function addEventListeners() {
     try {
-        if (questionForm) {
-            questionForm.addEventListener('submit', handleFormSubmit);
-        } else { console.warn("Question form not found for event listener."); }
-
-        // Input event listeners for clearing errors
-        if (nameInput) { nameInput.addEventListener('input', () => hideError(nameInput)); }
-        if (answerInput) { answerInput.addEventListener('input', () => hideError(answerInput)); }
-
-        // Click listener for the quiz button
-        if (startQuiz1Button) {
-            startQuiz1Button.addEventListener('click', handleQuizButtonClick);
-        } else { console.warn("Start Quiz button not found for event listener."); }
-
+        if (questionForm) questionForm.addEventListener('submit', handleFormSubmit);
+        else console.warn("Question form not found.");
+        if (nameInput) nameInput.addEventListener('input', () => hideError(nameInput));
+        if (answerInput) answerInput.addEventListener('input', () => hideError(answerInput));
+        if (startQuiz1Button) startQuiz1Button.addEventListener('click', handleQuizButtonClick);
+        else console.warn("Start Quiz button not found.");
     } catch(err) { console.error("Error adding event listeners:", err); }
 }
 
 
 function handleQuizButtonClick(event) {
-    // Check if the button is locked
-    if (startQuiz1Button && startQuiz1Button.classList.contains('locked')) {
-        event.preventDefault(); // Stop the link navigation
-        console.log("Clicked locked quiz button.");
-
-        // Animate the lock message for feedback
+    if (startQuiz1Button?.classList.contains('locked')) {
+        event.preventDefault(); console.log("Clicked locked quiz button.");
         if (quizLockMessage) {
-             quizLockMessage.style.animation = 'none'; // Reset animation
-             void quizLockMessage.offsetWidth; // Trigger reflow
-             quizLockMessage.style.animation = 'pulseLock 0.5s 2 ease-in-out'; // Quick pulse
-             // Optional: Restore infinite animation after short pulse
-             setTimeout(() => {
-                 if(quizLockMessage) quizLockMessage.style.animation = 'pulseLock 2s infinite ease-in-out';
-             }, 1000); // 0.5s * 2 cycles = 1s
+             quizLockMessage.style.animation = 'none'; void quizLockMessage.offsetWidth;
+             quizLockMessage.style.animation = 'pulseLock 0.5s 2 ease-in-out';
+             setTimeout(() => { if(quizLockMessage) quizLockMessage.style.animation = 'pulseLock 2s infinite ease-in-out'; }, 1000);
         }
-
-        // Focus the answer field and show error if it's the reason for lock
-        if (answerInput && !answerInput.disabled) {
-            answerInput.focus();
-            showError("Please complete your goal first.", answerInput);
-        } else {
-             // If form is disabled but button still locked (edge case?), show generic error
-             showError("Please complete the goal setting step above to unlock the quiz.");
-        }
-    } else {
-        console.log("Clicked unlocked quiz button. Proceeding to assessment.");
-        // Allow default link behavior (navigation to assessment.html)
-    }
+        if (answerInput && !answerInput.disabled) { answerInput.focus(); showError("Please complete your goal first.", answerInput); }
+        else { showError("Complete the goal step above to unlock the quiz."); }
+    } else { console.log("Clicked unlocked quiz button."); }
 }
 
 
 function showError(message, field = null) {
     try {
-        if(errorMessageDisplay){
-             errorMessageDisplay.textContent = message;
-             errorMessageDisplay.style.display = "block";
-             errorMessageDisplay.setAttribute('role', 'alert');
-         } else { console.warn("Error message display element not found."); }
-
-        // Clear previous invalid styles first
-        if (nameInput) nameInput.classList.remove('invalid-field-style');
-        if (answerInput) answerInput.classList.remove('invalid-field-style');
-
-        // Apply invalid style to the specific field if provided
-        if(field && typeof field.classList !== 'undefined'){
-             field.classList.add('invalid-field-style');
-             field.focus(); // Focus the field with the error
-             field.setAttribute('aria-invalid', 'true');
-             field.setAttribute('aria-describedby', 'error-message');
-        }
-        console.error("Validation Error:", message, field ? `Field: ${field.id}` : '');
-    } catch(err){ console.error("Error displaying validation error:", err); }
+        if(errorMessageDisplay){ errorMessageDisplay.textContent = message; errorMessageDisplay.style.display = "block"; errorMessageDisplay.setAttribute('role', 'alert'); }
+        else { console.warn("Error display element missing."); }
+        if (nameInput) nameInput.classList.remove('invalid-field-style'); if (answerInput) answerInput.classList.remove('invalid-field-style');
+        if(field?.classList){ field.classList.add('invalid-field-style'); field.focus(); field.setAttribute('aria-invalid', 'true'); field.setAttribute('aria-describedby', 'error-message'); }
+        console.error("Error Display:", message, field ? `Field: ${field.id}` : '');
+    } catch(err){ console.error("Error in showError:", err); }
 }
 
 
 function hideError(field = null) {
     try {
-        if(errorMessageDisplay) {
-            errorMessageDisplay.style.display = "none";
-            errorMessageDisplay.textContent = "";
-            errorMessageDisplay.removeAttribute('role'); // Remove alert role
+        if(errorMessageDisplay) { errorMessageDisplay.style.display = "none"; errorMessageDisplay.textContent = ""; errorMessageDisplay.removeAttribute('role'); }
+        if(field?.classList){ field.classList.remove('invalid-field-style'); field.removeAttribute('aria-invalid'); field.removeAttribute('aria-describedby'); }
+        else {
+            if (nameInput) { nameInput.classList.remove('invalid-field-style'); nameInput.removeAttribute('aria-invalid'); nameInput.removeAttribute('aria-describedby'); }
+            if (answerInput) { answerInput.classList.remove('invalid-field-style'); answerInput.removeAttribute('aria-invalid'); answerInput.removeAttribute('aria-describedby'); }
         }
-        if(field && typeof field.classList !== 'undefined'){
-            field.classList.remove('invalid-field-style');
-            field.removeAttribute('aria-invalid');
-            field.removeAttribute('aria-describedby');
-        } else {
-            if (nameInput) {
-                nameInput.classList.remove('invalid-field-style');
-                nameInput.removeAttribute('aria-invalid');
-                nameInput.removeAttribute('aria-describedby');
-            }
-            if (answerInput) {
-                answerInput.classList.remove('invalid-field-style');
-                answerInput.removeAttribute('aria-invalid');
-                answerInput.removeAttribute('aria-describedby');
-             }
-        }
-    } catch(err){ console.error("Error hiding error message/style:", err); }
+    } catch(err){ console.error("Error in hideError:", err); }
 }
 
 
 // --- Two-Stage Popup Function ---
 function showTwoStagePopupAndRedirect(redirectUrl) {
-    if (!tempPopupElement) {
-        console.error("Temporary popup element not found. Cannot display message. Redirecting directly.");
-        window.location.href = redirectUrl;
-        return;
-    }
+    if (!tempPopupElement) { console.error("Popup element missing!"); window.location.href = redirectUrl; return; }
 
-    // Stage 1: "Great job!" (No period)
-    tempPopupElement.innerHTML = "🎯 Great job! Your goal has been saved successfully";
+    // Stage 1: "Great job!"
+    tempPopupElement.innerHTML = "🎯 Great job! Your goal has been saved successfully"; // No period
     tempPopupElement.style.display = 'block';
-    requestAnimationFrame(() => { requestAnimationFrame(() => { tempPopupElement.style.opacity = '1'; console.log("Popup Stage 1 displayed."); }); });
+    requestAnimationFrame(() => { requestAnimationFrame(() => { tempPopupElement.style.opacity = '1'; console.log("Popup S1 show."); }); });
 
     // Wait 2000ms
     setTimeout(() => {
-        tempPopupElement.style.opacity = '0'; console.log("Popup Stage 1 fading out.");
-
+        tempPopupElement.style.opacity = '0'; console.log("Popup S1 hide.");
         // Wait for fade out (500ms)
         setTimeout(() => {
             // Stage 2: "Ready to start quiz!"
             tempPopupElement.innerHTML = "🚀 You're ready to start the quiz!";
-            tempPopupElement.style.opacity = '1'; console.log("Popup Stage 2 displayed.");
-
+            tempPopupElement.style.opacity = '1'; console.log("Popup S2 show.");
             // Wait 1500ms
             setTimeout(() => {
-                tempPopupElement.style.opacity = '0'; console.log("Popup Stage 2 fading out.");
-
+                tempPopupElement.style.opacity = '0'; console.log("Popup S2 hide.");
                 // Wait for fade out (500ms)
                 setTimeout(() => {
                     tempPopupElement.style.display = 'none';
                     console.log(`Popup hidden. Redirecting to ${redirectUrl}...`);
                     window.location.href = redirectUrl;
-                }, 500); // Match fade transition
-
-            }, 1500); // Stage 2 duration
-
-        }, 500); // Match fade transition
-
-    }, 2000); // Stage 1 duration
+                }, 500); // Fade out duration
+            }, 1500); // S2 duration
+        }, 500); // Fade out duration
+    }, 2000); // S1 duration
 }
 
 
-// --- OLD Modal Functions (kept for reference/potential future use, but not called in success flow) ---
-function showRedirectConfirmationModal() { console.warn("showRedirectConfirmationModal called, but should be using showTwoStagePopupAndRedirect now."); }
-function closeModal() { try { if(successModal) { successModal.style.display='none'; } console.log("Modal closed (function called)."); } catch(err){ console.error("Error closing modal:", err); } }
+// --- OLD Modal Functions ---
+function showRedirectConfirmationModal() { console.warn("Old modal called."); }
+function closeModal() { try { if(successModal) { successModal.style.display='none'; } } catch(err){ console.error("closeModal error:", err); } }
 
 
 
 async function updateUserProgress(userEmail, sectionId, questionId, questionText) {
-    if (!supabase) { console.error("updateUserProgress: Supabase client not available."); return false; }
+    if (!supabase) { console.error("updateUP: Supabase unavailable."); return false; }
     const currentUser = getCurrentUser();
-    if (!currentUser || !currentUser.id) { console.error("updateUserProgress: User ID is missing."); return false; }
-    const userId = currentUser.id;
-    if (!userEmail || !sectionId || !questionId || !questionText) { console.error("updateUserProgress: Invalid parameters provided."); return false; }
+    if (!currentUser?.id) { console.error("updateUP: User ID missing."); return false; }
+    if (!userEmail || !sectionId || !questionId || !questionText) { console.error("updateUP: Invalid params."); return false; }
 
     const now = new Date().toISOString();
     const progressData = {
-      user_id: userId, email: userEmail, section_id: sectionId, section_type: 'goal',
+      user_id: currentUser.id, email: userEmail, section_id: sectionId, section_type: 'goal',
       section_title: SECTION_TITLE_INTRO_GOAL, question_id: questionId, question_text: questionText,
       page: CURRENT_PAGE, progress_percent: 100, progress: 1, score: 100, status: 'complete',
       submitted_at: now, updated_at: now, is_passed: true
     };
-    console.log(`Attempting to upsert data into 'user_progress':`, JSON.stringify(progressData, null, 2));
+    console.log(`updateUP: Upserting user_progress:`, progressData);
     try {
         const conflictColumns = ['user_id', 'section_id'];
         const { error } = await supabase.from('user_progress').upsert([progressData], { onConflict: conflictColumns.join(','), ignoreDuplicates: false });
-        if (error) { console.error('Supabase user_progress upsert error:', error); return false; }
-        console.log(`Successfully upserted user_progress for section ${sectionId}.`); return true;
-    } catch (networkError) { console.error('Network Error during user_progress update:', networkError); return false; }
+        if (error) { console.error('updateUP: Supabase error:', error); return false; }
+        console.log(`updateUP: Success for section ${sectionId}.`); return true;
+    } catch (networkError) { console.error('updateUP: Network Error:', networkError); return false; }
 }
 
 
 function updateLocalSectionProgress(sectionId) {
     const currentUser = getCurrentUser();
-    if (!currentUser) { console.warn("updateLocalSectionProgress: User not found."); return 0; }
+    if (!currentUser) { console.warn("updateLSP: User not found."); return 0; }
     let sectionProgress = 0;
     if (sectionId === SECTION_ID) {
         const answer = localStorage.getItem(UNLOCK_ANSWER_KEY);
         sectionProgress = (answer && answer.trim().length >= 20) ? 100 : 0;
-    } else {
-        console.warn(`Progress logic not defined for section: ${sectionId}`);
-        sectionProgress = currentUser.progress?.[sectionId] || 0;
-    }
+    } else { sectionProgress = currentUser.progress?.[sectionId] || 0; }
     if (!currentUser.progress) { currentUser.progress = {}; }
     currentUser.progress[sectionId] = sectionProgress;
     saveCurrentUser(currentUser);
-    console.log(`Local progress updated for section '${sectionId}': ${sectionProgress}%`);
+    console.log(`updateLSP: Section '${sectionId}' progress set to ${sectionProgress}%`);
     return sectionProgress;
 }
 
 
 function showQuestionProgressBar(containerElement, percentage) {
-    if (!containerElement) { console.warn("showQuestionProgressBar: Invalid container."); return; }
+    if (!containerElement) { console.warn("showQPB: Invalid container."); return; }
     const pC = containerElement.querySelector('.question-progress-container');
     const bar = pC?.querySelector('.question-progress-bar');
     const text = pC?.querySelector('.question-progress-text');
     if (pC && bar && text) {
-        const clampedPercentage = Math.max(0, Math.min(100, Math.round(percentage)));
-        bar.style.width = `${clampedPercentage}%`;
-        text.textContent = `${clampedPercentage}% Complete`;
-        pC.style.display = 'block';
-        console.log(`Progress bar UI updated to ${clampedPercentage}%`);
-    } else { console.warn("Progress bar elements not found within:", containerElement); }
+        const clamped = Math.max(0, Math.min(100, Math.round(percentage)));
+        bar.style.width = `${clamped}%`; text.textContent = `${clamped}% Complete`; pC.style.display = 'block';
+        // console.log(`Progress bar updated to ${clamped}%`); // Optional log
+    } else { console.warn("showQPB: Elements missing within:", containerElement); }
 }
 
 
 function hideQuestionProgressBar(containerElement) {
-     if (!containerElement) { console.warn("hideQuestionProgressBar: Invalid container."); return; }
+     if (!containerElement) { console.warn("hideQPB: Invalid container."); return; }
     const pC = containerElement.querySelector('.question-progress-container');
     if (pC) {
         pC.style.display = 'none';
         const bar = pC.querySelector('.question-progress-bar');
         const text = pC.querySelector('.question-progress-text');
-        if (bar) bar.style.width = '0%';
-        if (text) text.textContent = '0% Complete';
-        console.log("Progress bar UI hidden");
-    } else { console.warn("Progress bar container not found within:", containerElement); }
+        if (bar) bar.style.width = '0%'; if (text) text.textContent = '0% Complete';
+        // console.log("Progress bar hidden"); // Optional log
+    } else { console.warn("hideQPB: Container not found within:", containerElement); }
 }
 
 
 async function handleFormSubmit(event) {
     event.preventDefault();
-    console.log("--- Starting Form Submission Process ---");
-    let isLocallySaved = false;
-    let submissionTimestamp = null;
+    console.log("--- Submit Start ---");
+    let isLocallySaved = false, submissionTimestamp = null;
     const questionContainer = questionForm?.closest('.question');
 
-    // Essential Element Checks (Removed submissionTimestampElement)
+    // Element Checks (Removed submissionTimestampElement)
     if (!nameInput || !answerInput || !userEmailDisplay || !submitBtn || !errorMessageDisplay || !questionForm || !questionPromptElement || !questionContainer || !tempPopupElement || !submissionInfoDiv ) {
-        console.error("handleFormSubmit Error: Missing essential elements.");
-        showError("Page error. Please refresh."); return;
+        console.error("Submit Error: Missing elements."); showError("Page error. Refresh."); return;
     }
-    if (!supabase) { console.error("Supabase client not available."); showError("Cannot connect. Please refresh."); return; }
+    if (!supabase) { console.error("Submit Error: Supabase unavailable."); showError("Cannot connect. Refresh."); return; }
 
-    const name = nameInput.value.trim();
-    const answer = answerInput.value.trim();
+    const name = nameInput.value.trim(), answer = answerInput.value.trim();
     let email = userEmailDisplay.textContent.trim();
     const questionText = questionPromptElement.textContent.trim() || QUESTION_TEXT_INTRO_GOAL;
 
     // Validation
     console.log("Validating..."); hideError(); let isValid = true;
-    if (!name) { showError("Please enter your name.", nameInput); isValid = false; }
-    if (answer.length < 20) { showError("Goal needs minimum 20 characters.", answerInput); isValid = false; }
+    if (!name) { showError("Please enter name.", nameInput); isValid = false; }
+    if (answer.length < 20) { showError("Goal min 20 chars.", answerInput); isValid = false; }
     if (!email || !/\S+@\S+\.\S+/.test(email)) {
         const currentUser = getCurrentUser(); const backupEmail = currentUser?.email;
         if (backupEmail && /\S+@\S+\.\S+/.test(backupEmail)) { email = backupEmail; console.warn("Using backup email."); }
-        else { showError("Invalid email. Please log out/in.", userEmailDisplay); isValid = false; }
+        else { showError("Invalid email. Log out/in.", userEmailDisplay); isValid = false; }
     }
     if (!isValid) { console.warn("Validation failed."); return; }
-    console.log("Validation successful.");
+    console.log("Validation OK.");
 
     // Prepare UI
     setButtonLoading(true); hideReminder(); hideSubmissionInfo();
 
     try {
-        const assessmentData = {
-            name: name, email: email, answer: answer, questionId: QUESTION_ID, questionText: questionText,
-            sectionId: SECTION_ID, score: 100, completionStatus: 'Complete', page: CURRENT_PAGE, type: 'goal'
-        };
-        console.log("Attempting DB submission...");
-        const dbSubmissionResult = await sendToSupabase(assessmentData); // Handles popup/redirect
+        const assessmentData = { name, email, answer, questionId: QUESTION_ID, questionText, sectionId: SECTION_ID, score: 100, completionStatus: 'Complete', page: CURRENT_PAGE, type: 'goal' };
+        console.log("Attempting DB save...");
+        const dbResult = await sendToSupabase(assessmentData); // Handles popup/redirect
 
-        if (dbSubmissionResult?.success) {
-            console.log("DB submission successful.");
-            submissionTimestamp = dbSubmissionResult.submitted_at || new Date().toISOString();
+        if (dbResult?.success) {
+            console.log("DB save OK.");
+            submissionTimestamp = dbResult.submitted_at || new Date().toISOString();
             storeAnswersLocally(name, answer, submissionTimestamp); isLocallySaved = true;
-            console.log("Attempting user_progress update...");
             await updateUserProgress(email, SECTION_ID, QUESTION_ID, questionText); // Log handled inside
             updateLocalSectionProgress(SECTION_ID);
             console.log("Updating UI for success...");
-            showQuestionProgressBar(questionContainer, 100);
-            hideSubmissionInfo(); // Keep hidden
+            showQuestionProgressBar(questionContainer, 100); hideSubmissionInfo();
             disableFormInputs(); unlockQuizButton();
-            console.log(`--- Submission OK ---`);
+            console.log("--- Submit OK ---");
         } else {
-            console.error("DB submission failed."); console.warn("Attempting local save fallback...");
+            console.error("DB save failed."); console.warn("Local save fallback...");
             submissionTimestamp = new Date().toISOString();
             storeAnswersLocally(name, answer, submissionTimestamp); isLocallySaved = true;
             updateLocalSectionProgress(SECTION_ID);
-            showQuestionProgressBar(questionContainer, 100); hideSubmissionInfo(); disableFormInputs(); unlockQuizButton();
+            showQuestionProgressBar(questionContainer, 100); hideSubmissionInfo();
+            disableFormInputs(); unlockQuizButton();
             showError("Goal saved locally, but failed to save online. You can proceed, but please check your connection later.");
-            console.log(`--- Submission Completed (Local Save, DB Failed) ---`);
+            console.log("--- Submit Completed (Local Save, DB Failed) ---");
         }
     } catch (err) {
-        console.error("CRITICAL ERROR during submit:", err);
-        showError(`Unexpected error: ${err.message}. Try again.`);
-        if (!isLocallySaved && name && answer && answer.length >= 20) {
+        console.error("CRITICAL Submit Error:", err); showError(`Unexpected error: ${err.message}.`);
+        if (!isLocallySaved && name && answer.length >= 20) {
             try {
-                console.warn("Attempting emergency local save..."); storeAnswersLocally(name, answer, null);
+                console.warn("Emergency local save..."); storeAnswersLocally(name, answer, null);
                 isLocallySaved = true; updateLocalSectionProgress(SECTION_ID);
                 if (questionContainer) showQuestionProgressBar(questionContainer, 100);
                 hideSubmissionInfo(); disableFormInputs(); unlockQuizButton();
                 showError("Saved locally due to error; online sync failed.");
-             } catch (localSaveError) { console.error("Emergency local save failed:", localSaveError); enableFormInputs(); }
+             } catch (localErr) { console.error("Emergency save failed:", localErr); enableFormInputs(); }
         }
-         console.log("--- Submission Failed (Error) ---");
-         if (!isLocallySaved) setButtonLoading(false);
+        console.log("--- Submit Failed (Error) ---");
+        if (!isLocallySaved) setButtonLoading(false);
     } finally {
-        console.log("Submit 'finally' block.");
-        if (isLocallySaved) { disableFormInputs(); console.log("Form remains disabled."); }
-        if (submitBtn && submitBtn.textContent === 'Submitting...') { setButtonLoading(false); }
+        console.log("Submit 'finally'.");
+        if (isLocallySaved) disableFormInputs(); // Ensure disabled if saved
+        if (submitBtn?.textContent === 'Submitting...') setButtonLoading(false); // Reset button if stuck
     }
 }
 
@@ -1021,13 +855,12 @@ function setButtonLoading(isLoading) {
     if (!submitBtn) return;
     submitBtn.disabled = isLoading;
     if (isLoading) {
-        submitBtn.textContent = 'Submitting...';
-        submitBtn.style.background = '#bdc3c7'; submitBtn.style.color = '#7f8c8d';
+        submitBtn.textContent = 'Submitting...'; submitBtn.style.background = '#bdc3c7'; submitBtn.style.color = '#7f8c8d';
         submitBtn.style.cursor = 'wait'; submitBtn.style.boxShadow = 'none'; submitBtn.style.transform = 'none';
         submitBtn.setAttribute('aria-busy', 'true');
     } else {
         const isGoalCompleteLocally = localStorage.getItem(UNLOCK_ANSWER_KEY)?.trim().length >= 20;
-        if (isGoalCompleteLocally) { disableFormInputs(); } else { enableFormInputs(); }
+        if (isGoalCompleteLocally) disableFormInputs(); else enableFormInputs();
         submitBtn.removeAttribute('aria-busy');
     }
 }
@@ -1035,13 +868,12 @@ function setButtonLoading(isLoading) {
 
 function initializePageContent(currentUser) {
     console.log("%cInitializing Page Content...", "color: blue;");
-    if (!currentUser || !currentUser.email) { console.error("Init Error: Invalid user."); showError("User info missing. Log in again."); logout(); return; }
+    if (!currentUser?.email || !currentUser?.id) { console.error("Init Error: Invalid user."); showError("User info missing. Log in again."); logout(); return; }
     try {
         displayUserInfo(currentUser);
         if (questionTitleElement) questionTitleElement.textContent = "Your First Step: Set Your Goal";
         if (questionPromptElement) questionPromptElement.textContent = QUESTION_TEXT_INTRO_GOAL;
-        checkUnlockStatus();
-        addEventListeners();
+        checkUnlockStatus(); addEventListeners();
         console.log(`Init OK for: ${currentUser.email}.`);
     } catch (error) {
         console.error("Init Error:", error); showError(`Init error: ${error.message}. Refresh.`);
@@ -1069,14 +901,11 @@ document.addEventListener('DOMContentLoaded', function() {
             console.log("All essential DOM elements found.");
 
             // Check Supabase
-            if (!supabase) {
-                console.error("Init Error: Supabase client unavailable."); if(submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Service Unavailable'; }
-                lockQuizButton(); if(quizLockMessage) quizLockMessage.textContent = "Service unavailable."; showError("Cannot connect. Refresh. Online saving disabled.");
-            }
+            if (!supabase) { console.error("Init Error: Supabase client unavailable."); if(submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Service Unavailable'; } lockQuizButton(); if(quizLockMessage) quizLockMessage.textContent = "Service unavailable."; showError("Cannot connect. Refresh. Online saving disabled."); }
 
             // Get User
             const currentUser = getCurrentUser();
-            if (!currentUser) { throw new Error("User data missing post-login check."); }
+            if (!currentUser) { console.error("Init Error: User data missing post-login."); logout(); return; } // Added error log and return
             console.log(`Initializing for ${currentUser.email}. Supabase: ${!!supabase}`);
 
             // Initialize
@@ -1099,17 +928,23 @@ document.addEventListener('DOMContentLoaded', function() {
 
 <script>
 // --- Second Script Block ---
-// Contains the `sendToSupabase` function for 'assessments' table and popup logic.
+// Handles 'assessments' table interaction & popup
 
-if (!supabase) { console.error("Second block: Supabase client potentially unavailable."); }
+// Add console log to confirm this script block is running
+console.log("Second script block initializing...");
+
+// Make sure Supabase client is accessible
+if (!supabase) { console.error("Second block: Supabase client potentially unavailable at init."); }
 
 async function sendToSupabase(submissionData) {
+    console.log("sendToSupabase called with data:", submissionData); // Log entry and data
     if (!supabase) { console.error("sendToSupabase: Supabase unavailable."); return { success: false, submitted_at: null }; }
-    if (!tempPopupElement) { console.error("sendToSupabase: tempPopupElement unavailable."); /* Continue submission? */ }
+    if (!tempPopupElement) { console.error("sendToSupabase: tempPopupElement unavailable."); /* Proceed without popup */ }
 
     try {
         const currentUser = getCurrentUser();
-        if (!currentUser || !currentUser.email || !currentUser.id) { console.error("sendToSupabase: User info missing."); return { success: false, submitted_at: null }; }
+        if (!currentUser?.id) { console.error("sendToSupabase: User ID missing."); return { success: false, submitted_at: null }; }
+        console.log("sendToSupabase: Current User ID:", currentUser.id);
 
         const now = new Date(); const timestampISO = now.toISOString();
         const questionText = document.getElementById("questionPrompt")?.textContent || submissionData.questionText || "Goal Setting Question";
@@ -1124,25 +959,28 @@ async function sendToSupabase(submissionData) {
             completion_status: submissionData.completionStatus || "completed", is_correct: calculatedIsCorrect,
             score: calculatedIsCorrect ? (submissionData.score ?? 100) : 0
         };
-        console.log("sendToSupabase: Sending data:", JSON.stringify(dataToSend, null, 2));
+        console.log("sendToSupabase: Preparing to send:", JSON.stringify(dataToSend, null, 2));
 
         const assessmentConflictColumns = ['user_id', 'question_id'];
-        console.log(`Upserting 'assessments' on conflict: ${assessmentConflictColumns.join(',')}`);
+        console.log(`sendToSupabase: Upserting 'assessments' on conflict: ${assessmentConflictColumns.join(',')}`);
+
+        // THE ACTUAL DATABASE CALL
         const { data: upsertResult, error: upsertError } = await supabase
             .from("assessments")
             .upsert([dataToSend], { onConflict: assessmentConflictColumns.join(','), ignoreDuplicates: false })
             .select().single();
-
+        // LOG THE RESULT OR ERROR IMMEDIATELY
         if (upsertError) {
-            console.error("sendToSupabase: DB upsert error:", upsertError); // Log the detailed error
-            return { success: false, submitted_at: null };
+            console.error("sendToSupabase: SUPABASE DB UPSERT ERROR:", upsertError); // Log the detailed error from Supabase
+            return { success: false, submitted_at: null }; // Indicate failure
+        } else {
+            console.log("sendToSupabase: SUPABASE DB UPSERT SUCCESS:", upsertResult); // Log the successful result
         }
 
-        console.log("sendToSupabase: DB upsert OK.", upsertResult);
         const submitted_at_from_db = upsertResult?.submitted_at || timestampISO;
 
-        // Trigger Success Popup & Redirect
-        console.log("sendToSupabase: Triggering success feedback.");
+        // Trigger Success Popup & Redirect only if DB was successful
+        console.log("sendToSupabase: Triggering success feedback popup.");
         if (typeof showTwoStagePopupAndRedirect === 'function') {
              showTwoStagePopupAndRedirect(QUIZ_REDIRECT_URL);
          } else {
@@ -1152,16 +990,17 @@ async function sendToSupabase(submissionData) {
         return { success: true, submitted_at: submitted_at_from_db };
 
     } catch (err) {
-        console.error("sendToSupabase: Unexpected error:", err);
+        // Catch any other unexpected errors in this function
+        console.error("sendToSupabase: UNEXPECTED CATCH BLOCK ERROR:", err);
         return { success: false, submitted_at: null };
     }
 }
 
-// Fallback getCurrentUser
+// Fallback getCurrentUser (shouldn't be needed if first script OK)
 if (typeof getCurrentUser !== 'function') {
-     function getCurrentUser() { try { const d=localStorage.getItem('currentUser'); if(!d) return null; const p=JSON.parse(d); return (p && p.email && p.id) ? p : null; } catch(e){console.error("Fallback getCurrentUser error:",e); return null;} }
+     function getCurrentUser() { try { const d=localStorage.getItem('currentUser'); if(!d) return null; const p=JSON.parse(d); return (p?.email && p?.id) ? p : null; } catch(e){console.error("Fallback getCurrentUser error:",e); return null;} }
 }
-// Fallback tempPopupElement assignment
+// Fallback tempPopupElement assignment (shouldn't be needed)
 if (!tempPopupElement) { document.addEventListener('DOMContentLoaded', ()=>{ tempPopupElement=document.getElementById('temp-popup'); if(!tempPopupElement) console.error("Fallback DOMContentLoaded: #temp-popup missing!"); }); }
 
 </script>
