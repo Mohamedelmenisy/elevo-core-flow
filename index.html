@@ -263,7 +263,7 @@ p { margin-bottom: 15px; color: #555e68; /* Slightly softer black */ line-height
     white-space: nowrap;
 }
 
-/* --- Submission Info Styles --- */
+/* --- Submission Info Styles (Now hidden on success by JS) --- */
 .submission-info {
     margin-top: 25px;
     padding: 18px 20px;
@@ -271,7 +271,7 @@ p { margin-bottom: 15px; color: #555e68; /* Slightly softer black */ line-height
     border-left: 5px solid #2ecc71; /* Keep green border for success */
     border-radius: 0 8px 8px 0;
     font-size: 14px;
-    display: none; /* Initially hidden */
+    display: none; /* Initially hidden, JS controls visibility */
 }
 .submission-info p {
     margin-bottom: 5px;
@@ -283,7 +283,7 @@ p { margin-bottom: 15px; color: #555e68; /* Slightly softer black */ line-height
     font-weight: 600;
 }
 
-/* --- Temporary Pop-up Styles (NEW) --- */
+/* --- Temporary Pop-up Styles --- */
 #temp-popup {
     position: fixed;
     top: 50%;
@@ -367,10 +367,11 @@ p { margin-bottom: 15px; color: #555e68; /* Slightly softer black */ line-height
             <span class="question-progress-text" id="progress-text-intro-goal">0% Complete</span>
         </div>
     </div>
-    <!-- Submission Info Area -->
+    <!-- Submission Info Area (Content removed, only structure remains, hidden by JS on success) -->
     <div class="submission-info" id="submissionInfo">
-        <p><strong>Goal Submitted Successfully!</strong></p>
-        <p id="submissionTimestamp">Your goal has been submitted successfully. Thank you!</p>
+        <!-- Content is now removed/hidden by JS -->
+        <!-- <p><strong>Goal Submitted Successfully!</strong></p> -->
+        <!-- <p id="submissionTimestamp"></p> -->
     </div>
 </div>
 
@@ -420,7 +421,6 @@ const CURRENT_PAGE = 'index.html';
 // ✅ This variable correctly points to 'assessment.html'
 const QUIZ_REDIRECT_URL = 'assessment.html';
 const REMINDER_TIMEOUT_MS = 15000;
-// const REDIRECT_DELAY_MS = 2500; // No longer needed for modal, new popup handles its own timing
 
 // Initialize Supabase Client
 try {
@@ -518,7 +518,7 @@ function checkUnlockStatus() {
     try {
         const answer = localStorage.getItem(UNLOCK_ANSWER_KEY);
         const name = localStorage.getItem(UNLOCK_NAME_KEY);
-        const timestamp = localStorage.getItem(UNLOCK_TIMESTAMP_KEY);
+        // const timestamp = localStorage.getItem(UNLOCK_TIMESTAMP_KEY); // Timestamp not shown anymore
         const questionContainer = questionForm?.closest('.question');
         const isGoalComplete = answer && answer.trim().length >= 20;
 
@@ -529,14 +529,14 @@ function checkUnlockStatus() {
             if (nameInput && !nameInput.value && name) nameInput.value = name; // Pre-fill if name exists
             if (answerInput) answerInput.value = answer;
             showQuestionProgressBar(questionContainer, 100);
-            showSubmissionInfo(timestamp); // Use timestamp from local storage
+            hideSubmissionInfo(); // Ensure old submission info is hidden
             disableFormInputs();
             unlockQuizButton();
             hideReminder();
         } else {
             console.log("checkUnlockStatus: Goal not completed. Setting initial UI state.");
             hideQuestionProgressBar(questionContainer);
-            hideSubmissionInfo();
+            hideSubmissionInfo(); // Ensure submission info is hidden initially
             enableFormInputs(); // Ensure form is enabled
             lockQuizButton();
             showReminder(); // Show reminder only if not completed
@@ -596,24 +596,27 @@ function showReminder() {
 
 
 function hideReminder() {
-    if (quizReminderMessage) {
+    if (quizReminderMessage && quizReminderMessage.style.display === 'block') { // Only act if visible
         quizReminderMessage.style.opacity = '0';
         quizReminderMessage.style.transform = 'translateY(-15px)';
         // Use transitionend event for hiding display property for better reliability
-        const handleTransitionEnd = () => {
-            // Check opacity again in case another showReminder was called quickly
-            if (quizReminderMessage.style.opacity === '0') {
-                quizReminderMessage.style.display = 'none';
+        const handleTransitionEnd = (event) => {
+            // Ensure it's the opacity transition ending
+            if (event.propertyName === 'opacity') {
+                 // Check opacity again in case another showReminder was called quickly
+                if (quizReminderMessage.style.opacity === '0') {
+                    quizReminderMessage.style.display = 'none';
+                }
+                quizReminderMessage.removeEventListener('transitionend', handleTransitionEnd);
             }
-            quizReminderMessage.removeEventListener('transitionend', handleTransitionEnd);
         };
         quizReminderMessage.addEventListener('transitionend', handleTransitionEnd);
-        // Fallback timeout in case transitionend doesn't fire
+        // Fallback timeout in case transitionend doesn't fire reliably
         setTimeout(() => {
              if (quizReminderMessage && quizReminderMessage.style.opacity === '0') {
                   quizReminderMessage.style.display = 'none';
              }
-         }, 500); // Should match animation duration slightly longer
+         }, 750); // Slightly longer than animation duration (0.7s)
     }
     // Clear the auto-hide timeout if manually hidden or goal completed
     if (reminderTimeoutId) {
@@ -633,44 +636,22 @@ function storeAnswersLocally(name, answer, submissionTime) {
     } catch (e) { console.error("Error storing local data:", e); showError("Could not save progress locally. Please check browser settings.");}
 }
 
+// This function is now only used for displaying the structure, not content
 function showSubmissionInfo(timestamp) {
-    if (submissionInfoDiv && submissionTimestampElement) {
-        let displayTime = 'N/A';
-        if (timestamp) {
-            try {
-                // Attempt to parse the timestamp
-                const dateObj = new Date(timestamp);
-                // Check if the date is valid
-                if (!isNaN(dateObj.getTime())) {
-                    displayTime = dateObj.toLocaleString('en-US', { // Use locale string formatting
-                        dateStyle: 'medium', // e.g., Sep 4, 2023
-                        timeStyle: 'short'   // e.g., 1:43 PM
-                    });
-                } else {
-                     console.warn("Invalid timestamp format:", timestamp);
-                     displayTime = timestamp; // Fallback to raw string if invalid
-                }
-            }
-            catch (e) {
-                console.warn("Could not format timestamp:", timestamp, e);
-                displayTime = timestamp; // Fallback to raw timestamp string on error
-            }
-        } else {
-            displayTime = ''; // Show nothing if timestamp is null/undefined
-        }
-
-        // Update the text content safely
-        submissionTimestampElement.textContent = displayTime ? `Submitted at: ${displayTime}` : 'Submission time not available.';
-        submissionInfoDiv.style.display = 'block';
-    } else {
-        console.warn("Submission info elements not found.");
-    }
+     // DEPRECATED for showing success message - Popup handles this.
+     // Kept for potential future use or structure reference.
+     // console.log("showSubmissionInfo called (now deprecated for success display)");
+     // if (submissionInfoDiv) {
+     //      submissionInfoDiv.style.display = 'block'; // Or keep hidden
+     // }
 }
 
-
-
 function hideSubmissionInfo() {
-    if (submissionInfoDiv) { submissionInfoDiv.style.display = 'none'; }
+    // Explicitly hide the old submission info area
+    if (submissionInfoDiv) {
+         submissionInfoDiv.style.display = 'none';
+         console.log("Submission info area hidden.");
+     }
 }
 
 function disableFormInputs() {
@@ -753,7 +734,6 @@ function addEventListeners() {
     } catch(err) { console.error("Error adding event listeners:", err); }
 }
 
-// Removed handleKeyDown as it's no longer used
 
 function handleQuizButtonClick(event) {
     // Check if the button is locked
@@ -843,7 +823,7 @@ function hideError(field = null) {
 }
 
 
-// --- NEW Two-Stage Popup Function ---
+// --- Two-Stage Popup Function ---
 function showTwoStagePopupAndRedirect(redirectUrl) {
     if (!tempPopupElement) {
         console.error("Temporary popup element not found. Cannot display message. Redirecting directly.");
@@ -852,7 +832,8 @@ function showTwoStagePopupAndRedirect(redirectUrl) {
     }
 
     // --- Stage 1: "Great job!" ---
-    tempPopupElement.innerHTML = "🎯 Great job! Your goal has been saved successfully"; // Message as requested
+    // Corrected text without the period
+    tempPopupElement.innerHTML = "🎯 Great job! Your goal has been saved successfully";
     tempPopupElement.style.display = 'block';
     // Force reflow/repaint before starting transition
     requestAnimationFrame(() => {
@@ -862,13 +843,13 @@ function showTwoStagePopupAndRedirect(redirectUrl) {
         });
     });
 
-    // --- Wait for Stage 1 Duration ---
+    // --- Wait for Stage 1 Duration (2000ms) ---
     setTimeout(() => {
         // Start fading out Stage 1
         tempPopupElement.style.opacity = '0';
         console.log("Popup Stage 1 fading out.");
 
-        // --- Wait for Stage 1 Fade Out ---
+        // --- Wait for Stage 1 Fade Out (500ms) ---
         setTimeout(() => {
             // --- Stage 2: "Ready to start quiz!" ---
             tempPopupElement.innerHTML = "🚀 You're ready to start the quiz!";
@@ -876,13 +857,13 @@ function showTwoStagePopupAndRedirect(redirectUrl) {
             tempPopupElement.style.opacity = '1';
             console.log("Popup Stage 2 displayed.");
 
-            // --- Wait for Stage 2 Duration ---
+            // --- Wait for Stage 2 Duration (1500ms) ---
             setTimeout(() => {
                 // Start fading out Stage 2
                 tempPopupElement.style.opacity = '0';
                 console.log("Popup Stage 2 fading out.");
 
-                // --- Wait for Stage 2 Fade Out ---
+                // --- Wait for Stage 2 Fade Out (500ms) ---
                 setTimeout(() => {
                     // Hide completely and then redirect
                     tempPopupElement.style.display = 'none';
@@ -901,9 +882,7 @@ function showTwoStagePopupAndRedirect(redirectUrl) {
 // --- OLD Modal Functions (kept for reference/potential future use, but not called in success flow) ---
 function showRedirectConfirmationModal() {
     // This function is no longer called on successful submission.
-    // It's replaced by showTwoStagePopupAndRedirect.
     console.warn("showRedirectConfirmationModal called, but should be using showTwoStagePopupAndRedirect now.");
-    // ... (rest of the old modal logic remains commented out or removed if definitely unused) ...
 }
 
 function closeModal() {
@@ -922,10 +901,10 @@ async function updateUserProgress(userEmail, sectionId, questionId, questionText
     const currentUser = getCurrentUser(); // Get current user data for ID
     if (!currentUser || !currentUser.id) {
         console.error("updateUserProgress: User ID is missing. Cannot update progress accurately.");
-        // Decide if you want to proceed without user_id or fail
-        // return false; // Let's fail if user_id is missing for data integrity
+         // Decide if you want to proceed without user_id or fail
+         return false; // Let's fail if user_id is missing for data integrity
     }
-    const userId = currentUser?.id || null; // Use null if missing, though we might fail above
+    const userId = currentUser.id; // Use ID
 
 
     if (!userEmail || !sectionId || !questionId || !questionText) {
@@ -935,7 +914,6 @@ async function updateUserProgress(userEmail, sectionId, questionId, questionText
 
     const now = new Date().toISOString();
     const progressData = {
-      // user_id should be the primary key or part of a unique constraint with email/section
       user_id: userId, // Include user_id obtained from currentUser
       email: userEmail,
       section_id: sectionId,
@@ -957,8 +935,7 @@ async function updateUserProgress(userEmail, sectionId, questionId, questionText
 
     try {
         // Define the columns that form the unique constraint for upsert
-        // Common constraints: (user_id, section_id) or (email, section_id)
-        // Adjust based on your actual table definition
+        // Common constraints: (user_id, section_id)
         const conflictColumns = ['user_id', 'section_id']; // Assuming this constraint exists
 
         const { error } = await supabase
@@ -970,12 +947,8 @@ async function updateUserProgress(userEmail, sectionId, questionId, questionText
 
         if (error) {
             console.error('Supabase user_progress upsert error details:', error);
-            // Log specific error codes if needed
-            if (error.code === '23503') { // Foreign key violation (e.g., user_id doesn't exist in users table)
-                 console.error("Foreign key violation. Ensure user exists in the users table.");
-            } else if (error.code === '23505') { // Unique constraint violation
-                 console.error("Unique constraint violation. Check onConflict columns and table definition.");
-            }
+            if (error.code === '23503') { console.error("Foreign key violation. Ensure user exists in the users table."); }
+            else if (error.code === '23505') { console.error("Unique constraint violation. Check onConflict columns and table definition."); }
             return false; // Indicate failure
         }
 
@@ -1108,77 +1081,65 @@ async function handleFormSubmit(event) {
     // --- Prepare UI for Submission ---
     setButtonLoading(true); // Disable button, show loading state
     hideReminder(); // Hide reminder message if visible
+    hideSubmissionInfo(); // Ensure old submission info area is hidden before proceeding
 
     // --- Submission Logic ---
     try {
         // Prepare data for the 'assessments' table submission (handled by the second script)
         const assessmentData = {
-            name: name, // Name from input
-            email: email, // Validated email
-            answer: answer, // Goal answer
-            questionId: QUESTION_ID,
-            questionText: questionText,
-            sectionId: SECTION_ID,
-            score: 100, // Default score for goal completion
-            completionStatus: 'Complete',
-            page: CURRENT_PAGE,
-            type: 'goal'
+            name: name, email: email, answer: answer, questionId: QUESTION_ID, questionText: questionText,
+            sectionId: SECTION_ID, score: 100, completionStatus: 'Complete', page: CURRENT_PAGE, type: 'goal'
         };
         console.log("Prepared assessment data:", JSON.stringify(assessmentData, null, 2));
 
         // --- Attempt Database Submission (using function from second script) ---
         console.log("Attempting to send assessment data to Supabase via sendToSupabase...");
-        // This function now handles its own popup/redirect logic on success
         const dbSubmissionResult = await sendToSupabase(assessmentData);
 
         // --- Handle Submission Result ---
         if (dbSubmissionResult?.success) {
             console.log("Database submission successful (reported by sendToSupabase).");
-            // Store locally using the timestamp returned from the successful DB save
-            submissionTimestamp = dbSubmissionResult.submitted_at || new Date().toISOString(); // Fallback timestamp
+            submissionTimestamp = dbSubmissionResult.submitted_at || new Date().toISOString(); // Use returned or fallback timestamp
             storeAnswersLocally(name, answer, submissionTimestamp);
             isLocallySaved = true;
 
-            // Update user_progress table in Supabase (redundant if sendToSupabase handles it, but safe)
+            // Update user_progress table
             console.log("Attempting to update user_progress table...");
             const progressUpdateSuccess = await updateUserProgress(email, SECTION_ID, QUESTION_ID, questionText);
             if (!progressUpdateSuccess) console.warn("Failed to update user_progress table. Local progress is saved.");
             else console.log("Successfully updated user_progress table.");
 
-            // Update local progress state
+            // Update local progress state & UI
             updateLocalSectionProgress(SECTION_ID);
-
-            // Update UI to reflect completion
             console.log("Updating UI elements for successful submission...");
             showQuestionProgressBar(questionContainer, 100);
-            showSubmissionInfo(submissionTimestamp); // Show timestamp from DB/local save
-            disableFormInputs(); // Disable form as it's done
-            unlockQuizButton(); // Unlock next step
+            hideSubmissionInfo(); // Explicitly hide again (belt & braces)
+            disableFormInputs();
+            unlockQuizButton();
 
-            // Note: The redirect is now handled inside sendToSupabase via showTwoStagePopupAndRedirect
+            // Note: Redirect is handled inside sendToSupabase via showTwoStagePopupAndRedirect
             console.log(`--- Form Submission Process Completed Successfully ---`);
 
         } else {
             // --- Handle Database Submission Failure ---
             console.error("Database submission failed (reported by sendToSupabase).");
-            // Attempt local save as a fallback
             console.warn("Attempting local save as fallback...");
             submissionTimestamp = new Date().toISOString(); // Use current time for local timestamp
             storeAnswersLocally(name, answer, submissionTimestamp);
-            isLocallySaved = true; // Mark as locally saved even if DB failed
+            isLocallySaved = true;
 
-            // Update local progress state
-            updateLocalSectionProgress(SECTION_ID);
+            updateLocalSectionProgress(SECTION_ID); // Update local progress regardless
 
-             // Update UI to reflect local completion, but indicate sync issue
+             // Update UI for local completion, show error message
             showQuestionProgressBar(questionContainer, 100);
-            showSubmissionInfo(submissionTimestamp); // Show local submission time
-            disableFormInputs(); // Disable form as goal is locally saved
-            unlockQuizButton(); // Unlock quiz as goal is captured locally
+            hideSubmissionInfo(); // Hide submission info area
+            disableFormInputs();
+            unlockQuizButton(); // Allow proceeding
 
             // Show the specific error message for failed online save
             showError("Goal saved locally, but failed to save online. You can proceed, but please check your connection later.");
-            setButtonLoading(false); // Optionally re-enable button, but disableFormInputs keeps it disabled
+            // Keep button disabled as form is locally saved
+            // setButtonLoading(false);
 
             console.log(`--- Form Submission Process Completed (Locally Saved, DB Failed) ---`);
         }
@@ -1195,28 +1156,24 @@ async function handleFormSubmit(event) {
                 storeAnswersLocally(name, answer, null); // No reliable timestamp
                 isLocallySaved = true;
                 updateLocalSectionProgress(SECTION_ID);
-                // Update UI minimally for local save
                 if (questionContainer) showQuestionProgressBar(questionContainer, 100);
-                showSubmissionInfo(null); // Indicate submission without time
+                hideSubmissionInfo(); // Hide submission info area
                 disableFormInputs();
-                unlockQuizButton(); // Allow proceeding if goal is captured
-                showError("Saved locally due to an error, but online sync likely failed. Please check connection later."); // Inform user
+                unlockQuizButton();
+                showError("Saved locally due to an error, but online sync likely failed. Please check connection later.");
              } catch (localSaveError) {
                  console.error("Failed to perform emergency local save:", localSaveError);
-                 // If even local save fails, ensure form is usable again
-                 enableFormInputs();
+                 enableFormInputs(); // Re-enable if even local save fails
              }
         }
          console.log("--- Form Submission Process Failed due to Error ---");
-         // Ensure button is usable if submission totally failed
-         if (!isLocallySaved) setButtonLoading(false);
+         if (!isLocallySaved) setButtonLoading(false); // Ensure button is usable if nothing saved
 
     } finally {
         console.log("Executing 'finally' block of form submission.");
-        // Final check: If locally saved (either successfully or as fallback), keep form disabled.
         if (isLocallySaved) {
-            disableFormInputs();
-            console.log("Submission process finished. Form remains disabled (locally saved or submitted).");
+            disableFormInputs(); // Ensure form stays disabled if saved locally or fully
+            console.log("Submission process finished. Form remains disabled.");
         }
         // If button is still in loading state here (shouldn't happen ideally), reset it
         if (submitBtn && submitBtn.textContent === 'Submitting...') {
@@ -1260,25 +1217,15 @@ function initializePageContent(currentUser) {
         return;
     }
     try {
-        // Display user info and prefill name if available
         displayUserInfo(currentUser);
-
-        // Set static text content
         if (questionTitleElement) questionTitleElement.textContent = "Your First Step: Set Your Goal";
         if (questionPromptElement) questionPromptElement.textContent = QUESTION_TEXT_INTRO_GOAL;
-
-        // Check unlock status (pre-fills form, sets button/progress state)
-        checkUnlockStatus();
-
-        // Add event listeners for form submission, inputs, etc.
+        checkUnlockStatus(); // Sets initial form/button/progress state
         addEventListeners();
-
         console.log(`Page content initialized for user: ${currentUser.email}.`);
-
     } catch (error) {
         console.error("Error during page content initialization:", error);
         showError(`Error initializing page: ${error.message}. Try refreshing.`);
-        // Disable interactions if initialization fails badly
         if(submitBtn) submitBtn.disabled = true;
         if(startQuiz1Button) lockQuizButton();
     }
@@ -1309,8 +1256,8 @@ document.addEventListener('DOMContentLoaded', function() {
             progressText = document.getElementById('progress-text-intro-goal');
             questionTitleElement = document.getElementById('questionTitle');
             questionPromptElement = document.getElementById('questionPrompt');
-            submissionInfoDiv = document.getElementById('submissionInfo');
-            submissionTimestampElement = document.getElementById('submissionTimestamp');
+            submissionInfoDiv = document.getElementById('submissionInfo'); // Ref needed for hiding
+            submissionTimestampElement = document.getElementById('submissionTimestamp'); // Ref needed for hiding
             quizReminderMessage = document.getElementById('quizReminderMessage');
             quizIntroContainer = document.getElementById('quizIntroContainer');
             startQuiz1Button = document.getElementById('startQuiz1Button');
@@ -1334,13 +1281,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 lockQuizButton(); // Lock quiz if service unavailable
                 if(quizLockMessage) quizLockMessage.textContent = "Course service unavailable.";
                 showError("Cannot connect to the course service. Please check connection and refresh. Online progress saving is disabled.");
-                // No return here, allow local functionality if possible
             }
 
             // --- Get Current User Data ---
             const currentUser = getCurrentUser();
             if (!currentUser) {
-                // This case should ideally be handled by the immediate redirect, but double-check
                 console.error("Initialization Error: User data is missing or invalid after login check. Redirecting.");
                 logout(); // Force logout/redirect if user data vanished
                 return; // Stop initialization
@@ -1354,28 +1299,22 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch (error) {
              // --- Handle Critical Initialization Errors ---
              console.error("CRITICAL ERROR during DOMContentLoaded Initialization:", error);
-             // Display error message to the user within the main container if possible
              if (mainContainer) {
                  mainContainer.innerHTML = `<div style="padding: 30px; text-align: center; background-color: #fff3f3; border: 1px solid #e74c3c; border-radius: 8px; color: #c0392b;"><h3 style="margin-bottom: 15px;">Oops! Something went wrong.</h3><p>We encountered an error while loading the page content. Please try refreshing the page.</p><p style="font-size: 0.8em; color: #999; margin-top: 10px;">Error details: ${error.message}</p></div>`;
                  mainContainer.style.display = 'block'; // Ensure it's visible
              } else {
-                 // Fallback if main container itself is missing
                  document.body.insertAdjacentHTML('afterbegin', `<p style="color: red; background: white; padding: 20px; border: 1px solid red; text-align: center;">Critical Error: Page structure is missing or invalid. (${error.message})</p>`);
              }
         }
     } else if (!isLoggedIn_immediate) {
-        // Condition: User not logged in (handled by immediate redirect, this is a fallback log)
         console.log("DOM Loaded: User not logged in (as per immediate check), initialization skipped.");
         if (mainContainer) mainContainer.style.display = 'none'; // Keep content hidden
     } else if (!mainContainer) {
-        // Condition: Logged in, but #mainContainer is missing
         console.error("DOM Loaded: Critical error - Main container (#mainContainer) not found!");
         document.body.insertAdjacentHTML('afterbegin', '<p style="color: red; background: white; padding: 20px; border: 1px solid red; text-align: center;">Critical Error: Essential page structure (#mainContainer) is missing.</p>');
     } else if (!tempPopupElement) {
-         // Condition: Logged in, main container exists, but #temp-popup is missing
         console.error("DOM Loaded: Critical error - Temp popup container (#temp-popup) not found!");
         document.body.insertAdjacentHTML('afterbegin', '<p style="color: red; background: white; padding: 20px; border: 1px solid red; text-align: center;">Critical Error: Essential page structure (#temp-popup) is missing.</p>');
-        // Potentially disable submission button as feedback mechanism won't work
         if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = "Page Error"; }
     }
 }); // End DOMContentLoaded
@@ -1392,14 +1331,12 @@ document.addEventListener('DOMContentLoaded', function() {
 // Ensure Supabase client is accessible (assuming initialization in the first block)
 if (!supabase) {
     console.error("Second script block: Supabase client not found. Interaction may fail.");
-    // Avoid re-initializing here if the first block already handles it and shows errors
 }
 
 async function sendToSupabase(submissionData) {
     // Ensure Supabase client is available before proceeding
     if (!supabase) {
         console.error("sendToSupabase (second script): Supabase client is not available.");
-        // Don't alert here if the main script handles the UI error message
         return { success: false, submitted_at: null }; // Indicate failure clearly
     }
      // Ensure tempPopupElement is available globally (assigned in first script's DOMContentLoaded)
@@ -1415,8 +1352,6 @@ async function sendToSupabase(submissionData) {
         // Validate essential user data retrieved
         if (!currentUser || !currentUser.email || !currentUser.id) {
             console.error("sendToSupabase (second script): User info (email or ID) missing from localStorage.");
-            // Alerting here might be redundant if main function handles login issues
-            // alert("Your user information is missing. Please log in again to save your progress.");
             return { success: false, submitted_at: null };
         }
 
@@ -1432,42 +1367,28 @@ async function sendToSupabase(submissionData) {
 
         // Prepare data payload for 'assessments' table
         const dataToSend = {
-            user_id: currentUser.id, // Crucial foreign key
-            name: currentUser.name || "User", // Name from user profile
-            user_email: currentUser.email, // User email
-            answer: submissionData.answer || "N/A", // Submitted answer
-            goal_answer: submissionData.answer || "N/A", // Specific field if needed
-            submitted_at: timestampISO, // Submission time
-            created_at: timestampISO, // Creation time (often same as submission)
-            type: submissionData.type || "goal", // Type of assessment
-            page: submissionData.page || "index", // Page identifier
-            section_id: submissionData.sectionId || "index", // Section identifier
-            question_id: submissionData.questionId || "intro-goal", // Question identifier
-            question_text: questionText, // Text of the question
-            completion_status: submissionData.completionStatus || "completed", // Status
-            is_correct: calculatedIsCorrect, // Boolean correctness
-            score: calculatedIsCorrect ? (submissionData.score ?? 100) : 0 // Score (use nullish coalescing for default)
+            user_id: currentUser.id, name: currentUser.name || "User", user_email: currentUser.email,
+            answer: submissionData.answer || "N/A", goal_answer: submissionData.answer || "N/A",
+            submitted_at: timestampISO, created_at: timestampISO, type: submissionData.type || "goal",
+            page: submissionData.page || "index", section_id: submissionData.sectionId || "index",
+            question_id: submissionData.questionId || "intro-goal", question_text: questionText,
+            completion_status: submissionData.completionStatus || "completed", is_correct: calculatedIsCorrect,
+            score: calculatedIsCorrect ? (submissionData.score ?? 100) : 0
         };
 
         console.log("sendToSupabase (second script): Data prepared for 'assessments' table:", JSON.stringify(dataToSend, null, 2));
 
         // --- Upsert into 'assessments' table ---
-        // Define unique constraint columns for this table (adjust if necessary)
         const assessmentConflictColumns = ['user_id', 'question_id'];
-
         console.log(`Attempting to upsert into 'assessments' with conflict on: ${assessmentConflictColumns.join(',')}`);
         const { data: upsertResult, error: upsertError } = await supabase
             .from("assessments")
-            .upsert([dataToSend], {
-                onConflict: assessmentConflictColumns.join(','),
-                ignoreDuplicates: false // Ensure update occurs on conflict
-            })
-            .select() // Select the inserted/updated row
-            .single(); // Expecting one row back
+            .upsert([dataToSend], { onConflict: assessmentConflictColumns.join(','), ignoreDuplicates: false })
+            .select()
+            .single();
 
         if (upsertError) {
             console.error("sendToSupabase (second script): Supabase 'assessments' upsert error:", upsertError);
-            // No alert here - let the calling function (handleFormSubmit) show the UI error
             return { success: false, submitted_at: null }; // Indicate failure
         }
 
@@ -1479,25 +1400,22 @@ async function sendToSupabase(submissionData) {
 
         // Use the two-stage popup function (defined in the first script block)
         if (typeof showTwoStagePopupAndRedirect === 'function') {
-             // Redirect to the correct quiz URL
              showTwoStagePopupAndRedirect(QUIZ_REDIRECT_URL); // QUIZ_REDIRECT_URL is 'assessment.html'
          } else {
              console.error("showTwoStagePopupAndRedirect function not found! Cannot show popup. Redirecting directly.");
              window.location.href = QUIZ_REDIRECT_URL; // Fallback direct redirect
          }
 
-
         // Return success status and the confirmed submission timestamp
         return { success: true, submitted_at: submitted_at_from_db };
 
     } catch (err) {
         console.error("sendToSupabase (second script): Unexpected error during submission:", err);
-        // Let the calling function handle the generic UI error message
         return { success: false, submitted_at: null }; // Indicate failure
     }
 }
 
-// Fallback getCurrentUser definition (should ideally not be needed if first script runs correctly)
+// Fallback getCurrentUser definition (should ideally not be needed)
 if (typeof getCurrentUser !== 'function') {
      function getCurrentUser() {
         try {
