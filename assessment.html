@@ -205,7 +205,16 @@ button:hover {
             <p class="intro-note">
                 <strong>Welcome!</strong> Before you begin the course modules, please take a moment to answer these questions. Your answer help us personalize your experience. Please answer honestly in your own words. <span id="adminAssessmentNote" style="display: none; font-weight: bold; color: #b45309;"> (Admin: Word count and paste restrictions are disabled for your account.)</span>
             </p>
-            <form id="assessmentForm" novalidate>
+            
+<!-- Progress Bar -->
+<div class="mb-4" style="width: 100%; margin-top: 20px;">
+    <label style="font-weight: bold; margin-bottom: 8px; display: block;">Progress</label>
+    <div style="background-color: #e5e7eb; border-radius: 8px; overflow: hidden; height: 20px;">
+        <div id="progressBar" style="width: 0%; background-color: #3b82f6; height: 100%; transition: width 0.5s;"></div>
+    </div>
+</div>
+
+<form id="assessmentForm" novalidate>
                  <!-- Question 1 -->
                 <div class="form-group">
                     <label for="q1_coaching_meaning">What does coaching mean to you?</label>
@@ -714,55 +723,73 @@ button:hover {
         }
     </script>
 
+
+
+
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
 <script>
-  const SUPABASE_URL = 'https://lgcutmuspcaralydycmg.supabase.co';
-  const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxnY3V0bXVzcGNhcmFseWR5Y21nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU0NDY3MDEsImV4cCI6MjA2MTAyMjcwMX0.3u5Y7pkH2NNnnoGLMWVfAa5b8fq88o1itRYnG1K38tE';
-  const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const SUPABASE_URL = 'https://lgcutmuspcaralydycmg.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'; // ضع هنا المفتاح الكامل إذا احتجت
+const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-  document.addEventListener("DOMContentLoaded", () => {
-    const form = document.querySelector("form");
+document.addEventListener("DOMContentLoaded", async () => {
+    const form = document.getElementById("assessmentForm");
+    const progressBar = document.getElementById("progressBar");
+    const popupOverlay = document.getElementById("popupOverlay"); 
+    const successPopup = document.getElementById("assessmentSuccessPopup");
+
+    let answered = 0;
+    const totalQuestions = 5; // 5 أسئلة موجودة
+
+    const updateProgress = () => {
+        const progress = (answered / totalQuestions) * 100;
+        progressBar.style.width = `${progress}%`;
+    };
+
+    async function getCurrentUserFromSupabase() {
+        const { data: { user }, error } = await supabaseClient.auth.getUser();
+        if (error || !user) {
+            console.error("Supabase user fetch error", error);
+            return null;
+        }
+        return user;
+    }
+
     form.addEventListener("submit", async (e) => {
-      e.preventDefault();
+        e.preventDefault();
 
-      const currentUser = JSON.parse(localStorage.getItem('currentUser') || '{}');
-      const email = currentUser.email;
-      console.log("📧 Retrieved email:", email);
-      if (!email || !email.includes('@')) {
-        alert("User email not found. Please log in again.");
-        return;
-      }
-      if (!email) {
-        alert("User email not found. Please log in again.");
-        return;
-      }
+        const localUser = JSON.parse(localStorage.getItem('currentUser') || '{}');
+        const userEmail = localUser.email;
+        if (!userEmail) {
+            alert("User email not found. Please login again.");
+            return;
+        }
 
-      const formData = new FormData(form);
-      const answer = {};
-      formData.forEach((value, key) => {
-        answer[key] = value;
-      });
+        const formData = new FormData(form);
+        answered = 0;
 
-      try {
-        const { error: insertError } = await supabaseClient
-          .from("assessments")
-          .upsert({ user_email: email, type: 'pre', answer, submitted_at: new Date().toISOString() }, { onConflict: 'user_email, type' });
-        if (insertError) throw insertError;
+        for (const [questionId, answer] of formData.entries()) {
+            if (answer.trim()) {
+                await supabaseClient.from("assessment_answers").upsert({ 
+                    user_email: userEmail, 
+                    question_id: questionId, 
+                    answer: answer, 
+                    submitted_at: new Date().toISOString() 
+                }, { onConflict: ['user_email', 'question_id'] });
 
-        const { error: updateError } = await supabaseClient
-          .from("users")
-          .update({ assessment_completed: true })
-          .eq("email", email);
-        if (updateError) console.warn("User update warning:", updateError);
+                answered++;
+                updateProgress();
+            }
+        }
 
-        alert("✅ Thank you! Your answer have been submitted.");
-        window.location.href = "dashboard.html";
-      } catch (err) {
-        console.error("Submission failed:", err);
-        alert("Failed to submit assessment: " + err.message);
-      }
+        await supabaseClient.from("users").update({ assessment_completed: true }).eq("email", userEmail);
+
+        successPopup.style.display = 'block';
+        popupOverlay.style.display = 'block';
+        form.reset();
+        progressBar.style.width = '0%';
     });
-  });
+});
 </script>
 
 </body>
