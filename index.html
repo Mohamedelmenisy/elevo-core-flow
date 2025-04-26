@@ -303,13 +303,6 @@ p { margin-bottom: 15px; color: #555e68; /* Slightly softer black */ line-height
 </style>
 </head>
 <body>
-
-<div class="goal-section" style="margin-top: 20px;">
-  <label id="goal-question" style="font-weight: bold; font-size: 18px; display: block; margin-bottom: 10px;">What is your main goal for this course?</label>
-  <input type="text" id="goal-input" placeholder="Type your goal here..." style="width: 100%; padding: 10px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 6px;">
-  <button id="submit-goal" style="width: 100%; padding: 12px; background-color: #007bff; color: white; border: none; border-radius: 6px; font-size: 16px;">Submit Goal</button>
-</div>
-
 <!-- Header -->
 <header class="header">Coaching & Leadership Course</header>
 <!-- User Bar -->
@@ -421,31 +414,7 @@ const isLoggedIn_immediate = localStorage.getItem(LOGGED_IN_KEY) === 'true' && q
 const hasSignedUp_immediate = localStorage.getItem(SIGNUP_FLAG_KEY) === 'true';
 const currentPage_immediate = window.location.pathname.split('/').pop() || 'index.html';
 console.log(`Index Page IMMEDIATE Check: isLoggedIn=${isLoggedIn_immediate}, hasSignedUp=${hasSignedUp_immediate}, Supabase available=${!!supabase}`);
-if (!isLoggedIn_immediate && (currentPage_immediate === 'index.html' || currentPage_immediate === '')) { const targetUrl = hasSignedUp_immediate ? 'login.html' : 'signup.html'; console.warn(`%cUser not logged in. Redirecting to ${targetUrl}...`, "color: orange;"); window.location.replace(targetUrl); } else if (isLoggedIn_immediate) { console.log("%cUser logged in. Proceeding.", "color: green;"); document.addEventListener("DOMContentLoaded", function () {
-    const submitButton = document.getElementById('submit-goal');
-    const goalInputElement = document.getElementById('goal-input');
-    const goalQuestionElement = document.getElementById('goal-question');
-
-    if (submitButton && goalInputElement && goalQuestionElement) {
-        submitButton.addEventListener('click', async () => {
-            const goalInput = goalInputElement.value.trim();
-            const goalQuestion = goalQuestionElement.textContent.trim() || "Unnamed question";
-
-            const submissionData = {
-                answer: goalInput,
-                question_text: goalQuestion,
-                question_id: "goal_q1",
-                page: "index",
-                type: "goal"
-            };
-
-            console.log("🔥 Sending submissionData:", submissionData);
-            await sendToSupabase(submissionData);
-        });
-    } else {
-        console.warn("⚠️ Missing goal elements for submission.");
-    }
-}); } else { console.log(`%cUser not logged in, but not on index page. No redirect needed here.`, "color: grey;"); }
+if (!isLoggedIn_immediate && (currentPage_immediate === 'index.html' || currentPage_immediate === '')) { const targetUrl = hasSignedUp_immediate ? 'login.html' : 'signup.html'; console.warn(`%cUser not logged in. Redirecting to ${targetUrl}...`, "color: orange;"); window.location.replace(targetUrl); } else if (isLoggedIn_immediate) { console.log("%cUser logged in. Proceeding.", "color: green;"); document.addEventListener('DOMContentLoaded', () => { const mc = document.getElementById('mainContainer'); if(mc) mc.style.display = 'block'; }); } else { console.log(`%cUser not logged in, but not on index page. No redirect needed here.`, "color: grey;"); }
 
 // --- DOM Element References ---
 let userNameDisplay, userEmailDisplay, questionForm, nameInput, answerInput, errorMessageDisplay,
@@ -590,7 +559,7 @@ function showSubmissionInfo(timestamp) {
                 displayTime = timestamp; // Fallback to raw timestamp string
             }
         } else {
-            displayTime = '';
+            displayTime = 'Saved locally (offline or DB issue)';
         }
         submissionTimestampElement.textContent = `Submitted at: ${displayTime}`;
         submissionInfoDiv.style.display = 'block';
@@ -690,7 +659,56 @@ function closeModal() {
     try { if(successModal) { successModal.style.display='none'; } console.log("Modal closed (function called)."); } catch(err){ console.error("Error closing modal:", err); }
 }
 
+async function sendToSupabase(submissionData) {
+    if (!supabase) {
+        console.error("sendToSupabase: Supabase client not available.");
+        showError("Database connection error. Progress saved locally only.");
+        return { success: false, submitted_at: null };
+    }
 
+    const clientTimestamp = new Date().toISOString();
+    const dataToSend = {
+        name: submissionData.name,
+        
+        goal_answer: submissionData.answer,
+        is_correct: null,
+        score: submissionData.score,
+        submitted_at: clientTimestamp,
+        section_id: submissionData.sectionId,
+        completion_status: submissionData.completionStatus,
+        question_id: submissionData.questionId,
+        question_text: submissionData.questionText,
+        page: CURRENT_PAGE
+    };
+
+    console.log("Attempting to send data to 'assessments' table:", JSON.stringify(dataToSend, null, 2));
+
+    try {
+        const { error } = await supabase
+            .from('assessments')
+            .insert([dataToSend]);
+
+        if (error) {
+            console.error('Supabase insert error details:', error);
+            let userMessage = `Database Error saving assessment: ${error.message}. Your progress has been saved locally.`;
+            if (error.code === '23505') {
+                 userMessage = "You seem to have already submitted this goal. Your progress is saved.";
+            }
+            showError(userMessage);
+            alert('Error submitting to Supabase: ' + (error.message || 'Unknown error'));
+            return { success: false, submitted_at: null };
+        }
+
+        console.log('Supabase assessment submission successful. Client Timestamp:', clientTimestamp);
+        return { success: true, submitted_at: clientTimestamp };
+
+    } catch (networkError) {
+        console.error('Network Error during assessment submission:', networkError);
+        showError(`Network Error: ${networkError.message}. Your progress has been saved locally.`);
+        alert('Network error submitting assessment. Progress saved locally.');
+        return { success: false, submitted_at: null };
+    }
+}
 
 async function updateUserProgress(userEmail, sectionId, questionId, questionText) {
     if (!supabase) {
@@ -933,128 +951,44 @@ function initializePageContent(currentUser) {
     } catch (error) { console.error("Error during page content initialization:", error); showError(`Error initializing page: ${error.message}. Try refreshing.`); if(submitBtn) submitBtn.disabled = true; if(startQuiz1Button) lockQuizButton(); }
 }
 
-document.addEventListener("DOMContentLoaded", function () {
-    const submitButton = document.getElementById('submit-goal');
-    const goalInputElement = document.getElementById('goal-input');
-    const goalQuestionElement = document.getElementById('goal-question');
+document.addEventListener('DOMContentLoaded', function() {
+    console.log("%cDOM Content Loaded.", "color: green;");
+    mainContainer = document.getElementById('mainContainer');
 
-    if (submitButton && goalInputElement && goalQuestionElement) {
-        submitButton.addEventListener('click', async () => {
-            const goalInput = goalInputElement.value.trim();
-            const goalQuestion = goalQuestionElement.textContent.trim() || "Unnamed question";
+    if (isLoggedIn_immediate && mainContainer) {
+        console.log("User logged in and main container found. Proceeding with initialization.");
+        try {
+            userNameDisplay = document.getElementById('userName'); userEmailDisplay = document.getElementById('userEmail'); questionForm = document.getElementById('questionForm'); nameInput = document.getElementById('name'); answerInput = document.getElementById('answer'); errorMessageDisplay = document.getElementById('error-message'); successModal = document.getElementById('successModal'); modalGreeting = document.getElementById('modalGreeting'); submitBtn = document.getElementById('submitBtn'); progressBarContainer = document.getElementById('progress-container-intro-goal'); progressBar = document.getElementById('progress-bar-intro-goal'); progressText = document.getElementById('progress-text-intro-goal'); questionTitleElement = document.getElementById('questionTitle'); questionPromptElement = document.getElementById('questionPrompt'); submissionInfoDiv = document.getElementById('submissionInfo'); submissionTimestampElement = document.getElementById('submissionTimestamp'); quizReminderMessage = document.getElementById('quizReminderMessage'); quizIntroContainer = document.getElementById('quizIntroContainer'); startQuiz1Button = document.getElementById('startQuiz1Button'); quizLockMessage = document.getElementById('quizLockMessage');
 
-            const submissionData = {
-                answer: goalInput,
-                question_text: goalQuestion,
-                question_id: "goal_q1",
-                page: "index",
-                type: "goal"
-            };
+            const essentialElements = { mainContainer, userNameDisplay, userEmailDisplay, questionForm, nameInput, answerInput, errorMessageDisplay, successModal, submitBtn, progressBarContainer, progressBar, progressText, questionTitleElement, questionPromptElement, submissionInfoDiv, submissionTimestampElement, quizReminderMessage, quizIntroContainer, startQuiz1Button, quizLockMessage };
+            let missingElementKey = null;
+            for (const [key, element] of Object.entries(essentialElements)) { if (!element) { missingElementKey = key; break; } }
+            if (missingElementKey) { throw new Error(`Initialization failed: Essential DOM element '${missingElementKey}' not found.`); }
+            console.log("All essential DOM elements found.");
 
-            console.log("🔥 Sending submissionData:", submissionData);
-            await sendToSupabase(submissionData);
-        });
-    } else {
-        console.warn("⚠️ Missing goal elements for submission.");
-    }
+            if (!supabase) {
+                console.error("Initialization Error: Supabase client is not available. Online features disabled.");
+                if(submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Service Unavailable'; }
+                lockQuizButton(); if(quizLockMessage) quizLockMessage.textContent = "Course service unavailable.";
+                showError("Cannot connect to the course service. Please check connection and refresh. Online progress saving is disabled.");
+            }
+
+            const currentUser = getCurrentUser();
+            if (!currentUser) { throw new Error("User data is missing or invalid after initial checks. Cannot proceed with initialization."); }
+            console.log(`Initializing content for user: ${currentUser.email}. Supabase available: ${!!supabase}`);
+
+            initializePageContent(currentUser);
+            console.log("DOM content initialization complete.");
+
+        } catch (error) {
+             console.error("CRITICAL ERROR during DOMContentLoaded Initialization:", error);
+             if (mainContainer) { mainContainer.innerHTML = `<div style="padding: 30px; text-align: center; background-color: #fff3f3; border: 1px solid #e74c3c; border-radius: 8px; color: #c0392b;"><h3 style="margin-bottom: 15px;">Oops! Something went wrong.</h3><p>We encountered an error while loading the page content. Please try refreshing the page.</p><p style="font-size: 0.8em; color: #999; margin-top: 10px;">Error details: ${error.message}</p></div>`; mainContainer.style.display = 'block'; }
+             else { document.body.insertAdjacentHTML('afterbegin', `<p style="color: red; background: white; padding: 20px; border: 1px solid red; text-align: center;">Critical Error: Page structure is missing or invalid. (${error.message})</p>`); }
+        }
+    } else if (!isLoggedIn_immediate) { console.log("DOM Loaded: User not logged in (as per immediate check), initialization skipped."); if (mainContainer) mainContainer.style.display = 'none'; }
+    else if (!mainContainer) { console.error("DOM Loaded: Critical error - Main container (#mainContainer) not found!"); document.body.insertAdjacentHTML('afterbegin', '<p style="color: red; background: white; padding: 20px; border: 1px solid red; text-align: center;">Critical Error: Essential page structure (#mainContainer) is missing.</p>'); }
 }); // End DOMContentLoaded
 
 </script>
 </body>
 </html>
-
-<script>
-async function sendToSupabase(submissionData) {
-    try {
-        const currentUser = JSON.parse(localStorage.getItem('currentUser') || '{}');
-
-        if (!currentUser || !currentUser.email || !currentUser.id) {
-            alert("User info missing. Please log in again.");
-            return { success: false };
-        }
-
-        const now = new Date();
-        const submittedAtLocal = now.toLocaleString("en-GB", { timeZone: "Africa/Cairo" });
-
-        // قراءة نص السؤال من DOM
-        const questionText = document.getElementById("goal-question")?.textContent || "Unnamed question";
-
-        // حساب is_correct بناءً على وجود إجابة
-        const hasAnswer = !!submissionData.answer?.trim();
-        const calculatedIsCorrect = hasAnswer;
-
-        const dataToSend = {
-            name: currentUser.name || "Anonymous",
-            user_email: currentUser.email,
-            user_id: currentUser.id,
-            answer: submissionData.answer || "N/A",
-            goal_answer: submissionData.answer || "N/A",
-            submitted_at: now.toISOString(),
-            created_at: now.toISOString(),
-            type: submissionData.type || "goal",
-            page: submissionData.page || "index",
-            section_id: submissionData.section_id || submissionData.page || "index",
-            question_id: submissionData.question_id || "Q1",
-            question_text: questionText,
-            completion_status: "completed",
-            is_correct: calculatedIsCorrect,
-            score: calculatedIsCorrect ? 100 : 0
-        };
-
-        const { data: existingEntry, error: checkError } = await supabase
-            .from("assessments")
-            .select("id")
-            .eq("name", dataToSend.name)
-            .eq("question_id", dataToSend.question_id)
-            .maybeSingle();
-
-        let insertResult;
-        if (existingEntry) {
-            insertResult = await supabase.from("assessments").update(dataToSend).eq("id", existingEntry.id);
-        } else {
-            insertResult = await supabase.from("assessments").insert([dataToSend]);
-        }
-
-        if (insertResult?.error) {
-            alert("Submission failed: " + insertResult.error.message);
-            return { success: false };
-        }
-
-        // تسجيل progress
-        const progressEntry = {
-            user_id: currentUser.id,
-            email: currentUser.email,
-            question_id: dataToSend.question_id,
-            question_text: dataToSend.question_text,
-            page: dataToSend.page,
-            section_id: dataToSend.section_id,
-            section_type: dataToSend.type || "goal",
-            section_title: dataToSend.page || "Index",
-            score: dataToSend.score,
-            status: "completed",
-            progress: 1,
-            progress_percent: 100,
-            submitted_at: now.toISOString(),
-            updated_at: now.toISOString(),
-            is_passed: dataToSend.is_correct
-        };
-
-        await supabase.from("user_progress").insert([progressEntry]);
-
-        const successMessage = document.createElement('div');
-        successMessage.innerHTML = `🎉 Goal submitted successfully!<br><small>Submitted at: ${submittedAtLocal}</small>`;
-        successMessage.style.cssText = "background:#4CAF50; color:white; padding:10px; border-radius:8px; margin-top:20px; text-align:center; font-size:18px;";
-        document.body.appendChild(successMessage);
-
-        setTimeout(() => {
-            window.location.href = "assessment.html";
-        }, 2000);
-
-        return { success: true };
-    } catch (err) {
-        console.error("Unexpected error during submission:", err);
-        alert("An unexpected error occurred. Please try again later.");
-        return { success: false };
-    }
-}
-</script>
