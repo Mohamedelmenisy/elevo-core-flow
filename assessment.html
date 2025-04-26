@@ -737,7 +737,7 @@ button:hover {
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
 <script>
 const SUPABASE_URL = 'https://lgcutmuspcaralydycmg.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxnY3V0bXVzcGNhcmFseWR5Y21nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU0NDY3MDEsImV4cCI6MjA2MTAyMjcwMX0.3u5Y7pkH2NNnnoGLMWVfAa5b8fq88o1itRYnG1K38tE'; // ضع المفتاح كاملاً هنا
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'; // ضع المفتاح كاملاً هنا
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 document.addEventListener("DOMContentLoaded", async () => {
@@ -849,16 +849,25 @@ document.addEventListener("DOMContentLoaded", async () => {
 </script>
 
 
+<!-- Popup Message -->
+<div id="popupMessage" style="display:none;position:fixed;top:30%;left:50%;transform:translate(-50%, -50%);background-color:#ffffff;padding:20px 30px;border:2px solid #4caf50;border-radius:12px;font-size:18px;color:#2e7d32;box-shadow:0 4px 8px rgba(0,0,0,0.2);z-index:9999;text-align:center;"></div>
+
+<!-- Progress Bar -->
+<div id="progressBarContainer" style="width: 100%; background-color: #ddd; border-radius: 20px; margin-top: 30px;">
+  <div id="progressBar" style="width: 0%; height: 30px; background-color: #4caf50; border-radius: 20px; text-align: center; line-height: 30px; color: white; font-weight: bold;">0%</div>
+</div>
+
 <!-- Supabase Client -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
 <script>
-// إعداد الاتصال بـ Supabase
-const SUPABASE_URL = 'https://lgcutmuspcaralydycmg.supabase.co'; // <-- غيره بالـ URL الخاص بك
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxnY3V0bXVzcGNhcmFseWR5Y21nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU0NDY3MDEsImV4cCI6MjA2MTAyMjcwMX0.3u5Y7pkH2NNnnoGLMWVfAa5b8fq88o1itRYnG1K38tE'; // <-- غيره بالـ Key الخاص بك
+const SUPABASE_URL = 'https://YOUR_SUPABASE_URL.supabase.co'; // <-- غيّره
+const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY'; // <-- غيّره
 const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// حفظ إجابة السؤال في Supabase
-async function saveAnswer(questionId, answer, score, goalAnswer, sectionId, sectionTitle, questionText, page, type) {
+let answeredQuestions = 0;
+const totalQuestions = 5; // تقديري، ممكن تعدل حسب عدد أسئلتك
+
+async function saveAnswer(questionId, answer, questionText) {
     const userData = JSON.parse(localStorage.getItem('currentUser')) || {};
     const { id: user_id, email: user_email, name } = userData;
 
@@ -868,13 +877,13 @@ async function saveAnswer(questionId, answer, score, goalAnswer, sectionId, sect
         name,
         question_id: questionId,
         answer,
-        score,
-        goal_answer: goalAnswer,
-        section_id: sectionId,
-        section_title: sectionTitle,
+        score: 1,
+        goal_answer: '',
+        section_id: 'pre-course',
+        section_title: 'Pre-Course Assessment',
         question_text: questionText,
-        page,
-        type,
+        page: 'assessment',
+        type: 'goal',
         submitted_at: new Date().toISOString(),
         completion_status: 'in-progress'
     }]);
@@ -886,7 +895,41 @@ async function saveAnswer(questionId, answer, score, goalAnswer, sectionId, sect
     }
 }
 
-// تحديث حالة التقييم مكتمل للمستخدم
+function showPopup(message) {
+    const popup = document.getElementById('popupMessage');
+    popup.innerHTML = message;
+    popup.style.display = 'block';
+    setTimeout(() => {
+        popup.style.display = 'none';
+    }, 2000);
+}
+
+function updateProgressBar() {
+    answeredQuestions++;
+    let progress = Math.min((answeredQuestions / totalQuestions) * 100, 100);
+    const progressBar = document.getElementById('progressBar');
+    if (progressBar) {
+      progressBar.style.width = progress + "%";
+      progressBar.innerHTML = Math.round(progress) + "%";
+    }
+
+    if (progress === 100) {
+        showPopup('🚀 All questions completed! Great job!');
+        completeAssessment();
+    }
+}
+
+function submitAnswerHandler(questionId, inputId, questionText) {
+    const answer = document.getElementById(inputId).value;
+    if (answer.trim() === "") {
+        alert("Please enter an answer before submitting.");
+        return;
+    }
+    saveAnswer(questionId, answer, questionText);
+    showPopup('🎯 Answer saved successfully!');
+    updateProgressBar();
+}
+
 async function completeAssessment() {
     const userData = JSON.parse(localStorage.getItem('currentUser')) || {};
     const { id: user_id } = userData;
@@ -900,21 +943,6 @@ async function completeAssessment() {
     } else {
         console.log('Assessment marked as completed.');
     }
-}
-
-// وظيفة عند إرسال الإجابة
-function submitAnswerHandler(questionId, answer, score, goalAnswer, questionText) {
-    saveAnswer(
-        questionId,
-        answer,
-        score,
-        goalAnswer,
-        'pre-course',
-        'Pre-Course Assessment',
-        questionText,
-        'assessment',
-        'goal'
-    );
 }
 </script>
 
