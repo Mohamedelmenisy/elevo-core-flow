@@ -666,12 +666,11 @@ async function sendToSupabase(submissionData) {
         if (!currentUser || !currentUser.email || !currentUser.id) {
             alert("User info missing. Please log in again.");
             console.warn("Missing currentUser or email/id in localStorage", currentUser);
-            return;
+            return { success: false };
         }
 
         const now = new Date();
 
-        // حساب is_correct من الاجابة لو مكتوب فيها "نعم" أو "true"
         const normalizedAnswer = submissionData.answer?.toLowerCase?.().trim();
         const calculatedIsCorrect = (normalizedAnswer === "نعم" || normalizedAnswer === "true");
 
@@ -693,7 +692,6 @@ async function sendToSupabase(submissionData) {
             score: calculatedIsCorrect ? 100 : 0
         };
 
-        // تحقق من التكرار
         const { data: existingEntry, error: checkError } = await supabase
             .from("assessments")
             .select("id")
@@ -720,10 +718,9 @@ async function sendToSupabase(submissionData) {
         if (insertResult?.error) {
             console.error("Error saving to Supabase:", insertResult.error.message);
             alert("Submission failed: " + insertResult.error.message);
-            return;
+            return { success: false };
         }
 
-        // user_progress
         const progressEntry = {
             user_id: currentUser.id,
             email: currentUser.email,
@@ -747,7 +744,6 @@ async function sendToSupabase(submissionData) {
             console.error("Error saving progress:", progressError.message);
         }
 
-        // رسالة نجاح
         const successMessage = document.createElement('div');
         successMessage.textContent = "🎉 Goal submitted successfully!";
         successMessage.style.cssText = "background:#4CAF50; color:white; padding:10px; border-radius:8px; margin-top:20px; text-align:center; font-size:18px;";
@@ -757,9 +753,11 @@ async function sendToSupabase(submissionData) {
             window.location.href = "assessment.html";
         }, 2000);
 
+        return { success: true };
     } catch (err) {
         console.error("Unexpected error during submission:", err);
         alert("An unexpected error occurred. Please try again later.");
+        return { success: false };
     }
 }
 
