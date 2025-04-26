@@ -665,14 +665,18 @@ async function sendToSupabase(submissionData) {
 
         if (!currentUser || !currentUser.email || !currentUser.id) {
             alert("User info missing. Please log in again.");
-            console.warn("Missing currentUser or email/id in localStorage", currentUser);
             return { success: false };
         }
 
         const now = new Date();
+        const submittedAtLocal = now.toLocaleString("en-GB", { timeZone: "Africa/Cairo" });
 
-        const normalizedAnswer = submissionData.answer?.toLowerCase?.().trim();
-        const calculatedIsCorrect = (normalizedAnswer === "نعم" || normalizedAnswer === "true");
+        // قراءة نص السؤال من DOM
+        const questionText = document.getElementById("goal-question")?.textContent || "Unnamed question";
+
+        // حساب is_correct بناءً على وجود إجابة
+        const hasAnswer = !!submissionData.answer?.trim();
+        const calculatedIsCorrect = hasAnswer;
 
         const dataToSend = {
             name: currentUser.name || "Anonymous",
@@ -686,7 +690,7 @@ async function sendToSupabase(submissionData) {
             page: submissionData.page || "index",
             section_id: submissionData.section_id || submissionData.page || "index",
             question_id: submissionData.question_id || "Q1",
-            question_text: submissionData.question_text || "ما هو هدفك من التدريب؟",
+            question_text: questionText,
             completion_status: "completed",
             is_correct: calculatedIsCorrect,
             score: calculatedIsCorrect ? 100 : 0
@@ -699,28 +703,19 @@ async function sendToSupabase(submissionData) {
             .eq("question_id", dataToSend.question_id)
             .maybeSingle();
 
-        if (checkError) {
-            console.error("Error checking for existing entry:", checkError.message);
-        }
-
         let insertResult;
         if (existingEntry) {
-            insertResult = await supabase
-                .from("assessments")
-                .update(dataToSend)
-                .eq("id", existingEntry.id);
+            insertResult = await supabase.from("assessments").update(dataToSend).eq("id", existingEntry.id);
         } else {
-            insertResult = await supabase
-                .from("assessments")
-                .insert([dataToSend]);
+            insertResult = await supabase.from("assessments").insert([dataToSend]);
         }
 
         if (insertResult?.error) {
-            console.error("Error saving to Supabase:", insertResult.error.message);
             alert("Submission failed: " + insertResult.error.message);
             return { success: false };
         }
 
+        // تسجيل progress
         const progressEntry = {
             user_id: currentUser.id,
             email: currentUser.email,
@@ -739,13 +734,10 @@ async function sendToSupabase(submissionData) {
             is_passed: dataToSend.is_correct
         };
 
-        const { error: progressError } = await supabase.from("user_progress").insert([progressEntry]);
-        if (progressError) {
-            console.error("Error saving progress:", progressError.message);
-        }
+        await supabase.from("user_progress").insert([progressEntry]);
 
         const successMessage = document.createElement('div');
-        successMessage.textContent = "🎉 Goal submitted successfully!";
+        successMessage.innerHTML = `🎉 Goal submitted successfully!<br><small>Submitted at: ${submittedAtLocal}</small>`;
         successMessage.style.cssText = "background:#4CAF50; color:white; padding:10px; border-radius:8px; margin-top:20px; text-align:center; font-size:18px;";
         document.body.appendChild(successMessage);
 
