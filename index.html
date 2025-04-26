@@ -945,14 +945,7 @@ document.addEventListener('DOMContentLoaded', function() {
 </html>
 
 <script>
-async function sendToSupabase(submissionData) {
-    try {
-        const currentUser = JSON.parse(localStorage.getItem('currentUser') || '{}');
 
-        if (!currentUser || !currentUser.email || !currentUser.id) {
-            alert("User info missing. Please log in again.");
-            return { success: false };
-        }
 
         const now = new Date();
         const submittedAtLocal = now.toLocaleString("en-GB", { timeZone: "Africa/Cairo" });
@@ -1002,6 +995,97 @@ async function sendToSupabase(submissionData) {
         }
 
         // تسجيل progress
+        const progressEntry = {
+            user_id: currentUser.id,
+            email: currentUser.email,
+            question_id: dataToSend.question_id,
+            question_text: dataToSend.question_text,
+            page: dataToSend.page,
+            section_id: dataToSend.section_id,
+            section_type: dataToSend.type || "goal",
+            section_title: dataToSend.page || "Index",
+            score: dataToSend.score,
+            status: "completed",
+            progress: 1,
+            progress_percent: 100,
+            submitted_at: now.toISOString(),
+            updated_at: now.toISOString(),
+            is_passed: dataToSend.is_correct
+        };
+
+        await supabase.from("user_progress").insert([progressEntry]);
+
+        const successMessage = document.createElement('div');
+        successMessage.innerHTML = `🎉 Goal submitted successfully!<br><small>Submitted at: ${submittedAtLocal}</small>`;
+        successMessage.style.cssText = "background:#4CAF50; color:white; padding:10px; border-radius:8px; margin-top:20px; text-align:center; font-size:18px;";
+        document.body.appendChild(successMessage);
+
+        setTimeout(() => {
+            window.location.href = "assessment.html";
+        }, 2000);
+
+        return { success: true };
+    } catch (err) {
+        console.error("Unexpected error during submission:", err);
+        alert("An unexpected error occurred. Please try again later.");
+        return { success: false };
+    }
+}
+</script>
+
+<script>
+async function sendToSupabase(submissionData) {
+    try {
+        const currentUser = JSON.parse(localStorage.getItem('currentUser') || '{}');
+
+        if (!currentUser || !currentUser.email || !currentUser.id) {
+            alert("User info missing. Please log in again.");
+            return { success: false };
+        }
+
+        const now = new Date();
+        const submittedAtLocal = now.toLocaleString("en-GB", { timeZone: "Africa/Cairo" });
+
+        const hasAnswer = !!submissionData.answer?.trim();
+        const calculatedIsCorrect = hasAnswer;
+
+        const dataToSend = {
+            name: currentUser.name || "Anonymous",
+            user_email: currentUser.email,
+            user_id: currentUser.id,
+            answer: submissionData.answer || "N/A",
+            goal_answer: submissionData.answer || "N/A",
+            submitted_at: now.toISOString(),
+            created_at: now.toISOString(),
+            type: submissionData.type || "goal",
+            page: submissionData.page || "index",
+            section_id: submissionData.section_id || submissionData.page || "index",
+            question_id: submissionData.question_id || "Q1",
+            question_text: submissionData.question_text || "Unnamed question",
+            completion_status: "completed",
+            is_correct: calculatedIsCorrect,
+            score: calculatedIsCorrect ? 100 : 0
+        };
+
+        const { data: existingEntry, error: checkError } = await supabase
+            .from("assessments")
+            .select("id")
+            .eq("name", dataToSend.name)
+            .eq("question_id", dataToSend.question_id)
+            .maybeSingle();
+
+        let insertResult;
+        if (existingEntry) {
+            insertResult = await supabase.from("assessments").update(dataToSend).eq("id", existingEntry.id);
+        } else {
+            insertResult = await supabase.from("assessments").insert([dataToSend]);
+        }
+
+        if (insertResult?.error) {
+            alert("Submission failed: " + insertResult.error.message);
+            return { success: false };
+        }
+
         const progressEntry = {
             user_id: currentUser.id,
             email: currentUser.email,
