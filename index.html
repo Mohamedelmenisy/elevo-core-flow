@@ -689,55 +689,74 @@ async function sendToSupabase(submissionData) {
             score: submissionData.score ?? 100
         };
 
-        const { data, error } = await supabase.from("assessments").insert([dataToSend]);
+        // ✅ check if entry already exists
+        const { data: existingEntry, error: checkError } = await supabase
+            .from("assessments")
+            .select("id")
+            .eq("name", dataToSend.name)
+            .eq("question_id", dataToSend.question_id)
+            .maybeSingle();
 
-        if (error) {
-            console.error("Error submitting to Supabase:", error.message);
-            alert("Submission failed: " + error.message);
-        } else {
-            console.log("Submission saved to Supabase:", data);
-
-            // ✅ كمان بنسجل في user_progress
-            const progressEntry = {
-                user_id: currentUser.id,
-                email: currentUser.email,
-                question_id: dataToSend.question_id,
-                question_text: dataToSend.question_text,
-                page: dataToSend.page,
-                section_id: dataToSend.section_id,
-                section_type: dataToSend.type || "goal",
-                section_title: dataToSend.page || "Index",
-                score: dataToSend.score,
-                status: "completed",
-                progress: 1,
-                progress_percent: 100,
-                submitted_at: now.toISOString(),
-                updated_at: now.toISOString(),
-                is_passed: dataToSend.is_correct
-            };
-
-            const { error: progressError } = await supabase.from("user_progress").insert([progressEntry]);
-
-            if (progressError) {
-                console.error("Error saving progress:", progressError.message);
-            } else {
-                console.log("Progress saved to user_progress table.");
-            }
-
-            // ✅ رسالة نجاح أنيقة
-            const successMessage = document.createElement('div');
-            successMessage.textContent = "🎉 Goal submitted successfully!";
-            successMessage.style.cssText = "background:#4CAF50; color:white; padding:10px; border-radius:8px; margin-top:20px; text-align:center; font-size:18px;";
-            document.body.appendChild(successMessage);
-
-            // ✅ تحويل تلقائي لـ assessment.html
-            setTimeout(() => {
-                window.location.href = "assessment.html";
-            }, 2000);
+        if (checkError) {
+            console.error("Error checking for existing entry:", checkError.message);
         }
+
+        let insertResult;
+        if (existingEntry) {
+            insertResult = await supabase
+                .from("assessments")
+                .update(dataToSend)
+                .eq("id", existingEntry.id);
+        } else {
+            insertResult = await supabase
+                .from("assessments")
+                .insert([dataToSend]);
+        }
+
+        if (insertResult.error) {
+            console.error("Error saving to Supabase:", insertResult.error.message);
+            alert("Submission failed: " + insertResult.error.message);
+            return;
+        }
+
+        // ✅ كمان بنسجل في user_progress
+        const progressEntry = {
+            user_id: currentUser.id,
+            email: currentUser.email,
+            question_id: dataToSend.question_id,
+            question_text: dataToSend.question_text,
+            page: dataToSend.page,
+            section_id: dataToSend.section_id,
+            section_type: dataToSend.type || "goal",
+            section_title: dataToSend.page || "Index",
+            score: dataToSend.score,
+            status: "completed",
+            progress: 1,
+            progress_percent: 100,
+            submitted_at: now.toISOString(),
+            updated_at: now.toISOString(),
+            is_passed: dataToSend.is_correct
+        };
+
+        const { error: progressError } = await supabase.from("user_progress").insert([progressEntry]);
+        if (progressError) {
+            console.error("Error saving progress:", progressError.message);
+        }
+
+        // ✅ رسالة نجاح أنيقة
+        const successMessage = document.createElement('div');
+        successMessage.textContent = "🎉 Goal submitted successfully!";
+        successMessage.style.cssText = "background:#4CAF50; color:white; padding:10px; border-radius:8px; margin-top:20px; text-align:center; font-size:18px;";
+        document.body.appendChild(successMessage);
+
+        // ✅ تحويل تلقائي لـ assessment.html
+        setTimeout(() => {
+            window.location.href = "assessment.html";
+        }, 2000);
+
     } catch (err) {
         console.error("Unexpected error during submission:", err);
-        alert("Unexpected error occurred.");
+        alert("An unexpected error occurred. Please try again later.");
     }
 }
 
