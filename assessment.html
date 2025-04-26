@@ -731,10 +731,13 @@ button:hover {
 
 
 
+
+
+
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
 <script>
 const SUPABASE_URL = 'https://lgcutmuspcaralydycmg.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'; // ضع المفتاح هنا كاملا
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'; // ضع المفتاح كاملاً هنا
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 document.addEventListener("DOMContentLoaded", async () => {
@@ -742,6 +745,16 @@ document.addEventListener("DOMContentLoaded", async () => {
     const progressBar = document.getElementById("progressBar");
     const successPopup = document.getElementById("assessmentSuccessPopup");
     const popupOverlay = document.getElementById("popupOverlay");
+    const successMessage = document.getElementById("successMessage");
+    const completionBox = document.createElement('div');
+    completionBox.id = 'completionSummaryBox';
+    completionBox.style.marginTop = '20px';
+    completionBox.style.padding = '20px';
+    completionBox.style.background = '#e0ffe0';
+    completionBox.style.border = '2px solid #10b981';
+    completionBox.style.borderRadius = '12px';
+    completionBox.style.display = 'none';
+    form.appendChild(completionBox);
 
     let answered = 0;
     const totalQuestions = 5;
@@ -752,9 +765,16 @@ document.addEventListener("DOMContentLoaded", async () => {
     function updateProgress() {
         const progress = (answered / totalQuestions) * 100;
         progressBar.style.width = `${progress}%`;
+
+        if (answered === totalQuestions) {
+            completionBox.innerHTML = '🎉 <strong>You have completed 100% of the Assessment!</strong> Great job!';
+            completionBox.style.display = 'block';
+        } else {
+            completionBox.style.display = 'none';
+        }
     }
 
-    async function saveAnswer(questionId, value) {
+    async function saveAnswer(questionId, value, button) {
         if (!value.trim()) return;
         await supabaseClient.from('assessment_answers').upsert({
             user_email: userEmail,
@@ -767,6 +787,29 @@ document.addEventListener("DOMContentLoaded", async () => {
             savedAnswers[questionId] = true;
             answered++;
             updateProgress();
+
+            const messageBox = document.createElement('div');
+            messageBox.style.marginTop = '10px';
+            messageBox.style.padding = '10px';
+            messageBox.style.background = '#d1fae5';
+            messageBox.style.border = '1px solid #10b981';
+            messageBox.style.color = '#065f46';
+            messageBox.style.borderRadius = '8px';
+            messageBox.innerText = '✅ Answer saved successfully!';
+            button.parentElement.appendChild(messageBox);
+
+            setTimeout(() => {
+                messageBox.remove();
+            }, 3000);
+
+            const input = document.getElementById(questionId);
+            if (input) {
+                input.disabled = true;
+                const disabledNote = document.createElement('small');
+                disabledNote.innerText = '🔒 This answer is locked after saving.';
+                disabledNote.style.color = '#6b7280';
+                input.parentElement.appendChild(disabledNote);
+            }
         }
     }
 
@@ -775,8 +818,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             const questionId = button.getAttribute('data-question-id');
             const input = document.getElementById(questionId);
             if (input) {
-                await saveAnswer(questionId, input.value);
-                alert('✅ Answer saved successfully!');
+                await saveAnswer(questionId, input.value, button);
             }
         });
     });
@@ -800,10 +842,8 @@ document.addEventListener("DOMContentLoaded", async () => {
             updated_at: new Date().toISOString()
         }, { onConflict: ['user_email', 'section_id'] });
 
-        successPopup.style.display = 'block';
-        popupOverlay.style.display = 'block';
-        form.reset();
-        progressBar.style.width = '0%';
+        form.innerHTML = '<div style="padding: 30px; text-align: center; background: #dbeafe; border-radius: 12px;"><h2>🎉 Thank you for completing the assessment! 🚀</h2><p>Good luck on your journey!</p></div>';
+        progressBar.style.width = '100%';
     });
 });
 </script>
