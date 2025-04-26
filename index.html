@@ -347,8 +347,9 @@ p { margin-bottom: 15px; color: #555e68; /* Slightly softer black */ line-height
     </div>
     <!-- Submission Info Area -->
     <div class="submission-info" id="submissionInfo">
-        <!-- Text content removed as requested -->
-        <p id="submissionTimestamp"></p> <!-- Kept for JS reference, but content will be cleared by JS -->
+        <!-- MODIFIED: Added back the success text -->
+        <p><strong>Goal Submitted Successfully!</strong></p>
+        <p id="submissionTimestamp">Submitted at:</p> <!-- Timestamp will be added here by JS -->
     </div>
 </div>
 
@@ -368,10 +369,11 @@ p { margin-bottom: 15px; color: #555e68; /* Slightly softer black */ line-height
 <!-- Success/Redirect Modal -->
 <div id="successModal" class="modal-overlay" style="display: none;"> <!-- Ensure it's hidden initially -->
 <div class="modal-content">
-<h3 id="modalGreeting" style="color: #27ae60;">Submission Received!</h3>
-<p style="margin-top: 15px;">Loading...</p>
-<button class="close-modal" onclick="closeModal()" aria-label="Close Modal" style="display: none;">×</button>
-<button class="modal-button" style="display: none;">Dummy</button>
+<!-- MODIFIED: Updated modal content -->
+<h3 id="modalGreeting" style="color: #27ae60; margin-bottom: 10px;">Success!</h3>
+<p style="margin-top: 15px; font-size: 1.1em;">🎯 Your goal has been submitted successfully. Thank you!</p>
+<button class="close-modal" onclick="closeModalAndRedirect()" aria-label="Close Modal" style="display: block;">×</button> <!-- Made close button visible and actionable -->
+<!-- Removed dummy button -->
 </div>
 </div>
 
@@ -394,7 +396,7 @@ const CURRENT_PAGE = 'index.html';
 // ✅ This variable correctly points to 'assessment.html'
 const QUIZ_REDIRECT_URL = 'assessment.html';
 const REMINDER_TIMEOUT_MS = 15000;
-const REDIRECT_DELAY_MS = 2500;
+const REDIRECT_DELAY_MS = 3500; // Increased delay slightly
 
 // Initialize Supabase Client
 try {
@@ -406,7 +408,8 @@ try {
     }
 } catch (error) {
     console.error("CRITICAL ERROR initializing Supabase client:", error);
-    alert("Error connecting to course services. Progress might not be saved online.");
+    // Avoid alert here if possible, rely on UI feedback
+    // alert("Error connecting to course services. Progress might not be saved online.");
 }
 
 // --- Immediate Redirection Logic ---
@@ -459,11 +462,14 @@ function displayUserInfo(currentUser) {
         if (currentUser) {
             userName = currentUser.name || userName;
             userEmail = currentUser.email || userEmail;
-            if (nameInput && !nameInput.value) { nameInput.value = userName; }
+            // Pre-fill name field only if it's empty AND user hasn't started typing
+            if (nameInput && !nameInput.value && !localStorage.getItem(UNLOCK_ANSWER_KEY)) {
+                 nameInput.value = userName;
+            }
         }
         if (userNameDisplay) {
             userNameDisplay.textContent = `Welcome, ${userName}`;
-            const isAdmin = currentUser.email === "m.elsayed@thechefz.co";
+            const isAdmin = currentUser?.email === "m.elsayed@thechefz.co"; // Safe check
             if (isAdmin) {
                 const adminBadge = document.createElement('span');
                 adminBadge.textContent = " (Admin)";
@@ -490,10 +496,10 @@ function checkUnlockStatus() {
 
         if (isGoalComplete) {
             console.log("checkUnlockStatus: Goal previously completed. Setting UI state.");
-            if (nameInput && !nameInput.value) nameInput.value = name || '';
-            if (answerInput) answerInput.value = answer;
+            if (nameInput && !nameInput.value) nameInput.value = name || ''; // Restore saved name
+            if (answerInput) answerInput.value = answer; // Restore saved answer
             showQuestionProgressBar(questionContainer, 100);
-            showSubmissionInfo(timestamp); // Show the green box, but text will be cleared
+            showSubmissionInfo(timestamp); // Show the green box with text and timestamp
             disableFormInputs();
             unlockQuizButton();
             hideReminder();
@@ -503,7 +509,12 @@ function checkUnlockStatus() {
             hideSubmissionInfo();
             enableFormInputs();
             lockQuizButton();
-            showReminder();
+            showReminder(); // Show reminder only if not completed
+            // Pre-fill name for first-time users
+            const currentUser = getCurrentUser();
+            if (currentUser && nameInput && !nameInput.value) {
+                 nameInput.value = currentUser.name || '';
+            }
         }
     } catch (err) { console.error("Error in checkUnlockStatus:", err); }
 }
@@ -518,59 +529,101 @@ function unlockQuizButton() {
     if (startQuiz1Button) {
         startQuiz1Button.classList.remove('locked');
         startQuiz1Button.classList.add('unlocked-success');
-        // ✅ Set href using the correct constant pointing to assessment.html
-        startQuiz1Button.href = QUIZ_REDIRECT_URL;
+        startQuiz1Button.href = QUIZ_REDIRECT_URL; // Set href to assessment.html
      }
     if (quizLockMessage) { quizLockMessage.style.display = 'none'; }
     console.log("Quiz button unlocked.");
 }
 
 function showReminder() {
+    // Only show reminder if goal isn't complete and it's not already visible
     const isGoalComplete = localStorage.getItem(UNLOCK_ANSWER_KEY)?.trim().length >= 20;
     if (quizReminderMessage && !isGoalComplete && quizReminderMessage.style.display !== 'block') {
         console.log("Showing reminder message.");
         quizReminderMessage.style.display = 'block';
-        quizReminderMessage.style.opacity = '1';
-        quizReminderMessage.style.transform = 'translateY(0)';
-        if (reminderTimeoutId) clearTimeout(reminderTimeoutId);
-        reminderTimeoutId = setTimeout(() => { hideReminder(); console.log("Reminder automatically hidden after timeout."); }, REMINDER_TIMEOUT_MS);
-    } else if (isGoalComplete) { hideReminder(); }
-}
-
-function hideReminder() {
-    if (quizReminderMessage) {
+        // Trigger animation
         quizReminderMessage.style.opacity = '0';
         quizReminderMessage.style.transform = 'translateY(-15px)';
-        setTimeout(() => { if (quizReminderMessage && quizReminderMessage.style.opacity === '0') { quizReminderMessage.style.display = 'none'; } }, 300);
+        requestAnimationFrame(() => {
+             requestAnimationFrame(() => { // Double requestAnimationFrame for reliability
+                 quizReminderMessage.style.opacity = '1';
+                 quizReminderMessage.style.transform = 'translateY(0)';
+             });
+        });
+        // Auto-hide timer
+        if (reminderTimeoutId) clearTimeout(reminderTimeoutId);
+        reminderTimeoutId = setTimeout(() => { hideReminder(); console.log("Reminder automatically hidden after timeout."); }, REMINDER_TIMEOUT_MS);
+    } else if (isGoalComplete) {
+        hideReminder(); // Ensure it's hidden if goal is complete
+    }
+}
+
+
+function hideReminder() {
+    if (quizReminderMessage && quizReminderMessage.style.display === 'block') {
+        quizReminderMessage.style.opacity = '0';
+        quizReminderMessage.style.transform = 'translateY(-15px)';
+        // Use transitionend event listener for hiding display property more reliably
+        const hideFunc = () => {
+            if (quizReminderMessage.style.opacity === '0') { // Check again before hiding
+                 quizReminderMessage.style.display = 'none';
+            }
+            quizReminderMessage.removeEventListener('transitionend', hideFunc);
+        };
+         quizReminderMessage.addEventListener('transitionend', hideFunc);
+         // Fallback timeout in case transitionend doesn't fire
+         setTimeout(hideFunc, 750); // Slightly longer than animation
     }
     if (reminderTimeoutId) { clearTimeout(reminderTimeoutId); reminderTimeoutId = null; }
 }
+
 
 function storeAnswersLocally(name, answer, submissionTime) {
     try {
         localStorage.setItem(UNLOCK_NAME_KEY, name);
         localStorage.setItem(UNLOCK_ANSWER_KEY, answer);
         if (submissionTime) { localStorage.setItem(UNLOCK_TIMESTAMP_KEY, submissionTime); }
-        else { localStorage.removeItem(UNLOCK_TIMESTAMP_KEY); }
+        else { localStorage.removeItem(UNLOCK_TIMESTAMP_KEY); } // Clear if no timestamp
         console.log("Stored goal answer locally.", { nameLength: name.length, answerLength: answer.length, submissionTime: submissionTime });
     } catch (e) { console.error("Error storing local data:", e); showError("Could not save progress locally. Please check browser settings.");}
 }
 
-// MODIFIED: This function now only shows the green box and clears any text in the timestamp element.
+// MODIFIED: Formats and displays the local timestamp
 function showSubmissionInfo(timestamp) {
     if (submissionInfoDiv && submissionTimestampElement) {
-        // Clear any previous text content
-        submissionTimestampElement.textContent = '';
-        submissionInfoDiv.style.display = 'block';
-        console.log("Submission info div shown (text cleared). Timestamp provided:", timestamp);
+        let displayTime = 'N/A';
+        if (timestamp) {
+            try {
+                // Format timestamp to local date and time string
+                displayTime = new Date(timestamp).toLocaleString(navigator.language || 'en-US', { // Use browser language preference
+                     dateStyle: 'medium', // e.g., Sep 4, 2023
+                     timeStyle: 'short'   // e.g., 2:30 PM
+                 });
+            }
+            catch (e) {
+                console.warn("Could not format timestamp:", timestamp, e);
+                displayTime = timestamp; // Fallback to raw timestamp string if formatting fails
+            }
+        } else {
+            // Handle case where timestamp is null or undefined (e.g., emergency local save)
+             displayTime = 'Not synced online';
+             console.warn("showSubmissionInfo called without a valid timestamp.");
+        }
+
+        // Set the text content
+        submissionTimestampElement.textContent = `Submitted at: ${displayTime}`;
+        submissionInfoDiv.style.display = 'block'; // Make the div visible
+        console.log("Submission info div shown with timestamp:", displayTime);
     } else {
-        console.warn("Submission info elements not found when trying to show.");
+        console.warn("Submission info elements (div or timestamp p) not found when trying to show.");
     }
 }
 
 
 function hideSubmissionInfo() {
     if (submissionInfoDiv) { submissionInfoDiv.style.display = 'none'; }
+    // Optionally clear text if needed:
+    // if (submissionTimestampElement) submissionTimestampElement.textContent = 'Submitted at:';
 }
 
 function disableFormInputs() {
@@ -588,45 +641,106 @@ function enableFormInputs() {
 function logout() {
     try {
         console.log("Logging out...");
-        if (supabase && supabase.auth && typeof supabase.auth.signOut === 'function') { supabase.auth.signOut().catch(err => console.error("Supabase signout error:", err)); console.log("Supabase sign out requested."); }
-        else { console.warn("Supabase auth or signOut method not available."); }
-        localStorage.removeItem(LOGGED_IN_KEY); localStorage.removeItem(CURRENT_USER_KEY); localStorage.removeItem(UNLOCK_ANSWER_KEY); localStorage.removeItem(UNLOCK_NAME_KEY); localStorage.removeItem(UNLOCK_TIMESTAMP_KEY); localStorage.removeItem(SIGNUP_FLAG_KEY);
-        console.log("Local storage cleared for logout.");
+        // Clear specific keys related to this course/page
+        localStorage.removeItem(LOGGED_IN_KEY);
+        localStorage.removeItem(CURRENT_USER_KEY);
+        localStorage.removeItem(UNLOCK_ANSWER_KEY);
+        localStorage.removeItem(UNLOCK_NAME_KEY);
+        localStorage.removeItem(UNLOCK_TIMESTAMP_KEY);
+        // Keep SIGNUP_FLAG_KEY if you want to remember if they ever signed up
+        // localStorage.removeItem(SIGNUP_FLAG_KEY);
+
+        if (supabase && supabase.auth && typeof supabase.auth.signOut === 'function') {
+            supabase.auth.signOut().catch(err => console.error("Supabase signout error:", err));
+            console.log("Supabase sign out requested.");
+        } else {
+            console.warn("Supabase auth or signOut method not available during logout.");
+        }
+
+        console.log("Relevant local storage cleared for logout.");
         window.location.replace('login.html');
-    } catch (e) { console.error("Logout error:", e); window.location.replace('login.html'); }
+    } catch (e) {
+        console.error("Logout error:", e);
+        // Force redirect even if errors occur
+        window.location.replace('login.html');
+    }
 }
+
 
 function addEventListeners() {
     try {
         if (questionForm) { questionForm.addEventListener('submit', handleFormSubmit); }
         else { console.warn("Question form not found for event listener."); }
+
+        // Escape key to close modal
         document.addEventListener('keydown', handleKeyDown);
+
+        // Input event listeners for validation feedback
         if (nameInput) { nameInput.addEventListener('input', () => hideError(nameInput)); }
         if (answerInput) { answerInput.addEventListener('input', () => hideError(answerInput)); }
+
+        // Click listener for the quiz button (handles locked state)
         if (startQuiz1Button) { startQuiz1Button.addEventListener('click', handleQuizButtonClick); }
         else { console.warn("Start Quiz button not found for event listener."); }
+
+        // Listener for the modal close button
+         const closeModalButton = successModal?.querySelector('.close-modal');
+         if (closeModalButton) {
+             closeModalButton.addEventListener('click', closeModalAndRedirect); // Updated action
+         } else {
+             console.warn("Modal close button not found for event listener.");
+         }
+
     } catch(err) { console.error("Error adding event listeners:", err); }
 }
 
+// MODIFIED: Close modal on escape key
 function handleKeyDown(e) {
-    try { if (e.key === 'Escape' && successModal && successModal.style.display === 'flex') { console.log("Escape key pressed while modal is visible (currently no action)."); } } catch(err){ console.error("Error handling keydown:", err); }
+    try {
+         if (e.key === 'Escape' && successModal && successModal.style.display === 'flex') {
+             console.log("Escape key pressed, closing modal and redirecting.");
+             closeModalAndRedirect();
+         }
+     } catch(err){ console.error("Error handling keydown:", err); }
 }
 
 function handleQuizButtonClick(event) {
     if (startQuiz1Button && startQuiz1Button.classList.contains('locked')) {
-        event.preventDefault(); console.log("Clicked locked quiz button.");
-        if (quizLockMessage) { quizLockMessage.style.animation = 'none'; void quizLockMessage.offsetWidth; quizLockMessage.style.animation = 'pulseLock 0.5s 2 ease-in-out'; setTimeout(() => { if(quizLockMessage) quizLockMessage.style.animation = 'pulseLock 2s infinite ease-in-out'; }, 1000); }
-        if (answerInput && !answerInput.disabled) { answerInput.focus(); showError("Please complete your goal first.", answerInput); }
-    } else { console.log("Clicked unlocked quiz button. Proceeding to assessment."); }
+        event.preventDefault(); // Prevent following the '#' link
+        console.log("Clicked locked quiz button.");
+        // Pulse the lock message for feedback
+        if (quizLockMessage) {
+             quizLockMessage.style.animation = 'none'; // Reset animation
+             void quizLockMessage.offsetWidth; // Trigger reflow
+             quizLockMessage.style.animation = 'pulseLock 0.5s 2 ease-in-out'; // Short pulse
+             // Optionally restore infinite animation after pulse
+             setTimeout(() => {
+                 if(quizLockMessage) quizLockMessage.style.animation = 'pulseLock 2s infinite ease-in-out';
+             }, 1000);
+         }
+        // Focus the answer field and show error if not disabled
+        if (answerInput && !answerInput.disabled) {
+             answerInput.focus();
+             showError("Please complete your goal first.", answerInput);
+        }
+    } else {
+         console.log("Clicked unlocked quiz button. Proceeding to assessment.");
+         // Allow default link behavior (redirect to assessment.html)
+     }
 }
 
 function showError(message, field = null) {
     try {
         if(errorMessageDisplay){ errorMessageDisplay.textContent = message; errorMessageDisplay.style.display = "block"; }
         else { console.warn("Error message display element not found."); }
+        // Clear previous invalid styles
         if (nameInput) nameInput.classList.remove('invalid-field-style');
         if (answerInput) answerInput.classList.remove('invalid-field-style');
-        if(field && typeof field.classList !== 'undefined'){ field.classList.add('invalid-field-style'); field.focus(); }
+        // Apply invalid style to the specific field
+        if(field && typeof field.classList !== 'undefined'){
+             field.classList.add('invalid-field-style');
+             field.focus(); // Focus the invalid field
+        }
         console.error("Validation Error:", message, field ? `Field: ${field.id}` : '');
     } catch(err){ console.error("Error displaying validation error:", err); }
 }
@@ -634,47 +748,96 @@ function showError(message, field = null) {
 function hideError(field = null) {
     try {
         if(errorMessageDisplay) { errorMessageDisplay.style.display = "none"; errorMessageDisplay.textContent = ""; }
+        // Remove invalid style from the specific field or all fields
         if(field && typeof field.classList !== 'undefined'){ field.classList.remove('invalid-field-style'); }
-        else { if (nameInput) nameInput.classList.remove('invalid-field-style'); if (answerInput) answerInput.classList.remove('invalid-field-style'); }
+        else { // Remove from all if no specific field provided
+             if (nameInput) nameInput.classList.remove('invalid-field-style');
+             if (answerInput) answerInput.classList.remove('invalid-field-style');
+         }
     } catch(err){ console.error("Error hiding error message/style:", err); }
 }
 
-// ✅ This function correctly uses QUIZ_REDIRECT_URL which points to 'assessment.html'
-function showRedirectConfirmationModal() {
+// MODIFIED: Renamed and updated content for the success pop-up
+let redirectTimeoutId = null; // To manage the redirect timer
+
+function showGoalSuccessPopup() {
     try {
         if (!successModal) { console.warn("Success modal element not found. Redirecting directly."); window.location.href = QUIZ_REDIRECT_URL; return; }
         const modalContent = successModal.querySelector('.modal-content');
         if (!modalContent) { console.warn("Modal content area not found. Redirecting directly."); window.location.href = QUIZ_REDIRECT_URL; return; }
+
         const heading = modalContent.querySelector('h3#modalGreeting');
         const paragraph = modalContent.querySelector('p');
-        if (heading) { heading.textContent = "Goal Submitted!"; heading.style.color = '#27ae60'; }
-        if (paragraph) { paragraph.textContent = `Thank you! You've completed the first step and unlocked the quiz. Redirecting you now...`; paragraph.style.marginTop = '15px'; }
-        successModal.style.display = 'flex'; successModal.style.opacity = '1';
-        console.log(`Modal shown. Redirecting to ${QUIZ_REDIRECT_URL} in ${REDIRECT_DELAY_MS}ms.`);
-        setTimeout(() => { window.location.href = QUIZ_REDIRECT_URL; }, REDIRECT_DELAY_MS);
-    } catch (err) { console.error("Error displaying redirect confirmation modal:", err); alert("Success! Your goal has been submitted. Redirecting to the first quiz..."); window.location.href = QUIZ_REDIRECT_URL; }
+
+        // Set the new pop-up message
+        if (heading) { heading.textContent = "Success!"; heading.style.color = '#27ae60'; } // Optional: Keep a simple heading
+        if (paragraph) { paragraph.innerHTML = `🎯 Your goal has been submitted successfully. Thank you!`; paragraph.style.marginTop = '15px'; paragraph.style.fontSize = '1.1em'; } // Use innerHTML for emoji
+
+        successModal.style.display = 'flex';
+        successModal.style.opacity = '1'; // Ensure it's visible
+
+        console.log(`Success pop-up shown. Redirecting to ${QUIZ_REDIRECT_URL} in ${REDIRECT_DELAY_MS}ms unless closed.`);
+
+        // Clear any existing redirect timer
+        if (redirectTimeoutId) clearTimeout(redirectTimeoutId);
+
+        // Set a timer to redirect automatically
+        redirectTimeoutId = setTimeout(() => {
+             console.log("Automatic redirect timer fired.");
+             window.location.href = QUIZ_REDIRECT_URL;
+         }, REDIRECT_DELAY_MS);
+
+    } catch (err) {
+        console.error("Error displaying goal success pop-up:", err);
+        // Fallback: Alert and immediate redirect
+        alert("🎯 Your goal has been submitted successfully. Thank you! Redirecting...");
+        window.location.href = QUIZ_REDIRECT_URL;
+    }
 }
 
-function closeModal() {
-    try { if(successModal) { successModal.style.display='none'; } console.log("Modal closed (function called)."); } catch(err){ console.error("Error closing modal:", err); }
+// MODIFIED: Function to close modal AND redirect immediately
+function closeModalAndRedirect() {
+    try {
+        // Clear the automatic redirect timer if it exists
+        if (redirectTimeoutId) {
+             clearTimeout(redirectTimeoutId);
+             redirectTimeoutId = null;
+             console.log("Automatic redirect timer cleared by manual close.");
+         }
+         // Hide the modal
+        if (successModal) {
+             successModal.style.display = 'none';
+         }
+        console.log("Modal closed manually. Redirecting now...");
+        // Redirect immediately
+        window.location.href = QUIZ_REDIRECT_URL;
+     } catch(err){ console.error("Error closing modal and redirecting:", err);
+         // Force redirect even on error
+         window.location.href = QUIZ_REDIRECT_URL;
+     }
 }
 
 
 
 async function updateUserProgress(userEmail, sectionId, questionId, questionText) {
+    // This function might be redundant if sendToSupabase handles progress,
+    // but kept here for potential future separation or fallback.
     if (!supabase) {
         console.error("updateUserProgress: Supabase client not available.");
         return false;
     }
-
     if (!userEmail || !sectionId || !questionId || !questionText) {
          console.error("updateUserProgress: Invalid parameters provided.", { userEmail, sectionId, questionId, questionText });
          return false;
     }
 
     const now = new Date().toISOString();
+    let userId = null;
+    try { userId = getCurrentUser()?.id; } catch { console.warn("Could not get user ID for progress update."); }
+
     const progressData = {
       email: userEmail,
+      user_id: userId, // Include user_id if available
       section_id: sectionId,
       section_type: 'goal',
       section_title: SECTION_TITLE_INTRO_GOAL,
@@ -682,40 +845,25 @@ async function updateUserProgress(userEmail, sectionId, questionId, questionText
       question_text: questionText,
       page: CURRENT_PAGE,
       progress_percent: 100,
-      progress: 100, // Assuming goal completion is 100% progress for this section
-      score: 100,     // Assuming goal completion gives a 'score' of 100
+      progress: 1, // 1 step completed
+      score: 100, // Assume 100 for goal completion
       status: 'complete',
       submitted_at: now,
       updated_at: now,
-      is_passed: true, // Goal completion is considered passing
-      user_id: null // Will be filled if available from currentUser
+      is_passed: true,
     };
-
-    // Attempt to get user_id if currentUser is available
-    const currentUser = getCurrentUser();
-    if (currentUser && currentUser.id) {
-      progressData.user_id = currentUser.id;
-    } else {
-        console.warn("User ID not found in currentUser for user_progress update.");
-        // Decide if you want to proceed without user_id or handle differently
-    }
-
 
     console.log(`Attempting to upsert data into 'user_progress' table:`, JSON.stringify(progressData, null, 2));
 
     try {
-        // Using email and section_id as conflict target seems reasonable for this page's goal
         const { error } = await supabase
             .from('user_progress')
-            .upsert([progressData], {
-                 onConflict: 'email, section_id' // Adjust if your primary key / unique constraint is different
-             });
+            .upsert([progressData], { onConflict: 'user_id, section_id' }); // Ensure this matches your constraints
 
         if (error) {
             console.error('Supabase user_progress upsert error details:', error);
             return false;
         }
-
         console.log(`Successfully upserted user_progress for section ${sectionId}.`);
         return true;
 
@@ -733,6 +881,7 @@ function updateLocalSectionProgress(sectionId) {
         const answer = localStorage.getItem(UNLOCK_ANSWER_KEY);
         sectionProgress = (answer && answer.trim().length >= 20) ? 100 : 0;
     } else {
+        // Handle other sections if needed later
         console.warn(`Progress calculation logic not yet defined for section: ${sectionId}`);
         sectionProgress = currentUser.progress?.[sectionId] || 0;
     }
@@ -759,7 +908,7 @@ function hideQuestionProgressBar(containerElement) {
     else { console.warn("Progress bar container not found within:", containerElement); }
 }
 
-// MODIFIED: Calls the *global* window.sendToSupabase function
+// MODIFIED: Calls the global sendToSupabase and the new success pop-up
 async function handleFormSubmit(event) {
     event.preventDefault();
     console.log("--- Starting Form Submission Process ---");
@@ -768,9 +917,9 @@ async function handleFormSubmit(event) {
     let submissionTimestamp = null;
     const questionContainer = questionForm?.closest('.question');
 
-    // --- Essential Element Check ---
-    if (!nameInput || !answerInput || !userEmailDisplay || !submitBtn || !errorMessageDisplay || !questionForm || !questionPromptElement || !questionContainer || !window.sendToSupabase) { // Added check for global function
-        console.error("handleFormSubmit Error: One or more essential page elements or the global sendToSupabase function are missing.");
+    // --- Essential Element & Function Check ---
+    if (!nameInput || !answerInput || !userEmailDisplay || !submitBtn || !errorMessageDisplay || !questionForm || !questionPromptElement || !questionContainer || !window.sendToSupabase || !showGoalSuccessPopup) {
+        console.error("handleFormSubmit Error: One or more essential page elements or required functions are missing.");
         showError("Page error: Cannot process submission. Please refresh.");
         return;
     }
@@ -802,20 +951,18 @@ async function handleFormSubmit(event) {
     console.log("Form validation successful.");
 
     setButtonLoading(true);
-    hideReminder();
+    hideReminder(); // Hide reminder on submission attempt
 
     try {
-        // --- Prepare Data for Supabase ---
+        // --- Prepare Data Object ---
         const assessmentData = {
-            name: name, // Will be overridden by currentUser.name inside sendToSupabase if possible
-            email: email, // Will be overridden by currentUser.email inside sendToSupabase
+            name: name, // Will be potentially overridden by currentUser in sendToSupabase
+            email: email, // Will be potentially overridden by currentUser in sendToSupabase
             answer: answer,
             question_id: QUESTION_ID,
-            // questionText is derived inside sendToSupabase from DOM
             section_id: SECTION_ID,
             page: CURRENT_PAGE,
             type: 'goal'
-            // score & completionStatus are calculated inside sendToSupabase
         };
         console.log("Prepared data object for sendToSupabase:", JSON.stringify(assessmentData, null, 2));
 
@@ -823,65 +970,34 @@ async function handleFormSubmit(event) {
         console.log("Attempting to send assessment data to Supabase (using global sendToSupabase)...");
         const { success: assessmentSuccess, submitted_at } = await window.sendToSupabase(assessmentData);
 
-        if (!assessmentSuccess) {
-            console.error("Supabase submission failed according to sendToSupabase function.");
-            // Optionally show a non-blocking error here, but proceed with local save attempt
-            // showError("Failed to save goal online. Progress saved locally where possible.");
-        } else {
-            console.log(`Supabase submission reported success. Submitted at: ${submitted_at}`);
-        }
-
-        // --- Local Save (Regardless of DB success, using timestamp if available) ---
+        // --- Local Save (Always attempt, use timestamp if available) ---
         console.log("Attempting to save data locally...");
         storeAnswersLocally(name, answer, submitted_at); // Use timestamp from DB if successful, otherwise null
         isLocallySaved = true;
-        submissionTimestamp = submitted_at; // Keep track of the timestamp used
-        console.log(`Local save completed. Timestamp used for local storage: ${submissionTimestamp}`);
-
-        // --- Update User Progress (Supabase - Redundant with sendToSupabase's insert?) ---
-        // Note: The global sendToSupabase already inserts into user_progress.
-        // Calling updateUserProgress here might be redundant or cause conflicts.
-        // Let's comment it out for now, assuming sendToSupabase handles progress correctly.
-        /*
-        if (supabase && assessmentSuccess) { // Only attempt if DB save was initially successful
-            console.log("Attempting to update user_progress table in Supabase (might be redundant)...");
-            const progressUpdateSuccess = await updateUserProgress(email, SECTION_ID, QUESTION_ID, questionText);
-            if (!progressUpdateSuccess) {
-                console.warn("Failed to update user_progress table in Supabase (potential redundancy). Local progress is saved.");
-            } else {
-                console.log("Successfully updated user_progress table (potentially redundant).");
-            }
-        } else if (!assessmentSuccess) {
-             console.warn("Skipping user_progress update due to initial assessment save failure.");
-        } else {
-             console.warn("Supabase client not available, skipping user_progress update.");
-        }
-        */
-       console.log("Skipping separate user_progress update call; assuming sendToSupabase handled it.");
-
+        submissionTimestamp = submitted_at; // Store the timestamp used
+        console.log(`Local save completed. Timestamp used: ${submissionTimestamp}`);
 
         // --- Update Local User Object Progress ---
         updateLocalSectionProgress(SECTION_ID);
 
-        // --- Update UI ---
+        // --- Update UI (Progress Bar, Submission Info Box, Form State, Quiz Button) ---
         console.log("Updating UI elements...");
         showQuestionProgressBar(questionContainer, 100);
-        showSubmissionInfo(submissionTimestamp); // Show green box (text cleared by function)
+        showSubmissionInfo(submissionTimestamp); // Show green box with timestamp
         disableFormInputs();
         unlockQuizButton();
 
-        // --- Show Modal & Redirect (Only on DB Success) ---
-        // ✅ This function redirects to QUIZ_REDIRECT_URL ('assessment.html')
+        // --- Show Success Pop-up (Only on DB Success) ---
         if (assessmentSuccess) {
-            console.log("Showing redirect confirmation modal...");
-            showRedirectConfirmationModal();
+            console.log("Database submission successful. Showing success pop-up...");
+            showGoalSuccessPopup(); // Call the modified pop-up function
         } else {
-            console.warn("DB submission failed, not showing redirect modal. UI updated based on local save.");
-            // Give feedback that online save failed but local is okay?
-             showError("Failed to save goal online. Your progress is saved on this device. You can now proceed to the quiz.", null); // Show general error
+            console.warn("DB submission failed. Skipping success pop-up.");
+            // Provide feedback that online save failed but local worked
+             showError("Failed to save goal online, but progress saved on this device. You can proceed to the quiz.", null);
         }
 
-        console.log(`--- Form Submission Process Completed (Assessment Success: ${assessmentSuccess}) ---`);
+        console.log(`--- Form Submission Process Completed (DB Success: ${assessmentSuccess}) ---`);
 
     } catch (err) {
         console.error("CRITICAL ERROR during form submission process:", err);
@@ -890,30 +1006,30 @@ async function handleFormSubmit(event) {
         if (!isLocallySaved && name && answer && answer.length >= 20) {
             try {
                 console.warn("Attempting emergency local save due to error...");
-                storeAnswersLocally(name, answer, null); // No reliable timestamp on error
+                storeAnswersLocally(name, answer, null); // No reliable timestamp
                 isLocallySaved = true;
                 updateLocalSectionProgress(SECTION_ID);
                 const container = questionForm?.closest('.question');
                 if (container) showQuestionProgressBar(container, 100);
-                showSubmissionInfo(null); // Show green box (text cleared)
+                showSubmissionInfo(null); // Show green box, timestamp will indicate issue
                 disableFormInputs();
                 unlockQuizButton();
-                showError("An error occurred, but your progress was saved locally. You can proceed.", null); // Update error message
+                showError("An error occurred, but progress saved locally. You can proceed.", null);
              } catch (localSaveError) {
                  console.error("Failed to perform emergency local save:", localSaveError);
-                 showError(`An critical error occurred: ${err.message}. Local save also failed. Please refresh.`, null);
+                 showError(`A critical error occurred: ${err.message}. Local save also failed. Please refresh.`, null);
              }
         }
          console.log("--- Form Submission Process Failed due to Error ---");
 
     } finally {
         console.log("Executing 'finally' block of form submission.");
-        // Only re-enable button if local save didn't happen (implies total failure)
+        // Only re-enable button if local save didn't happen (implies total failure before local save)
         if (!isLocallySaved) {
-             setButtonLoading(false); // Re-enable button if nothing saved
+             setButtonLoading(false); // Re-enable button
              console.log("Submission failed AND local save didn't complete. Form re-enabled.");
         } else {
-             // Keep form disabled if locally saved, even if DB failed or threw error after local save
+             // Keep form disabled if locally saved, even if DB failed
              disableFormInputs();
              console.log("Submission process finished. Form remains disabled (at least locally saved).");
         }
@@ -926,12 +1042,12 @@ function setButtonLoading(isLoading) {
     submitBtn.disabled = isLoading;
     if (isLoading) { submitBtn.textContent = 'Submitting...'; submitBtn.style.background = '#bdc3c7'; submitBtn.style.color = '#7f8c8d'; submitBtn.style.cursor = 'wait'; submitBtn.style.boxShadow = 'none'; submitBtn.style.transform = 'none'; }
     else {
-        // After loading, check if the form should remain disabled (i.e., if goal is complete locally)
+        // After loading state ends, check completion status to set final button state
         const isGoalCompleteLocally = localStorage.getItem(UNLOCK_ANSWER_KEY)?.trim().length >= 20;
         if (isGoalCompleteLocally) {
-            disableFormInputs(); // Keep disabled if complete
+            disableFormInputs(); // Ensure it stays disabled if completed
         } else {
-            enableFormInputs(); // Re-enable if somehow not complete
+            enableFormInputs(); // Re-enable if somehow submission failed before completion
         }
     }
 }
@@ -943,8 +1059,8 @@ function initializePageContent(currentUser) {
         displayUserInfo(currentUser);
         if (questionTitleElement) questionTitleElement.textContent = "Your First Step: Set Your Goal";
         if (questionPromptElement) questionPromptElement.textContent = QUESTION_TEXT_INTRO_GOAL;
-        checkUnlockStatus();
-        addEventListeners();
+        checkUnlockStatus(); // Sets initial form/button states based on local storage
+        addEventListeners(); // Add listeners after elements are assigned
         console.log(`Page content initialized for user: ${currentUser.email}.`);
     } catch (error) { console.error("Error during page content initialization:", error); showError(`Error initializing page: ${error.message}. Try refreshing.`); if(submitBtn) submitBtn.disabled = true; if(startQuiz1Button) lockQuizButton(); }
 }
@@ -964,7 +1080,7 @@ document.addEventListener('DOMContentLoaded', function() {
             answerInput = document.getElementById('answer');
             errorMessageDisplay = document.getElementById('error-message');
             successModal = document.getElementById('successModal');
-            modalGreeting = document.getElementById('modalGreeting');
+            modalGreeting = document.getElementById('modalGreeting'); // Although content changed, reference kept
             submitBtn = document.getElementById('submitBtn');
             progressBarContainer = document.getElementById('progress-container-intro-goal');
             progressBar = document.getElementById('progress-bar-intro-goal');
@@ -972,7 +1088,7 @@ document.addEventListener('DOMContentLoaded', function() {
             questionTitleElement = document.getElementById('questionTitle');
             questionPromptElement = document.getElementById('questionPrompt');
             submissionInfoDiv = document.getElementById('submissionInfo');
-            submissionTimestampElement = document.getElementById('submissionTimestamp'); // Reference kept
+            submissionTimestampElement = document.getElementById('submissionTimestamp'); // Reference needed for showSubmissionInfo
             quizReminderMessage = document.getElementById('quizReminderMessage');
             quizIntroContainer = document.getElementById('quizIntroContainer');
             startQuiz1Button = document.getElementById('startQuiz1Button');
@@ -990,23 +1106,20 @@ document.addEventListener('DOMContentLoaded', function() {
                 console.error("Initialization Error: Supabase client is not available. Online features disabled.");
                 if(submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Service Unavailable'; }
                 lockQuizButton(); if(quizLockMessage) quizLockMessage.textContent = "Course service unavailable.";
-                showError("Cannot connect to the course service. Please check connection and refresh. Online progress saving is disabled.");
-                // Do not throw error here, allow local functionality if possible
+                showError("Cannot connect to the course service. Progress may not save online. Please check connection and refresh.", null); // Use showError
             }
 
              // --- Check sendToSupabase Function ---
              if (typeof window.sendToSupabase !== 'function') {
-                 throw new Error("Initialization failed: Global function 'sendToSupabase' (from second script block) not found.");
+                 throw new Error("Initialization failed: Global function 'sendToSupabase' not found.");
              }
              console.log("Global function 'sendToSupabase' found.");
 
 
             // --- Get Current User ---
             const currentUser = getCurrentUser();
-            if (!currentUser) { throw new Error("User data is missing or invalid after initial checks. Cannot proceed with initialization."); }
+            if (!currentUser) { throw new Error("User data is missing or invalid. Cannot proceed with initialization."); }
             console.log(`Initializing content for user: ${currentUser.email}. Supabase available: ${!!supabase}`);
-            const isAdmin = currentUser.email === "m.elsayed@thechefz.co"; // Check admin status here if needed elsewhere
-            if (isAdmin) console.log("Admin user detected.");
 
             // --- Initialize Page ---
             initializePageContent(currentUser);
@@ -1026,141 +1139,116 @@ document.addEventListener('DOMContentLoaded', function() {
 </html>
 
 <script>
-// MODIFIED: Removed redundant success message creation and timeout redirect.
+// Global function to handle Supabase submission
 // Returns { success: boolean, submitted_at: string | null }
 async function sendToSupabase(submissionData) {
-    // Make sure Supabase client is available globally
     if (!window.supabase) {
         console.error("sendToSupabase (global): Supabase client is not available.");
-        alert("Cannot connect to the database. Please check your connection.");
+        // Avoid alert here, let caller handle UI feedback
         return { success: false, submitted_at: null };
     }
 
     let currentUser = null;
     try {
-        currentUser = JSON.parse(localStorage.getItem('currentUser') || '{}');
+        currentUser = JSON.parse(localStorage.getItem(CURRENT_USER_KEY) || '{}');
     } catch (e) {
          console.error("sendToSupabase (global): Error parsing currentUser from localStorage", e);
-         alert("User info corrupted. Please log in again.");
-         window.logout(); // Force logout
-         return { success: false, submitted_at: null };
+         return { success: false, submitted_at: null }; // Indicate failure
     }
-
 
     if (!currentUser || !currentUser.email || !currentUser.id) {
         console.error("sendToSupabase (global): User info missing in localStorage (email or id).", currentUser);
-        alert("User info missing. Please log in again.");
-        // Optionally redirect to login or call logout()
-        window.logout(); // Force logout
-        return { success: false, submitted_at: null };
+        // Avoid alert, let caller handle UI/redirect
+        return { success: false, submitted_at: null }; // Indicate failure
     }
 
     const now = new Date();
-    // const submittedAtLocal = now.toLocaleString("en-GB", { timeZone: "Africa/Cairo" }); // Not used anymore
+    const timestampISO = now.toISOString();
 
-    // Get question text from DOM (ensure the ID exists)
     const questionPromptElement = document.getElementById("questionPrompt");
-    const questionText = questionPromptElement ? questionPromptElement.textContent.trim() : "Unnamed question - Goal Setting"; // Default if element not found
+    const questionText = questionPromptElement ? questionPromptElement.textContent.trim() : QUESTION_TEXT_INTRO_GOAL; // Use constant as fallback
 
-    // Determine correctness (simply having an answer for the goal)
     const hasAnswer = !!submissionData.answer?.trim();
     const calculatedIsCorrect = hasAnswer;
     const calculatedScore = calculatedIsCorrect ? 100 : 0;
 
     // Prepare data for 'assessments' table
     const assessmentEntry = {
-        name: currentUser.name || "Anonymous User", // Use name from currentUser
+        name: currentUser.name || "Anonymous User",
         user_email: currentUser.email,
         user_id: currentUser.id,
         answer: submissionData.answer || "N/A",
-        goal_answer: submissionData.answer || "N/A", // Specific field if needed
-        submitted_at: now.toISOString(),
-        created_at: now.toISOString(), // Often same as submitted_at for inserts
+        goal_answer: submissionData.answer || "N/A",
+        submitted_at: timestampISO,
+        created_at: timestampISO,
         type: submissionData.type || "goal",
-        page: submissionData.page || CURRENT_PAGE || "index", // Use constant if available
-        section_id: submissionData.section_id || SECTION_ID || "index", // Use constant if available
-        question_id: submissionData.question_id || QUESTION_ID || "intro-goal", // Use constant if available
+        page: submissionData.page || CURRENT_PAGE,
+        section_id: submissionData.section_id || SECTION_ID,
+        question_id: submissionData.question_id || QUESTION_ID,
         question_text: questionText,
-        completion_status: "completed", // Fixed status for goal
+        completion_status: "completed",
         is_correct: calculatedIsCorrect,
         score: calculatedScore
     };
-    console.log("sendToSupabase (global): Data prepared for assessments table:", assessmentEntry);
-
+    console.log("sendToSupabase (global): Data prepared for assessments:", assessmentEntry);
 
     // Prepare data for 'user_progress' table
     const progressEntry = {
         user_id: currentUser.id,
         email: currentUser.email,
-        question_id: assessmentEntry.question_id, // Use consistent ID
+        question_id: assessmentEntry.question_id,
         question_text: assessmentEntry.question_text,
         page: assessmentEntry.page,
         section_id: assessmentEntry.section_id,
         section_type: assessmentEntry.type,
-        section_title: SECTION_TITLE_INTRO_GOAL || "Course Introduction Goal", // Use constant or default
+        section_title: SECTION_TITLE_INTRO_GOAL, // Use constant
         score: assessmentEntry.score,
         status: assessmentEntry.completion_status,
-        progress: 1, // Represents 1 task completed (the goal)
-        progress_percent: 100, // 100% completion for this specific task/section
-        submitted_at: assessmentEntry.submitted_at,
-        updated_at: now.toISOString(), // Use current time for update
-        is_passed: assessmentEntry.is_correct // Pass if correct/answered
+        progress: 1,
+        progress_percent: 100,
+        submitted_at: timestampISO,
+        updated_at: timestampISO,
+        is_passed: assessmentEntry.is_correct
     };
-     console.log("sendToSupabase (global): Data prepared for user_progress table:", progressEntry);
+     console.log("sendToSupabase (global): Data prepared for user_progress:", progressEntry);
 
 
     try {
         // --- Upsert into 'assessments' table ---
-        // Using user_id and question_id for conflict resolution seems robust
         console.log("sendToSupabase (global): Upserting into assessments...");
         const { error: assessmentError } = await window.supabase
             .from("assessments")
-            .upsert([assessmentEntry], {
-                 onConflict: 'user_id, question_id' // Adjust if your constraint is different
-             });
+            .upsert([assessmentEntry], { onConflict: 'user_id, question_id' });
 
         if (assessmentError) {
             console.error("sendToSupabase (global): Error upserting assessment:", assessmentError);
-            // Decide if this is a fatal error or if progress update can still proceed
-            // Let's treat it as non-fatal for now, but log it
-            // alert("Submission failed (assessment): " + assessmentError.message);
-            // return { success: false, submitted_at: null }; // Treat as failure if assessment save fails
+            // Consider this a failure for the overall operation
+            return { success: false, submitted_at: null };
         } else {
              console.log("sendToSupabase (global): Assessment upsert successful.");
         }
 
-
         // --- Upsert into 'user_progress' table ---
-        // Using user_id and section_id for conflict resolution
         console.log("sendToSupabase (global): Upserting into user_progress...");
         const { error: progressError } = await window.supabase
             .from("user_progress")
-            .upsert([progressEntry], {
-                onConflict: 'user_id, section_id' // Assumes this is the unique constraint for progress
-            });
+            .upsert([progressEntry], { onConflict: 'user_id, section_id' }); // Check constraint
 
         if (progressError) {
             console.error("sendToSupabase (global): Error upserting user progress:", progressError);
-            // This might be considered a more critical failure for overall tracking
-            alert("Submission failed (progress tracking): " + progressError.message);
-            return { success: false, submitted_at: null }; // Return failure if progress save fails
+            // Consider this a failure
+            return { success: false, submitted_at: null };
         } else {
             console.log("sendToSupabase (global): User progress upsert successful.");
         }
 
-        // --- If both (or at least progress) succeeded ---
+        // --- If both succeeded ---
         console.log("sendToSupabase (global): Submission process completed successfully in DB.");
-
-        // REMOVED: Redundant success message and redirect timeout
-        // const successMessage = document.createElement('div'); ...
-        // setTimeout(...);
-
-        // Return success status and the timestamp
-        return { success: true, submitted_at: now.toISOString() };
+        return { success: true, submitted_at: timestampISO }; // Return success and the timestamp
 
     } catch (err) {
-        console.error("sendToSupabase (global): Unexpected error during database operations:", err);
-        alert("An unexpected error occurred while saving your progress online. Please try again later.");
+        console.error("sendToSupabase (global): Unexpected error during DB operations:", err);
+        // Return failure on unexpected errors
         return { success: false, submitted_at: null };
     }
 }
