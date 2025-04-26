@@ -272,6 +272,8 @@ p { margin-bottom: 15px; color: #555e68; /* Slightly softer black */ line-height
     border-radius: 0 8px 8px 0;
     font-size: 14px;
     display: none; /* Initially hidden */
+    /* Adjusted: Removed fixed height, relies on padding */
+    min-height: 30px; /* Set a minimum height if needed */
 }
 .submission-info p {
     margin-bottom: 5px;
@@ -345,8 +347,8 @@ p { margin-bottom: 15px; color: #555e68; /* Slightly softer black */ line-height
     </div>
     <!-- Submission Info Area -->
     <div class="submission-info" id="submissionInfo">
-        <p><strong>Goal Submitted Successfully!</strong></p>
-        <p id="submissionTimestamp">Your goal has been submitted successfully. Thank you!</p>
+        <!-- Text content removed as requested -->
+        <p id="submissionTimestamp"></p> <!-- Kept for JS reference, but content will be cleared by JS -->
     </div>
 </div>
 
@@ -491,7 +493,7 @@ function checkUnlockStatus() {
             if (nameInput && !nameInput.value) nameInput.value = name || '';
             if (answerInput) answerInput.value = answer;
             showQuestionProgressBar(questionContainer, 100);
-            showSubmissionInfo(timestamp); // Use timestamp from local storage
+            showSubmissionInfo(timestamp); // Show the green box, but text will be cleared
             disableFormInputs();
             unlockQuizButton();
             hideReminder();
@@ -554,27 +556,15 @@ function storeAnswersLocally(name, answer, submissionTime) {
     } catch (e) { console.error("Error storing local data:", e); showError("Could not save progress locally. Please check browser settings.");}
 }
 
+// MODIFIED: This function now only shows the green box and clears any text in the timestamp element.
 function showSubmissionInfo(timestamp) {
     if (submissionInfoDiv && submissionTimestampElement) {
-        let displayTime = 'N/A';
-        if (timestamp) {
-            try {
-                displayTime = new Date(timestamp).toLocaleString('en-US', {
-                     dateStyle: 'medium',
-                     timeStyle: 'short'
-                 });
-            }
-            catch (e) {
-                console.warn("Could not format timestamp:", timestamp, e);
-                displayTime = timestamp; // Fallback to raw timestamp string
-            }
-        } else {
-            displayTime = '';
-        }
-        submissionTimestampElement.textContent = `Submitted at: ${displayTime}`;
+        // Clear any previous text content
+        submissionTimestampElement.textContent = '';
         submissionInfoDiv.style.display = 'block';
+        console.log("Submission info div shown (text cleared). Timestamp provided:", timestamp);
     } else {
-        console.warn("Submission info elements not found.");
+        console.warn("Submission info elements not found when trying to show.");
     }
 }
 
@@ -692,26 +682,37 @@ async function updateUserProgress(userEmail, sectionId, questionId, questionText
       question_text: questionText,
       page: CURRENT_PAGE,
       progress_percent: 100,
-      progress: 100,
-      score: 100,
+      progress: 100, // Assuming goal completion is 100% progress for this section
+      score: 100,     // Assuming goal completion gives a 'score' of 100
       status: 'complete',
       submitted_at: now,
       updated_at: now,
-      is_passed: true,
-      user_id: null
+      is_passed: true, // Goal completion is considered passing
+      user_id: null // Will be filled if available from currentUser
     };
+
+    // Attempt to get user_id if currentUser is available
+    const currentUser = getCurrentUser();
+    if (currentUser && currentUser.id) {
+      progressData.user_id = currentUser.id;
+    } else {
+        console.warn("User ID not found in currentUser for user_progress update.");
+        // Decide if you want to proceed without user_id or handle differently
+    }
+
 
     console.log(`Attempting to upsert data into 'user_progress' table:`, JSON.stringify(progressData, null, 2));
 
     try {
+        // Using email and section_id as conflict target seems reasonable for this page's goal
         const { error } = await supabase
             .from('user_progress')
             .upsert([progressData], {
-                 onConflict: 'email,section_id'
+                 onConflict: 'email, section_id' // Adjust if your primary key / unique constraint is different
              });
 
         if (error) {
-            console.error('Supabase upsert error details:', error);
+            console.error('Supabase user_progress upsert error details:', error);
             return false;
         }
 
@@ -726,8 +727,6 @@ async function updateUserProgress(userEmail, sectionId, questionId, questionText
 
 function updateLocalSectionProgress(sectionId) {
     const currentUser = getCurrentUser();
-            const isAdmin = currentUser.email === "m.elsayed@thechefz.co";
-            if (isAdmin) console.log("Admin user detected.");
     if (!currentUser) { console.warn("updateLocalSectionProgress: Cannot update, user not found."); return 0; }
     let sectionProgress = 0;
     if (sectionId === SECTION_ID) {
@@ -760,6 +759,7 @@ function hideQuestionProgressBar(containerElement) {
     else { console.warn("Progress bar container not found within:", containerElement); }
 }
 
+// MODIFIED: Calls the *global* window.sendToSupabase function
 async function handleFormSubmit(event) {
     event.preventDefault();
     console.log("--- Starting Form Submission Process ---");
@@ -768,8 +768,9 @@ async function handleFormSubmit(event) {
     let submissionTimestamp = null;
     const questionContainer = questionForm?.closest('.question');
 
-    if (!nameInput || !answerInput || !userEmailDisplay || !submitBtn || !errorMessageDisplay || !questionForm || !questionPromptElement || !questionContainer) {
-        console.error("handleFormSubmit Error: One or more essential page elements are missing.");
+    // --- Essential Element Check ---
+    if (!nameInput || !answerInput || !userEmailDisplay || !submitBtn || !errorMessageDisplay || !questionForm || !questionPromptElement || !questionContainer || !window.sendToSupabase) { // Added check for global function
+        console.error("handleFormSubmit Error: One or more essential page elements or the global sendToSupabase function are missing.");
         showError("Page error: Cannot process submission. Please refresh.");
         return;
     }
@@ -779,6 +780,7 @@ async function handleFormSubmit(event) {
         return;
     }
 
+    // --- Form Data & Validation ---
     const name = nameInput.value.trim();
     const answer = answerInput.value.trim();
     let email = userEmailDisplay.textContent.trim();
@@ -791,8 +793,6 @@ async function handleFormSubmit(event) {
     if (answer.length < 20) { showError("Your goal needs to be at least 20 characters long.", answerInput); isValid = false; }
     if (!email || !email.includes('@')) {
         const currentUser = getCurrentUser();
-            const isAdmin = currentUser.email === "m.elsayed@thechefz.co";
-            if (isAdmin) console.log("Admin user detected.");
         const backupEmail = currentUser?.email;
         if (backupEmail && backupEmail.includes('@')) { email = backupEmail; console.warn("Using backup email from currentUser object."); }
         else { showError("Your email address seems invalid. Please log out and back in.", userEmailDisplay); isValid = false; }
@@ -805,53 +805,80 @@ async function handleFormSubmit(event) {
     hideReminder();
 
     try {
+        // --- Prepare Data for Supabase ---
         const assessmentData = {
-            name: name,
-            email: email,
+            name: name, // Will be overridden by currentUser.name inside sendToSupabase if possible
+            email: email, // Will be overridden by currentUser.email inside sendToSupabase
             answer: answer,
-            questionId: QUESTION_ID,
-            questionText: questionText,
-            sectionId: SECTION_ID,
-            score: 100,
-            completionStatus: 'Complete'
+            question_id: QUESTION_ID,
+            // questionText is derived inside sendToSupabase from DOM
+            section_id: SECTION_ID,
+            page: CURRENT_PAGE,
+            type: 'goal'
+            // score & completionStatus are calculated inside sendToSupabase
         };
-        console.log("Prepared assessment data:", JSON.stringify(assessmentData, null, 2));
+        console.log("Prepared data object for sendToSupabase:", JSON.stringify(assessmentData, null, 2));
 
-        console.log("Attempting to send assessment data to Supabase...");
-        const { success: assessmentSuccess, submitted_at } = await sendToSupabase(assessmentData);
+        // --- Call GLOBAL sendToSupabase function ---
+        console.log("Attempting to send assessment data to Supabase (using global sendToSupabase)...");
+        const { success: assessmentSuccess, submitted_at } = await window.sendToSupabase(assessmentData);
 
+        if (!assessmentSuccess) {
+            console.error("Supabase submission failed according to sendToSupabase function.");
+            // Optionally show a non-blocking error here, but proceed with local save attempt
+            // showError("Failed to save goal online. Progress saved locally where possible.");
+        } else {
+            console.log(`Supabase submission reported success. Submitted at: ${submitted_at}`);
+        }
+
+        // --- Local Save (Regardless of DB success, using timestamp if available) ---
         console.log("Attempting to save data locally...");
-        storeAnswersLocally(name, answer, submitted_at);
+        storeAnswersLocally(name, answer, submitted_at); // Use timestamp from DB if successful, otherwise null
         isLocallySaved = true;
-        submissionTimestamp = submitted_at;
-        console.log(`Local save completed. Timestamp used for local storage: ${submitted_at}`);
+        submissionTimestamp = submitted_at; // Keep track of the timestamp used
+        console.log(`Local save completed. Timestamp used for local storage: ${submissionTimestamp}`);
 
-        if (supabase) {
-            console.log("Attempting to update user_progress table in Supabase...");
+        // --- Update User Progress (Supabase - Redundant with sendToSupabase's insert?) ---
+        // Note: The global sendToSupabase already inserts into user_progress.
+        // Calling updateUserProgress here might be redundant or cause conflicts.
+        // Let's comment it out for now, assuming sendToSupabase handles progress correctly.
+        /*
+        if (supabase && assessmentSuccess) { // Only attempt if DB save was initially successful
+            console.log("Attempting to update user_progress table in Supabase (might be redundant)...");
             const progressUpdateSuccess = await updateUserProgress(email, SECTION_ID, QUESTION_ID, questionText);
             if (!progressUpdateSuccess) {
-                console.warn("Failed to update user_progress table in Supabase. Local progress is saved.");
+                console.warn("Failed to update user_progress table in Supabase (potential redundancy). Local progress is saved.");
             } else {
-                console.log("Successfully updated user_progress table.");
+                console.log("Successfully updated user_progress table (potentially redundant).");
             }
+        } else if (!assessmentSuccess) {
+             console.warn("Skipping user_progress update due to initial assessment save failure.");
         } else {
              console.warn("Supabase client not available, skipping user_progress update.");
         }
+        */
+       console.log("Skipping separate user_progress update call; assuming sendToSupabase handled it.");
 
+
+        // --- Update Local User Object Progress ---
         updateLocalSectionProgress(SECTION_ID);
 
+        // --- Update UI ---
         console.log("Updating UI elements...");
         showQuestionProgressBar(questionContainer, 100);
-        showSubmissionInfo(submissionTimestamp);
+        showSubmissionInfo(submissionTimestamp); // Show green box (text cleared by function)
         disableFormInputs();
         unlockQuizButton();
 
+        // --- Show Modal & Redirect (Only on DB Success) ---
         // ✅ This function redirects to QUIZ_REDIRECT_URL ('assessment.html')
         if (assessmentSuccess) {
             console.log("Showing redirect confirmation modal...");
             showRedirectConfirmationModal();
         } else {
             console.warn("DB submission failed, not showing redirect modal. UI updated based on local save.");
+            // Give feedback that online save failed but local is okay?
+             showError("Failed to save goal online. Your progress is saved on this device. You can now proceed to the quiz.", null); // Show general error
         }
 
         console.log(`--- Form Submission Process Completed (Assessment Success: ${assessmentSuccess}) ---`);
@@ -859,31 +886,36 @@ async function handleFormSubmit(event) {
     } catch (err) {
         console.error("CRITICAL ERROR during form submission process:", err);
         showError(`An unexpected error occurred: ${err.message}. Please try again later.`);
+        // --- Emergency Local Save on Error ---
         if (!isLocallySaved && name && answer && answer.length >= 20) {
             try {
                 console.warn("Attempting emergency local save due to error...");
-                storeAnswersLocally(name, answer, null);
+                storeAnswersLocally(name, answer, null); // No reliable timestamp on error
                 isLocallySaved = true;
                 updateLocalSectionProgress(SECTION_ID);
                 const container = questionForm?.closest('.question');
                 if (container) showQuestionProgressBar(container, 100);
-                showSubmissionInfo(null);
+                showSubmissionInfo(null); // Show green box (text cleared)
                 disableFormInputs();
                 unlockQuizButton();
+                showError("An error occurred, but your progress was saved locally. You can proceed.", null); // Update error message
              } catch (localSaveError) {
                  console.error("Failed to perform emergency local save:", localSaveError);
+                 showError(`An critical error occurred: ${err.message}. Local save also failed. Please refresh.`, null);
              }
         }
          console.log("--- Form Submission Process Failed due to Error ---");
 
     } finally {
         console.log("Executing 'finally' block of form submission.");
+        // Only re-enable button if local save didn't happen (implies total failure)
         if (!isLocallySaved) {
-             setButtonLoading(false);
+             setButtonLoading(false); // Re-enable button if nothing saved
              console.log("Submission failed AND local save didn't complete. Form re-enabled.");
         } else {
+             // Keep form disabled if locally saved, even if DB failed or threw error after local save
              disableFormInputs();
-             console.log("Submission process finished. Form remains disabled (locally saved).");
+             console.log("Submission process finished. Form remains disabled (at least locally saved).");
         }
     }
 }
@@ -894,11 +926,12 @@ function setButtonLoading(isLoading) {
     submitBtn.disabled = isLoading;
     if (isLoading) { submitBtn.textContent = 'Submitting...'; submitBtn.style.background = '#bdc3c7'; submitBtn.style.color = '#7f8c8d'; submitBtn.style.cursor = 'wait'; submitBtn.style.boxShadow = 'none'; submitBtn.style.transform = 'none'; }
     else {
+        // After loading, check if the form should remain disabled (i.e., if goal is complete locally)
         const isGoalCompleteLocally = localStorage.getItem(UNLOCK_ANSWER_KEY)?.trim().length >= 20;
         if (isGoalCompleteLocally) {
-            disableFormInputs();
+            disableFormInputs(); // Keep disabled if complete
         } else {
-            enableFormInputs();
+            enableFormInputs(); // Re-enable if somehow not complete
         }
     }
 }
@@ -923,27 +956,59 @@ document.addEventListener('DOMContentLoaded', function() {
     if (isLoggedIn_immediate && mainContainer) {
         console.log("User logged in and main container found. Proceeding with initialization.");
         try {
-            userNameDisplay = document.getElementById('userName'); userEmailDisplay = document.getElementById('userEmail'); questionForm = document.getElementById('questionForm'); nameInput = document.getElementById('name'); answerInput = document.getElementById('answer'); errorMessageDisplay = document.getElementById('error-message'); successModal = document.getElementById('successModal'); modalGreeting = document.getElementById('modalGreeting'); submitBtn = document.getElementById('submitBtn'); progressBarContainer = document.getElementById('progress-container-intro-goal'); progressBar = document.getElementById('progress-bar-intro-goal'); progressText = document.getElementById('progress-text-intro-goal'); questionTitleElement = document.getElementById('questionTitle'); questionPromptElement = document.getElementById('questionPrompt'); submissionInfoDiv = document.getElementById('submissionInfo'); submissionTimestampElement = document.getElementById('submissionTimestamp'); quizReminderMessage = document.getElementById('quizReminderMessage'); quizIntroContainer = document.getElementById('quizIntroContainer'); startQuiz1Button = document.getElementById('startQuiz1Button'); quizLockMessage = document.getElementById('quizLockMessage');
+            // --- Assign DOM Elements ---
+            userNameDisplay = document.getElementById('userName');
+            userEmailDisplay = document.getElementById('userEmail');
+            questionForm = document.getElementById('questionForm');
+            nameInput = document.getElementById('name');
+            answerInput = document.getElementById('answer');
+            errorMessageDisplay = document.getElementById('error-message');
+            successModal = document.getElementById('successModal');
+            modalGreeting = document.getElementById('modalGreeting');
+            submitBtn = document.getElementById('submitBtn');
+            progressBarContainer = document.getElementById('progress-container-intro-goal');
+            progressBar = document.getElementById('progress-bar-intro-goal');
+            progressText = document.getElementById('progress-text-intro-goal');
+            questionTitleElement = document.getElementById('questionTitle');
+            questionPromptElement = document.getElementById('questionPrompt');
+            submissionInfoDiv = document.getElementById('submissionInfo');
+            submissionTimestampElement = document.getElementById('submissionTimestamp'); // Reference kept
+            quizReminderMessage = document.getElementById('quizReminderMessage');
+            quizIntroContainer = document.getElementById('quizIntroContainer');
+            startQuiz1Button = document.getElementById('startQuiz1Button');
+            quizLockMessage = document.getElementById('quizLockMessage');
 
+            // --- Check Essential Elements ---
             const essentialElements = { mainContainer, userNameDisplay, userEmailDisplay, questionForm, nameInput, answerInput, errorMessageDisplay, successModal, submitBtn, progressBarContainer, progressBar, progressText, questionTitleElement, questionPromptElement, submissionInfoDiv, submissionTimestampElement, quizReminderMessage, quizIntroContainer, startQuiz1Button, quizLockMessage };
             let missingElementKey = null;
             for (const [key, element] of Object.entries(essentialElements)) { if (!element) { missingElementKey = key; break; } }
             if (missingElementKey) { throw new Error(`Initialization failed: Essential DOM element '${missingElementKey}' not found.`); }
             console.log("All essential DOM elements found.");
 
+             // --- Check Supabase Client ---
             if (!supabase) {
                 console.error("Initialization Error: Supabase client is not available. Online features disabled.");
                 if(submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Service Unavailable'; }
                 lockQuizButton(); if(quizLockMessage) quizLockMessage.textContent = "Course service unavailable.";
                 showError("Cannot connect to the course service. Please check connection and refresh. Online progress saving is disabled.");
+                // Do not throw error here, allow local functionality if possible
             }
 
+             // --- Check sendToSupabase Function ---
+             if (typeof window.sendToSupabase !== 'function') {
+                 throw new Error("Initialization failed: Global function 'sendToSupabase' (from second script block) not found.");
+             }
+             console.log("Global function 'sendToSupabase' found.");
+
+
+            // --- Get Current User ---
             const currentUser = getCurrentUser();
-            const isAdmin = currentUser.email === "m.elsayed@thechefz.co";
-            if (isAdmin) console.log("Admin user detected.");
             if (!currentUser) { throw new Error("User data is missing or invalid after initial checks. Cannot proceed with initialization."); }
             console.log(`Initializing content for user: ${currentUser.email}. Supabase available: ${!!supabase}`);
+            const isAdmin = currentUser.email === "m.elsayed@thechefz.co"; // Check admin status here if needed elsewhere
+            if (isAdmin) console.log("Admin user detected.");
 
+            // --- Initialize Page ---
             initializePageContent(currentUser);
             console.log("DOM content initialization complete.");
 
@@ -961,97 +1026,142 @@ document.addEventListener('DOMContentLoaded', function() {
 </html>
 
 <script>
+// MODIFIED: Removed redundant success message creation and timeout redirect.
+// Returns { success: boolean, submitted_at: string | null }
 async function sendToSupabase(submissionData) {
+    // Make sure Supabase client is available globally
+    if (!window.supabase) {
+        console.error("sendToSupabase (global): Supabase client is not available.");
+        alert("Cannot connect to the database. Please check your connection.");
+        return { success: false, submitted_at: null };
+    }
+
+    let currentUser = null;
     try {
-        const currentUser = JSON.parse(localStorage.getItem('currentUser') || '{}');
+        currentUser = JSON.parse(localStorage.getItem('currentUser') || '{}');
+    } catch (e) {
+         console.error("sendToSupabase (global): Error parsing currentUser from localStorage", e);
+         alert("User info corrupted. Please log in again.");
+         window.logout(); // Force logout
+         return { success: false, submitted_at: null };
+    }
 
-        if (!currentUser || !currentUser.email || !currentUser.id) {
-            alert("User info missing. Please log in again.");
-            return { success: false };
-        }
 
-        const now = new Date();
-        const submittedAtLocal = now.toLocaleString("en-GB", { timeZone: "Africa/Cairo" });
+    if (!currentUser || !currentUser.email || !currentUser.id) {
+        console.error("sendToSupabase (global): User info missing in localStorage (email or id).", currentUser);
+        alert("User info missing. Please log in again.");
+        // Optionally redirect to login or call logout()
+        window.logout(); // Force logout
+        return { success: false, submitted_at: null };
+    }
 
-        // قراءة نص السؤال من DOM
-        const questionText = document.getElementById("questionPrompt")?.textContent || "Unnamed question";
+    const now = new Date();
+    // const submittedAtLocal = now.toLocaleString("en-GB", { timeZone: "Africa/Cairo" }); // Not used anymore
 
-        // حساب is_correct بناءً على وجود إجابة
-        const hasAnswer = !!submissionData.answer?.trim();
-        const calculatedIsCorrect = hasAnswer;
+    // Get question text from DOM (ensure the ID exists)
+    const questionPromptElement = document.getElementById("questionPrompt");
+    const questionText = questionPromptElement ? questionPromptElement.textContent.trim() : "Unnamed question - Goal Setting"; // Default if element not found
 
-        const dataToSend = {
-            name: currentUser.name || "Anonymous",
-            user_email: currentUser.email,
-            user_id: currentUser.id,
-            answer: submissionData.answer || "N/A",
-            goal_answer: submissionData.answer || "N/A",
-            submitted_at: now.toISOString(),
-            created_at: now.toISOString(),
-            type: submissionData.type || "goal",
-            page: submissionData.page || "index",
-            section_id: submissionData.section_id || submissionData.page || "index",
-            question_id: submissionData.question_id || "Q1",
-            question_text: questionText,
-            completion_status: "completed",
-            is_correct: calculatedIsCorrect,
-            score: calculatedIsCorrect ? 100 : 0
-        };
+    // Determine correctness (simply having an answer for the goal)
+    const hasAnswer = !!submissionData.answer?.trim();
+    const calculatedIsCorrect = hasAnswer;
+    const calculatedScore = calculatedIsCorrect ? 100 : 0;
 
-        const { data: existingEntry, error: checkError } = await supabase
+    // Prepare data for 'assessments' table
+    const assessmentEntry = {
+        name: currentUser.name || "Anonymous User", // Use name from currentUser
+        user_email: currentUser.email,
+        user_id: currentUser.id,
+        answer: submissionData.answer || "N/A",
+        goal_answer: submissionData.answer || "N/A", // Specific field if needed
+        submitted_at: now.toISOString(),
+        created_at: now.toISOString(), // Often same as submitted_at for inserts
+        type: submissionData.type || "goal",
+        page: submissionData.page || CURRENT_PAGE || "index", // Use constant if available
+        section_id: submissionData.section_id || SECTION_ID || "index", // Use constant if available
+        question_id: submissionData.question_id || QUESTION_ID || "intro-goal", // Use constant if available
+        question_text: questionText,
+        completion_status: "completed", // Fixed status for goal
+        is_correct: calculatedIsCorrect,
+        score: calculatedScore
+    };
+    console.log("sendToSupabase (global): Data prepared for assessments table:", assessmentEntry);
+
+
+    // Prepare data for 'user_progress' table
+    const progressEntry = {
+        user_id: currentUser.id,
+        email: currentUser.email,
+        question_id: assessmentEntry.question_id, // Use consistent ID
+        question_text: assessmentEntry.question_text,
+        page: assessmentEntry.page,
+        section_id: assessmentEntry.section_id,
+        section_type: assessmentEntry.type,
+        section_title: SECTION_TITLE_INTRO_GOAL || "Course Introduction Goal", // Use constant or default
+        score: assessmentEntry.score,
+        status: assessmentEntry.completion_status,
+        progress: 1, // Represents 1 task completed (the goal)
+        progress_percent: 100, // 100% completion for this specific task/section
+        submitted_at: assessmentEntry.submitted_at,
+        updated_at: now.toISOString(), // Use current time for update
+        is_passed: assessmentEntry.is_correct // Pass if correct/answered
+    };
+     console.log("sendToSupabase (global): Data prepared for user_progress table:", progressEntry);
+
+
+    try {
+        // --- Upsert into 'assessments' table ---
+        // Using user_id and question_id for conflict resolution seems robust
+        console.log("sendToSupabase (global): Upserting into assessments...");
+        const { error: assessmentError } = await window.supabase
             .from("assessments")
-            .select("id")
-            .eq("name", dataToSend.name)
-            .eq("question_id", dataToSend.question_id)
-            .maybeSingle();
+            .upsert([assessmentEntry], {
+                 onConflict: 'user_id, question_id' // Adjust if your constraint is different
+             });
 
-        let insertResult;
-        if (existingEntry) {
-            insertResult = await supabase.from("assessments").update(dataToSend).eq("id", existingEntry.id);
+        if (assessmentError) {
+            console.error("sendToSupabase (global): Error upserting assessment:", assessmentError);
+            // Decide if this is a fatal error or if progress update can still proceed
+            // Let's treat it as non-fatal for now, but log it
+            // alert("Submission failed (assessment): " + assessmentError.message);
+            // return { success: false, submitted_at: null }; // Treat as failure if assessment save fails
         } else {
-            insertResult = await supabase.from("assessments").insert([dataToSend]);
+             console.log("sendToSupabase (global): Assessment upsert successful.");
         }
 
-        if (insertResult?.error) {
-            alert("Submission failed: " + insertResult.error.message);
-            return { success: false };
+
+        // --- Upsert into 'user_progress' table ---
+        // Using user_id and section_id for conflict resolution
+        console.log("sendToSupabase (global): Upserting into user_progress...");
+        const { error: progressError } = await window.supabase
+            .from("user_progress")
+            .upsert([progressEntry], {
+                onConflict: 'user_id, section_id' // Assumes this is the unique constraint for progress
+            });
+
+        if (progressError) {
+            console.error("sendToSupabase (global): Error upserting user progress:", progressError);
+            // This might be considered a more critical failure for overall tracking
+            alert("Submission failed (progress tracking): " + progressError.message);
+            return { success: false, submitted_at: null }; // Return failure if progress save fails
+        } else {
+            console.log("sendToSupabase (global): User progress upsert successful.");
         }
 
-        // تسجيل progress
-        const progressEntry = {
-            user_id: currentUser.id,
-            email: currentUser.email,
-            question_id: dataToSend.question_id,
-            question_text: dataToSend.question_text,
-            page: dataToSend.page,
-            section_id: dataToSend.section_id,
-            section_type: dataToSend.type || "goal",
-            section_title: dataToSend.page || "Index",
-            score: dataToSend.score,
-            status: "completed",
-            progress: 1,
-            progress_percent: 100,
-            submitted_at: now.toISOString(),
-            updated_at: now.toISOString(),
-            is_passed: dataToSend.is_correct
-        };
+        // --- If both (or at least progress) succeeded ---
+        console.log("sendToSupabase (global): Submission process completed successfully in DB.");
 
-        await supabase.from("user_progress").insert([progressEntry]);
+        // REMOVED: Redundant success message and redirect timeout
+        // const successMessage = document.createElement('div'); ...
+        // setTimeout(...);
 
-        const successMessage = document.createElement('div');
-        successMessage.innerHTML = `🎉 Goal submitted successfully!<br><small>Submitted at: ${submittedAtLocal}</small>`;
-        successMessage.style.cssText = "background:#4CAF50; color:white; padding:10px; border-radius:8px; margin-top:20px; text-align:center; font-size:18px;";
-        document.body.appendChild(successMessage);
+        // Return success status and the timestamp
+        return { success: true, submitted_at: now.toISOString() };
 
-        setTimeout(() => {
-            window.location.href = "assessment.html";
-        }, 2000);
-
-        return { success: true };
     } catch (err) {
-        console.error("Unexpected error during submission:", err);
-        alert("An unexpected error occurred. Please try again later.");
-        return { success: false };
+        console.error("sendToSupabase (global): Unexpected error during database operations:", err);
+        alert("An unexpected error occurred while saving your progress online. Please try again later.");
+        return { success: false, submitted_at: null };
     }
 }
 </script>
