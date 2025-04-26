@@ -458,21 +458,28 @@ function getCurrentUser() {
         if (!d) { console.warn("getCurrentUser: No data found in localStorage."); return null; }
         const p = JSON.parse(d);
         if (p && typeof p === 'object' && p.email && p.name) {
+             // Ensure progress object exists
              if (typeof p.progress !== 'object' || p.progress === null) { p.progress = {}; }
+             // Ensure user ID exists (important for DB relations)
+             if (!p.id) { console.warn("getCurrentUser: User ID missing from stored data."); }
             return p;
         } else {
-            console.error("getCurrentUser: Parsed data invalid or missing essential fields (email, name).", p);
-            logout(); return null;
+            console.error("getCurrentUser: Parsed data invalid or missing essential fields (email, name, id?).", p);
+            logout(); return null; // Logout if essential data is corrupt/missing
         }
     } catch (e) {
         console.error("getCurrentUser JSON Parse Error:", e);
-        logout(); return null;
+        logout(); return null; // Logout on parsing error
     }
 }
 
+
 function saveCurrentUser(userObject) {
     try {
-        if (!userObject || typeof userObject !== 'object' || !userObject.email || !userObject.name) { throw new Error("Invalid user object provided for saving."); }
+        // Add validation for user ID as well
+        if (!userObject || typeof userObject !== 'object' || !userObject.email || !userObject.name || !userObject.id) {
+             throw new Error("Invalid user object provided for saving (missing email, name, or id).");
+         }
         if (typeof userObject.progress !== 'object' || userObject.progress === null) { userObject.progress = {}; }
         localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(userObject));
         console.log("User data saved to localStorage.");
@@ -485,16 +492,19 @@ function displayUserInfo(currentUser) {
         if (currentUser) {
             userName = currentUser.name || userName;
             userEmail = currentUser.email || userEmail;
+            // Pre-fill name input only if it's empty
             if (nameInput && !nameInput.value) { nameInput.value = userName; }
         }
         if (userNameDisplay) {
             userNameDisplay.textContent = `Welcome, ${userName}`;
-            const isAdmin = currentUser?.email === "m.elsayed@thechefz.co"; // Optional chaining
+            // Check for admin email
+            const isAdmin = currentUser?.email === "m.elsayed@thechefz.co"; // Optional chaining just in case
             if (isAdmin) {
                 const adminBadge = document.createElement('span');
                 adminBadge.textContent = " (Admin)";
-                adminBadge.style.color = "#f39c12";
+                adminBadge.style.color = "#f39c12"; // Orange color for admin badge
                 adminBadge.style.fontWeight = "bold";
+                adminBadge.style.fontSize = "0.9em"; // Slightly smaller
                 userNameDisplay.appendChild(adminBadge);
             }
         }
@@ -516,7 +526,7 @@ function checkUnlockStatus() {
 
         if (isGoalComplete) {
             console.log("checkUnlockStatus: Goal previously completed. Setting UI state.");
-            if (nameInput && !nameInput.value) nameInput.value = name || '';
+            if (nameInput && !nameInput.value && name) nameInput.value = name; // Pre-fill if name exists
             if (answerInput) answerInput.value = answer;
             showQuestionProgressBar(questionContainer, 100);
             showSubmissionInfo(timestamp); // Use timestamp from local storage
@@ -527,15 +537,21 @@ function checkUnlockStatus() {
             console.log("checkUnlockStatus: Goal not completed. Setting initial UI state.");
             hideQuestionProgressBar(questionContainer);
             hideSubmissionInfo();
-            enableFormInputs();
+            enableFormInputs(); // Ensure form is enabled
             lockQuizButton();
-            showReminder();
+            showReminder(); // Show reminder only if not completed
         }
     } catch (err) { console.error("Error in checkUnlockStatus:", err); }
 }
 
 function lockQuizButton() {
-    if (startQuiz1Button) { startQuiz1Button.classList.add('locked'); startQuiz1Button.classList.remove('unlocked-success'); startQuiz1Button.href = '#'; } // Keep href as # when locked
+    if (startQuiz1Button) {
+        startQuiz1Button.classList.add('locked');
+        startQuiz1Button.classList.remove('unlocked-success');
+        startQuiz1Button.href = '#'; // Prevent navigation when locked
+        startQuiz1Button.setAttribute('aria-disabled', 'true');
+        startQuiz1Button.style.pointerEvents = 'none'; // Explicitly disable pointer events
+    }
     if (quizLockMessage) { quizLockMessage.style.display = 'block'; }
     console.log("Quiz button locked.");
 }
@@ -546,38 +562,73 @@ function unlockQuizButton() {
         startQuiz1Button.classList.add('unlocked-success');
         // ✅ Set href using the correct constant pointing to assessment.html
         startQuiz1Button.href = QUIZ_REDIRECT_URL;
+        startQuiz1Button.removeAttribute('aria-disabled');
+        startQuiz1Button.style.pointerEvents = 'auto'; // Explicitly enable pointer events
      }
     if (quizLockMessage) { quizLockMessage.style.display = 'none'; }
     console.log("Quiz button unlocked.");
 }
 
+
 function showReminder() {
+    // Ensure reminder message exists and goal is not complete
     const isGoalComplete = localStorage.getItem(UNLOCK_ANSWER_KEY)?.trim().length >= 20;
     if (quizReminderMessage && !isGoalComplete && quizReminderMessage.style.display !== 'block') {
         console.log("Showing reminder message.");
         quizReminderMessage.style.display = 'block';
-        quizReminderMessage.style.opacity = '1';
-        quizReminderMessage.style.transform = 'translateY(0)';
+        // Trigger animation by setting opacity and transform
+        requestAnimationFrame(() => {
+             quizReminderMessage.style.opacity = '1';
+             quizReminderMessage.style.transform = 'translateY(0)';
+        });
+        // Clear any existing timeout
         if (reminderTimeoutId) clearTimeout(reminderTimeoutId);
-        reminderTimeoutId = setTimeout(() => { hideReminder(); console.log("Reminder automatically hidden after timeout."); }, REMINDER_TIMEOUT_MS);
-    } else if (isGoalComplete) { hideReminder(); }
+        // Set timeout to hide automatically
+        reminderTimeoutId = setTimeout(() => {
+            hideReminder();
+            console.log("Reminder automatically hidden after timeout.");
+        }, REMINDER_TIMEOUT_MS);
+    } else if (isGoalComplete) {
+        // If goal is already complete, ensure reminder is hidden
+        hideReminder();
+    }
 }
+
 
 function hideReminder() {
     if (quizReminderMessage) {
         quizReminderMessage.style.opacity = '0';
         quizReminderMessage.style.transform = 'translateY(-15px)';
-        setTimeout(() => { if (quizReminderMessage && quizReminderMessage.style.opacity === '0') { quizReminderMessage.style.display = 'none'; } }, 300);
+        // Use transitionend event for hiding display property for better reliability
+        const handleTransitionEnd = () => {
+            // Check opacity again in case another showReminder was called quickly
+            if (quizReminderMessage.style.opacity === '0') {
+                quizReminderMessage.style.display = 'none';
+            }
+            quizReminderMessage.removeEventListener('transitionend', handleTransitionEnd);
+        };
+        quizReminderMessage.addEventListener('transitionend', handleTransitionEnd);
+        // Fallback timeout in case transitionend doesn't fire
+        setTimeout(() => {
+             if (quizReminderMessage && quizReminderMessage.style.opacity === '0') {
+                  quizReminderMessage.style.display = 'none';
+             }
+         }, 500); // Should match animation duration slightly longer
     }
-    if (reminderTimeoutId) { clearTimeout(reminderTimeoutId); reminderTimeoutId = null; }
+    // Clear the auto-hide timeout if manually hidden or goal completed
+    if (reminderTimeoutId) {
+        clearTimeout(reminderTimeoutId);
+        reminderTimeoutId = null;
+    }
 }
+
 
 function storeAnswersLocally(name, answer, submissionTime) {
     try {
         localStorage.setItem(UNLOCK_NAME_KEY, name);
         localStorage.setItem(UNLOCK_ANSWER_KEY, answer);
         if (submissionTime) { localStorage.setItem(UNLOCK_TIMESTAMP_KEY, submissionTime); }
-        else { localStorage.removeItem(UNLOCK_TIMESTAMP_KEY); }
+        else { localStorage.removeItem(UNLOCK_TIMESTAMP_KEY); } // Clear if no time provided
         console.log("Stored goal answer locally.", { nameLength: name.length, answerLength: answer.length, submissionTime: submissionTime });
     } catch (e) { console.error("Error storing local data:", e); showError("Could not save progress locally. Please check browser settings.");}
 }
@@ -587,24 +638,35 @@ function showSubmissionInfo(timestamp) {
         let displayTime = 'N/A';
         if (timestamp) {
             try {
-                displayTime = new Date(timestamp).toLocaleString('en-US', {
-                     dateStyle: 'medium',
-                     timeStyle: 'short'
-                 });
+                // Attempt to parse the timestamp
+                const dateObj = new Date(timestamp);
+                // Check if the date is valid
+                if (!isNaN(dateObj.getTime())) {
+                    displayTime = dateObj.toLocaleString('en-US', { // Use locale string formatting
+                        dateStyle: 'medium', // e.g., Sep 4, 2023
+                        timeStyle: 'short'   // e.g., 1:43 PM
+                    });
+                } else {
+                     console.warn("Invalid timestamp format:", timestamp);
+                     displayTime = timestamp; // Fallback to raw string if invalid
+                }
             }
             catch (e) {
                 console.warn("Could not format timestamp:", timestamp, e);
-                displayTime = timestamp; // Fallback to raw timestamp string
+                displayTime = timestamp; // Fallback to raw timestamp string on error
             }
         } else {
-            displayTime = '';
+            displayTime = ''; // Show nothing if timestamp is null/undefined
         }
-        submissionTimestampElement.textContent = `Submitted at: ${displayTime}`;
+
+        // Update the text content safely
+        submissionTimestampElement.textContent = displayTime ? `Submitted at: ${displayTime}` : 'Submission time not available.';
         submissionInfoDiv.style.display = 'block';
     } else {
         console.warn("Submission info elements not found.");
     }
 }
+
 
 
 function hideSubmissionInfo() {
@@ -614,115 +676,225 @@ function hideSubmissionInfo() {
 function disableFormInputs() {
     if(nameInput) nameInput.disabled = true;
     if(answerInput) answerInput.disabled = true;
-    if(submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Goal Submitted'; submitBtn.style.background = '#bdc3c7'; submitBtn.style.color = '#7f8c8d'; submitBtn.style.cursor = 'not-allowed'; submitBtn.style.boxShadow = 'none'; submitBtn.style.transform = 'none'; }
+    if(submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Goal Submitted';
+        // Apply disabled styles directly for consistency
+        submitBtn.style.background = '#bdc3c7';
+        submitBtn.style.color = '#7f8c8d';
+        submitBtn.style.cursor = 'not-allowed';
+        submitBtn.style.boxShadow = 'none';
+        submitBtn.style.transform = 'none';
+        submitBtn.setAttribute('aria-disabled', 'true');
+    }
 }
 
 function enableFormInputs() {
     if(nameInput) nameInput.disabled = false;
     if(answerInput) answerInput.disabled = false;
-    if(submitBtn && submitBtn.textContent !== 'Submitting...') { submitBtn.disabled = false; submitBtn.textContent = 'Submit Your Goal'; submitBtn.style.background = 'linear-gradient(90deg, #3498db, #2980b9)'; submitBtn.style.color = 'white'; submitBtn.style.cursor = 'pointer'; submitBtn.style.boxShadow = '0 4px 10px rgba(52, 152, 219, 0.2)'; submitBtn.style.transform = 'none'; }
+    if(submitBtn && submitBtn.textContent !== 'Submitting...') {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Submit Your Goal';
+        // Restore original/active styles
+        submitBtn.style.background = 'linear-gradient(90deg, #3498db, #2980b9)';
+        submitBtn.style.color = 'white';
+        submitBtn.style.cursor = 'pointer';
+        submitBtn.style.boxShadow = '0 4px 10px rgba(52, 152, 219, 0.2)';
+        submitBtn.style.transform = 'none'; // Reset transform
+        submitBtn.removeAttribute('aria-disabled');
+    }
 }
+
 
 function logout() {
     try {
         console.log("Logging out...");
-        if (supabase && supabase.auth && typeof supabase.auth.signOut === 'function') { supabase.auth.signOut().catch(err => console.error("Supabase signout error:", err)); console.log("Supabase sign out requested."); }
-        else { console.warn("Supabase auth or signOut method not available."); }
-        localStorage.removeItem(LOGGED_IN_KEY); localStorage.removeItem(CURRENT_USER_KEY); localStorage.removeItem(UNLOCK_ANSWER_KEY); localStorage.removeItem(UNLOCK_NAME_KEY); localStorage.removeItem(UNLOCK_TIMESTAMP_KEY); localStorage.removeItem(SIGNUP_FLAG_KEY);
-        console.log("Local storage cleared for logout.");
+        // Sign out from Supabase Auth
+        if (supabase && supabase.auth && typeof supabase.auth.signOut === 'function') {
+             supabase.auth.signOut().catch(err => console.error("Supabase signout error:", err));
+             console.log("Supabase sign out requested.");
+        } else {
+            console.warn("Supabase auth or signOut method not available.");
+        }
+        // Clear relevant local storage items
+        localStorage.removeItem(LOGGED_IN_KEY);
+        localStorage.removeItem(CURRENT_USER_KEY);
+        localStorage.removeItem(UNLOCK_ANSWER_KEY);
+        localStorage.removeItem(UNLOCK_NAME_KEY);
+        localStorage.removeItem(UNLOCK_TIMESTAMP_KEY);
+        // Keep SIGNUP_FLAG_KEY to remember if they signed up before
+        // localStorage.removeItem(SIGNUP_FLAG_KEY);
+        console.log("Local storage cleared for logout (kept signup flag).");
+        // Redirect to login page
         window.location.replace('login.html');
-    } catch (e) { console.error("Logout error:", e); window.location.replace('login.html'); }
+    } catch (e) {
+        console.error("Logout error:", e);
+        // Force redirect even on error
+        window.location.replace('login.html');
+    }
 }
+
 
 function addEventListeners() {
     try {
-        if (questionForm) { questionForm.addEventListener('submit', handleFormSubmit); }
-        else { console.warn("Question form not found for event listener."); }
-        // document.addEventListener('keydown', handleKeyDown); // Removed as Escape key not used for new popup
+        if (questionForm) {
+            questionForm.addEventListener('submit', handleFormSubmit);
+        } else { console.warn("Question form not found for event listener."); }
+
+        // Input event listeners for clearing errors
         if (nameInput) { nameInput.addEventListener('input', () => hideError(nameInput)); }
         if (answerInput) { answerInput.addEventListener('input', () => hideError(answerInput)); }
-        if (startQuiz1Button) { startQuiz1Button.addEventListener('click', handleQuizButtonClick); }
-        else { console.warn("Start Quiz button not found for event listener."); }
+
+        // Click listener for the quiz button
+        if (startQuiz1Button) {
+            startQuiz1Button.addEventListener('click', handleQuizButtonClick);
+        } else { console.warn("Start Quiz button not found for event listener."); }
+
     } catch(err) { console.error("Error adding event listeners:", err); }
 }
 
-// function handleKeyDown(e) { // Removed as Escape key not used for new popup
-//     try { if (e.key === 'Escape' && successModal && successModal.style.display === 'flex') { console.log("Escape key pressed while modal is visible (currently no action)."); } } catch(err){ console.error("Error handling keydown:", err); }
-// }
+// Removed handleKeyDown as it's no longer used
 
 function handleQuizButtonClick(event) {
+    // Check if the button is locked
     if (startQuiz1Button && startQuiz1Button.classList.contains('locked')) {
-        event.preventDefault(); console.log("Clicked locked quiz button.");
-        if (quizLockMessage) { quizLockMessage.style.animation = 'none'; void quizLockMessage.offsetWidth; quizLockMessage.style.animation = 'pulseLock 0.5s 2 ease-in-out'; setTimeout(() => { if(quizLockMessage) quizLockMessage.style.animation = 'pulseLock 2s infinite ease-in-out'; }, 1000); }
-        if (answerInput && !answerInput.disabled) { answerInput.focus(); showError("Please complete your goal first.", answerInput); }
-    } else { console.log("Clicked unlocked quiz button. Proceeding to assessment."); }
+        event.preventDefault(); // Stop the link navigation
+        console.log("Clicked locked quiz button.");
+
+        // Animate the lock message for feedback
+        if (quizLockMessage) {
+             quizLockMessage.style.animation = 'none'; // Reset animation
+             void quizLockMessage.offsetWidth; // Trigger reflow
+             quizLockMessage.style.animation = 'pulseLock 0.5s 2 ease-in-out'; // Quick pulse
+             // Optional: Restore infinite animation after short pulse
+             setTimeout(() => {
+                 if(quizLockMessage) quizLockMessage.style.animation = 'pulseLock 2s infinite ease-in-out';
+             }, 1000); // 0.5s * 2 cycles = 1s
+        }
+
+        // Focus the answer field and show error if it's the reason for lock
+        if (answerInput && !answerInput.disabled) {
+            answerInput.focus();
+            showError("Please complete your goal first.", answerInput);
+        } else {
+             // If form is disabled but button still locked (edge case?), show generic error
+             showError("Please complete the goal setting step above to unlock the quiz.");
+        }
+    } else {
+        console.log("Clicked unlocked quiz button. Proceeding to assessment.");
+        // Allow default link behavior (navigation to assessment.html)
+    }
 }
+
 
 function showError(message, field = null) {
     try {
-        if(errorMessageDisplay){ errorMessageDisplay.textContent = message; errorMessageDisplay.style.display = "block"; }
-        else { console.warn("Error message display element not found."); }
+        if(errorMessageDisplay){
+             errorMessageDisplay.textContent = message;
+             errorMessageDisplay.style.display = "block";
+             // Consider adding ARIA attributes for accessibility
+             errorMessageDisplay.setAttribute('role', 'alert');
+         } else { console.warn("Error message display element not found."); }
+
+        // Clear previous invalid styles first
         if (nameInput) nameInput.classList.remove('invalid-field-style');
         if (answerInput) answerInput.classList.remove('invalid-field-style');
-        if(field && typeof field.classList !== 'undefined'){ field.classList.add('invalid-field-style'); field.focus(); }
+
+        // Apply invalid style to the specific field if provided
+        if(field && typeof field.classList !== 'undefined'){
+             field.classList.add('invalid-field-style');
+             field.focus(); // Focus the field with the error
+             field.setAttribute('aria-invalid', 'true'); // ARIA for invalid field
+             field.setAttribute('aria-describedby', 'error-message'); // Link field to error message
+        }
         console.error("Validation Error:", message, field ? `Field: ${field.id}` : '');
     } catch(err){ console.error("Error displaying validation error:", err); }
 }
 
+
 function hideError(field = null) {
     try {
-        if(errorMessageDisplay) { errorMessageDisplay.style.display = "none"; errorMessageDisplay.textContent = ""; }
-        if(field && typeof field.classList !== 'undefined'){ field.classList.remove('invalid-field-style'); }
-        else { if (nameInput) nameInput.classList.remove('invalid-field-style'); if (answerInput) answerInput.classList.remove('invalid-field-style'); }
+        // Hide the general error message
+        if(errorMessageDisplay) {
+            errorMessageDisplay.style.display = "none";
+            errorMessageDisplay.textContent = "";
+            errorMessageDisplay.removeAttribute('role'); // Remove alert role
+        }
+
+        // Remove invalid style and ARIA attributes from the specific field or all fields
+        if(field && typeof field.classList !== 'undefined'){
+            field.classList.remove('invalid-field-style');
+            field.removeAttribute('aria-invalid');
+            field.removeAttribute('aria-describedby');
+        } else {
+            // If no specific field, clear from both known inputs
+            if (nameInput) {
+                nameInput.classList.remove('invalid-field-style');
+                nameInput.removeAttribute('aria-invalid');
+                nameInput.removeAttribute('aria-describedby');
+            }
+            if (answerInput) {
+                answerInput.classList.remove('invalid-field-style');
+                answerInput.removeAttribute('aria-invalid');
+                answerInput.removeAttribute('aria-describedby');
+             }
+        }
     } catch(err){ console.error("Error hiding error message/style:", err); }
 }
+
 
 // --- NEW Two-Stage Popup Function ---
 function showTwoStagePopupAndRedirect(redirectUrl) {
     if (!tempPopupElement) {
-        console.error("Temporary popup element not found. Cannot display message.");
-        // Fallback: redirect immediately if popup fails
+        console.error("Temporary popup element not found. Cannot display message. Redirecting directly.");
         window.location.href = redirectUrl;
         return;
     }
 
-    // Stage 1: "Great job!"
-    tempPopupElement.innerHTML = "🎯 Great job! Your goal has been saved successfully"; // Removed period as requested
+    // --- Stage 1: "Great job!" ---
+    tempPopupElement.innerHTML = "🎯 Great job! Your goal has been saved successfully"; // Message as requested
     tempPopupElement.style.display = 'block';
-    // Force reflow to ensure transition happens
-    void tempPopupElement.offsetWidth;
-    tempPopupElement.style.opacity = '1';
-    console.log("Popup Stage 1 displayed.");
+    // Force reflow/repaint before starting transition
+    requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+            tempPopupElement.style.opacity = '1';
+            console.log("Popup Stage 1 displayed.");
+        });
+    });
 
+    // --- Wait for Stage 1 Duration ---
     setTimeout(() => {
         // Start fading out Stage 1
         tempPopupElement.style.opacity = '0';
         console.log("Popup Stage 1 fading out.");
 
+        // --- Wait for Stage 1 Fade Out ---
         setTimeout(() => {
-            // Stage 2: "Ready to start quiz!"
+            // --- Stage 2: "Ready to start quiz!" ---
             tempPopupElement.innerHTML = "🚀 You're ready to start the quiz!";
-            // Make it visible again (opacity already 0, will fade in)
+            // Make it visible again by fading in
             tempPopupElement.style.opacity = '1';
             console.log("Popup Stage 2 displayed.");
 
+            // --- Wait for Stage 2 Duration ---
             setTimeout(() => {
                 // Start fading out Stage 2
                 tempPopupElement.style.opacity = '0';
                 console.log("Popup Stage 2 fading out.");
 
+                // --- Wait for Stage 2 Fade Out ---
                 setTimeout(() => {
-                    // Hide completely and redirect
+                    // Hide completely and then redirect
                     tempPopupElement.style.display = 'none';
                     console.log(`Popup hidden. Redirecting to ${redirectUrl}...`);
                     window.location.href = redirectUrl;
-                }, 500); // Wait for fade out before redirecting
+                }, 500); // Match fade transition duration (0.5s)
 
-            }, 1500); // Duration for Stage 2 message (adjust as needed)
+            }, 1500); // Display Stage 2 message for 1.5 seconds
 
-        }, 500); // Wait for fade out transition of Stage 1
+        }, 500); // Match fade transition duration (0.5s)
 
-    }, 2000); // Duration for Stage 1 message (2 seconds)
+    }, 2000); // Display Stage 1 message for 2 seconds
 }
 
 
@@ -730,24 +902,12 @@ function showTwoStagePopupAndRedirect(redirectUrl) {
 function showRedirectConfirmationModal() {
     // This function is no longer called on successful submission.
     // It's replaced by showTwoStagePopupAndRedirect.
-    // Kept here in case it's needed elsewhere or for reference.
     console.warn("showRedirectConfirmationModal called, but should be using showTwoStagePopupAndRedirect now.");
-    try {
-        if (!successModal) { console.warn("Success modal element not found. Redirecting directly."); window.location.href = QUIZ_REDIRECT_URL; return; }
-        const modalContent = successModal.querySelector('.modal-content');
-        if (!modalContent) { console.warn("Modal content area not found. Redirecting directly."); window.location.href = QUIZ_REDIRECT_URL; return; }
-        const heading = modalContent.querySelector('h3#modalGreeting');
-        const paragraph = modalContent.querySelector('p');
-        if (heading) { heading.textContent = "Goal Submitted!"; heading.style.color = '#27ae60'; }
-        if (paragraph) { paragraph.textContent = `Thank you! You've completed the first step and unlocked the quiz. Redirecting you now...`; paragraph.style.marginTop = '15px'; }
-        successModal.style.display = 'flex'; successModal.style.opacity = '1';
-        // const REDIRECT_DELAY_MS_MODAL = 2500; // Define locally if needed
-        // console.log(`Modal shown. Redirecting to ${QUIZ_REDIRECT_URL} in ${REDIRECT_DELAY_MS_MODAL}ms.`);
-        // setTimeout(() => { window.location.href = QUIZ_REDIRECT_URL; }, REDIRECT_DELAY_MS_MODAL);
-    } catch (err) { console.error("Error displaying redirect confirmation modal:", err); alert("Success! Your goal has been submitted. Redirecting to the first quiz..."); window.location.href = QUIZ_REDIRECT_URL; }
+    // ... (rest of the old modal logic remains commented out or removed if definitely unused) ...
 }
 
 function closeModal() {
+    // This function is likely unused if the modal isn't shown.
     try { if(successModal) { successModal.style.display='none'; } console.log("Modal closed (function called)."); } catch(err){ console.error("Error closing modal:", err); }
 }
 
@@ -756,117 +916,158 @@ function closeModal() {
 async function updateUserProgress(userEmail, sectionId, questionId, questionText) {
     if (!supabase) {
         console.error("updateUserProgress: Supabase client not available.");
-        return false;
+        return false; // Indicate failure
     }
+
+    const currentUser = getCurrentUser(); // Get current user data for ID
+    if (!currentUser || !currentUser.id) {
+        console.error("updateUserProgress: User ID is missing. Cannot update progress accurately.");
+        // Decide if you want to proceed without user_id or fail
+        // return false; // Let's fail if user_id is missing for data integrity
+    }
+    const userId = currentUser?.id || null; // Use null if missing, though we might fail above
+
 
     if (!userEmail || !sectionId || !questionId || !questionText) {
          console.error("updateUserProgress: Invalid parameters provided.", { userEmail, sectionId, questionId, questionText });
-         return false;
+         return false; // Indicate failure
     }
 
     const now = new Date().toISOString();
     const progressData = {
+      // user_id should be the primary key or part of a unique constraint with email/section
+      user_id: userId, // Include user_id obtained from currentUser
       email: userEmail,
       section_id: sectionId,
-      section_type: 'goal',
-      section_title: SECTION_TITLE_INTRO_GOAL,
-      question_id: questionId,
-      question_text: questionText,
-      page: CURRENT_PAGE,
-      progress_percent: 100,
-      progress: 100, // Assuming 1 question = 100% for this section
-      score: 100, // Assuming goal completion is 100 score
-      status: 'complete',
-      submitted_at: now,
-      updated_at: now,
-      is_passed: true, // Goal completion is considered passed
-      user_id: null // Will be set if available later
+      section_type: 'goal', // Specific type for this section
+      section_title: SECTION_TITLE_INTRO_GOAL, // Specific title
+      question_id: questionId, // Specific question ID
+      question_text: questionText, // Text of the question answered
+      page: CURRENT_PAGE, // Page where the progress occurred
+      progress_percent: 100, // 100% for completing this single goal
+      progress: 1, // e.g., 1 out of 1 step completed
+      score: 100, // Score assigned for completion
+      status: 'complete', // Status of this section
+      submitted_at: now, // Timestamp of this specific submission
+      updated_at: now, // Timestamp of the update
+      is_passed: true // Goal completion is considered passing
     };
-
-    // Try to get user_id from currentUser if available
-    const currentUser = getCurrentUser();
-    if (currentUser?.id) {
-        progressData.user_id = currentUser.id;
-    } else {
-        console.warn("User ID not found in local storage for user_progress update.");
-    }
-
 
     console.log(`Attempting to upsert data into 'user_progress' table:`, JSON.stringify(progressData, null, 2));
 
     try {
-        // Define the unique constraint columns for upsert
-        const conflictColumns = ['email', 'section_id'];
+        // Define the columns that form the unique constraint for upsert
+        // Common constraints: (user_id, section_id) or (email, section_id)
+        // Adjust based on your actual table definition
+        const conflictColumns = ['user_id', 'section_id']; // Assuming this constraint exists
 
         const { error } = await supabase
             .from('user_progress')
             .upsert([progressData], {
-                 onConflict: conflictColumns.join(','), // Pass as comma-separated string
-                 ignoreDuplicates: false // Ensure it updates existing records
+                 onConflict: conflictColumns.join(','), // Specify constraint columns
+                 ignoreDuplicates: false // Set to false to ensure update happens
              });
 
         if (error) {
-            console.error('Supabase upsert error details:', error);
-            // Handle potential constraint violation if email+section_id isn't the primary key/unique constraint
-            if (error.code === '23505') { // Unique violation code
-                 console.warn('Upsert conflict potentially not resolved correctly, check table constraints.');
-                 // Optional: Try an update explicitly if needed, though upsert should handle it
+            console.error('Supabase user_progress upsert error details:', error);
+            // Log specific error codes if needed
+            if (error.code === '23503') { // Foreign key violation (e.g., user_id doesn't exist in users table)
+                 console.error("Foreign key violation. Ensure user exists in the users table.");
+            } else if (error.code === '23505') { // Unique constraint violation
+                 console.error("Unique constraint violation. Check onConflict columns and table definition.");
             }
-            return false;
+            return false; // Indicate failure
         }
 
         console.log(`Successfully upserted user_progress for section ${sectionId}.`);
-        return true;
+        return true; // Indicate success
 
     } catch (networkError) {
         console.error('Network Error during user_progress update:', networkError);
-        return false;
+        return false; // Indicate failure
     }
 }
+
 
 function updateLocalSectionProgress(sectionId) {
     const currentUser = getCurrentUser();
     if (!currentUser) { console.warn("updateLocalSectionProgress: Cannot update, user not found."); return 0; }
+
     let sectionProgress = 0;
+    // Calculate progress specifically for the 'index' section (intro goal)
     if (sectionId === SECTION_ID) {
         const answer = localStorage.getItem(UNLOCK_ANSWER_KEY);
+        // Progress is 100 if the goal answer meets the criteria, 0 otherwise
         sectionProgress = (answer && answer.trim().length >= 20) ? 100 : 0;
     } else {
+        // Placeholder for progress logic of other sections if this function were reused
         console.warn(`Progress calculation logic not yet defined for section: ${sectionId}`);
+        // Attempt to retrieve existing progress for other sections if available
         sectionProgress = currentUser.progress?.[sectionId] || 0;
     }
+
+    // Ensure the progress object exists on the currentUser
     if (!currentUser.progress) { currentUser.progress = {}; }
+
+    // Update the progress for the specific section
     currentUser.progress[sectionId] = sectionProgress;
+
+    // Save the updated currentUser object back to localStorage
     saveCurrentUser(currentUser);
     console.log(`Local progress updated for section '${sectionId}': ${sectionProgress}%`);
-    return sectionProgress;
+    return sectionProgress; // Return the calculated progress
 }
+
 
 function showQuestionProgressBar(containerElement, percentage) {
     if (!containerElement) { console.warn("showQuestionProgressBar: Provided container element is invalid."); return; }
+    // Find progress bar elements within the provided container
     const pC = containerElement.querySelector('.question-progress-container');
     const bar = pC?.querySelector('.question-progress-bar');
     const text = pC?.querySelector('.question-progress-text');
-    if (pC && bar && text) { const clampedPercentage = Math.max(0, Math.min(100, Math.round(percentage))); bar.style.width = `${clampedPercentage}%`; text.textContent = `${clampedPercentage}% Complete`; pC.style.display = 'block'; console.log(`Progress bar UI updated to ${clampedPercentage}%`); }
-    else { console.warn("Progress bar elements (container, bar, or text) not found within:", containerElement); }
+
+    if (pC && bar && text) {
+        // Clamp percentage between 0 and 100
+        const clampedPercentage = Math.max(0, Math.min(100, Math.round(percentage)));
+        // Update bar width and text content
+        bar.style.width = `${clampedPercentage}%`;
+        text.textContent = `${clampedPercentage}% Complete`;
+        // Ensure the container is visible
+        pC.style.display = 'block';
+        console.log(`Progress bar UI updated to ${clampedPercentage}%`);
+    } else {
+        console.warn("Progress bar elements (container, bar, or text) not found within:", containerElement);
+    }
 }
+
 
 function hideQuestionProgressBar(containerElement) {
      if (!containerElement) { console.warn("hideQuestionProgressBar: Provided container element is invalid."); return; }
     const pC = containerElement.querySelector('.question-progress-container');
-    if (pC) { pC.style.display = 'none'; console.log("Progress bar UI hidden"); }
-    else { console.warn("Progress bar container not found within:", containerElement); }
+    if (pC) {
+        pC.style.display = 'none'; // Hide the progress bar container
+        // Optionally reset the bar and text
+        const bar = pC.querySelector('.question-progress-bar');
+        const text = pC.querySelector('.question-progress-text');
+        if (bar) bar.style.width = '0%';
+        if (text) text.textContent = '0% Complete';
+        console.log("Progress bar UI hidden");
+    } else {
+        console.warn("Progress bar container not found within:", containerElement);
+    }
 }
 
+
 async function handleFormSubmit(event) {
-    event.preventDefault();
+    event.preventDefault(); // Prevent default form submission
     console.log("--- Starting Form Submission Process ---");
 
     let isLocallySaved = false;
-    let submissionTimestamp = null;
+    let submissionTimestamp = null; // Will hold the timestamp after successful save
     const questionContainer = questionForm?.closest('.question');
 
-    if (!nameInput || !answerInput || !userEmailDisplay || !submitBtn || !errorMessageDisplay || !questionForm || !questionPromptElement || !questionContainer || !tempPopupElement) { // Added tempPopupElement check
+    // --- Essential Element Checks ---
+    if (!nameInput || !answerInput || !userEmailDisplay || !submitBtn || !errorMessageDisplay || !questionForm || !questionPromptElement || !questionContainer || !tempPopupElement) {
         console.error("handleFormSubmit Error: One or more essential page elements are missing.");
         showError("Page error: Cannot process submission. Please refresh.");
         return;
@@ -877,201 +1078,306 @@ async function handleFormSubmit(event) {
         return;
     }
 
+    // --- Get Input Values ---
     const name = nameInput.value.trim();
     const answer = answerInput.value.trim();
-    let email = userEmailDisplay.textContent.trim();
-    const questionText = questionPromptElement.textContent.trim() || QUESTION_TEXT_INTRO_GOAL;
+    let email = userEmailDisplay.textContent.trim(); // Get email from display
+    const questionText = questionPromptElement.textContent.trim() || QUESTION_TEXT_INTRO_GOAL; // Get question text
 
+    // --- Client-Side Validation ---
     console.log("Running client-side validation...");
-    hideError();
+    hideError(); // Clear previous errors
     let isValid = true;
     if (!name) { showError("Please enter your name.", nameInput); isValid = false; }
     if (answer.length < 20) { showError("Your goal needs to be at least 20 characters long.", answerInput); isValid = false; }
-    if (!email || !email.includes('@')) {
-        const currentUser = getCurrentUser();
+    // Validate email format roughly
+    if (!email || !/\S+@\S+\.\S+/.test(email)) {
+        const currentUser = getCurrentUser(); // Try to get backup email
         const backupEmail = currentUser?.email;
-        if (backupEmail && backupEmail.includes('@')) { email = backupEmail; console.warn("Using backup email from currentUser object."); }
-        else { showError("Your email address seems invalid. Please log out and back in.", userEmailDisplay); isValid = false; }
+        if (backupEmail && /\S+@\S+\.\S+/.test(backupEmail)) {
+            email = backupEmail;
+            console.warn("Using backup email from currentUser object.");
+        } else {
+            showError("Your email address seems invalid. Please log out and back in.", userEmailDisplay); isValid = false;
+        }
     }
 
-    if (!isValid) { console.warn("Form validation failed."); return; }
+    if (!isValid) { console.warn("Form validation failed."); return; } // Stop if invalid
     console.log("Form validation successful.");
 
-    setButtonLoading(true);
-    hideReminder();
+    // --- Prepare UI for Submission ---
+    setButtonLoading(true); // Disable button, show loading state
+    hideReminder(); // Hide reminder message if visible
 
+    // --- Submission Logic ---
     try {
+        // Prepare data for the 'assessments' table submission (handled by the second script)
         const assessmentData = {
-            name: name,
-            email: email,
-            answer: answer,
+            name: name, // Name from input
+            email: email, // Validated email
+            answer: answer, // Goal answer
             questionId: QUESTION_ID,
             questionText: questionText,
             sectionId: SECTION_ID,
-            score: 100, // Score for completing the goal
-            completionStatus: 'Complete', // Status
-            page: CURRENT_PAGE, // Add page info
-            type: 'goal' // Add type info
+            score: 100, // Default score for goal completion
+            completionStatus: 'Complete',
+            page: CURRENT_PAGE,
+            type: 'goal'
         };
         console.log("Prepared assessment data:", JSON.stringify(assessmentData, null, 2));
 
-        // Note: sendToSupabase in the *second* script block handles the actual DB interaction.
-        // This first script block focuses on local state and UI updates before triggering the feedback.
-        // Ideally, consolidate DB logic, but following prompt to modify existing structure.
-
-        console.log("Attempting to save data locally...");
-        // Use current time for local timestamp if DB save isn't returning one here
-        submissionTimestamp = new Date().toISOString();
-        storeAnswersLocally(name, answer, submissionTimestamp);
-        isLocallySaved = true;
-        console.log(`Local save completed. Timestamp used for local storage: ${submissionTimestamp}`);
-
-        // Update Supabase Progress Table (using the function in *this* script)
-        if (supabase) {
-            console.log("Attempting to update user_progress table in Supabase...");
-            const progressUpdateSuccess = await updateUserProgress(email, SECTION_ID, QUESTION_ID, questionText);
-            if (!progressUpdateSuccess) {
-                console.warn("Failed to update user_progress table in Supabase. Local progress is saved.");
-                // Potentially show a non-blocking warning to the user?
-            } else {
-                console.log("Successfully updated user_progress table.");
-            }
-        } else {
-             console.warn("Supabase client not available, skipping user_progress update.");
-        }
-
-        // Update local progress tracking (e.g., for completion percentage if needed later)
-        updateLocalSectionProgress(SECTION_ID);
-
-        console.log("Updating UI elements...");
-        showQuestionProgressBar(questionContainer, 100);
-        showSubmissionInfo(submissionTimestamp);
-        disableFormInputs();
-        unlockQuizButton();
-
-        // ✅ Trigger the NEW two-stage popup and redirect
-        console.log("Showing two-stage popup and initiating redirect...");
-        // Call the function defined in the *second* script block which handles the actual submission
-        // and contains the modified success feedback.
-        // We pass the essential data needed by that function.
+        // --- Attempt Database Submission (using function from second script) ---
+        console.log("Attempting to send assessment data to Supabase via sendToSupabase...");
+        // This function now handles its own popup/redirect logic on success
         const dbSubmissionResult = await sendToSupabase(assessmentData);
 
-        // The `sendToSupabase` function now handles the popup and redirect on its own success.
-        // No need to call `showTwoStagePopupAndRedirect` here if `sendToSupabase` handles it.
-        // Let's assume `sendToSupabase` will show the popup if its internal DB operations succeed.
-        if (!dbSubmissionResult?.success) {
-            // Handle case where the DB submission in the second script failed
-            console.error("Database submission failed (reported by sendToSupabase). UI updated based on local save, but data might not be online.");
-            showError("Goal saved locally, but failed to save online. You can proceed, but please check your connection later.");
-            // Don't redirect if DB save failed
-            setButtonLoading(false); // Re-enable button maybe? Or keep disabled as it's locally saved? Let's keep disabled.
+        // --- Handle Submission Result ---
+        if (dbSubmissionResult?.success) {
+            console.log("Database submission successful (reported by sendToSupabase).");
+            // Store locally using the timestamp returned from the successful DB save
+            submissionTimestamp = dbSubmissionResult.submitted_at || new Date().toISOString(); // Fallback timestamp
+            storeAnswersLocally(name, answer, submissionTimestamp);
+            isLocallySaved = true;
+
+            // Update user_progress table in Supabase (redundant if sendToSupabase handles it, but safe)
+            console.log("Attempting to update user_progress table...");
+            const progressUpdateSuccess = await updateUserProgress(email, SECTION_ID, QUESTION_ID, questionText);
+            if (!progressUpdateSuccess) console.warn("Failed to update user_progress table. Local progress is saved.");
+            else console.log("Successfully updated user_progress table.");
+
+            // Update local progress state
+            updateLocalSectionProgress(SECTION_ID);
+
+            // Update UI to reflect completion
+            console.log("Updating UI elements for successful submission...");
+            showQuestionProgressBar(questionContainer, 100);
+            showSubmissionInfo(submissionTimestamp); // Show timestamp from DB/local save
+            disableFormInputs(); // Disable form as it's done
+            unlockQuizButton(); // Unlock next step
+
+            // Note: The redirect is now handled inside sendToSupabase via showTwoStagePopupAndRedirect
+            console.log(`--- Form Submission Process Completed Successfully ---`);
+
         } else {
-             console.log("Database submission successful (reported by sendToSupabase). Popup/redirect handled by that function.");
+            // --- Handle Database Submission Failure ---
+            console.error("Database submission failed (reported by sendToSupabase).");
+            // Attempt local save as a fallback
+            console.warn("Attempting local save as fallback...");
+            submissionTimestamp = new Date().toISOString(); // Use current time for local timestamp
+            storeAnswersLocally(name, answer, submissionTimestamp);
+            isLocallySaved = true; // Mark as locally saved even if DB failed
+
+            // Update local progress state
+            updateLocalSectionProgress(SECTION_ID);
+
+             // Update UI to reflect local completion, but indicate sync issue
+            showQuestionProgressBar(questionContainer, 100);
+            showSubmissionInfo(submissionTimestamp); // Show local submission time
+            disableFormInputs(); // Disable form as goal is locally saved
+            unlockQuizButton(); // Unlock quiz as goal is captured locally
+
+            // Show the specific error message for failed online save
+            showError("Goal saved locally, but failed to save online. You can proceed, but please check your connection later.");
+            setButtonLoading(false); // Optionally re-enable button, but disableFormInputs keeps it disabled
+
+            console.log(`--- Form Submission Process Completed (Locally Saved, DB Failed) ---`);
         }
 
-        console.log(`--- Form Submission Process Completed (Local Save: ${isLocallySaved}, DB Result from sendToSupabase: ${dbSubmissionResult?.success}) ---`);
-
     } catch (err) {
+        // --- Handle Unexpected Errors During Submission Process ---
         console.error("CRITICAL ERROR during form submission process:", err);
         showError(`An unexpected error occurred: ${err.message}. Please try again later.`);
+
+        // Attempt emergency local save if not already done and data is valid
         if (!isLocallySaved && name && answer && answer.length >= 20) {
             try {
                 console.warn("Attempting emergency local save due to error...");
                 storeAnswersLocally(name, answer, null); // No reliable timestamp
                 isLocallySaved = true;
                 updateLocalSectionProgress(SECTION_ID);
-                const container = questionForm?.closest('.question');
-                if (container) showQuestionProgressBar(container, 100);
-                showSubmissionInfo(null); // Show basic submission info without time
+                // Update UI minimally for local save
+                if (questionContainer) showQuestionProgressBar(questionContainer, 100);
+                showSubmissionInfo(null); // Indicate submission without time
                 disableFormInputs();
-                unlockQuizButton();
-                showError("Saved locally due to error, but online sync failed. Please try again later."); // Inform user
+                unlockQuizButton(); // Allow proceeding if goal is captured
+                showError("Saved locally due to an error, but online sync likely failed. Please check connection later."); // Inform user
              } catch (localSaveError) {
                  console.error("Failed to perform emergency local save:", localSaveError);
+                 // If even local save fails, ensure form is usable again
+                 enableFormInputs();
              }
         }
          console.log("--- Form Submission Process Failed due to Error ---");
-         setButtonLoading(false); // Ensure button is usable if something went wrong before disabling
+         // Ensure button is usable if submission totally failed
+         if (!isLocallySaved) setButtonLoading(false);
 
     } finally {
         console.log("Executing 'finally' block of form submission.");
-        // If locally saved, keep disabled, otherwise re-enable (handled above in error/success paths)
+        // Final check: If locally saved (either successfully or as fallback), keep form disabled.
         if (isLocallySaved) {
             disableFormInputs();
             console.log("Submission process finished. Form remains disabled (locally saved or submitted).");
         }
+        // If button is still in loading state here (shouldn't happen ideally), reset it
+        if (submitBtn && submitBtn.textContent === 'Submitting...') {
+             setButtonLoading(false);
+         }
     }
 }
+
 
 
 function setButtonLoading(isLoading) {
     if (!submitBtn) return;
     submitBtn.disabled = isLoading;
-    if (isLoading) { submitBtn.textContent = 'Submitting...'; submitBtn.style.background = '#bdc3c7'; submitBtn.style.color = '#7f8c8d'; submitBtn.style.cursor = 'wait'; submitBtn.style.boxShadow = 'none'; submitBtn.style.transform = 'none'; }
-    else {
-        // Re-enable only if goal hasn't been successfully saved locally yet
+    if (isLoading) {
+        submitBtn.textContent = 'Submitting...';
+        submitBtn.style.background = '#bdc3c7'; // Use disabled style
+        submitBtn.style.color = '#7f8c8d';
+        submitBtn.style.cursor = 'wait';
+        submitBtn.style.boxShadow = 'none';
+        submitBtn.style.transform = 'none';
+        submitBtn.setAttribute('aria-busy', 'true'); // Indicate busy state
+    } else {
+        // Restore button state based on whether the goal is complete *locally*
         const isGoalCompleteLocally = localStorage.getItem(UNLOCK_ANSWER_KEY)?.trim().length >= 20;
         if (isGoalCompleteLocally) {
-            disableFormInputs(); // Keep disabled if goal is done
+            disableFormInputs(); // If goal done, ensure button stays disabled correctly
         } else {
-            enableFormInputs(); // Re-enable if goal not done
+            enableFormInputs(); // If goal not done, ensure button is active
         }
+        submitBtn.removeAttribute('aria-busy'); // Remove busy state
     }
 }
 
+
 function initializePageContent(currentUser) {
     console.log("%cInitializing Page Content...", "color: blue;");
-    if (!currentUser || !currentUser.email) { console.error("initializePageContent called without a valid currentUser object!"); showError("User information is missing. Please try logging in again."); logout(); return; }
+    if (!currentUser || !currentUser.email) {
+        console.error("initializePageContent called without a valid currentUser object!");
+        showError("User information is missing. Please try logging in again.");
+        logout(); // Log out if user data is fundamentally missing
+        return;
+    }
     try {
+        // Display user info and prefill name if available
         displayUserInfo(currentUser);
+
+        // Set static text content
         if (questionTitleElement) questionTitleElement.textContent = "Your First Step: Set Your Goal";
         if (questionPromptElement) questionPromptElement.textContent = QUESTION_TEXT_INTRO_GOAL;
+
+        // Check unlock status (pre-fills form, sets button/progress state)
         checkUnlockStatus();
+
+        // Add event listeners for form submission, inputs, etc.
         addEventListeners();
+
         console.log(`Page content initialized for user: ${currentUser.email}.`);
-    } catch (error) { console.error("Error during page content initialization:", error); showError(`Error initializing page: ${error.message}. Try refreshing.`); if(submitBtn) submitBtn.disabled = true; if(startQuiz1Button) lockQuizButton(); }
+
+    } catch (error) {
+        console.error("Error during page content initialization:", error);
+        showError(`Error initializing page: ${error.message}. Try refreshing.`);
+        // Disable interactions if initialization fails badly
+        if(submitBtn) submitBtn.disabled = true;
+        if(startQuiz1Button) lockQuizButton();
+    }
 }
+
 
 document.addEventListener('DOMContentLoaded', function() {
     console.log("%cDOM Content Loaded.", "color: green;");
     mainContainer = document.getElementById('mainContainer');
-    tempPopupElement = document.getElementById('temp-popup'); // Get the popup element
+    tempPopupElement = document.getElementById('temp-popup'); // Get the popup element reference
 
-    if (isLoggedIn_immediate && mainContainer && tempPopupElement) { // Check for popup element too
+    // Proceed only if user is logged in and essential containers exist
+    if (isLoggedIn_immediate && mainContainer && tempPopupElement) {
         console.log("User logged in and essential containers found. Proceeding with initialization.");
         try {
-            // Assign other elements
-            userNameDisplay = document.getElementById('userName'); userEmailDisplay = document.getElementById('userEmail'); questionForm = document.getElementById('questionForm'); nameInput = document.getElementById('name'); answerInput = document.getElementById('answer'); errorMessageDisplay = document.getElementById('error-message'); successModal = document.getElementById('successModal'); modalGreeting = document.getElementById('modalGreeting'); submitBtn = document.getElementById('submitBtn'); progressBarContainer = document.getElementById('progress-container-intro-goal'); progressBar = document.getElementById('progress-bar-intro-goal'); progressText = document.getElementById('progress-text-intro-goal'); questionTitleElement = document.getElementById('questionTitle'); questionPromptElement = document.getElementById('questionPrompt'); submissionInfoDiv = document.getElementById('submissionInfo'); submissionTimestampElement = document.getElementById('submissionTimestamp'); quizReminderMessage = document.getElementById('quizReminderMessage'); quizIntroContainer = document.getElementById('quizIntroContainer'); startQuiz1Button = document.getElementById('startQuiz1Button'); quizLockMessage = document.getElementById('quizLockMessage');
+            // --- Assign DOM Element References ---
+            userNameDisplay = document.getElementById('userName');
+            userEmailDisplay = document.getElementById('userEmail');
+            questionForm = document.getElementById('questionForm');
+            nameInput = document.getElementById('name');
+            answerInput = document.getElementById('answer');
+            errorMessageDisplay = document.getElementById('error-message');
+            successModal = document.getElementById('successModal'); // Keep ref even if unused
+            modalGreeting = document.getElementById('modalGreeting'); // Keep ref even if unused
+            submitBtn = document.getElementById('submitBtn');
+            progressBarContainer = document.getElementById('progress-container-intro-goal');
+            progressBar = document.getElementById('progress-bar-intro-goal');
+            progressText = document.getElementById('progress-text-intro-goal');
+            questionTitleElement = document.getElementById('questionTitle');
+            questionPromptElement = document.getElementById('questionPrompt');
+            submissionInfoDiv = document.getElementById('submissionInfo');
+            submissionTimestampElement = document.getElementById('submissionTimestamp');
+            quizReminderMessage = document.getElementById('quizReminderMessage');
+            quizIntroContainer = document.getElementById('quizIntroContainer');
+            startQuiz1Button = document.getElementById('startQuiz1Button');
+            quizLockMessage = document.getElementById('quizLockMessage');
 
-            // Check essential elements (excluding modal which is less critical now)
+            // --- Verify All Essential Elements ---
             const essentialElements = { mainContainer, tempPopupElement, userNameDisplay, userEmailDisplay, questionForm, nameInput, answerInput, errorMessageDisplay, submitBtn, progressBarContainer, progressBar, progressText, questionTitleElement, questionPromptElement, submissionInfoDiv, submissionTimestampElement, quizReminderMessage, quizIntroContainer, startQuiz1Button, quizLockMessage };
             let missingElementKey = null;
-            for (const [key, element] of Object.entries(essentialElements)) { if (!element) { missingElementKey = key; break; } }
-            if (missingElementKey) { throw new Error(`Initialization failed: Essential DOM element '${missingElementKey}' not found.`); }
+            for (const [key, element] of Object.entries(essentialElements)) {
+                if (!element) { missingElementKey = key; break; }
+            }
+            if (missingElementKey) {
+                throw new Error(`Initialization failed: Essential DOM element '${missingElementKey}' not found.`);
+            }
             console.log("All essential DOM elements found.");
 
+            // --- Check Supabase Availability ---
             if (!supabase) {
                 console.error("Initialization Error: Supabase client is not available. Online features disabled.");
                 if(submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Service Unavailable'; }
-                lockQuizButton(); if(quizLockMessage) quizLockMessage.textContent = "Course service unavailable.";
+                lockQuizButton(); // Lock quiz if service unavailable
+                if(quizLockMessage) quizLockMessage.textContent = "Course service unavailable.";
                 showError("Cannot connect to the course service. Please check connection and refresh. Online progress saving is disabled.");
+                // No return here, allow local functionality if possible
             }
 
+            // --- Get Current User Data ---
             const currentUser = getCurrentUser();
-            if (!currentUser) { throw new Error("User data is missing or invalid after initial checks. Cannot proceed with initialization."); }
+            if (!currentUser) {
+                // This case should ideally be handled by the immediate redirect, but double-check
+                console.error("Initialization Error: User data is missing or invalid after login check. Redirecting.");
+                logout(); // Force logout/redirect if user data vanished
+                return; // Stop initialization
+            }
             console.log(`Initializing content for user: ${currentUser.email}. Supabase available: ${!!supabase}`);
 
+            // --- Initialize Page Content ---
             initializePageContent(currentUser);
             console.log("DOM content initialization complete.");
 
         } catch (error) {
+             // --- Handle Critical Initialization Errors ---
              console.error("CRITICAL ERROR during DOMContentLoaded Initialization:", error);
-             if (mainContainer) { mainContainer.innerHTML = `<div style="padding: 30px; text-align: center; background-color: #fff3f3; border: 1px solid #e74c3c; border-radius: 8px; color: #c0392b;"><h3 style="margin-bottom: 15px;">Oops! Something went wrong.</h3><p>We encountered an error while loading the page content. Please try refreshing the page.</p><p style="font-size: 0.8em; color: #999; margin-top: 10px;">Error details: ${error.message}</p></div>`; mainContainer.style.display = 'block'; }
-             else { document.body.insertAdjacentHTML('afterbegin', `<p style="color: red; background: white; padding: 20px; border: 1px solid red; text-align: center;">Critical Error: Page structure is missing or invalid. (${error.message})</p>`); }
+             // Display error message to the user within the main container if possible
+             if (mainContainer) {
+                 mainContainer.innerHTML = `<div style="padding: 30px; text-align: center; background-color: #fff3f3; border: 1px solid #e74c3c; border-radius: 8px; color: #c0392b;"><h3 style="margin-bottom: 15px;">Oops! Something went wrong.</h3><p>We encountered an error while loading the page content. Please try refreshing the page.</p><p style="font-size: 0.8em; color: #999; margin-top: 10px;">Error details: ${error.message}</p></div>`;
+                 mainContainer.style.display = 'block'; // Ensure it's visible
+             } else {
+                 // Fallback if main container itself is missing
+                 document.body.insertAdjacentHTML('afterbegin', `<p style="color: red; background: white; padding: 20px; border: 1px solid red; text-align: center;">Critical Error: Page structure is missing or invalid. (${error.message})</p>`);
+             }
         }
-    } else if (!isLoggedIn_immediate) { console.log("DOM Loaded: User not logged in (as per immediate check), initialization skipped."); if (mainContainer) mainContainer.style.display = 'none'; }
-    else if (!mainContainer) { console.error("DOM Loaded: Critical error - Main container (#mainContainer) not found!"); document.body.insertAdjacentHTML('afterbegin', '<p style="color: red; background: white; padding: 20px; border: 1px solid red; text-align: center;">Critical Error: Essential page structure (#mainContainer) is missing.</p>'); }
-    else if (!tempPopupElement) { console.error("DOM Loaded: Critical error - Temp popup container (#temp-popup) not found!"); document.body.insertAdjacentHTML('afterbegin', '<p style="color: red; background: white; padding: 20px; border: 1px solid red; text-align: center;">Critical Error: Essential page structure (#temp-popup) is missing.</p>'); }
+    } else if (!isLoggedIn_immediate) {
+        // Condition: User not logged in (handled by immediate redirect, this is a fallback log)
+        console.log("DOM Loaded: User not logged in (as per immediate check), initialization skipped.");
+        if (mainContainer) mainContainer.style.display = 'none'; // Keep content hidden
+    } else if (!mainContainer) {
+        // Condition: Logged in, but #mainContainer is missing
+        console.error("DOM Loaded: Critical error - Main container (#mainContainer) not found!");
+        document.body.insertAdjacentHTML('afterbegin', '<p style="color: red; background: white; padding: 20px; border: 1px solid red; text-align: center;">Critical Error: Essential page structure (#mainContainer) is missing.</p>');
+    } else if (!tempPopupElement) {
+         // Condition: Logged in, main container exists, but #temp-popup is missing
+        console.error("DOM Loaded: Critical error - Temp popup container (#temp-popup) not found!");
+        document.body.insertAdjacentHTML('afterbegin', '<p style="color: red; background: white; padding: 20px; border: 1px solid red; text-align: center;">Critical Error: Essential page structure (#temp-popup) is missing.</p>');
+        // Potentially disable submission button as feedback mechanism won't work
+        if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = "Page Error"; }
+    }
 }); // End DOMContentLoaded
 
 </script>
@@ -1080,148 +1386,138 @@ document.addEventListener('DOMContentLoaded', function() {
 
 <script>
 // --- Second Script Block ---
-// This block contains the `sendToSupabase` function which interacts with the 'assessments' table
-// and now incorporates the two-stage popup logic.
+// Contains the `sendToSupabase` function for interacting with the 'assessments' table
+// and includes the integrated two-stage popup logic.
 
-// Make sure Supabase client is accessible here if it wasn't initialized globally
-// (Assuming it is, based on the structure)
+// Ensure Supabase client is accessible (assuming initialization in the first block)
 if (!supabase) {
-    console.error("Second script block: Supabase client not found. Trying to re-initialize.");
-    try {
-        if (window.supabase && window.supabase.createClient) {
-            supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-            console.log("Supabase client re-initialized in second block.");
-        } else { throw new Error("Supabase library not found."); }
-    } catch (e) {
-        console.error("CRITICAL: Failed to initialize Supabase in second block.", e);
-        // Alerting here might be disruptive if the first block handled it
-    }
+    console.error("Second script block: Supabase client not found. Interaction may fail.");
+    // Avoid re-initializing here if the first block already handles it and shows errors
 }
 
 async function sendToSupabase(submissionData) {
-    // Ensure Supabase is available before proceeding
+    // Ensure Supabase client is available before proceeding
     if (!supabase) {
         console.error("sendToSupabase (second script): Supabase client is not available.");
-        alert("Cannot connect to the server to save your goal. Please check your connection and try again.");
-        return { success: false };
+        // Don't alert here if the main script handles the UI error message
+        return { success: false, submitted_at: null }; // Indicate failure clearly
     }
-     // Ensure tempPopupElement is available (it should be assigned in the first script's DOMContentLoaded)
+     // Ensure tempPopupElement is available globally (assigned in first script's DOMContentLoaded)
      if (!tempPopupElement) {
          console.error("sendToSupabase (second script): tempPopupElement not found. Cannot show feedback.");
-         // Proceed with submission but can't show popup
+         // Proceed with submission? Or fail? Let's proceed but log the lack of feedback.
      }
 
-
     try {
-        const currentUser = getCurrentUser(); // Use the function from the first script
+        // Use the globally available getCurrentUser function
+        const currentUser = getCurrentUser();
 
+        // Validate essential user data retrieved
         if (!currentUser || !currentUser.email || !currentUser.id) {
-            console.error("sendToSupabase (second script): User info missing.");
-            alert("Your user information is missing. Please log in again to save your progress.");
-            // Potentially trigger logout() here?
+            console.error("sendToSupabase (second script): User info (email or ID) missing from localStorage.");
+            // Alerting here might be redundant if main function handles login issues
+            // alert("Your user information is missing. Please log in again to save your progress.");
             return { success: false, submitted_at: null };
         }
 
         const now = new Date();
-        // const submittedAtLocal = now.toLocaleString("en-GB", { timeZone: "Africa/Cairo" }); // Not used in popup
+        const timestampISO = now.toISOString(); // Use ISO format for DB
 
-        // Get question text (assuming DOM element is accessible)
-        const questionText = document.getElementById("questionPrompt")?.textContent || submissionData.questionText || "Unnamed question";
+        // Get question text safely
+        const questionText = document.getElementById("questionPrompt")?.textContent || submissionData.questionText || "Goal Setting Question"; // Fallback text
 
-        // Determine correctness (simple check for non-empty goal)
+        // Determine correctness based on non-empty answer
         const hasAnswer = !!submissionData.answer?.trim();
         const calculatedIsCorrect = hasAnswer;
 
+        // Prepare data payload for 'assessments' table
         const dataToSend = {
-            name: currentUser.name || "Anonymous", // Use name from currentUser
-            user_email: currentUser.email,
-            user_id: currentUser.id,
-            answer: submissionData.answer || "N/A",
-            goal_answer: submissionData.answer || "N/A", // Specific field for goal
-            submitted_at: now.toISOString(),
-            created_at: now.toISOString(), // Often useful to have both
-            type: submissionData.type || "goal", // Use provided type or default
-            page: submissionData.page || "index", // Use provided page or default
-            section_id: submissionData.sectionId || submissionData.page || "index", // Use provided section or default
-            question_id: submissionData.questionId || "intro-goal", // Use provided ID or default
-            question_text: questionText,
-            completion_status: submissionData.completionStatus || "completed", // Use provided status
-            is_correct: calculatedIsCorrect, // Based on answer presence
-            score: calculatedIsCorrect ? (submissionData.score || 100) : 0 // Use provided score or default
+            user_id: currentUser.id, // Crucial foreign key
+            name: currentUser.name || "User", // Name from user profile
+            user_email: currentUser.email, // User email
+            answer: submissionData.answer || "N/A", // Submitted answer
+            goal_answer: submissionData.answer || "N/A", // Specific field if needed
+            submitted_at: timestampISO, // Submission time
+            created_at: timestampISO, // Creation time (often same as submission)
+            type: submissionData.type || "goal", // Type of assessment
+            page: submissionData.page || "index", // Page identifier
+            section_id: submissionData.sectionId || "index", // Section identifier
+            question_id: submissionData.questionId || "intro-goal", // Question identifier
+            question_text: questionText, // Text of the question
+            completion_status: submissionData.completionStatus || "completed", // Status
+            is_correct: calculatedIsCorrect, // Boolean correctness
+            score: calculatedIsCorrect ? (submissionData.score ?? 100) : 0 // Score (use nullish coalescing for default)
         };
 
         console.log("sendToSupabase (second script): Data prepared for 'assessments' table:", JSON.stringify(dataToSend, null, 2));
 
-        // Upsert into 'assessments' table
-        // Define the unique constraint columns for assessments upsert
-        const assessmentConflictColumns = ['user_id', 'question_id']; // Adjust if different
+        // --- Upsert into 'assessments' table ---
+        // Define unique constraint columns for this table (adjust if necessary)
+        const assessmentConflictColumns = ['user_id', 'question_id'];
 
         console.log(`Attempting to upsert into 'assessments' with conflict on: ${assessmentConflictColumns.join(',')}`);
         const { data: upsertResult, error: upsertError } = await supabase
             .from("assessments")
             .upsert([dataToSend], {
                 onConflict: assessmentConflictColumns.join(','),
-                ignoreDuplicates: false
+                ignoreDuplicates: false // Ensure update occurs on conflict
             })
-            .select() // Select the inserted/updated row to confirm
-            .single(); // Expecting a single row back
+            .select() // Select the inserted/updated row
+            .single(); // Expecting one row back
 
         if (upsertError) {
             console.error("sendToSupabase (second script): Supabase 'assessments' upsert error:", upsertError);
-            alert("Submission failed: Could not save your goal to the database. " + upsertError.message);
-            return { success: false, submitted_at: null };
+            // No alert here - let the calling function (handleFormSubmit) show the UI error
+            return { success: false, submitted_at: null }; // Indicate failure
         }
 
         console.log("sendToSupabase (second script): Successfully upserted to 'assessments' table. Result:", upsertResult);
-        const submitted_at = upsertResult?.submitted_at || now.toISOString(); // Use timestamp from DB result if available
+        const submitted_at_from_db = upsertResult?.submitted_at || timestampISO; // Use timestamp from DB response or fallback
 
-        // Note: The user_progress update is now handled in the first script's handleFormSubmit
-        // function *before* this function is called. No need to duplicate it here.
-
-        // --- Success Feedback and Redirect ---
+        // --- Success Feedback & Redirect ---
         console.log("sendToSupabase (second script): DB operations successful. Triggering feedback popup.");
 
-        // ✅ Use the new two-stage popup function
-        // Make sure the redirect URL is correct ('assessment.html')
-        showTwoStagePopupAndRedirect('assessment.html');
+        // Use the two-stage popup function (defined in the first script block)
+        if (typeof showTwoStagePopupAndRedirect === 'function') {
+             // Redirect to the correct quiz URL
+             showTwoStagePopupAndRedirect(QUIZ_REDIRECT_URL); // QUIZ_REDIRECT_URL is 'assessment.html'
+         } else {
+             console.error("showTwoStagePopupAndRedirect function not found! Cannot show popup. Redirecting directly.");
+             window.location.href = QUIZ_REDIRECT_URL; // Fallback direct redirect
+         }
 
-        // Return success status and the timestamp
-        return { success: true, submitted_at: submitted_at };
+
+        // Return success status and the confirmed submission timestamp
+        return { success: true, submitted_at: submitted_at_from_db };
 
     } catch (err) {
         console.error("sendToSupabase (second script): Unexpected error during submission:", err);
-        alert("An unexpected error occurred while saving your goal. Please try again later.");
-        return { success: false, submitted_at: null };
+        // Let the calling function handle the generic UI error message
+        return { success: false, submitted_at: null }; // Indicate failure
     }
 }
 
-// Helper function potentially needed if called before DOMContentLoaded in first script
-function getCurrentUser() {
-    try {
-        const d = localStorage.getItem('currentUser'); // Direct key access
-        if (!d) { return null; }
-        const p = JSON.parse(d);
-        // Basic validation
-        if (p && typeof p === 'object' && p.email && p.id) {
-            return p;
-        }
-        return null;
-    } catch (e) {
-        console.error("getCurrentUser (fallback in second script) error:", e);
-        return null;
+// Fallback getCurrentUser definition (should ideally not be needed if first script runs correctly)
+if (typeof getCurrentUser !== 'function') {
+     function getCurrentUser() {
+        try {
+            const d = localStorage.getItem('currentUser');
+            if (!d) { return null; }
+            const p = JSON.parse(d);
+            if (p && typeof p === 'object' && p.email && p.id) { return p; }
+            return null;
+        } catch (e) { console.error("getCurrentUser (fallback definition) error:", e); return null; }
     }
 }
 
-// Ensure tempPopupElement is assigned if the second script runs standalone somehow
-// (Though ideally it relies on the first script's DOMContentLoaded)
+// Ensure tempPopupElement is assigned if needed (fallback)
 if (!tempPopupElement) {
     document.addEventListener('DOMContentLoaded', () => {
          tempPopupElement = document.getElementById('temp-popup');
          if (!tempPopupElement) {
-             console.error("Second script DOMContentLoaded: #temp-popup still not found!");
+             console.error("Second script DOMContentLoaded fallback: #temp-popup still not found!");
          }
     });
 }
-
 
 </script>
