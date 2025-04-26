@@ -726,10 +726,13 @@ button:hover {
 
 
 
+
+
+
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
 <script>
 const SUPABASE_URL = 'https://lgcutmuspcaralydycmg.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxnY3V0bXVzcGNhcmFseWR5Y21nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU0NDY3MDEsImV4cCI6MjA2MTAyMjcwMX0.3u5Y7pkH2NNnnoGLMWVfAa5b8fq88o1itRYnG1K38tE'; // ضع هنا المفتاح الكامل إذا احتجت
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxnY3V0bXVzcGNhcmFseWR5Y21nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU0NDY3MDEsImV4cCI6MjA2MTAyMjcwMX0.3u5Y7pkH2NNnnoGLMWVfAa5b8fq88o1itRYnG1K38tE'; // أكمل المفتاح لو ناقص
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 document.addEventListener("DOMContentLoaded", async () => {
@@ -738,57 +741,77 @@ document.addEventListener("DOMContentLoaded", async () => {
     const popupOverlay = document.getElementById("popupOverlay"); 
     const successPopup = document.getElementById("assessmentSuccessPopup");
 
-    let answered = 0;
-    const totalQuestions = 5; // 5 أسئلة موجودة
+    const totalQuestions = 5;
+    let currentUser = JSON.parse(localStorage.getItem('currentUser') || '{}');
+    const userEmail = currentUser.email;
 
-    const updateProgress = () => {
+    if (!userEmail) {
+        alert("User email not found. Please login again.");
+        return;
+    }
+
+    const updateProgressUI = async () => {
+        const { data, error } = await supabaseClient
+            .from('assessment_answers')
+            .select('question_id')
+            .eq('user_email', userEmail);
+
+        const answered = data ? data.length : 0;
         const progress = (answered / totalQuestions) * 100;
         progressBar.style.width = `${progress}%`;
+
+        await supabaseClient.from('user_progress').upsert({
+            user_email: userEmail,
+            section_type: 'assessment',
+            section_id: 'pre-course',
+            section_title: 'Pre-Course Assessment',
+            progress: progress,
+            updated_at: new Date().toISOString()
+        }, { onConflict: ['user_email', 'section_id'] });
     };
 
-    async function getCurrentUserFromSupabase() {
-        const { data: { user }, error } = await supabaseClient.auth.getUser();
-        if (error || !user) {
-            console.error("Supabase user fetch error", error);
-            return null;
-        }
-        return user;
-    }
+    const autoSave = async (questionId, value) => {
+        if (!value.trim()) return;
+
+        await supabaseClient.from('assessment_answers').upsert({
+            user_email: userEmail,
+            question_id: questionId,
+            answer: value,
+            submitted_at: new Date().toISOString()
+        }, { onConflict: ['user_email', 'question_id'] });
+
+        await updateProgressUI();
+    };
+
+    // مراقبة كل input/textarea للحفظ الفوري
+    form.querySelectorAll('textarea, input').forEach(el => {
+        el.addEventListener('blur', async () => {
+            await autoSave(el.name || el.id, el.value);
+        });
+    });
 
     form.addEventListener("submit", async (e) => {
         e.preventDefault();
 
-        const localUser = JSON.parse(localStorage.getItem('currentUser') || '{}');
-        const userEmail = localUser.email;
-        if (!userEmail) {
-            alert("User email not found. Please login again.");
-            return;
-        }
-
         const formData = new FormData(form);
-        answered = 0;
 
         for (const [questionId, answer] of formData.entries()) {
             if (answer.trim()) {
-                await supabaseClient.from("assessment_answers").upsert({ 
-                    user_email: userEmail, 
-                    question_id: questionId, 
-                    answer: answer, 
-                    submitted_at: new Date().toISOString() 
-                }, { onConflict: ['user_email', 'question_id'] });
-
-                answered++;
-                updateProgress();
+                await autoSave(questionId, answer);
             }
         }
 
+        // Mark assessment as completed
         await supabaseClient.from("users").update({ assessment_completed: true }).eq("email", userEmail);
 
         successPopup.style.display = 'block';
         popupOverlay.style.display = 'block';
         form.reset();
-        progressBar.style.width = '0%';
+        await updateProgressUI();
     });
+
+    // Initial load
+    updateProgressUI();
 });
 </script>
 
