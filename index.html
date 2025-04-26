@@ -346,7 +346,7 @@ p { margin-bottom: 15px; color: #555e68; /* Slightly softer black */ line-height
     <!-- Submission Info Area -->
     <div class="submission-info" id="submissionInfo">
         <p><strong>Goal Submitted Successfully!</strong></p>
-        <p id="submissionTimestamp">Your goal has been submitted successfully. Thank you!</p>
+        <p id="submissionTimestamp">Submitted at: Loading...</p>
     </div>
 </div>
 
@@ -459,17 +459,7 @@ function displayUserInfo(currentUser) {
             userEmail = currentUser.email || userEmail;
             if (nameInput && !nameInput.value) { nameInput.value = userName; }
         }
-        if (userNameDisplay) {
-            userNameDisplay.textContent = `Welcome, ${userName}`;
-            const isAdmin = currentUser.email === "m.elsayed@thechefz.co";
-            if (isAdmin) {
-                const adminBadge = document.createElement('span');
-                adminBadge.textContent = " (Admin)";
-                adminBadge.style.color = "#f39c12";
-                adminBadge.style.fontWeight = "bold";
-                userNameDisplay.appendChild(adminBadge);
-            }
-        }
+        if (userNameDisplay) userNameDisplay.textContent = `Welcome, ${userName}`;
         if (userEmailDisplay) userEmailDisplay.textContent = userEmail;
     } catch (err) { console.error("Error in displayUserInfo:", err); }
 }
@@ -569,7 +559,7 @@ function showSubmissionInfo(timestamp) {
                 displayTime = timestamp; // Fallback to raw timestamp string
             }
         } else {
-            displayTime = '';
+            displayTime = 'Saved locally (offline or DB issue)';
         }
         submissionTimestampElement.textContent = `Submitted at: ${displayTime}`;
         submissionInfoDiv.style.display = 'block';
@@ -669,7 +659,56 @@ function closeModal() {
     try { if(successModal) { successModal.style.display='none'; } console.log("Modal closed (function called)."); } catch(err){ console.error("Error closing modal:", err); }
 }
 
+async function sendToSupabase(submissionData) {
+    if (!supabase) {
+        console.error("sendToSupabase: Supabase client not available.");
+        showError("Database connection error. Progress saved locally only.");
+        return { success: false, submitted_at: null };
+    }
 
+    const clientTimestamp = new Date().toISOString();
+    const dataToSend = {
+        name: submissionData.name,
+        
+        goal_answer: submissionData.answer,
+        is_correct: null,
+        score: submissionData.score,
+        submitted_at: clientTimestamp,
+        section_id: submissionData.sectionId,
+        completion_status: submissionData.completionStatus,
+        question_id: submissionData.questionId,
+        question_text: submissionData.questionText,
+        page: CURRENT_PAGE
+    };
+
+    console.log("Attempting to send data to 'assessments' table:", JSON.stringify(dataToSend, null, 2));
+
+    try {
+        const { error } = await supabase
+            .from('assessments')
+            .insert([dataToSend]);
+
+        if (error) {
+            console.error('Supabase insert error details:', error);
+            let userMessage = `Database Error saving assessment: ${error.message}. Your progress has been saved locally.`;
+            if (error.code === '23505') {
+                 userMessage = "You seem to have already submitted this goal. Your progress is saved.";
+            }
+            showError(userMessage);
+            alert('Error submitting to Supabase: ' + (error.message || 'Unknown error'));
+            return { success: false, submitted_at: null };
+        }
+
+        console.log('Supabase assessment submission successful. Client Timestamp:', clientTimestamp);
+        return { success: true, submitted_at: clientTimestamp };
+
+    } catch (networkError) {
+        console.error('Network Error during assessment submission:', networkError);
+        showError(`Network Error: ${networkError.message}. Your progress has been saved locally.`);
+        alert('Network error submitting assessment. Progress saved locally.');
+        return { success: false, submitted_at: null };
+    }
+}
 
 async function updateUserProgress(userEmail, sectionId, questionId, questionText) {
     if (!supabase) {
@@ -726,8 +765,6 @@ async function updateUserProgress(userEmail, sectionId, questionId, questionText
 
 function updateLocalSectionProgress(sectionId) {
     const currentUser = getCurrentUser();
-            const isAdmin = currentUser.email === "m.elsayed@thechefz.co";
-            if (isAdmin) console.log("Admin user detected.");
     if (!currentUser) { console.warn("updateLocalSectionProgress: Cannot update, user not found."); return 0; }
     let sectionProgress = 0;
     if (sectionId === SECTION_ID) {
@@ -791,8 +828,6 @@ async function handleFormSubmit(event) {
     if (answer.length < 20) { showError("Your goal needs to be at least 20 characters long.", answerInput); isValid = false; }
     if (!email || !email.includes('@')) {
         const currentUser = getCurrentUser();
-            const isAdmin = currentUser.email === "m.elsayed@thechefz.co";
-            if (isAdmin) console.log("Admin user detected.");
         const backupEmail = currentUser?.email;
         if (backupEmail && backupEmail.includes('@')) { email = backupEmail; console.warn("Using backup email from currentUser object."); }
         else { showError("Your email address seems invalid. Please log out and back in.", userEmailDisplay); isValid = false; }
@@ -849,7 +884,7 @@ async function handleFormSubmit(event) {
         // ✅ This function redirects to QUIZ_REDIRECT_URL ('assessment.html')
         if (assessmentSuccess) {
             console.log("Showing redirect confirmation modal...");
-            showSuccessMessage();
+            showRedirectConfirmationModal();
         } else {
             console.warn("DB submission failed, not showing redirect modal. UI updated based on local save.");
         }
@@ -939,8 +974,6 @@ document.addEventListener('DOMContentLoaded', function() {
             }
 
             const currentUser = getCurrentUser();
-            const isAdmin = currentUser.email === "m.elsayed@thechefz.co";
-            if (isAdmin) console.log("Admin user detected.");
             if (!currentUser) { throw new Error("User data is missing or invalid after initial checks. Cannot proceed with initialization."); }
             console.log(`Initializing content for user: ${currentUser.email}. Supabase available: ${!!supabase}`);
 
@@ -959,99 +992,3 @@ document.addEventListener('DOMContentLoaded', function() {
 </script>
 </body>
 </html>
-
-<script>
-async function sendToSupabase(submissionData) {
-    try {
-        const currentUser = JSON.parse(localStorage.getItem('currentUser') || '{}');
-
-        if (!currentUser || !currentUser.email || !currentUser.id) {
-            alert("User info missing. Please log in again.");
-            return { success: false };
-        }
-
-        const now = new Date();
-        const submittedAtLocal = now.toLocaleString("en-GB", { timeZone: "Africa/Cairo" });
-
-        // قراءة نص السؤال من DOM
-        const questionText = document.getElementById("questionPrompt")?.textContent || "Unnamed question";
-
-        // حساب is_correct بناءً على وجود إجابة
-        const hasAnswer = !!submissionData.answer?.trim();
-        const calculatedIsCorrect = hasAnswer;
-
-        const dataToSend = {
-            name: currentUser.name || "Anonymous",
-            user_email: currentUser.email,
-            user_id: currentUser.id,
-            answer: submissionData.answer || "N/A",
-            goal_answer: submissionData.answer || "N/A",
-            submitted_at: now.toISOString(),
-            created_at: now.toISOString(),
-            type: submissionData.type || "goal",
-            page: submissionData.page || "index",
-            section_id: submissionData.section_id || submissionData.page || "index",
-            question_id: submissionData.question_id || "Q1",
-            question_text: questionText,
-            completion_status: "completed",
-            is_correct: calculatedIsCorrect,
-            score: calculatedIsCorrect ? 100 : 0
-        };
-
-        const { data: existingEntry, error: checkError } = await supabase
-            .from("assessments")
-            .select("id")
-            .eq("name", dataToSend.name)
-            .eq("question_id", dataToSend.question_id)
-            .maybeSingle();
-
-        let insertResult;
-        if (existingEntry) {
-            insertResult = await supabase.from("assessments").update(dataToSend).eq("id", existingEntry.id);
-        } else {
-            insertResult = await supabase.from("assessments").insert([dataToSend]);
-        }
-
-        if (insertResult?.error) {
-            alert("Submission failed: " + insertResult.error.message);
-            return { success: false };
-        }
-
-        // تسجيل progress
-        const progressEntry = {
-            user_id: currentUser.id,
-            email: currentUser.email,
-            question_id: dataToSend.question_id,
-            question_text: dataToSend.question_text,
-            page: dataToSend.page,
-            section_id: dataToSend.section_id,
-            section_type: dataToSend.type || "goal",
-            section_title: dataToSend.page || "Index",
-            score: dataToSend.score,
-            status: "completed",
-            progress: 1,
-            progress_percent: 100,
-            submitted_at: now.toISOString(),
-            updated_at: now.toISOString(),
-            is_passed: dataToSend.is_correct
-        };
-
-        await supabase.from("user_progress").insert([progressEntry]);
-
-        const successMessage = document.createElement('div');
-        successMessage.innerHTML = `🎉 Goal submitted successfully!<br><small>Submitted at: ${submittedAtLocal}</small>`;
-        successMessage.style.cssText = "background:#4CAF50; color:white; padding:10px; border-radius:8px; margin-top:20px; text-align:center; font-size:18px;";
-        document.body.appendChild(successMessage);
-
-        setTimeout(() => {
-            window.location.href = "assessment.html";
-        }, 2000);
-
-        return { success: true };
-    } catch (err) {
-        console.error("Unexpected error during submission:", err);
-        alert("An unexpected error occurred. Please try again later.");
-        return { success: false };
-    }
-}
-</script>
