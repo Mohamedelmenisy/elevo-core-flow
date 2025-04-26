@@ -219,6 +219,7 @@ button:hover {
                 <div class="form-group">
                     <label for="q1_coaching_meaning">What does coaching mean to you?</label>
                     <textarea id="q1_coaching_meaning" name="coaching_meaning" required data-min-words="20" placeholder="Describe your understanding of coaching..."></textarea>
+<button type="button" class="btn btn-success mt-2 save-answer" data-question-id="q1_coaching_meaning">Save Answer</button>
                     <div class="input-meta-info">
                         <div class="paste-warning" id="q1_paste_warning">Pasting content is discouraged. Please use your own words.</div>
                         <div class="word-count-info" id="q1_word_count_container">Words: <span id="q1_word_count">0</span>/20</div>
@@ -240,6 +241,7 @@ button:hover {
                 <div class="form-group">
                     <label for="q3_expectations">What are your expectations from this course?</label>
                     <textarea id="q3_expectations" name="expectations" required data-min-words="15" placeholder="What do you hope to learn or achieve?"></textarea>
+<button type="button" class="btn btn-success mt-2 save-answer" data-question-id="q3_expectations">Save Answer</button>
                      <div class="input-meta-info">
                          <div class="paste-warning" id="q3_paste_warning">Pasting content is discouraged. Please use your own words.</div>
                          <div class="word-count-info" id="q3_word_count_container">Words: <span id="q3_word_count">0</span>/15</div>
@@ -251,10 +253,12 @@ button:hover {
                  <div class="form-group">
                     <label for="q4_confidence_rating">Rate your current coaching confidence (1=Low, 5=High)</label>
                     <input type="number" id="q4_confidence_rating" name="confidence_rating" required min="1" max="5" step="1" placeholder="Enter a number between 1 and 5">
+<button type="button" class="btn btn-success mt-2 save-answer" data-question-id="q4_confidence_rating">Save Answer</button>
                     <div class="error-message" id="q4_rating_error"></div>
 
                     <label for="q4_confidence_explanation" style="margin-top: 15px;">Briefly explain your rating:</label>
                     <textarea id="q4_confidence_explanation" name="confidence_explanation" required data-min-words="10" placeholder="Why did you choose this rating?"></textarea>
+<button type="button" class="btn btn-success mt-2 save-answer" data-question-id="q4_confidence_explanation">Save Answer</button>
                      <div class="input-meta-info">
                          <div class="paste-warning" id="q4_exp_paste_warning">Pasting content is discouraged. Please use your own words.</div>
                          <div class="word-count-info" id="q4_exp_word_count_container">Words: <span id="q4_exp_word_count">0</span>/10</div>
@@ -472,6 +476,7 @@ button:hover {
              randomQuestionContainer.innerHTML = `
                  <label for="${selectedRandomQuestion.id}">${selectedRandomQuestion.label}</label>
                  <textarea id="${selectedRandomQuestion.id}" name="${selectedRandomQuestion.id}" required data-min-words="${selectedRandomQuestion.minWords}" placeholder="${randomPlaceholder}"></textarea>
+<button type="button" class="btn btn-success mt-2 save-answer" data-question-id="${selectedRandomQuestion.id}">Save Answer</button>
                  <div class="input-meta-info">
                      <div class="paste-warning" id="${selectedRandomQuestion.id}_paste_warning">Pasting content is discouraged. Please use your own words.</div>
                      <div class="word-count-info" id="${selectedRandomQuestion.id}_word_count_container">Words: <span id="${selectedRandomQuestion.id}_word_count">0</span>${randomWordCountDenominator}</div>
@@ -726,53 +731,31 @@ button:hover {
 
 
 
-
-
-
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
 <script>
 const SUPABASE_URL = 'https://lgcutmuspcaralydycmg.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxnY3V0bXVzcGNhcmFseWR5Y21nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU0NDY3MDEsImV4cCI6MjA2MTAyMjcwMX0.3u5Y7pkH2NNnnoGLMWVfAa5b8fq88o1itRYnG1K38tE'; // أكمل المفتاح لو ناقص
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'; // ضع المفتاح هنا كاملا
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 document.addEventListener("DOMContentLoaded", async () => {
     const form = document.getElementById("assessmentForm");
     const progressBar = document.getElementById("progressBar");
-    const popupOverlay = document.getElementById("popupOverlay"); 
     const successPopup = document.getElementById("assessmentSuccessPopup");
+    const popupOverlay = document.getElementById("popupOverlay");
 
+    let answered = 0;
     const totalQuestions = 5;
-    let currentUser = JSON.parse(localStorage.getItem('currentUser') || '{}');
+    const savedAnswers = {};
+    const currentUser = JSON.parse(localStorage.getItem('currentUser') || '{}');
     const userEmail = currentUser.email;
 
-    if (!userEmail) {
-        alert("User email not found. Please login again.");
-        return;
-    }
-
-    const updateProgressUI = async () => {
-        const { data, error } = await supabaseClient
-            .from('assessment_answers')
-            .select('question_id')
-            .eq('user_email', userEmail);
-
-        const answered = data ? data.length : 0;
+    function updateProgress() {
         const progress = (answered / totalQuestions) * 100;
         progressBar.style.width = `${progress}%`;
+    }
 
-        await supabaseClient.from('user_progress').upsert({
-            user_email: userEmail,
-            section_type: 'assessment',
-            section_id: 'pre-course',
-            section_title: 'Pre-Course Assessment',
-            progress: progress,
-            updated_at: new Date().toISOString()
-        }, { onConflict: ['user_email', 'section_id'] });
-    };
-
-    const autoSave = async (questionId, value) => {
+    async function saveAnswer(questionId, value) {
         if (!value.trim()) return;
-
         await supabaseClient.from('assessment_answers').upsert({
             user_email: userEmail,
             question_id: questionId,
@@ -780,38 +763,48 @@ document.addEventListener("DOMContentLoaded", async () => {
             submitted_at: new Date().toISOString()
         }, { onConflict: ['user_email', 'question_id'] });
 
-        await updateProgressUI();
-    };
+        if (!savedAnswers[questionId]) {
+            savedAnswers[questionId] = true;
+            answered++;
+            updateProgress();
+        }
+    }
 
-    // مراقبة كل input/textarea للحفظ الفوري
-    form.querySelectorAll('textarea, input').forEach(el => {
-        el.addEventListener('blur', async () => {
-            await autoSave(el.name || el.id, el.value);
+    document.querySelectorAll('.save-answer').forEach(button => {
+        button.addEventListener('click', async () => {
+            const questionId = button.getAttribute('data-question-id');
+            const input = document.getElementById(questionId);
+            if (input) {
+                await saveAnswer(questionId, input.value);
+                alert('✅ Answer saved successfully!');
+            }
         });
     });
 
     form.addEventListener("submit", async (e) => {
         e.preventDefault();
 
-        const formData = new FormData(form);
-
-        for (const [questionId, answer] of formData.entries()) {
-            if (answer.trim()) {
-                await autoSave(questionId, answer);
-            }
+        if (answered < totalQuestions) {
+            alert('⚠️ Please save all answers before submitting.');
+            return;
         }
 
-        // Mark assessment as completed
-        await supabaseClient.from("users").update({ assessment_completed: true }).eq("email", userEmail);
+        await supabaseClient.from('users').update({ assessment_completed: true }).eq('email', userEmail);
+
+        await supabaseClient.from('user_progress').upsert({
+            user_email: userEmail,
+            section_type: 'assessment',
+            section_id: 'pre-course',
+            section_title: 'Pre-Course Assessment',
+            progress: 100,
+            updated_at: new Date().toISOString()
+        }, { onConflict: ['user_email', 'section_id'] });
 
         successPopup.style.display = 'block';
         popupOverlay.style.display = 'block';
         form.reset();
-        await updateProgressUI();
+        progressBar.style.width = '0%';
     });
-
-    // Initial load
-    updateProgressUI();
 });
 </script>
 
