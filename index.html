@@ -660,53 +660,31 @@ function closeModal() {
 }
 
 async function sendToSupabase(submissionData) {
-    if (!supabase) {
-        console.error("sendToSupabase: Supabase client not available.");
-        showError("Database connection error. Progress saved locally only.");
-        return { success: false, submitted_at: null };
-    }
-
-    const clientTimestamp = new Date().toISOString();
-    const dataToSend = {
-        name: submissionData.name,
-        
-        answer: submissionData.answer,
-        is_correct: null,
-        score: submissionData.score,
-        submitted_at: clientTimestamp,
-        section_id: submissionData.sectionId,
-        completion_status: submissionData.completionStatus,
-        question_id: submissionData.questionId,
-        question_text: submissionData.questionText,
-        page: CURRENT_PAGE
-    };
-
-    console.log("Attempting to send data to 'assessments' table:", JSON.stringify(dataToSend, null, 2));
-
     try {
-        const { error } = await supabase
-            .from('assessments')
-            .insert([dataToSend]);
+        const currentUser = JSON.parse(localStorage.getItem('currentUser') || '{}');
+
+        const dataToSend = {
+            name: currentUser.name || submissionData.name || "Anonymous",
+            user_email: currentUser.email || "unknown@email.com",
+            user_id: currentUser.id || null,
+            answer: submissionData.answer || "N/A",
+            submitted_at: new Date().toISOString(),
+            type: submissionData.type || "goal",
+            page: submissionData.page || "index"
+        };
+
+        const { data, error } = await supabase.from("assessments").insert([dataToSend]);
 
         if (error) {
-            console.error('Supabase insert error details:', error);
-            let userMessage = `Database Error saving assessment: ${error.message}. Your progress has been saved locally.`;
-            if (error.code === '23505') {
-                 userMessage = "You seem to have already submitted this goal. Your progress is saved.";
-            }
-            showError(userMessage);
-            alert('Error submitting to Supabase: ' + (error.message || 'Unknown error'));
-            return { success: false, submitted_at: null };
+            console.error("Error submitting to Supabase:", error.message);
+            alert("Submission failed. Please try again later.");
+        } else {
+            console.log("Submission saved to Supabase:", data);
+            alert("Goal submitted successfully!");
         }
-
-        console.log('Supabase assessment submission successful. Client Timestamp:', clientTimestamp);
-        return { success: true, submitted_at: clientTimestamp };
-
-    } catch (networkError) {
-        console.error('Network Error during assessment submission:', networkError);
-        showError(`Network Error: ${networkError.message}. Your progress has been saved locally.`);
-        alert('Network error submitting assessment. Progress saved locally.');
-        return { success: false, submitted_at: null };
+    } catch (err) {
+        console.error("Unexpected error during submission:", err);
+        alert("Unexpected error occurred.");
     }
 }
 
