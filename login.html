@@ -162,7 +162,39 @@
         function togglePasswordVisibility(toggleButton, inputElement) { if (!toggleButton || !inputElement) return; const isPassword = inputElement.type === 'password'; inputElement.type = isPassword ? 'text' : 'password'; toggleButton.innerHTML = isPassword ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>' : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>'; toggleButton.setAttribute('aria-label', isPassword ? 'Hide password' : 'Show password'); }
         function setButtonLoading(isLoading) { if (!loginButton) return; console.log(`Setting button loading: ${isLoading}`); loginButton.disabled = isLoading; loginButton.classList.toggle('loading', isLoading); }
 
-        // *** NEW: Function to store user data ***
+        // *** NEW: Function to store user data (MODIFIED TO FETCH NAME FROM 'users' TABLE') ***
+        async function storeUserData(user) {
+            if (!user || !user.id || !user.email) {
+                console.error("storeUserData: Invalid user object received:", user);
+                return;
+            }
+            try {
+                // Fetch name from 'users' table
+                const { data: userData, error } = await supabase
+                  .from('users')
+                  .select('name')
+                  .eq('email', user.email)
+                  .single();
+
+                const fullName = userData?.name || user.user_metadata?.full_name || user.email.split('@')[0];
+
+                const currentUserData = {
+                    id: user.id,
+                    email: user.email,
+                    name: fullName,
+                    progress: {}
+                };
+
+                localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(currentUserData));
+                localStorage.setItem(LOGGED_IN_KEY, 'true');
+                console.log("User data stored in localStorage with full name:", currentUserData);
+            } catch (e) {
+                console.error("Error fetching/storing user data:", e);
+                localStorage.removeItem(CURRENT_USER_KEY);
+                localStorage.removeItem(LOGGED_IN_KEY);
+            }
+        }
+    
         function storeUserData(user) {
             if (!user || !user.id || !user.email) {
                 console.error("storeUserData: Invalid user object received:", user);
