@@ -850,11 +850,11 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 
 <!-- Popup Message -->
-<div id="popupMessage" style="display:none;position:fixed;top:30%;left:50%;transform:translate(-50%, -50%);background-color:#ffffff;padding:20px 30px;border:2px solid #4caf50;border-radius:12px;font-size:18px;color:#2e7d32;box-shadow:0 4px 8px rgba(0,0,0,0.2);z-index:9999;text-align:center;"></div>
+<div id="popupMessage" style="display:none;position:fixed;top:30%;left:50%;transform:translate(-50%, -50%);background:#ffffff;padding:20px 30px;border:2px solid #4caf50;border-radius:12px;font-size:18px;color:#2e7d32;box-shadow:0 4px 8px rgba(0,0,0,0.2);z-index:9999;text-align:center;"></div>
 
 <!-- Progress Bar -->
-<div id="progressBarContainer" style="width: 100%; background-color: #ddd; border-radius: 20px; margin-top: 30px;">
-  <div id="progressBar" style="width: 0%; height: 30px; background-color: #4caf50; border-radius: 20px; text-align: center; line-height: 30px; color: white; font-weight: bold;">0%</div>
+<div id="progressBarContainer" style="width:100%;background:#ddd;border-radius:20px;margin-top:30px;">
+  <div id="progressBar" style="width:0%;height:30px;background:#4caf50;border-radius:20px;text-align:center;line-height:30px;color:white;font-weight:bold;">0%</div>
 </div>
 
 <!-- Supabase Client -->
@@ -865,18 +865,75 @@ const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY'; // <-- غيّره
 const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 let answeredQuestions = 0;
-const totalQuestions = 5; // تقديري، ممكن تعدل حسب عدد أسئلتك
+const totalQuestions = 5; // أو ممكن تتغير حسب عدد الأسئلة
 
-async function saveAnswer(questionId, answer, questionText) {
+async function sendToSupabase(submissionData) {
+    const { data, error } = await supabase.from('assessment_answers').insert([submissionData]);
+
+    if (error) {
+        console.error('Error saving submission:', error.message);
+    } else {
+        console.log('Goal submitted successfully!');
+    }
+}
+
+async function updateUserProgress(user_id) {
+    const { data, error } = await supabase.from('users').update({
+        assessment_completed: true
+    }).eq('id', user_id);
+
+    if (error) {
+        console.error('Error updating user progress:', error.message);
+    } else {
+        console.log('User assessment marked as completed.');
+    }
+}
+
+function showPopup(message) {
+    const popup = document.getElementById('popupMessage');
+    if (popup) {
+        popup.innerHTML = message;
+        popup.style.display = 'block';
+        setTimeout(() => {
+            popup.style.display = 'none';
+        }, 2000);
+    }
+}
+
+function updateProgressBar() {
+    answeredQuestions++;
+    let progress = Math.min((answeredQuestions / totalQuestions) * 100, 100);
+    const progressBar = document.getElementById('progressBar');
+    if (progressBar) {
+        progressBar.style.width = progress + "%";
+        progressBar.innerHTML = Math.round(progress) + "%";
+    }
+
+    if (progress === 100) {
+        showPopup('🚀 All questions completed! Great job!');
+        const userData = JSON.parse(localStorage.getItem('currentUser')) || {};
+        updateUserProgress(userData.id);
+    }
+}
+
+function submitGoal(questionId, inputId, questionText) {
+    const answerInput = document.getElementById(inputId);
+    const answer = answerInput ? answerInput.value : "";
+
+    if (answer.trim() === "") {
+        alert("Please enter an answer before submitting.");
+        return;
+    }
+
     const userData = JSON.parse(localStorage.getItem('currentUser')) || {};
     const { id: user_id, email: user_email, name } = userData;
 
-    const { data, error } = await supabase.from('assessment_answers').insert([{
+    const submissionData = {
         user_id,
         user_email,
         name,
         question_id: questionId,
-        answer,
+        answer: answer,
         score: 1,
         goal_answer: '',
         section_id: 'pre-course',
@@ -886,63 +943,11 @@ async function saveAnswer(questionId, answer, questionText) {
         type: 'goal',
         submitted_at: new Date().toISOString(),
         completion_status: 'in-progress'
-    }]);
+    };
 
-    if (error) {
-        console.error('Error saving answer:', error.message);
-    } else {
-        console.log('Answer saved successfully!');
-    }
-}
-
-function showPopup(message) {
-    const popup = document.getElementById('popupMessage');
-    popup.innerHTML = message;
-    popup.style.display = 'block';
-    setTimeout(() => {
-        popup.style.display = 'none';
-    }, 2000);
-}
-
-function updateProgressBar() {
-    answeredQuestions++;
-    let progress = Math.min((answeredQuestions / totalQuestions) * 100, 100);
-    const progressBar = document.getElementById('progressBar');
-    if (progressBar) {
-      progressBar.style.width = progress + "%";
-      progressBar.innerHTML = Math.round(progress) + "%";
-    }
-
-    if (progress === 100) {
-        showPopup('🚀 All questions completed! Great job!');
-        completeAssessment();
-    }
-}
-
-function submitAnswerHandler(questionId, inputId, questionText) {
-    const answer = document.getElementById(inputId).value;
-    if (answer.trim() === "") {
-        alert("Please enter an answer before submitting.");
-        return;
-    }
-    saveAnswer(questionId, answer, questionText);
+    sendToSupabase(submissionData);
     showPopup('🎯 Answer saved successfully!');
     updateProgressBar();
-}
-
-async function completeAssessment() {
-    const userData = JSON.parse(localStorage.getItem('currentUser')) || {};
-    const { id: user_id } = userData;
-
-    const { data, error } = await supabase.from('users').update({
-        assessment_completed: true
-    }).eq('id', user_id);
-
-    if (error) {
-        console.error('Error updating assessment completion:', error.message);
-    } else {
-        console.log('Assessment marked as completed.');
-    }
 }
 </script>
 
