@@ -359,7 +359,7 @@
                          </select>
                      </div>
                      <div>
-                         <label for="searchFilter">Search:</label> <!-- Changed ID -->
+                         <label for="searchFilter">Search:</label>
                          <input type="text" id="searchFilter" placeholder="Name or email...">
                      </div>
                     <button id="applyFiltersBtn"><i data-feather="filter"></i>Apply</button>
@@ -397,7 +397,7 @@
                                   <th>Status</th>
                                   <th>Score</th>
                                   <th>Submitted At</th>
-                                  <th>Details</th> <!-- Changed Header -->
+                                  <th>Details</th>
                               </tr>
                           </thead>
                           <tbody id="adminTableBody">
@@ -453,7 +453,7 @@
         // --- Unified Keys & Config ---
         const LOGGED_IN_KEY = 'isUserLoggedIn';
         const CURRENT_USER_KEY = 'currentUser';
-        const ADMIN_EMAIL = 'm.elsayed@thechefz.co'; // Case-insensitive comparison used
+        // const ADMIN_EMAIL = 'm.elsayed@thechefz.co'; // REMOVED - No longer used for admin check
 
         // --- Module IDs ---
         const MODULE_IDS = { INTRO: 'intro', SKILLS: 'coaching-skills', INDIVIDUALS: 'coaching-individuals', TEAM: 'coaching-team', YOURSELF: 'coaching-yourself', ACTION_PLAN: 'action-plan', POST_ASSESSMENT: 'post-assessment', FEEDBACK: 'feedback' };
@@ -475,7 +475,7 @@
 
         // --- State ---
         let currentUser = null;
-        let isAdmin = false;
+        let isAdmin = false; // Default to false, will be updated after DB check
         let allAssessmentData = []; // Raw data from Supabase for admin
         let filteredAdminData = []; // Data after applying filters
         let currentPage = 1;
@@ -511,13 +511,16 @@
 
                 currentUser = getCurrentUser();
                 if (!currentUser?.id || !currentUser?.email) { logout(); return; } // Failsafe
-                isAdmin = currentUser.email.toLowerCase() === ADMIN_EMAIL.toLowerCase();
-                 console.log(`User: ${currentUser.email}, Is Admin: ${isAdmin}`);
+
+                // --- MODIFICATION: Fetch admin status from DB ---
+                isAdmin = await fetchAdminStatus(currentUser.id);
+                console.log(`User: ${currentUser.email}, Fetched is_admin status: ${isAdmin}`);
+                // --- END MODIFICATION ---
 
                 displayUserInfo(currentUser);
                 mainContainer.style.display = 'block';
 
-                await initializeDashboard();
+                await initializeDashboard(); // This function will now use the correctly set `isAdmin` flag
 
                 setupEventListeners(); // Setup listeners after initial load
 
@@ -542,7 +545,7 @@
              applyFiltersBtn = document.getElementById('applyFiltersBtn');
              statusFilter = document.getElementById('statusFilter');
              typeFilter = document.getElementById('typeFilter');
-             searchFilter = document.getElementById('searchFilter'); // Updated ID
+             searchFilter = document.getElementById('searchFilter');
              exportCsvBtn = document.getElementById('exportCsvBtn');
              paginationContainer = document.getElementById('paginationContainer');
              detailsModal = document.getElementById('detailsModal');
@@ -557,7 +560,7 @@
 
          function setupEventListeners() {
              if (applyFiltersBtn) applyFiltersBtn.addEventListener('click', applyAdminFilters);
-             if (searchFilter) searchFilter.addEventListener('keyup', (event) => { // Search on enter or clear
+             if (searchFilter) searchFilter.addEventListener('keyup', (event) => {
                  if (event.key === 'Enter' || searchFilter.value === '') { applyAdminFilters(); }
              });
              if (exportCsvBtn) exportCsvBtn.addEventListener('click', handleExportCsv);
@@ -567,7 +570,7 @@
              if (paginationContainer) paginationContainer.addEventListener('click', handlePaginationClicks);
 
              // Close modal event
-              window.addEventListener('click', (event) => { // Close if clicked outside modal content
+              window.addEventListener('click', (event) => {
                   if (event.target == detailsModal) { closeDetailsModal(); }
               });
          }
@@ -578,7 +581,7 @@
             console.log("Initializing dashboard...");
             try {
                 const userProgress = await fetchUserProgress(currentUser.id);
-                updateModuleCards(userProgress); // Update user's view first
+                updateModuleCards(userProgress); // Update user's view first (using the already set `isAdmin` flag)
 
                 if (isAdmin) {
                     adminDashboardSection.style.display = 'block';
@@ -587,18 +590,17 @@
                     adminDataContainer.style.display = 'none';
 
                     allAssessmentData = await fetchAllAssessmentData();
-                     filteredAdminData = [...allAssessmentData]; // Initially, filtered is all
+                     filteredAdminData = [...allAssessmentData];
 
                     if (filteredAdminData.length > 0) {
-                         currentPage = 1; // Reset page
-                         renderAdminSection(); // Render table, charts, pagination
+                         currentPage = 1;
+                         renderAdminSection();
                          adminLoadingIndicator.style.display = 'none';
                          adminDataContainer.style.display = 'block';
                     } else {
                          adminLoadingIndicator.innerHTML = '<p>No assessment data found.</p>';
                          adminTableBody.innerHTML = '<tr><td colspan="7" style="text-align:center;">No assessment data available.</td></tr>';
-                          if(paginationContainer) paginationContainer.innerHTML = ''; // Clear pagination
-                         // Optionally hide charts or show empty state for charts
+                          if(paginationContainer) paginationContainer.innerHTML = '';
                     }
                 } else {
                     adminDashboardSection.style.display = 'none';
@@ -609,7 +611,7 @@
                 console.error("Error initializing dashboard:", error);
                 showDashboardError(`Failed to load dashboard data: ${error.message}`);
                 if (adminLoadingIndicator) adminLoadingIndicator.style.display = 'none';
-                if (isAdmin) { // Show error in admin section if admin
+                if (isAdmin) {
                       adminTableBody.innerHTML = `<tr><td colspan="7" style="text-align:center; color: var(--error-red);">Failed to load data: ${error.message}</td></tr>`;
                       adminDataContainer.style.display = 'block';
                  }
@@ -617,7 +619,39 @@
         }
 
          // --- Data Fetching ---
-        async function fetchUserProgress(userId) { /* ... Same as before ... */
+
+         // <<< NEW: Fetch is_admin status from the users table >>>
+         async function fetchAdminStatus(userId) {
+             if (!supabase || !userId) return false; // Default to false if no supabase or userId
+             try {
+                 console.log(`%cFetching admin status for user ID: ${userId}`, "color: blue;");
+                 const { data, error, status } = await supabase
+                     .from('users') // Target the 'users' table (make sure this table exists and has the column)
+                     .select('is_admin') // Select only the required column
+                     .eq('id', userId) // Filter by the user's UUID
+                     .single(); // Expect only one result or null
+
+                 // Handle potential errors
+                 if (error && status !== 406) { // 406: Not Found (returned by .single()) - Treat as not admin
+                     console.error('Error fetching admin status:', error.message);
+                     return false; // Return false on error
+                 }
+
+                 // Check the result
+                 if (data) {
+                     console.log(`%cRaw is_admin value from DB: ${data.is_admin}`, "color: blue;");
+                     return data.is_admin === true; // Explicitly check if the value is true
+                 } else {
+                     console.log(`%cNo user record found or is_admin not set for user ID: ${userId}. Assuming not admin.`, "color: orange;");
+                     return false; // User record not found or is_admin is null/false
+                 }
+             } catch (error) {
+                 console.error("Exception during fetchAdminStatus:", error);
+                 return false; // Default to false in case of any unexpected exception
+             }
+         }
+
+         async function fetchUserProgress(userId) {
              if (!supabase || !userId) return {};
              try {
                  const { data, error } = await supabase
@@ -636,7 +670,7 @@
                  return progressMap;
              } catch (error) { console.error("Error fetchUserProgress:", error); showDashboardError(error.message); return {}; }
          }
-        async function fetchAllAssessmentData() { /* ... Same as before ... */
+         async function fetchAllAssessmentData() {
              if (!supabase) return [];
              try {
                  const { data, error } = await supabase
@@ -648,12 +682,10 @@
                  return data || [];
              } catch (error) { console.error("Error fetchAllAssessmentData:", error); showDashboardError(error.message); return []; }
          }
-         // <<< NEW: Fetch detailed answers for a specific user assessment >>>
          async function fetchUserAssessmentDetails(userId, assessmentId) {
               if (!supabase || !userId || !assessmentId) return null;
               try {
                    console.log(`Fetching details for user ${userId}, assessment ${assessmentId}`);
-                   // Fetch from user_progress where user_id and section_id (or question_id pattern) match
                    const { data, error } = await supabase
                        .from('user_progress') // Assuming details are here
                         .select('question_text, answer, is_passed, score') // Select relevant fields
@@ -672,36 +704,38 @@
 
 
         // --- UI Update Functions ---
-        function updateModuleCards(progressMap) { /* ... MODIFIED FOR ADMIN ... */
+        function updateModuleCards(progressMap) {
              const moduleCards = document.querySelectorAll('.module-card');
-             let previousModuleCompleted = true;
+             let previousModuleCompleted = true; // Start assuming the "previous" (non-existent) is complete
 
              moduleCards.forEach(card => {
                  const moduleId = card.dataset.moduleId;
-                 const associatedAssessmentId = ASSESSMENT_ID_MAP[moduleId] || moduleId; // Use map or fallback
+                 const associatedAssessmentId = ASSESSMENT_ID_MAP[moduleId] || moduleId;
                  const status = progressMap[associatedAssessmentId] || 'not-started';
                  const statusBadge = card.querySelector('.status-badge');
                  const actionButton = card.querySelector('.module-action-button');
                  const cardIcon = card.querySelector('h4 i');
-                 const isCompleted = (status === 'completed' || status === 'passed' || status === 'failed');
+                 // Determine completion based on status (passed, completed, or even failed means they attempted it)
+                 const isAttemptedOrCompleted = (status === 'completed' || status === 'passed' || status === 'failed' || status === 'needs-support');
 
-                 // Update Status Badge (same as before)
-                 if (statusBadge) { /* ... badge logic ... */
-                      statusBadge.textContent = status.replace('-', ' ').replace('_', ' ');
-                      statusBadge.className = 'status-badge';
-                      if (isCompleted) statusBadge.classList.add('completed');
+                 // Update Status Badge
+                 if (statusBadge) {
+                      statusBadge.textContent = status.replace(/[-_]/g, ' '); // Make it readable
+                      statusBadge.className = 'status-badge'; // Reset classes
+                      if (status === 'completed' || status === 'passed') statusBadge.classList.add('completed');
                       else if (status === 'in-progress') statusBadge.classList.add('in-progress');
+                      else if (status === 'failed' || status === 'needs-support') statusBadge.classList.add('completed'); // Treat failed/needs-support as completed for display/unlocking next
                       else statusBadge.classList.add('not-started');
                   }
 
-                 // --- MODIFIED: Apply locking logic ONLY if NOT admin ---
+                 // --- MODIFIED: Apply locking logic. Admins always have access. Non-admins need previous complete. ---
                  let allowAccess = isAdmin || previousModuleCompleted;
 
                  if (allowAccess) {
                      card.classList.remove('locked');
                      if (actionButton) {
                          actionButton.disabled = false;
-                         if (isCompleted) {
+                         if (isAttemptedOrCompleted) {
                              actionButton.innerHTML = `<i data-feather="eye"></i><span>View Module</span>`;
                              if(cardIcon) cardIcon.setAttribute('data-feather', 'check-square');
                          } else {
@@ -709,7 +743,7 @@
                              if(cardIcon) cardIcon.setAttribute('data-feather', 'play-circle');
                          }
                      }
-                 } else { // Apply lock if not admin AND previous not completed
+                 } else { // Apply lock if not admin AND previous not completed/attempted
                      card.classList.add('locked');
                      if (actionButton) {
                          actionButton.disabled = true;
@@ -720,28 +754,28 @@
                  // --- END MODIFICATION ---
 
                  // Update for next iteration (only relevant if not admin)
-                 previousModuleCompleted = isCompleted;
+                 // The next module is unlocked if the current one was attempted/completed OR if the user is an admin.
+                 previousModuleCompleted = isAttemptedOrCompleted;
+
                  feather.replace(); // Update icons
              });
-              console.log("Module cards updated.");
+              console.log("Module cards updated based on progress and admin status.");
          }
 
 
         // --- Admin Section Functions ---
 
-         // <<< NEW: Combined rendering function for admin >>>
          function renderAdminSection() {
-             if (!isAdmin) return; // Safety check
+             if (!isAdmin) return;
               console.log(`Rendering admin section - Page ${currentPage}`);
 
-             // Calculate pagination slice
              const startIndex = (currentPage - 1) * rowsPerPage;
              const endIndex = startIndex + rowsPerPage;
              const paginatedData = filteredAdminData.slice(startIndex, endIndex);
 
              populateAdminTable(paginatedData);
              renderPaginationControls(filteredAdminData.length);
-             renderCharts(filteredAdminData); // Render charts based on filtered data
+             renderCharts(filteredAdminData);
          }
 
 
@@ -750,32 +784,35 @@
              console.log("Applying filters...");
              const statusValue = statusFilter.value;
              const typeValue = typeFilter.value;
-             const searchValue = searchFilter.value.toLowerCase().trim(); // Get search value
+             const searchValue = searchFilter.value.toLowerCase().trim();
 
              filteredAdminData = allAssessmentData.filter(item => {
                  let statusMatch = true;
                  if (statusValue !== 'all') {
-                     if (statusValue === 'failed') statusMatch = (item.is_correct === 'failed' || item.is_correct === 'needs-support');
-                     else statusMatch = (item.is_correct === statusValue || item.completion_status === statusValue);
+                      // Handle 'failed' filter to include both 'failed' and 'needs-support'
+                     if (statusValue === 'failed') {
+                         statusMatch = (item.is_correct === 'failed' || item.is_correct === 'needs-support' || item.completion_status === 'failed' || item.completion_status === 'needs-support');
+                     } else {
+                         statusMatch = (item.is_correct === statusValue || item.completion_status === statusValue);
+                     }
                  }
                  const typeMatch = typeValue === 'all' || item.question_id === typeValue;
-                 // <<< NEW: Add search filter logic >>>
                  const searchMatch = searchValue === '' ||
                                     (item.name && item.name.toLowerCase().includes(searchValue)) ||
                                     (item.user_email && item.user_email.toLowerCase().includes(searchValue));
 
-                 return statusMatch && typeMatch && searchMatch; // Include searchMatch
+                 return statusMatch && typeMatch && searchMatch;
              });
 
               console.log(`Filtering complete. Found ${filteredAdminData.length} records.`);
-             currentPage = 1; // Reset to first page after filtering
-             renderAdminSection(); // Re-render everything with new filtered data
+             currentPage = 1;
+             renderAdminSection();
          }
 
 
-        function populateAdminTable(data) { /* ... MODIFIED ... */
+        function populateAdminTable(data) {
              if (!adminTableBody) return;
-             adminTableBody.innerHTML = ''; // Clear previous data
+             adminTableBody.innerHTML = '';
 
              if (!data || data.length === 0) {
                  adminTableBody.innerHTML = `<tr><td colspan="7" style="text-align:center;">No matching data found.</td></tr>`;
@@ -785,7 +822,9 @@
              data.forEach(item => {
                  const row = adminTableBody.insertRow();
                  let displayStatus = item.is_correct || item.completion_status || 'N/A';
-                 let statusClass = displayStatus.toLowerCase().replace(/[\s_]+/g, '-'); // Replace space or underscore with hyphen
+                  // Normalize 'needs-support' to 'failed' for consistent badge class
+                 let statusClass = displayStatus.toLowerCase().replace(/[\s_]+/g, '-');
+                 if (statusClass === 'needs-support') statusClass = 'failed';
 
                  row.innerHTML = `
                      <td>${item.name || 'N/A'}</td>
@@ -801,16 +840,15 @@
                      </td>
                  `;
              });
-             feather.replace(); // Update icons
+             feather.replace();
          }
 
-         // <<< NEW: Pagination Rendering >>>
          function renderPaginationControls(totalItems) {
              if (!paginationContainer) return;
-             paginationContainer.innerHTML = ''; // Clear existing controls
+             paginationContainer.innerHTML = '';
              const totalPages = Math.ceil(totalItems / rowsPerPage);
 
-             if (totalPages <= 1) return; // No need for pagination if only one page
+             if (totalPages <= 1) return;
 
              // Previous Button
              const prevButton = document.createElement('button');
@@ -835,7 +873,6 @@
              paginationContainer.appendChild(nextButton);
          }
 
-         // <<< NEW: Handle Clicks in Admin Table (for Details) >>>
          function handleTableClicks(event) {
              const targetButton = event.target.closest('.view-details-btn');
              if (targetButton) {
@@ -847,28 +884,26 @@
              }
          }
 
-          // <<< NEW: Handle Clicks on Pagination Buttons >>>
           function handlePaginationClicks(event) {
               const targetButton = event.target.closest('.pagination-button');
               if (targetButton && !targetButton.disabled) {
                    const targetPage = parseInt(targetButton.dataset.page, 10);
                    if (targetPage && targetPage !== currentPage) {
                         currentPage = targetPage;
-                        renderAdminSection(); // Re-render the table and controls for the new page
+                        renderAdminSection();
                    }
               }
           }
 
-         // <<< NEW: Modal Functions >>>
          async function openDetailsModal(userId, assessmentId, userName) {
               if (!detailsModal || !modalBody || !modalTitle) return;
               modalTitle.textContent = `Details for ${userName} - ${assessmentId.replace(/_/g, ' ')}`;
               modalBody.innerHTML = '<p class="loading-indicator">Loading details...</p>';
-              detailsModal.style.display = "block"; // Show modal immediately
+              detailsModal.style.display = "block";
 
                const details = await fetchUserAssessmentDetails(userId, assessmentId);
 
-               if (details === null) { // Error fetching
+               if (details === null) {
                    modalBody.innerHTML = '<p style="color: var(--error-red);">Could not load details.</p>';
                } else if (details.length === 0) {
                    modalBody.innerHTML = '<p>No detailed answers found for this assessment submission.</p>';
@@ -876,7 +911,6 @@
                    let detailsHtml = '';
                    details.forEach((item, index) => {
                        let answerDisplay = item.answer || 'N/A';
-                        // Add styling for correctness if available (is_passed is boolean)
                         let correctnessClass = '';
                         if (item.is_passed === true) correctnessClass = 'correct';
                         if (item.is_passed === false) correctnessClass = 'incorrect';
@@ -894,33 +928,65 @@
          }
          function closeDetailsModal() {
               if (detailsModal) detailsModal.style.display = "none";
-              if (modalBody) modalBody.innerHTML = ''; // Clear content
+              if (modalBody) modalBody.innerHTML = '';
          }
 
 
         // --- Chart Rendering ---
-        function renderCharts(data) { /* ... Same as before ... */
+        function renderCharts(data) {
               if (!statusChartCanvas || !scoreChartCanvas || !data) return;
+
              // Status Chart (Pie)
-             const statusCounts = data.reduce((acc, item) => { /* ... counts logic ... */
+             const statusCounts = data.reduce((acc, item) => {
                  let status = item.is_correct || item.completion_status || 'unknown';
-                 if (status === 'needs-support') status = 'failed'; // Grouping
+                  // Group 'needs-support' under 'failed' for charting
+                 if (status === 'needs-support') status = 'failed';
                  acc[status] = (acc[status] || 0) + 1; return acc;
              }, {});
              const statusLabels = Object.keys(statusCounts); const statusData = Object.values(statusCounts);
-             const statusColors = statusLabels.map(l => { /* ... color logic ... */
-                 if (l === 'passed' || l === 'completed') return 'rgba(34, 197, 94, 0.7)'; if (l === 'failed') return 'rgba(239, 68, 68, 0.7)'; if (l === 'in-progress') return 'rgba(59, 130, 246, 0.7)'; return 'rgba(156, 163, 175, 0.7)';
+             const statusColors = statusLabels.map(l => {
+                 if (l === 'passed' || l === 'completed') return 'rgba(34, 197, 94, 0.7)';
+                 if (l === 'failed') return 'rgba(239, 68, 68, 0.7)';
+                 if (l === 'in-progress') return 'rgba(59, 130, 246, 0.7)';
+                 return 'rgba(156, 163, 175, 0.7)'; // Default/unknown
              });
              if (statusChartInstance) statusChartInstance.destroy();
-             statusChartInstance = new Chart(statusChartCanvas, { type: 'pie', data: { labels: statusLabels.map(l=>l.charAt(0).toUpperCase() + l.slice(1).replace('-',' ')), datasets: [{ data: statusData, backgroundColor: statusColors, borderWidth: 1 }] }, options: { /* ... options ... */ responsive: true, plugins: { legend: { position: 'top' }, tooltip:{/*..callbacks..*/} } } });
+             statusChartInstance = new Chart(statusChartCanvas, {
+                 type: 'pie',
+                 data: {
+                     labels: statusLabels.map(l=>l.charAt(0).toUpperCase() + l.slice(1).replace('-',' ')),
+                     datasets: [{ data: statusData, backgroundColor: statusColors, borderWidth: 1 }]
+                 },
+                 options: { responsive: true, plugins: { legend: { position: 'top' }, tooltip:{/* callbacks if needed */} } }
+             });
 
-              // Score Chart (Bar - Example)
-              const scoreCounts = data.reduce((acc, item) => { /* ... counts logic ... */
-                   const score = item.score ?? -1; let range='N/A'; if(score>=0 && score<=49) range='0-49%'; else if(score>=50 && score<=74) range='50-74%'; else if(score>=75 && score<=100) range='75-100%'; acc[range]=(acc[range] || 0)+1; return acc;
+              // Score Chart (Bar)
+              const scoreCounts = data.reduce((acc, item) => {
+                   const score = item.score ?? -1; // Use -1 for N/A scores
+                   let range='N/A';
+                   if(score>=0 && score<=49) range='0-49%';
+                   else if(score>=50 && score<=74) range='50-74%';
+                   else if(score>=75 && score<=100) range='75-100%';
+                   acc[range]=(acc[range] || 0)+1; return acc;
               }, {});
-              const scoreLabels = Object.keys(scoreCounts).sort(); const scoreData = scoreLabels.map(l => scoreCounts[l]);
+              // Ensure consistent order for score ranges
+              const scoreOrder = ['0-49%', '50-74%', '75-100%', 'N/A'];
+              const scoreLabels = scoreOrder.filter(label => scoreCounts[label] > 0); // Only show ranges with data
+              const scoreData = scoreLabels.map(l => scoreCounts[l]);
+
               if (scoreChartInstance) scoreChartInstance.destroy();
-              scoreChartInstance = new Chart(scoreChartCanvas, { type: 'bar', data: { labels: scoreLabels, datasets: [{ label: 'Users by Score', data: scoreData, backgroundColor: 'rgba(245, 158, 11, 0.7)', borderColor: 'rgba(217, 119, 6, 1)', borderWidth: 1 }] }, options: { /* ... options ... */ responsive: true, scales:{ y:{beginAtZero: true, title:{display:true, text:'Num Users'}}, x:{title:{display:true, text:'Score Range (%)'}} }, plugins:{ legend:{display:false} } } });
+              scoreChartInstance = new Chart(scoreChartCanvas, {
+                  type: 'bar',
+                  data: {
+                      labels: scoreLabels,
+                      datasets: [{ label: 'Users by Score', data: scoreData, backgroundColor: 'rgba(245, 158, 11, 0.7)', borderColor: 'rgba(217, 119, 6, 1)', borderWidth: 1 }]
+                  },
+                  options: {
+                      responsive: true,
+                      scales:{ y:{beginAtZero: true, title:{display:true, text:'Number of Users'}}, x:{title:{display:true, text:'Score Range (%)'}} },
+                      plugins:{ legend:{display:false} }
+                  }
+              });
               console.log("Charts rendered.");
          }
 
@@ -938,14 +1004,12 @@
               }
 
               const csv = [];
-              // Header Row (match table columns)
               const headers = ["User Name", "Email", "Assessment", "Status", "Score", "Submitted At"];
               csv.push(headers.join(','));
 
-              // Data Rows
               filteredAdminData.forEach(item => {
                   const row = [
-                      `"${(item.name || 'N/A').replace(/"/g, '""')}"`, // Escape double quotes
+                      `"${(item.name || 'N/A').replace(/"/g, '""')}"`,
                       `"${(item.user_email || 'N/A').replace(/"/g, '""')}"`,
                       `"${(item.question_text || item.question_id || 'N/A').replace(/"/g, '""')}"`,
                       `"${(item.is_correct || item.completion_status || 'N/A').replace(/"/g, '""')}"`,
@@ -955,12 +1019,11 @@
                   csv.push(row.join(','));
               });
 
-              // Create Blob and Download Link
               const csvContent = csv.join('\n');
               const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
               const link = document.createElement("a");
 
-              if (link.download !== undefined) { // Feature detection
+              if (link.download !== undefined) {
                   const url = URL.createObjectURL(blob);
                   link.setAttribute("href", url);
                   link.setAttribute("download", filename);
@@ -968,24 +1031,26 @@
                   document.body.appendChild(link);
                   link.click();
                   document.body.removeChild(link);
-                   URL.revokeObjectURL(url); // Clean up
+                   URL.revokeObjectURL(url);
               } else {
                    alert("CSV export is not supported in your browser.");
               }
           }
 
         // --- Utility Functions ---
-        function getCurrentUser() { /* ... Same as before ... */
+        function getCurrentUser() {
               try { const u=localStorage.getItem(CURRENT_USER_KEY); if(!u) return null; const p=JSON.parse(u); if(p&&p.email&&p.id){if(!p.name)p.name=p.email.split('@')[0];return p;} else {localStorage.removeItem(CURRENT_USER_KEY); localStorage.removeItem(LOGGED_IN_KEY); return null;} } catch(e){ console.error("Parse user error", e); localStorage.removeItem(CURRENT_USER_KEY); localStorage.removeItem(LOGGED_IN_KEY); return null; }
           }
-        function displayUserInfo(currentUserInfo) { /* ... Same as before ... */
+        function displayUserInfo(currentUserInfo) {
               try { let n='User',e=''; if(currentUserInfo){n=currentUserInfo.name||currentUserInfo.email.split('@')[0]; e=currentUserInfo.email||'';} if(userNameDisplay) userNameDisplay.textContent=n; if(userEmailDisplay) userEmailDisplay.textContent=e; } catch(err){ console.error("Display user info error:", err); if(userNameDisplay) userNameDisplay.textContent='Welcome'; if(userEmailDisplay) userEmailDisplay.textContent=''; }
           }
-        function logout() { /* ... Same as before ... */
+        function logout() {
               try { localStorage.removeItem(LOGGED_IN_KEY); localStorage.removeItem(CURRENT_USER_KEY); window.location.href='login.html'; } catch(e){ console.error("Logout error:", e); window.location.href='login.html'; }
           }
-         function showDashboardError(message) { /* ... Same as before ... */
+         function showDashboardError(message) {
               console.error("Dashboard Error:", message);
+              // Optionally display a user-friendly error message on the page
+              // Example: if (mainContainer) mainContainer.insertAdjacentHTML('afterbegin', `<p style="color:red;">Error: ${message}</p>`);
           }
           function handleFatalError(message) {
               console.error("FATAL ERROR:", message);
