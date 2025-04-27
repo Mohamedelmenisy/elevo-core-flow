@@ -162,91 +162,85 @@
         function togglePasswordVisibility(toggleButton, inputElement) { if (!toggleButton || !inputElement) return; const isPassword = inputElement.type === 'password'; inputElement.type = isPassword ? 'text' : 'password'; toggleButton.innerHTML = isPassword ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>' : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>'; toggleButton.setAttribute('aria-label', isPassword ? 'Hide password' : 'Show password'); }
         function setButtonLoading(isLoading) { if (!loginButton) return; console.log(`Setting button loading: ${isLoading}`); loginButton.disabled = isLoading; loginButton.classList.toggle('loading', isLoading); }
 
-        // *** NEW: Function to store user data (MODIFIED TO FETCH NAME FROM 'users' TABLE') ***
-        async function storeUserData(user) {
-            if (!user || !user.id || !user.email) {
-                console.error("storeUserData: Invalid user object received:", user);
-                return;
-            }
-            try {
-                // Fetch name from 'users' table
-                const { data: userData, error } = await supabase
-                  .from('users')
-                  .select('name')
-                  .eq('email', user.email)
-                  .single();
+        // *** MODIFIED: Function to store user data (NOW ONLY USED AS FALLBACK/ON SESSION CHECK) ***
+        // This function remains to handle cases where a session exists but local data is missing on page load.
+        // The primary storage (including is_admin) happens in authenticateUserWithSupabase after successful login.
+        async function storeUserDataFallback(user) {
+             if (!user || !user.id || !user.email || !supabase) {
+                 console.error("storeUserDataFallback: Invalid user object or Supabase client not available:", user);
+                 return;
+             }
+             console.log("storeUserDataFallback: Attempting to fetch profile for existing session user:", user.id);
+             try {
+                 // Fetch profile (is_admin and name) using ID
+                 const { data: profile, error: profileError } = await supabase
+                   .from('users')
+                   .select('is_admin, name')
+                   .eq('id', user.id) // Use ID here
+                   .single();
 
-                const fullName = userData?.name || user.user_metadata?.full_name || user.email.split('@')[0];
+                 if (profileError) {
+                     console.warn("storeUserDataFallback: Fetching user profile failed, storing basic data only:", profileError.message);
+                     // Fallback: Store basic data if profile fetch fails
+                     const currentUserData = {
+                         id: user.id,
+                         email: user.email,
+                         // Attempt to get name from metadata, fallback to email prefix
+                         name: user.user_metadata?.full_name || user.email.split('@')[0],
+                         is_admin: false, // Assume not admin if profile fetch fails
+                         progress: {} // Initialize progress object
+                     };
+                     localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(currentUserData));
+                 } else {
+                     // Success: Merge auth data and profile data
+                     const fullUserData = {
+                         id: user.id,
+                         email: user.email,
+                         is_admin: profile.is_admin ?? false, // Use fetched value, default to false if null/undefined
+                         name: profile.name || user.user_metadata?.full_name || user.email.split('@')[0], // Prioritize profile name
+                         progress: {}
+                     };
+                     localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(fullUserData));
+                     console.log("storeUserDataFallback: Full user data stored in localStorage:", fullUserData);
+                 }
 
-                const currentUserData = {
-                    id: user.id,
-                    email: user.email,
-                    name: fullName,
-                    progress: {}
-                };
+                 localStorage.setItem(LOGGED_IN_KEY, 'true'); // Always set this if session is valid
 
-                localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(currentUserData));
-                localStorage.setItem(LOGGED_IN_KEY, 'true');
-                console.log("User data stored in localStorage with full name:", currentUserData);
-            } catch (e) {
-                console.error("Error fetching/storing user data:", e);
-                localStorage.removeItem(CURRENT_USER_KEY);
-                localStorage.removeItem(LOGGED_IN_KEY);
-            }
-        }
-    
-        function storeUserData(user) {
-            if (!user || !user.id || !user.email) {
-                console.error("storeUserData: Invalid user object received:", user);
-                return;
-            }
-            try {
-                // Prepare data structure similar to what index.html expects
-                const currentUserData = {
-                    id: user.id,
-                    email: user.email,
-                    // Attempt to get name from metadata, fallback to email prefix
-                    name: user.user_metadata?.full_name || user.email.split('@')[0],
-                    progress: {} // Initialize progress object
-                };
-                localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(currentUserData));
-                localStorage.setItem(LOGGED_IN_KEY, 'true'); // Ensure this is also set
-                console.log("User data stored in localStorage:", currentUserData);
-            } catch (e) {
-                console.error("Error storing user data in localStorage:", e);
-                // Clear potentially corrupted data
-                localStorage.removeItem(CURRENT_USER_KEY);
-                localStorage.removeItem(LOGGED_IN_KEY);
-            }
-        }
+             } catch (e) {
+                 console.error("storeUserDataFallback: Error fetching/storing user data:", e);
+                 // Clear potentially corrupted data on error
+                 localStorage.removeItem(CURRENT_USER_KEY);
+                 localStorage.removeItem(LOGGED_IN_KEY);
+             }
+         }
+
 
         // --- Initial Checks & Setup (Only run if Supabase initialized) ---
         if (supabase) {
-            supabase.auth.getSession().then(async ({ data: { session } }) => { // Make async to potentially fetch user
-                if (session) {
+            supabase.auth.getSession().then(async ({ data: { session } }) => { // Make async to fetch user/profile if needed
+                if (session && session.user) { // Check for session and user object
                     console.log("Supabase session found.", session);
-                    // *** NEW: Check if local data exists, if not, fetch and store ***
                     const localUserExists = localStorage.getItem(CURRENT_USER_KEY) && localStorage.getItem(LOGGED_IN_KEY) === 'true';
+
                     if (!localUserExists) {
-                        console.log("Local user data missing despite session. Fetching user...");
-                        try {
-                            const { data: { user }, error: userError } = await supabase.auth.getUser();
-                            if (userError) {
-                                console.error("Error fetching user data for existing session:", userError);
-                            } else if (user) {
-                                console.log("User data fetched for existing session:", user);
-                                storeUserData(user); // Store fetched user data
-                            } else {
-                                console.warn("No user object returned for existing session.");
-                            }
-                        } catch (fetchError) {
-                            console.error("Unexpected error fetching user data:", fetchError);
-                        }
+                        console.log("Local user data missing despite session. Fetching profile via storeUserDataFallback...");
+                        await storeUserDataFallback(session.user); // Use the fallback function to fetch profile
                     } else {
                         console.log("Local user data found for existing session.");
+                        // Optional: Add a check here to see if the stored data includes 'is_admin'. If not, call storeUserDataFallback to refresh.
+                        try {
+                            const storedData = JSON.parse(localStorage.getItem(CURRENT_USER_KEY));
+                            if (typeof storedData.is_admin === 'undefined') {
+                                console.log("Local user data missing 'is_admin'. Refreshing...");
+                                await storeUserDataFallback(session.user);
+                            }
+                        } catch (parseError) {
+                            console.error("Error parsing stored user data, refreshing...", parseError);
+                            await storeUserDataFallback(session.user);
+                        }
                     }
 
-                    // Now, show the "already logged in" message regardless of fetch success
+                    // Show the "already logged in" message
                     if(alreadyLoggedInMessageDiv) alreadyLoggedInMessageDiv.style.display = 'block';
                     hideMessage(loginMessage);
                     if (loginForm) loginForm.style.display = 'none';
@@ -291,6 +285,7 @@
                  if(rememberCheckbox) rememberCheckbox.checked = true;
              }
              if (loginForm && loginForm.style.display !== 'none' && emailInput && passwordInput) {
+                 // Focus logic: if email is filled (remembered/param), focus password, else focus email
                  if (emailInput.value === '') { emailInput.focus(); } else { passwordInput.focus(); }
              }
          }
@@ -323,7 +318,8 @@
                     else { localStorage.removeItem(REMEMBERED_EMAIL_KEY); }
 
                     console.log(`Authenticating with Supabase: ${email}`);
-                    await authenticateUserWithSupabase(email, password); // Handles storage + redirect
+                    // *** CALL THE MODIFIED AUTHENTICATION FUNCTION ***
+                    await authenticateUserWithSupabase(email, password);
                 });
             } else if (loginForm && loginForm.style.display !== 'none') {
                  console.error("Login form element not found!");
@@ -333,13 +329,29 @@
              if(forgotPasswordLink) {
                   forgotPasswordLink.addEventListener('click', function(e) {
                       e.preventDefault();
+                      // Implement password reset flow using Supabase
+                      // Example: Redirect to a password reset page or show a modal
                       alert('Forgot Password functionality needs to be implemented (e.g., using Supabase auth password reset).');
+                      // Example Supabase call (needs UI integration):
+                      // const userEmail = prompt("Please enter your email address:");
+                      // if (userEmail) {
+                      //     supabase.auth.resetPasswordForEmail(userEmail, {
+                      //         redirectTo: window.location.origin + '/reset-password.html', // URL for password update form
+                      //     }).then(({ error }) => {
+                      //         if (error) {
+                      //             alert("Error sending password reset email: " + error.message);
+                      //         } else {
+                      //             alert("Password reset email sent. Please check your inbox.");
+                      //         }
+                      //     });
+                      // }
                   });
               }
 
          } // End if(supabase) for event listeners
 
          // --- Supabase Authentication Function (Handles Storage + Secure Redirect) ---
+         // *** THIS FUNCTION IS NOW MODIFIED ACCORDING TO THE REQUEST ***
          async function authenticateUserWithSupabase(email, password) {
               if (!supabase) {
                    console.error("Cannot authenticate: Supabase client not initialized.");
@@ -347,19 +359,20 @@
                    setButtonLoading(false);
                    return;
               }
-             console.log(`Running authenticateUserWithSupabase for ${email}. Will store data and redirect securely on success.`);
+             console.log(`Running authenticateUserWithSupabase for ${email}. Will fetch profile, store data, and redirect securely on success.`);
 
              try {
-                 const { data, error } = await supabase.auth.signInWithPassword({
+                 // 1. Sign in user with email and password
+                 const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
                      email: email,
                      password: password,
                  });
 
-                 if (error) {
-                     console.error("Supabase Login Error:", error.message);
+                 if (authError) {
+                     console.error("Supabase Login Error:", authError.message);
                      let userMessage = 'Incorrect email or password.';
-                     if (error.message.toLowerCase().includes('invalid login credentials')) { userMessage = 'Incorrect email or password.'; }
-                     else if (error.message.toLowerCase().includes('email not confirmed')) { userMessage = 'Please check your inbox to confirm your email address first.';}
+                     if (authError.message.toLowerCase().includes('invalid login credentials')) { userMessage = 'Incorrect email or password.'; }
+                     else if (authError.message.toLowerCase().includes('email not confirmed')) { userMessage = 'Please check your inbox to confirm your email address first.';}
                      else { userMessage = 'Login failed. Please try again later.'; }
                      showMessage(loginError, userMessage, true);
                      setButtonLoading(false);
@@ -367,32 +380,66 @@
                  }
 
                  // --- Login Successful ---
-                 console.log("Supabase Login Successful. User data:", data.user);
+                 console.log("Supabase Authentication Successful. User:", authData.user);
 
-                 // *** NEW: Store user data BEFORE redirecting ***
-                 if (data.user) {
-                     storeUserData(data.user); // This now also sets LOGGED_IN_KEY
-                 } else {
+                 if (!authData.user) {
                      console.error("Login succeeded but no user data received!");
-                     // Handle this case - maybe show an error and don't redirect?
                      showMessage(loginError, 'Login partially successful, but user data missing. Please try again.', true);
                      setButtonLoading(false);
-                     return; // Prevent redirect
+                     return; // Prevent further steps
                  }
+
+                 const userId = authData.user.id;
+                 const userEmail = authData.user.email;
+
+                 // 2. Fetch user profile (is_admin and name) from 'users' table
+                 console.log(`Fetching profile for user ID: ${userId}`);
+                 const { data: profile, error: profileError } = await supabase
+                    .from('users')
+                    .select('is_admin, name') // Select required fields
+                    .eq('id', userId)         // Filter by the authenticated user's ID
+                    .single();                // Expect only one matching record
+
+                 if (profileError) {
+                     console.error('Fetching user profile failed after login:', profileError.message);
+                     // Decide how to handle this: log user in with basic data, or show error?
+                     // Option: Show error and stop login process
+                     showMessage(loginError, 'Login successful, but could not fetch profile details. Please contact support.', true);
+                     // Optional: Log the user out again if profile is essential
+                     // await supabase.auth.signOut();
+                     setButtonLoading(false);
+                     return; // Stop the process here
+                 }
+
+                 console.log("User profile fetched successfully:", profile);
+
+                 // 3. Merge auth data and profile data
+                 const fullUserData = {
+                     id: userId,
+                     email: userEmail,
+                     is_admin: profile.is_admin ?? false, // Use fetched value, default to false if null/undefined
+                     name: profile.name || authData.user.user_metadata?.full_name || userEmail.split('@')[0], // Prioritize profile name, fallback
+                     progress: {} // Initialize progress object (or load existing if needed)
+                 };
+
+                 // 4. Store the *complete* user data in localStorage
+                 localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(fullUserData));
+                 localStorage.setItem(LOGGED_IN_KEY, 'true'); // Set login status flag
+                 console.log("Full user data (including is_admin) stored in localStorage:", fullUserData);
 
                  // Show success message (optional, as redirect is quick)
                  showMessage(loginMessage, "Login successful! Redirecting...", false);
 
-                 // *** THE SECURE REDIRECT HAPPENS HERE ***
+                 // 5. Redirect user to the dashboard/main page
                  const destination = 'index.html'; // Target page
                  console.log(`Redirecting securely to: ${destination}`);
                  setTimeout(() => {
                      window.location.href = destination;
-                 }, 1000); // Keep a short delay for the message
+                 }, 500); // Short delay for the message, can be adjusted
 
              } catch (unexpectedError) {
-                 console.error("Unexpected error during Supabase login:", unexpectedError);
-                 showMessage(loginError, 'An unexpected error occurred. Please try again.', true);
+                 console.error("Unexpected error during login process:", unexpectedError);
+                 showMessage(loginError, 'An unexpected error occurred during login. Please try again.', true);
                  // Clear potentially inconsistent state
                  localStorage.removeItem(CURRENT_USER_KEY);
                  localStorage.removeItem(LOGGED_IN_KEY);
