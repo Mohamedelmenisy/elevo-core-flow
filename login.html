@@ -162,77 +162,77 @@
         function togglePasswordVisibility(toggleButton, inputElement) { if (!toggleButton || !inputElement) return; const isPassword = inputElement.type === 'password'; inputElement.type = isPassword ? 'text' : 'password'; toggleButton.innerHTML = isPassword ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>' : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>'; toggleButton.setAttribute('aria-label', isPassword ? 'Hide password' : 'Show password'); }
         function setButtonLoading(isLoading) { if (!loginButton) return; console.log(`Setting button loading: ${isLoading}`); loginButton.disabled = isLoading; loginButton.classList.toggle('loading', isLoading); }
 
-        // *** Helper: Fetch profile and store full user data ***
+        // *** Helper: Fetch profile and store full user data (USING EMAIL) ***
         async function storeUserDataWithProfile(user) {
-             // ... (Keep this function exactly as it was in the previous version)
-             if (!user || !user.id || !user.email || !supabase) { console.error("storeUserDataWithProfile: Invalid user object or Supabase client not available:", user); return; }
-             console.log("storeUserDataWithProfile: Attempting to fetch profile for user:", user.id);
+             if (!user || !user.id || !user.email || !supabase) {
+                 console.error("storeUserDataWithProfile: Invalid user object or Supabase client not available:", user);
+                 return;
+             }
+             // ** MODIFICATION HERE **
+             console.log("storeUserDataWithProfile: Attempting to fetch profile for user email:", user.email);
              try {
-                 const { data: profile, error: profileError } = await supabase.from('users').select('is_admin, name').eq('id', user.id).single();
+                 // Fetch profile using email
+                 const { data: profile, error: profileError } = await supabase
+                   .from('users')
+                   .select('is_admin, name')
+                   .eq('email', user.email) // <-- Use email for matching
+                   .single();
+
                  let fullUserData;
                  if (profileError) {
-                     console.warn("storeUserDataWithProfile: Fetching user profile failed, storing basic data only:", profileError.message);
+                     console.warn("storeUserDataWithProfile: Fetching user profile failed (using email), storing basic data only:", profileError.message);
                      fullUserData = { id: user.id, email: user.email, is_admin: false, name: user.user_metadata?.full_name || user.email.split('@')[0], progress: {} };
                  } else {
-                     console.log("storeUserDataWithProfile: Profile fetched successfully:", profile);
+                     console.log("storeUserDataWithProfile: Profile fetched successfully (using email):", profile);
                      fullUserData = { id: user.id, email: user.email, is_admin: profile.is_admin ?? false, name: profile.name || user.user_metadata?.full_name || user.email.split('@')[0], progress: {} };
                  }
                  localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(fullUserData));
                  localStorage.setItem(LOGGED_IN_KEY, 'true');
                  console.log("storeUserDataWithProfile: Full user data stored in localStorage:", fullUserData);
+
              } catch (e) {
-                 console.error("storeUserDataWithProfile: Error fetching/storing user data:", e);
+                 console.error("storeUserDataWithProfile: Error fetching/storing user data (using email):", e);
                  localStorage.removeItem(CURRENT_USER_KEY); localStorage.removeItem(LOGGED_IN_KEY);
              }
          }
 
         // --- Initial Checks & Setup (Only run if Supabase initialized) ---
         if (supabase) {
-            // --- *** MODIFIED SECTION START *** ---
             const urlParams = new URLSearchParams(window.location.search);
-            const signedUpParam = urlParams.get('signedup'); // Check if coming from signup
-            const emailParam = urlParams.get('email'); // Get potential email param
+            const signedUpParam = urlParams.get('signedup');
+            const emailParam = urlParams.get('email');
 
-            // First, check if we just came from signup
             if (signedUpParam === 'true') {
                 console.log("Just arrived from signup page. Displaying login form and signing out any auto-login session.");
-
-                 // **Crucial Step:** Sign out any session that might have been auto-created by signup
                  supabase.auth.signOut().then(() => {
                      console.log("Auto-login session signed out.");
-                     // Clear any potentially stored local data from the auto-login
-                     localStorage.removeItem(LOGGED_IN_KEY);
-                     localStorage.removeItem(CURRENT_USER_KEY);
-
-                     // Now proceed to set up the login form for the new user
+                     localStorage.removeItem(LOGGED_IN_KEY); localStorage.removeItem(CURRENT_USER_KEY);
                      if(alreadyLoggedInMessageDiv) alreadyLoggedInMessageDiv.style.display = 'none';
-                     if(loginForm) loginForm.style.display = 'block'; // Ensure form is visible
-                     if(document.querySelector('.links')) document.querySelector('.links').style.display = 'block'; // Ensure links are visible
+                     if(loginForm) loginForm.style.display = 'block';
+                     if(document.querySelector('.links')) document.querySelector('.links').style.display = 'block';
 
-                     // Show the success message
+                     // --- Modified Message (Assuming email confirmation is OFF or handled) ---
                      showMessage(loginMessage, "Account created successfully! Please log in.", false);
+                     // --- OR use this if email confirmation IS ON: ---
+                     // showMessage(loginMessage, "Account created! Please check your email inbox (and spam folder) for a confirmation link. Click the link to activate your account before logging in.", false);
 
-                     // Handle pre-filling email and focus (pass the email param)
-                     handleUrlParamsAndFocus(emailParam, true); // Pass true for justSignedUp
-
-                     // Remove the 'signedup' param from URL without reloading
-                     const newUrl = window.location.pathname + (emailParam ? `?email=${emailParam}` : '');
+                     handleUrlParamsAndFocus(emailParam, true);
+                     const newUrl = window.location.pathname + (emailParam ? `?email=${encodeURIComponent(emailParam)}` : ''); // Ensure email is encoded
                      window.history.replaceState({}, document.title, newUrl);
 
                  }).catch(signOutError => {
                       console.error("Error signing out after signup redirect:", signOutError);
-                      // Fallback: Still try to show the form, but log the error
                        if(alreadyLoggedInMessageDiv) alreadyLoggedInMessageDiv.style.display = 'none';
                        if(loginForm) loginForm.style.display = 'block';
                        if(document.querySelector('.links')) document.querySelector('.links').style.display = 'block';
                        showMessage(loginMessage, "Account created! Please log in.", false);
                        handleUrlParamsAndFocus(emailParam, true);
-                       const newUrl = window.location.pathname + (emailParam ? `?email=${emailParam}` : '');
+                       const newUrl = window.location.pathname + (emailParam ? `?email=${encodeURIComponent(emailParam)}` : '');
                        window.history.replaceState({}, document.title, newUrl);
                  });
 
             } else {
-                 // If NOT coming from signup, proceed with the normal session check
+                 // Normal session check
                  supabase.auth.getSession().then(async ({ data: { session } }) => {
                      if (session && session.user) {
                          console.log("Supabase session found (normal load).");
@@ -241,7 +241,8 @@
                          try { localUserData = JSON.parse(localStorage.getItem(CURRENT_USER_KEY)); } catch (e) { console.warn("Could not parse local user data."); }
 
                          if (!localLoginFlag || !localUserData || typeof localUserData.is_admin === 'undefined') {
-                             console.log("Local user data missing or outdated. Fetching profile...");
+                             console.log("Local user data missing or outdated. Fetching profile using email...");
+                             // *** Calls the modified function using email ***
                              await storeUserDataWithProfile(session.user);
                          } else {
                              console.log("Valid local user data found for existing session.");
@@ -255,15 +256,13 @@
                      } else {
                          console.log("No active Supabase session found (normal load).");
                          if(alreadyLoggedInMessageDiv) alreadyLoggedInMessageDiv.style.display = 'none';
-                         // Handle params/focus for normal non-logged-in state (pass emailParam if exists)
-                         handleUrlParamsAndFocus(emailParam, false); // Pass false for justSignedUp
+                         handleUrlParamsAndFocus(emailParam, false);
                      }
                  }).catch(error => {
                      console.error("Error checking Supabase session:", error);
-                     handleUrlParamsAndFocus(emailParam, false); // Proceed cautiously
+                     handleUrlParamsAndFocus(emailParam, false);
                  });
             }
-             // --- *** MODIFIED SECTION END *** ---
 
          } else {
               console.warn("Supabase client not available. Login functionality disabled.");
@@ -274,45 +273,25 @@
               if(supabaseErrorMessageDiv) supabaseErrorMessageDiv.style.display = 'block';
          }
 
-        // --- *** MODIFIED handleUrlParamsAndFocus *** ---
          function handleUrlParamsAndFocus(emailFromUrl = null, justSignedUp = false) {
-             // Get URL params again *inside* the function if needed, or rely on passed params
-             // const urlParams = new URLSearchParams(window.location.search);
-             // const emailParam = urlParams.get('email'); // Already have this as emailFromUrl
-             // const signedUpParam = urlParams.get('signedup'); // Already handled this flag earlier
-
-             // Pre-fill email from URL if provided
              if (emailFromUrl && emailInput) {
                 console.log("Pre-filling email from URL parameter:", emailFromUrl);
-                emailInput.value = emailFromUrl;
+                emailInput.value = decodeURIComponent(emailFromUrl); // Decode email from URL
              }
-
-             // Show signup message *only* if just signed up (handled outside now, but keep check)
-             // if (justSignedUp && (!alreadyLoggedInMessageDiv || alreadyLoggedInMessageDiv.style.display === 'none')) {
-             //     showMessage(loginMessage, "Account created successfully! Please log in.", false);
-             //     // Remove the query param from URL without reloading (handled outside now)
-             //     // window.history.replaceState({}, document.title, window.location.pathname);
-             // }
-
-             // Pre-fill from 'Remember Me' only if email isn't already filled by URL param
              const rememberedEmail = localStorage.getItem(REMEMBERED_EMAIL_KEY);
              if (rememberedEmail && emailInput && !emailInput.value) {
                  console.log("Pre-filling email from localStorage:", rememberedEmail);
                  emailInput.value = rememberedEmail;
                  if(rememberCheckbox) rememberCheckbox.checked = true;
              }
-
-             // Focus logic: only if form is visible
-             // Added check !justSignedUp because focus might be handled differently after signup message
              if (loginForm && loginForm.style.display !== 'none' && emailInput && passwordInput) {
                  if (emailInput.value === '') {
                      emailInput.focus();
                  } else {
-                     // If email is filled (from URL or rememberMe), focus password
                      passwordInput.focus();
                  }
-             } else if (justSignedUp && passwordInput) {
-                 // Specifically focus password after signup if email was pre-filled
+             } else if (justSignedUp && passwordInput && emailInput && emailInput.value !== '') {
+                // Focus password specifically after signup only if email was pre-filled
                  passwordInput.focus();
              }
          }
@@ -327,45 +306,28 @@
                 });
             }
 
-            loginForm.addEventListener('submit', async function(e) { // Make handler async
+            loginForm.addEventListener('submit', async function(e) {
                 e.preventDefault();
                 console.log("Login form submitted.");
-
                 hideMessage(emailError); hideMessage(passwordError); hideMessage(loginError); hideMessage(loginMessage);
                 setButtonLoading(true);
 
                 if (!emailInput || !passwordInput || !rememberCheckbox) {
                      console.error("Form elements missing!");
                      showMessage(loginError, "Form error. Please refresh.", true);
-                     setButtonLoading(false);
-                     return;
+                     setButtonLoading(false); return;
                 }
-
                 const email = emailInput.value.trim().toLowerCase();
                 const password = passwordInput.value;
                 const rememberMe = rememberCheckbox.checked;
-
                 let isValid = true;
-                if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-                     showMessage(emailError, "Please enter a valid email address");
-                     isValid = false;
-                }
-                if (!password) {
-                     showMessage(passwordError, "Password is required");
-                     isValid = false;
-                }
-
-                if (!isValid) {
-                    console.log("Validation failed.");
-                    setButtonLoading(false);
-                    return;
-                }
-
-                if (rememberMe) { localStorage.setItem(REMEMBERED_EMAIL_KEY, email); }
-                 else { localStorage.removeItem(REMEMBERED_EMAIL_KEY); }
+                if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showMessage(emailError, "Please enter a valid email address"); isValid = false; }
+                if (!password) { showMessage(passwordError, "Password is required"); isValid = false; }
+                if (!isValid) { console.log("Validation failed."); setButtonLoading(false); return; }
+                if (rememberMe) { localStorage.setItem(REMEMBERED_EMAIL_KEY, email); } else { localStorage.removeItem(REMEMBERED_EMAIL_KEY); }
 
                 console.log(`Authenticating with Supabase: ${email}`);
-                // *** Call the function that handles login AND profile fetch ***
+                // *** Calls the function which now uses email for profile fetch ***
                 await authenticateUserWithSupabaseAndFetchProfile(email, password);
             });
 
@@ -374,7 +336,6 @@
                   forgotPasswordLink.addEventListener('click', function(e) {
                       e.preventDefault();
                       alert('Forgot Password functionality needs to be implemented.');
-                      // Implement Supabase password reset flow here
                   });
               }
 
@@ -384,41 +345,76 @@
              console.error("Login form element not found!");
          }
 
-         // --- *** Supabase Authentication Function (Fetches Profile, Stores Full Data, Redirects) *** ---
+         // --- *** Supabase Authentication Function (Fetches Profile using EMAIL, Stores Full Data, Redirects) *** ---
          async function authenticateUserWithSupabaseAndFetchProfile(email, password) {
-            // ... (Keep this function exactly as it was in the previous version) ...
-              if (!supabase) { console.error("Cannot authenticate: Supabase client not initialized."); showMessage(loginError, 'Authentication service unavailable.', true); setButtonLoading(false); return; }
+              if (!supabase) {
+                   console.error("Cannot authenticate: Supabase client not initialized.");
+                   showMessage(loginError, 'Authentication service unavailable.', true);
+                   setButtonLoading(false); return;
+              }
              console.log(`Running authenticateUserWithSupabaseAndFetchProfile for ${email}.`);
+
              try {
+                 // 1. Sign in user
                  const { data: authData, error: authError } = await supabase.auth.signInWithPassword({ email: email, password: password, });
                  if (authError) {
                      console.error("Supabase Login Error:", authError.message);
                      let userMessage = 'Incorrect email or password.';
                      if (authError.message.toLowerCase().includes('invalid login credentials')) { userMessage = 'Incorrect email or password.'; }
-                     else if (authError.message.toLowerCase().includes('email not confirmed')) { userMessage = 'Please check your inbox to confirm your email address first.';}
+                     else if (authError.message.toLowerCase().includes('email not confirmed')) { userMessage = 'Please check your inbox to confirm your email address first.';} // Keep this check
                      else { userMessage = 'Login failed. Please try again later.'; }
                      showMessage(loginError, userMessage, true); setButtonLoading(false); return;
                  }
                  console.log("Supabase Authentication Successful. User:", authData.user);
-                 if (!authData.user) { console.error("Login succeeded but no user data received!"); showMessage(loginError, 'Login partially successful, but user data missing. Please try again.', true); setButtonLoading(false); return; }
-                 const userId = authData.user.id; const userEmail = authData.user.email;
-                 console.log(`Fetching profile from 'users' table for user ID: ${userId}`);
-                 const { data: profile, error: profileError } = await supabase.from('users').select('is_admin, name').eq('id', userId).single();
+                 if (!authData.user) {
+                     console.error("Login succeeded but no user data received!");
+                     showMessage(loginError, 'Login partially successful, but user data missing. Please try again.', true);
+                     setButtonLoading(false); return;
+                 }
+
+                 const userId = authData.user.id; // Still useful to have the auth ID
+                 const userEmail = authData.user.email; // Use this for the profile query
+
+                 // 2. Fetch user profile from 'users' table **USING EMAIL**
+                 // ** MODIFICATION HERE **
+                 console.log(`Fetching profile from 'users' table for user email: ${userEmail}`);
+                 const { data: profile, error: profileError } = await supabase
+                    .from('users')
+                    .select('is_admin, name')
+                    .eq('email', userEmail) // <-- Use email for matching
+                    .single();
+
                  if (profileError) {
-                     console.error('Fetching user profile failed after login:', profileError.message);
+                     console.error('Fetching user profile failed after login (using email):', profileError.message);
+                     // Display specific error message
                      showMessage(loginError, 'Login successful, but could not fetch your profile details. Please contact support.', true);
                      setButtonLoading(false);
-                     await supabase.auth.signOut(); return;
+                     await supabase.auth.signOut(); // Sign out to prevent inconsistent state
+                     return;
                  }
-                 console.log("User profile fetched successfully:", profile);
-                 const fullUserData = { id: userId, email: userEmail, is_admin: profile.is_admin ?? false, name: profile.name || authData.user.user_metadata?.full_name || userEmail.split('@')[0], progress: {} };
+
+                 console.log("User profile fetched successfully (using email):", profile);
+
+                 // 3. Merge auth data and profile data
+                 const fullUserData = {
+                     id: userId, // Keep the auth user ID
+                     email: userEmail,
+                     is_admin: profile.is_admin ?? false,
+                     name: profile.name || authData.user.user_metadata?.full_name || userEmail.split('@')[0],
+                     progress: {}
+                 };
+
+                 // 4. Store complete data
                  localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(fullUserData));
                  localStorage.setItem(LOGGED_IN_KEY, 'true');
                  console.log("Full user data (including is_admin and name) stored in localStorage:", fullUserData);
+
+                 // 5. Redirect
                  showMessage(loginMessage, "Login successful! Redirecting...", false);
                  const destination = 'index.html';
                  console.log(`Redirecting securely to: ${destination}`);
                  setTimeout(() => { window.location.href = destination; }, 500);
+
              } catch (unexpectedError) {
                  console.error("Unexpected error during login and profile fetch process:", unexpectedError);
                  showMessage(loginError, 'An unexpected error occurred during login. Please try again.', true);
