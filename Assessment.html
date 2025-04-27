@@ -70,7 +70,7 @@
         .container { max-width: 850px; margin: 30px auto 40px auto; background: white; padding: 35px 45px; box-shadow: 0 4px 25px rgba(0, 0, 0, 0.07); border-radius: 12px; width: 92%; }
         h2 { margin-bottom: 15px; font-size: 1.8rem; text-align: center; color: #111827; font-weight: 700; }
         .assessment-intro { text-align: center; margin-bottom: 35px; color: #4b5563; font-size: 1.05rem; }
-        .question-block { background-color: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 25px; margin-bottom: 25px; transition: box-shadow 0.3s ease, background-color 0.3s ease; position: relative; }
+        .question-block { background-color: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 25px; margin-bottom: 25px; transition: box-shadow 0.3s ease, background-color 0.3s ease, border-color 0.3s ease; position: relative; } /* Added border-color transition */
         .question-block.locked { background-color: #f9fafb; border-left: 4px solid #10b981; }
         .question-block:focus-within:not(.locked) { box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2); }
         .question-text { font-weight: 600; color: #1f2937; margin-bottom: 15px; display: block; font-size: 1.1rem; }
@@ -101,9 +101,14 @@
             margin-bottom: 8px;
             display: block; /* Initially visible */
             font-style: italic;
+            transition: opacity 0.3s ease; /* Add transition for hiding */
         }
         .question-block.locked .save-warning {
-            display: none; /* Hide warning when question is locked */
+             opacity: 0; /* Fade out warning when question is locked */
+             height: 0; /* Collapse space */
+             margin-top: 0;
+             margin-bottom: 0;
+             overflow: hidden;
         }
         .save-answer-button {
             background-color: #3b82f6; /* Blue */
@@ -117,31 +122,34 @@
             transition: all 0.3s;
             display: inline-block;
             vertical-align: middle; /* Align with confirmation text */
+             margin-top: 5px; /* Reduced top margin when warning is present */
         }
         .save-answer-button:hover:not(:disabled) { background-color: #2563eb; box-shadow: 0 2px 5px rgba(59, 130, 246, 0.2); transform: translateY(-1px); }
         .save-answer-button:disabled { background: #9ca3af; cursor: not-allowed; box-shadow: none; opacity: 0.8; }
         .save-confirmation {
             color: #059669; /* Emerald green */
             font-size: 0.9rem;
-            /* margin-top: 15px; REMOVED - aligned using vertical-align */
             margin-left: 15px; /* Space from button */
             display: none; /* **HIDDEN INITIALLY** */
             font-weight: 500;
             align-items: center;
             gap: 5px;
-            display: inline-flex; /* Use flex for alignment */
+            /* display: inline-flex; */ /* JS will set this */
             vertical-align: middle; /* Align with button */
+            opacity: 0; /* Start hidden for fade in */
+             transition: opacity 0.4s ease; /* Fade transition */
         }
         .save-confirmation svg { width: 16px; height: 16px; }
         .save-confirmation.visible {
             display: inline-flex; /* **SHOWN ONLY WHEN VISIBLE CLASS IS ADDED** */
+            opacity: 1; /* Fade in */
         }
 
 
         /* Form Error Message (General) */
         #formErrorMessage { color: #ef4444; font-size: 0.95rem; margin-top: 15px; display: none; font-weight: 500; text-align: center; background-color: #fef2f2; padding: 10px; border: 1px solid #fecaca; border-radius: 6px; }
         /* Per-question Error Styling (applied to block) */
-        .question-block.invalid-block { border: 1px solid #ef4444; box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15) !important; }
+        .question-block.invalid-block { border-color: #ef4444 !important; box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15) !important; } /* Use important to override other states */
 
         /* Final Submit Button */
         #submitAssessmentButton { background: linear-gradient(90deg, #10b981, #059669); color: white; border: none; padding: 15px 30px; font-size: 1.1rem; cursor: pointer; border-radius: 8px; display: block; width: 100%; font-weight: 600; transition: all 0.3s; margin-top: 40px; box-shadow: 0 4px 10px rgba(16, 185, 129, 0.2); }
@@ -404,7 +412,7 @@
                 // Assign elements
                 userNameDisplay = document.getElementById('userName');
                 userEmailDisplay = document.getElementById('userEmail');
-                assessmentFormDiv = document.getElementById('assessmentForm'); // Using the div container now
+                assessmentFormDiv = document.getElementById('assessmentForm');
                 submitAssessmentButton = document.getElementById('submitAssessmentButton');
                 overallProgressContainer = document.getElementById('overallProgressContainer');
                 overallProgressBar = document.getElementById('overallProgressBar');
@@ -412,7 +420,6 @@
                 formErrorMessage = document.getElementById('formErrorMessage');
                 successMessageArea = document.getElementById('successMessageArea');
                 questionBlocks = Array.from(assessmentFormDiv.querySelectorAll('.question-block'));
-                 // Get total questions from the first block's data attribute or count blocks
                 totalQuestions = questionBlocks.length > 0 ? parseInt(questionBlocks[0].dataset.totalQuestions || questionBlocks.length, 10) : 0;
 
 
@@ -421,9 +428,8 @@
                 }
                  if (!supabase && submitAssessmentButton) {
                      console.warn("Supabase client not available.");
-                     // Disable all save buttons too
                      assessmentFormDiv.querySelectorAll('.save-answer-button').forEach(btn => btn.disabled = true);
-                     submitAssessmentButton.disabled = true; // Keep final button disabled
+                     submitAssessmentButton.disabled = true;
                  }
 
                 const currentUser = getCurrentUser();
@@ -438,7 +444,7 @@
                  if (mainContainer) mainContainer.style.display = 'block';
                  console.log("Assessment page content initialized and displayed.");
 
-                 // Ensure all save confirmations are hidden initially (redundant if CSS is correct, but safe)
+                 // Ensure all save confirmations are hidden initially
                  document.querySelectorAll('.save-confirmation').forEach(el => el.classList.remove('visible'));
 
 
@@ -462,24 +468,26 @@
         // --- Event Listeners ---
         function addEventListeners() {
             try {
-                // Add listeners to each "Save Answer" button
                  assessmentFormDiv.querySelectorAll('.save-answer-button').forEach(button => {
                      button.addEventListener('click', handleSaveAnswer);
                  });
-
-                 // Add listener to the final submit button (for redirect)
                  if (submitAssessmentButton) {
                      submitAssessmentButton.addEventListener('click', handleFinalSubmit);
                  }
             } catch (err) { console.error("Error adding assessment event listeners:", err); }
         }
 
-        // --- Per-Question Save Handler ---
+        // --- Per-Question Save Handler --- <<<<< CORRECTED LOGIC >>>>>
         async function handleSaveAnswer(event) {
             const saveButton = event.target;
             const blockId = saveButton.dataset.questionBlockId;
             const questionBlock = document.getElementById(blockId);
-            if (!questionBlock || saveButton.disabled) return; // Already saved or error
+            const confirmationDiv = questionBlock.querySelector('.save-confirmation'); // Get confirmation div early
+
+            if (!questionBlock || saveButton.disabled || questionBlock.classList.contains('locked')) {
+                console.log("Save attempt on locked/disabled question or button.");
+                return; // Already saved or error state
+            }
 
             hideError(); // Hide general error
             questionBlock.classList.remove('invalid-block'); // Remove specific error highlight
@@ -503,25 +511,25 @@
                 isAnswered = checkedRadio !== null;
             }
 
-            // --- Simple Validation for this question ---
+            // --- Validation for this question ---
             if (!isAnswered) {
                 showError("Please provide an answer before saving.", questionBlock);
-                questionBlock.classList.add('invalid-block'); // Highlight this block
-                // Focus the first input element within the invalid block for accessibility
+                questionBlock.classList.add('invalid-block');
                 const firstInput = questionBlock.querySelector('input, textarea');
                 if(firstInput) firstInput.focus();
                 return;
             }
 
             // --- Proceed with Saving ---
-            setSaveButtonLoading(saveButton, true);
-            lockQuestionInput(questionInput, true); // Disable input immediately
+            setSaveButtonLoading(saveButton, true, 'Saving...'); // Set loading state
+             // Ensure confirmation is hidden during save attempt
+             if (confirmationDiv) confirmationDiv.classList.remove('visible');
 
             const currentUser = getCurrentUser();
             if (!currentUser || !currentUser.id || !currentUser.email) {
                 showError("User data lost. Please log in again.", questionBlock);
-                setSaveButtonLoading(saveButton, false, 'Retry Save');
-                lockQuestionInput(questionInput, false); // Re-enable
+                setSaveButtonLoading(saveButton, false, 'Retry Save'); // Set retry state
+                // Don't lock input on user data error
                 return;
             }
 
@@ -529,15 +537,16 @@
             const questionId = questionInput.dataset.questionId;
             const questionText = questionInput.dataset.questionText || questionBlock.querySelector('.question-text')?.textContent.trim() || 'N/A';
             const scoreValue = parseInt(questionInput.dataset.scoreValue || '0', 10);
-            const isPassed = scoreValue > 0; // Simple pass/fail logic
-            const progressPercentage = 100; // Individual question is complete
+            const isPassed = scoreValue > 0;
+            const progressPercentage = 100;
 
-            // Create Payloads
             const assessmentPayload = { user_id: currentUser.id, user_email: currentUser.email, name: currentUser.name, question_id: questionId, question_text: questionText, answer: answerValue, goal_answer: null, type: ASSESSMENT_SECTION_TYPE, submitted_at: submissionTime, is_correct: null, score: scoreValue, completion_status: COMPLETION_STATUS, page: ASSESSMENT_PAGE_NAME, section_id: ASSESSMENT_SECTION_ID };
             const progressPayload = { user_id: currentUser.id, progress_percentage: progressPercentage, section_type: ASSESSMENT_SECTION_TYPE, section_id: ASSESSMENT_SECTION_ID, section_title: ASSESSMENT_SECTION_TITLE, question_id: questionId, question_text: questionText, page: ASSESSMENT_PAGE_NAME, score: scoreValue, status: COMPLETION_STATUS, submitted_at: submissionTime, updated_at: submissionTime, is_passed: isPassed };
 
-            // Send Data (await both, but handle errors individually if needed)
+            let dbSuccess = false; // Assume failure initially
+
             try {
+                console.log(`Attempting save for Q: ${questionId}`);
                 const results = await Promise.allSettled([
                     sendAssessmentData(assessmentPayload),
                     updateUserProgressData(progressPayload)
@@ -545,61 +554,58 @@
 
                 const assessmentResult = results[0];
                 const progressResult = results[1];
-                let dbSuccess = true;
 
-                if (assessmentResult.status === 'rejected' || !assessmentResult.value) {
-                    console.error("Failed to save assessment data for " + questionId, assessmentResult.reason);
-                     dbSuccess = false;
-                }
-                 if (progressResult.status === 'rejected' || !progressResult.value) {
-                     console.error("Failed to update progress data for " + questionId, progressResult.reason);
-                     // Don't necessarily set dbSuccess to false here, progress update might be less critical
-                     // but log it.
-                 }
-
-
-                if (dbSuccess) {
-                    console.log(`Successfully saved answer for ${questionId}`);
-                    setSaveButtonLoading(saveButton, false, 'Saved'); // Change text permanently
-                    saveButton.disabled = true; // Ensure it stays disabled
-                    questionBlock.classList.add('locked'); // Add visual lock style and hide warning via CSS
-                    const confirmationDiv = questionBlock.querySelector('.save-confirmation');
-                    if (confirmationDiv) confirmationDiv.classList.add('visible'); // Show "Saved" check
-
-                    updateOverallProgress(); // Update progress bar
-                    checkCompletionAndEnableSubmit(); // Check if all done
-
+                // Check if BOTH were successful (value is true)
+                if (assessmentResult.status === 'fulfilled' && assessmentResult.value === true &&
+                    progressResult.status === 'fulfilled' && progressResult.value === true) {
+                     dbSuccess = true;
+                     console.log(`Successfully saved answer and progress for ${questionId}`);
                 } else {
-                    // Handle DB save failure
-                    showError("Failed to save answer. Please try again.", questionBlock);
-                    setSaveButtonLoading(saveButton, false, 'Retry Save');
-                    lockQuestionInput(questionInput, false); // Re-enable input
-                    questionBlock.classList.remove('locked'); // Remove lock style
-                     // Keep save button enabled for retry
+                    console.error(`DB save failed for ${questionId}. Assessment: ${assessmentResult.status}, Progress: ${progressResult.status}`);
+                    // Log specific errors if rejected
+                    if (assessmentResult.status === 'rejected') console.error("Assessment Save Error:", assessmentResult.reason);
+                    if (progressResult.status === 'rejected') console.error("Progress Save Error:", progressResult.reason);
+                }
+
+                // --- Update UI based STRICTLY on dbSuccess flag ---
+                if (dbSuccess) {
+                    setSaveButtonLoading(saveButton, false, 'Saved'); // Set final "Saved" text
+                    saveButton.disabled = true;                     // Permanently disable button
+                    lockQuestionInput(questionInput, true);         // Lock the input elements
+                    questionBlock.classList.add('locked');          // Add lock style (hides warning via CSS)
+                    if (confirmationDiv) confirmationDiv.classList.add('visible'); // **Show confirmation ONLY on success**
+
+                    updateOverallProgress();
+                    checkCompletionAndEnableSubmit();
+                } else {
+                     // Handle DB save failure UI
+                     showError("Failed to save answer. Please check connection and try again.", questionBlock);
+                     setSaveButtonLoading(saveButton, false, 'Retry Save'); // Set button text to Retry
+                     lockQuestionInput(questionInput, false);           // Re-enable input for retry
+                     questionBlock.classList.remove('locked');          // Ensure lock style is removed
+                     if (confirmationDiv) confirmationDiv.classList.remove('visible'); // Ensure confirmation is hidden
+                     // Button remains enabled for retry
                 }
 
             } catch (err) {
+                 // Catch unexpected errors during the process
                  console.error("Unexpected error during save operation for " + questionId + ":", err);
-                 showError(`Error saving: ${err.message}`, questionBlock);
+                 showError(`Error saving: ${err.message}. Please try again.`, questionBlock);
                  setSaveButtonLoading(saveButton, false, 'Retry Save');
-                 lockQuestionInput(questionInput, false); // Re-enable
-                 questionBlock.classList.remove('locked'); // Remove lock style
+                 lockQuestionInput(questionInput, false);
+                 questionBlock.classList.remove('locked');
+                 if (confirmationDiv) confirmationDiv.classList.remove('visible'); // Ensure confirmation is hidden
             }
         }
+
 
         // --- Update Overall Progress ---
         function updateOverallProgress() {
             if (!overallProgressBar || !overallProgressText || !totalQuestions) return;
-
-             // Count how many questions are marked as 'locked' (saved)
              const savedCount = assessmentFormDiv.querySelectorAll('.question-block.locked').length;
-
              const percentage = totalQuestions > 0 ? Math.round((savedCount / totalQuestions) * 100) : 0;
-
              overallProgressBar.style.width = `${percentage}%`;
              overallProgressText.textContent = `${percentage}% Complete`;
-
-             // Make progress bar fully opaque if user started answering
              if (percentage > 0) {
                  overallProgressContainer.classList.add('active');
              } else {
@@ -620,21 +626,14 @@
 
         // --- Final Submit Handler (Just shows message and redirects) ---
         function handleFinalSubmit(event) {
-            event.preventDefault(); // Prevent any default form behavior if it were a form submit
+            event.preventDefault();
             console.log("Final 'Complete Assessment' button clicked.");
-
-            // Hide the main assessment form content subtly
             assessmentFormDiv.style.opacity = '0.5';
             assessmentFormDiv.style.pointerEvents = 'none';
-            submitAssessmentButton.disabled = true; // Disable itself
+            submitAssessmentButton.disabled = true;
             submitAssessmentButton.textContent = 'Completed';
-
-            // Show Success Message
             if (successMessageArea) successMessageArea.classList.add('visible');
             successMessageArea.scrollIntoView({ behavior: 'smooth', block: 'center' });
-
-
-            // Redirect after delay
             setTimeout(() => {
                 console.log(`Redirecting to ${REDIRECT_URL}...`);
                 window.location.href = REDIRECT_URL;
@@ -650,8 +649,12 @@
         // --- UI Control Functions ---
         function setSaveButtonLoading(button, isLoading, text = 'Save Answer') {
             if (!button) return;
-            button.disabled = isLoading;
-             button.textContent = isLoading ? 'Saving...' : text;
+            button.disabled = isLoading; // Disable while loading
+            button.textContent = text;
+             // Re-enable only if the final state is 'Retry Save'
+             if (!isLoading && text === 'Retry Save') {
+                 button.disabled = false;
+             }
         }
 
          function lockQuestionInput(inputElement, lock) {
@@ -659,30 +662,26 @@
              inputElement.classList.toggle('input-locked', lock);
 
              if (inputElement.tagName === 'TEXTAREA') {
-                 inputElement.disabled = lock;
-                 inputElement.readOnly = lock; // Good practice for textareas
+                 inputElement.readOnly = lock; // Use readOnly for textareas, allows selection but not edit
+                 inputElement.disabled = lock; // Also disable for good measure
              } else if (inputElement.classList.contains('radio-options')) {
                  const radios = inputElement.querySelectorAll('input[type="radio"]');
                  radios.forEach(radio => {
                      radio.disabled = lock;
                  });
-                 // Add/remove locked class to labels too if needed for styling consistency
                  const labels = inputElement.querySelectorAll('label');
                  labels.forEach(label => {
-                     label.classList.toggle('input-locked', lock); // Use class for styling cursor etc.
+                     label.classList.toggle('input-locked', lock);
                  });
              }
          }
 
 
         function showError(message, contextElement = null) {
-            // If contextElement (like a question block) is provided, try to show error near it?
-            // For now, using the general error message area, but highlighting the block if possible.
             try {
                 if (formErrorMessage) {
                      formErrorMessage.textContent = message;
                      formErrorMessage.style.display = "block";
-                     // Scroll general error into view, or the context element if provided
                     const elementToScroll = contextElement || formErrorMessage;
                     elementToScroll.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 }
@@ -696,7 +695,6 @@
         function hideError() {
              try {
                  if (formErrorMessage) formErrorMessage.style.display = "none";
-                 // Remove all invalid block highlights when hiding general error
                  assessmentFormDiv.querySelectorAll('.invalid-block').forEach(el => el.classList.remove('invalid-block'));
              } catch (err) { console.error("Error in hideError:", err); }
          }
