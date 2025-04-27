@@ -547,39 +547,43 @@
             const isPassed = scoreValue > 0; // Or define specific passing logic
             const progressPercentage = 100; // Individual question progress is 100% when answered
 
-            const assessmentPayload = {
-                user_id: currentUser.id,
-                user_email: currentUser.email,
-                name: currentUser.name || currentUser.email.split('@')[0], // Ensure name exists
-                question_id: questionId,
-                question_text: questionText,
-                answer: answerValue,
-                goal_answer: null, // Or set if applicable
-                type: ASSESSMENT_SECTION_TYPE,
-                submitted_at: submissionTime,
-                is_correct: null, // Or set if applicable
-                score: scoreValue,
-                completion_status: COMPLETION_STATUS,
-                page: ASSESSMENT_PAGE_NAME,
-                section_id: ASSESSMENT_SECTION_ID
-            };
+           // ✅ Corrected assessmentPayload
+const assessmentPayload = {
+    user_id: currentUser.id,
+    user_email: currentUser.email,
+    name: currentUser.name || currentUser.email.split('@')[0], // Ensure name exists
+    question_id: questionId,
+    question_text: questionText,
+    answer: answerValue,
+    goal_answer: answerValue || '', // Safe fallback
+    type: ASSESSMENT_SECTION_TYPE,
+    submitted_at: submissionTime,
+    is_correct: false, // Default assumption
+    score: scoreValue,
+    completion_status: COMPLETION_STATUS,
+    page: ASSESSMENT_PAGE_NAME,
+    section_id: ASSESSMENT_SECTION_ID
+};
 
-            const progressPayload = {
-                user_id: currentUser.id,
-                progress_percentage: progressPercentage,
-                section_type: ASSESSMENT_SECTION_TYPE,
-                section_id: ASSESSMENT_SECTION_ID,
-                section_title: ASSESSMENT_SECTION_TITLE,
-                question_id: questionId, // Key for upsert conflict
-                question_text: questionText,
-                page: ASSESSMENT_PAGE_NAME,
-                score: scoreValue,
-                status: COMPLETION_STATUS,
-                submitted_at: submissionTime, // Track initial submission
-                updated_at: submissionTime, // Track last update
-                is_passed: isPassed
-            };
-
+           
+// ✅ Corrected progressPayload
+const progressPayload = {
+    user_id: currentUser.id,
+    email: currentUser.email, // Added email
+    progress: progressPercentage, // Added missing 'progress' field
+    progress_percentage: progressPercentage,
+    section_type: ASSESSMENT_SECTION_TYPE,
+    section_id: ASSESSMENT_SECTION_ID,
+    section_title: ASSESSMENT_SECTION_TITLE,
+    question_id: questionId, // Key for upsert conflict
+    question_text: questionText,
+    page: ASSESSMENT_PAGE_NAME,
+    score: scoreValue,
+    status: COMPLETION_STATUS,
+    submitted_at: submissionTime,
+    updated_at: submissionTime,
+    is_passed: isPassed
+};
             let dbSuccess = false; // Assume failure initially
 
             try {
@@ -711,10 +715,10 @@
             console.log(`[${qId}] Attempting UPSERT 'assessments' with onConflict: user_id, question_id...`);
             try {
                 // Use upsert with onConflict defined
-                const { data, error } = await supabase
-                    .from('assessments')
-                    .upsert(assessmentPayload, { onConflict: 'user_id, question_id' }) // Specify conflict columns
-                    .select(); // Optionally select the upserted/updated row
+                const { error: assessmentError } = await supabase
+  .from('assessments')
+  .upsert(assessmentPayload, { onConflict: ['user_id', 'question_id'] });
+
 
                 if (error) {
                     console.error(`[${qId}] Supabase Upsert Error (assessments):`, error);
@@ -734,10 +738,9 @@
              console.log(`[${qId}] Attempting UPSERT 'user_progress' with onConflict: user_id, question_id...`);
              try {
                  // Use upsert with onConflict defined
-                 const { data, error } = await supabase
-                    .from('user_progress')
-                    .upsert(progressPayload, { onConflict: 'user_id, question_id' }) // Specify conflict columns
-                    .select(); // Optionally select the upserted/updated row
+                 const { error: progressError } = await supabase
+  .from('user_progress')
+  .upsert(progressPayload, { onConflict: ['user_id', 'question_id'] });
 
                  if (error) {
                      console.error(`[${qId}] Supabase Upsert Error (user_progress):`, error);
