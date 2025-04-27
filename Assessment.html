@@ -492,7 +492,7 @@
         const QUIZ_ID = 'quiz_lc_main'; // Unique ID for this Leadership/Coaching quiz
         const SECTION_TITLE = 'Quiz: Leadership & Coaching'; // Updated title
         const SECTION_TYPE = 'quiz'; // Use 'quiz' type
-        const PAGE_NAME = 'Assessment_LC.html'; // Specific name for this version (or keep old if preferred)
+        const PAGE_NAME = 'ass.html'; // Specific name for this version (ensure matches filename)
         const MIN_ESSAY_LENGTH = 20; // Minimum characters for essay answers as requested
         const LOCAL_ANSWERS_KEY = 'quiz_lc_temp_answers'; // Key for localStorage temporary answers
 
@@ -527,7 +527,7 @@
          function quickCheckCurrentUser() { const data = localStorage.getItem(CURRENT_USER_KEY); return data && data.startsWith('{') && data.endsWith('}'); }
          const isLoggedIn_immediate_assess = localStorage.getItem(LOGGED_IN_KEY) === 'true' && quickCheckCurrentUser();
          const hasSignedUp_immediate_assess = localStorage.getItem(SIGNUP_FLAG_KEY) === 'true';
-         const currentPage_immediate_assess = window.location.pathname.split('/').pop() || 'Assessment.html'; // Keep original or update filename here
+         const currentPage_immediate_assess = window.location.pathname.split('/').pop() || PAGE_NAME; // Use PAGE_NAME const
          console.log(`Assessment Page IMMEDIATE Check: isLoggedIn=${isLoggedIn_immediate_assess}, hasSignedUp=${hasSignedUp_immediate_assess}, currentPage=${currentPage_immediate_assess}`);
          if (!isLoggedIn_immediate_assess) {
              const targetUrl_assess = hasSignedUp_immediate_assess ? 'login.html' : 'signup.html';
@@ -770,7 +770,7 @@
              }
          }
 
-        // --- REVISED: Handle Final Quiz Submission (Contains ALL Database Interactions) ---
+        // --- REVISED & UPDATED: Handle Final Quiz Submission (Contains ALL Database Interactions) ---
         async function handleQuizSubmit(event) {
             event.preventDefault();
             console.log("handleQuizSubmit: Starting final submission...");
@@ -842,7 +842,7 @@
                 answer: 'N/A', // Not applicable for summary, but maybe required by DB
                 is_correct: isPassedOverall ? 'passed' : 'failed', // Overall pass/fail status
                 score: mcqScore, // Store the total MCQ score
-                submitted_at: submissionTime.toISOString().slice(0, 10), // Just the date part maybe? Or full timestamp
+                submitted_at: submissionTime.toISOString(), // Use full timestamp for consistency
                 goal_answer: null, // Assuming not used here
                 section_id: QUIZ_ID, // Link to the specific quiz/section
                 completion_status: 'completed',
@@ -902,6 +902,25 @@
                 if (progressError) throw new Error(`Database error (user progress): ${progressError.message}`);
                 console.log('%cSupabase Upsert Success (user_progress)', 'color: green;');
 
+                // --- >>> NEW: Update assessment_completed in users table <<< ---
+                console.log(`%cAttempting to update user ${currentUser.id} assessment_completed status...`, "color: blue;");
+                const { data: updateData, error: updateError } = await supabase
+                    .from('users') // Target the 'users' table
+                    .update({ assessment_completed: true }) // Set the field to true
+                    .eq('id', currentUser.id) // Match the current user's ID
+                    .select(); // Optional: return the updated row
+
+                if (updateError) {
+                    // Log the error but don't stop execution, as main submission succeeded
+                    console.error(`%cFailed to update user assessment_completed status for ${currentUser.id}: ${updateError.message}`, "color: red; font-weight: bold;");
+                    // Potentially notify admin or log to a monitoring service here
+                } else {
+                    console.log(`%cSuccessfully updated assessment_completed status for user ${currentUser.id}.`, "color: green;");
+                    // console.log("Updated user data:", updateData); // Optional: log returned data
+                }
+                // --- >>> END NEW UPDATE CODE <<< ---
+
+
                 // --- 5. Update UI on Success ---
                 displayFinalResults(mcqScore, totalMcqQuestions, percentage, isPassedOverall);
                 quizForm.style.display = 'none';
@@ -914,8 +933,10 @@
             } catch (error) {
                 console.error("Error during Supabase submission:", error);
                 showError(`Submission failed: ${error.message}. Please try again or contact support.`);
-                setButtonLoading(false); // Re-enable button on failure
+                // Reset button loading state ONLY on failure
+                setButtonLoading(false);
             }
+            // Removed setButtonLoading(false) from the success path, as the button disappears anyway
         }
 
         // --- Display Final Results (Keep As Is - Handles MCQ score correctly) ---
@@ -941,7 +962,7 @@
             resultsMessage.textContent = message;
             resultsContainer.style.display = 'block';
             resultsContainer.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            // setButtonLoading(false); // Called within handleQuizSubmit now
+            // setButtonLoading(false); // No longer needed here
         }
 
         // --- Utility Functions (Keep As Is) ---
