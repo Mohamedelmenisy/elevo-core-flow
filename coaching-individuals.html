@@ -325,7 +325,6 @@
         <div class="button-container"> <a href="coaching-skills.html" class="button back">← Back to Coaching Skills</a> <button type="button" class="button" id="nextButton">Next: Team Coaching →</button> </div>
     </div>
 
-
     <script>
         // --- Supabase Configuration ---
         const SUPABASE_URL = 'https://lgcutmuspcaralydycmg.supabase.co';
@@ -337,7 +336,7 @@
         const localStorageKey = 'allUserAnswers_coachingIndividuals';
         const SECTION_ID = 'individuals'; // Unique ID for this section
         const PAGE_NAME = 'coaching-individuals.html';
-        const REQUIRED_TABLE_ROWS = 3; // <<< Updated Constant for Skill/Will table validation
+        const REQUIRED_TABLE_ROWS = 3; // Requirement for Skill/Will table
 
         // --- Unified Keys ---
         const LOGGED_IN_KEY = 'isUserLoggedIn';
@@ -356,7 +355,6 @@
              console.log(`%c${PAGE_NAME}: DOMContentLoaded event fired.`, "color: green;");
              if (!supabase) {
                  console.error(`Supabase client failed to initialize on ${PAGE_NAME}. Some features might not work.`);
-                 // Optionally display an error to the user
              }
 
              const currentUser = getCurrentUser();
@@ -371,7 +369,6 @@
              loadUserAnswers(currentUser); // Pass full user object
              setupEventListeners(currentUser); // Pass full user object
              highlightActiveNav();
-             // Removed addRequiredStars as they are hardcoded now
              setupMobileTableLabels();
              console.log(`%c${PAGE_NAME}: Initialization complete.`, "color: blue;");
         });
@@ -395,44 +392,45 @@
 
             // Load textareas and other standard inputs
             document.querySelectorAll('.editable-answer:not(.skill-will-table .editable-answer)').forEach(field => {
-                 const qId = field.dataset.question;
-                 const qContainer = document.getElementById(`question-container-${qId}`); // Assumes containers have this ID format
-                 loadFieldState(field, qId, userPageAnswers, qContainer); // Handles disabling and progress bar
+                 const qId = field.dataset.question; // Use data-question for these
+                 const qContainer = document.getElementById(`question-container-${qId}`);
+                 loadFieldState(field, qId, userPageAnswers, qContainer);
             });
 
-             // Load Skill/Will table state and check completion for progress bar
+             // Load Skill/Will table state
              loadTableState(userPageAnswers);
 
             updateSectionProgress(SECTION_ID); // Recalculate overall progress based on loaded states
         }
 
-        // Helper to load state for any field (Textarea, Input, Select)
+        // Helper to load state for ANY field (using ID for table, data-question otherwise)
         function loadFieldState(field, questionId, userAnswers, questionContainer) {
             if (!field) return;
-            const errorId = `error-${questionId}`;
-            const buttonGroup = field.closest('.question-item')?.querySelector('.answer-buttons') || field.closest('.table-input-group')?.querySelector('.answer-buttons');
+             const effectiveQuestionId = field.id || questionId; // Prioritize ID if present (for table), else use data-question
+             const errorId = `error-${rowIdentifierFromQuestionId(effectiveQuestionId) || effectiveQuestionId}`; // Generate error ID based on row or question
+            const buttonGroup = field.closest('td')?.querySelector('.answer-buttons') || field.closest('.question-item')?.querySelector('.answer-buttons');
             const saveButton = buttonGroup?.querySelector('.save-btn');
             const deleteButton = buttonGroup?.querySelector('.delete-btn');
 
             hideMessages(errorId, field); // Clear previous state
 
             // Check if an answer exists AND it's not just whitespace
-            if (userAnswers[questionId] !== undefined && userAnswers[questionId] !== null && userAnswers[questionId].trim() !== '') {
-                field.value = userAnswers[questionId];
+            if (userAnswers[effectiveQuestionId] !== undefined && userAnswers[effectiveQuestionId] !== null && userAnswers[effectiveQuestionId].trim() !== '') {
+                field.value = userAnswers[effectiveQuestionId];
                 field.disabled = true; // Disable field
                 field.classList.remove('required-field');
                 if (saveButton) {
                     saveButton.disabled = true;
                     saveButton.textContent = 'Saved ✔️';
-                     if (field.closest('.skill-will-table')) saveButton.textContent = 'Row Saved ✔️'; // Adjust text for table
+                     if (field.closest('.skill-will-table')) saveButton.textContent = 'Row Saved ✔️';
                 }
                 if (deleteButton) {
                     deleteButton.disabled = true;
                     deleteButton.style.display = 'none'; // Hide delete button
                 }
-                // Show individual progress bar if the container exists
-                const individualProgressContainer = document.getElementById(`progress-container-${questionId}`);
-                if (individualProgressContainer && questionContainer) { // Only show for non-table items with progress bar
+                // Show individual progress bar if the container exists (for non-table items)
+                const individualProgressContainer = document.getElementById(`progress-container-${effectiveQuestionId}`);
+                if (individualProgressContainer && questionContainer) {
                      showQuestionProgressBar(individualProgressContainer);
                 }
 
@@ -443,7 +441,7 @@
                 if (saveButton) {
                     saveButton.disabled = false;
                     saveButton.textContent = 'Save';
-                     if (field.closest('.skill-will-table')) saveButton.textContent = 'Save Row'; // Adjust text for table
+                     if (field.closest('.skill-will-table')) saveButton.textContent = 'Save Row';
                 }
                 if (deleteButton) {
                     deleteButton.disabled = false;
@@ -451,12 +449,13 @@
                      if (field.closest('.skill-will-table')) deleteButton.textContent = 'Delete Row';
                 }
                  // Hide individual progress bar
-                 const individualProgressContainer = document.getElementById(`progress-container-${questionId}`);
+                 const individualProgressContainer = document.getElementById(`progress-container-${effectiveQuestionId}`);
                 if (individualProgressContainer && questionContainer) {
                     hideQuestionProgressBar(individualProgressContainer);
                 }
             }
         }
+
 
          // Helper to load state for Skill/Will table & check completion
          function loadTableState(userAnswers) {
@@ -466,11 +465,11 @@
              for (let i = 1; i <= 6; i++) { // Loop through potential rows
                  const nameId = `team-member${i}`;
                  const mapId = `coaching-map${i}`;
-                 const nameField = document.getElementById(nameId);
-                 const mapField = document.getElementById(mapId);
+                 const nameField = document.getElementById(nameId); // Use ID
+                 const mapField = document.getElementById(mapId);   // Use ID
 
-                 if (nameField) loadFieldState(nameField, nameId, userAnswers, null); // Load name field state
-                 if (mapField) loadFieldState(mapField, mapId, userAnswers, null); // Load map field state
+                 if (nameField) loadFieldState(nameField, nameId, userAnswers, null); // Load field state, pass ID
+                 if (mapField) loadFieldState(mapField, mapId, userAnswers, null);   // Load field state, pass ID
 
                   // A row contributes to the count only if *both* its fields are disabled (saved)
                   if (nameField?.disabled && mapField?.disabled) {
@@ -496,8 +495,8 @@
             document.querySelectorAll('.editable-answer').forEach(field => {
                 const eventType = (field.tagName === 'SELECT') ? 'change' : 'input';
                 field.addEventListener(eventType, function() {
-                    const questionId = field.id; // Use ID now for table fields
-                    const errorId = `error-${questionId.startsWith('team-') ? questionId.split('-')[0] + questionId.split('-')[1] : questionId}`; // Construct error ID for rows or questions
+                    const questionId = field.id || field.dataset.question; // Use ID for table, data-question otherwise
+                    const errorId = `error-${rowIdentifierFromQuestionId(questionId) || questionId}`;
                     hideError(errorId); // Hide specific error on input
                     if (this.value.trim() !== '') this.classList.remove('required-field');
 
@@ -514,6 +513,14 @@
         }
 
         function handleNextButtonClick(e) { /* ... consistent ... */ if (!validateAllAnswers(true)) { e.preventDefault(); showGeneralWarningMessage(); } else { window.location.href = 'coaching-team.html'; /* Direct navigation on success */ } }
+        // Helper function to get row identifier (e.g., 'team1') from a question ID (e.g., 'team-member1')
+        function rowIdentifierFromQuestionId(questionId) {
+            if (questionId.startsWith('team-member') || questionId.startsWith('coaching-map')) {
+                return `team${questionId.match(/(\d+)$/)[1]}`;
+            }
+            return null;
+        }
+
         function clearTableErrorIfRowComplete(rowId) {
              const errorId = `error-${rowId}`; // Use row-specific error ID
              const errorElement = document.getElementById(errorId);
@@ -567,13 +574,20 @@
                          const mapValue = mapField.value.trim();
 
                          if (nameValue && !mapValue) { // Name entered, but map missing
-                             allValid = false;
-                             if (showErrors) { mapField.classList.add('required-field'); showError(errorId, null, 'Quadrant required.'); }
-                             if (!firstInvalidField) firstInvalidField = mapField;
+                             // Only mark as invalid if showing errors, otherwise allow progressing if requirement met
+                             if (showErrors) {
+                                 allValid = false;
+                                 mapField.classList.add('required-field');
+                                 showError(errorId, null, 'Quadrant required.');
+                                 if (!firstInvalidField) firstInvalidField = mapField;
+                             }
                          } else if (!nameValue && mapValue) { // Map selected, but name missing
-                              allValid = false;
-                              if (showErrors) { nameField.classList.add('required-field'); showError(errorId, null, 'Name required.'); }
-                              if (!firstInvalidField) firstInvalidField = nameField;
+                              if (showErrors) {
+                                 allValid = false;
+                                 nameField.classList.add('required-field');
+                                 showError(errorId, null, 'Name required.');
+                                 if (!firstInvalidField) firstInvalidField = nameField;
+                              }
                          } else if (nameValue && mapValue) {
                               completedRowCount++; // Count enabled but completed rows towards the requirement check
                          }
@@ -585,7 +599,7 @@
 
              // Check if overall table requirement is met
              if (completedRowCount < REQUIRED_TABLE_ROWS) {
-                  allValid = false;
+                  allValid = false; // Mark overall as invalid if requirement not met
                   console.log(`Skill/Will Table Count: ${completedRowCount}/${REQUIRED_TABLE_ROWS}`);
                   if (showErrors) {
                      // Show error near the first incomplete *enabled* row, or a general table error
@@ -597,12 +611,14 @@
                             if(nameField && mapField && !nameField.value.trim() && !mapField.value.trim()) { // Only show general error if row hasn't been started
                                  showError(errorId, null, `Complete at least ${REQUIRED_TABLE_ROWS} rows.`);
                                   if (!firstInvalidField) firstInvalidField = nameField; // Focus the first field of that row
-                            } else if (nameField && mapField && !nameField.value.trim()) {
+                            } else if (nameField && mapField && !nameField.value.trim() && nameField.value && !mapField.value.trim() ) { // Check if name filled, map not
+                                 showError(errorId, null, 'Quadrant required.');
+                                 mapField.classList.add('required-field');
+                                  if (!firstInvalidField) firstInvalidField = mapField;
+                            } else if (nameField && mapField && !nameField.value.trim() && mapField.value) { // Check if map filled, name not
                                  showError(errorId, null, 'Name required.');
+                                 nameField.classList.add('required-field');
                                   if (!firstInvalidField) firstInvalidField = nameField;
-                            } else if (nameField && mapField && !mapField.value.trim()) {
-                                  showError(errorId, null, 'Quadrant required.');
-                                   if (!firstInvalidField) firstInvalidField = mapField;
                             }
                       } else {
                            // If all rows are saved but count is still low, show general warning
@@ -646,14 +662,14 @@
              if (!supabase) { alert('Database connection error. Cannot save.'); return; }
              const currentUser = getCurrentUser(); if (!currentUser?.email || !currentUser.id) { alert('Session expired.'); return; }
 
-             // Use data-question for standard questions, id for table fields
-             const field = document.querySelector(`[data-question="${questionId}"]`) || document.getElementById(questionId);
-             const questionContainer = field?.closest('.question-item'); // Find container for non-table questions
+             // Use data-question for standard questions
+             const field = document.querySelector(`[data-question="${questionId}"]`);
+             const questionContainer = field?.closest('.question-item');
              const errorId = `error-${questionId}`;
              const saveButton = field?.parentElement?.querySelector('.save-btn');
              const deleteButton = field?.parentElement?.querySelector('.delete-btn');
 
-              if (!field || !saveButton || !deleteButton) { console.error("Save Error: Required elements missing for", questionId); return; }
+              if (!field || !questionContainer || !saveButton || !deleteButton) { console.error("Save Error: Required elements missing for", questionId); return; }
               if (field.disabled) { console.warn("Attempted to save already saved question:", questionId); return; }
 
              const answer = field.value;
@@ -664,10 +680,8 @@
 
              if (isRequired && trimmedAnswer === '') {
                  showError(errorId, field);
-                 if (questionContainer) { // Only hide progress bar for non-table items
-                     const progressContainer = document.getElementById(`progress-container-${questionId}`);
-                     if(progressContainer) hideQuestionProgressBar(progressContainer);
-                 }
+                 const progressContainer = document.getElementById(`progress-container-${questionId}`);
+                 if(progressContainer) hideQuestionProgressBar(progressContainer);
                  return;
              }
 
@@ -675,9 +689,8 @@
 
              try {
                  let questionText = `Answer for ${questionId}`; // Default
-                  const qTextElement = questionContainer?.querySelector('.question-text');
+                  const qTextElement = questionContainer.querySelector('.question-text');
                   if (qTextElement) questionText = qTextElement.textContent.replace('*','').trim();
-
 
                  const submissionTime = new Date().toISOString();
                  const userProgressPayload = {
@@ -734,15 +747,22 @@
 
              const rowNum = rowIdentifier.match(/(\d+)$/)?.[1]; if (!rowNum) return;
              const nameId = `team-member${rowNum}`; const mapId = `coaching-map${rowNum}`;
-             const errorId = `error-${rowIdentifier}`;
+             const errorId = `error-${rowIdentifier}`; // Use row identifier for error span
              const nameField = document.getElementById(nameId); // Use ID selector
              const mapField = document.getElementById(mapId);   // Use ID selector
-             const buttonGroup = nameField?.closest('td')?.querySelector('.answer-buttons');
+             const buttonGroup = nameField?.closest('td')?.nextElementSibling?.querySelector('.answer-buttons'); // Find buttons in the second cell's group
              const saveButton = buttonGroup?.querySelector('.save-btn');
              const deleteButton = buttonGroup?.querySelector('.delete-btn');
              const tableProgressContainer = document.getElementById('skill-will-progress-container');
 
-             if (!nameField || !mapField || !saveButton || !deleteButton || !tableProgressContainer) { console.error('Table elements missing for row:', rowIdentifier); return; }
+              // Add more specific logging for missing elements
+             if (!nameField) console.error(`Save Error: Name field missing for row ${rowIdentifier} (ID: ${nameId})`);
+             if (!mapField) console.error(`Save Error: Map field missing for row ${rowIdentifier} (ID: ${mapId})`);
+             if (!saveButton) console.error(`Save Error: Save button missing for row ${rowIdentifier}`);
+             if (!deleteButton) console.error(`Save Error: Delete button missing for row ${rowIdentifier}`);
+             if (!tableProgressContainer) console.error('Save Error: Table progress container missing');
+             if (!nameField || !mapField || !saveButton || !deleteButton || !tableProgressContainer) { return; } // Exit if any crucial element is missing
+
              if (nameField.disabled || mapField.disabled) { console.warn('Row already saved:', rowIdentifier); return; }
 
              const nameVal = nameField.value; const mapVal = mapField.value;
@@ -807,12 +827,12 @@
              const errorId = `error-${rowIdentifier}`;
              const nameField = document.getElementById(nameId);
              const mapField = document.getElementById(mapId);
-             const buttonGroup = nameField?.closest('td')?.querySelector('.answer-buttons');
+             const buttonGroup = nameField?.closest('td')?.nextElementSibling?.querySelector('.answer-buttons');
              const saveButton = buttonGroup?.querySelector('.save-btn');
              const deleteButton = buttonGroup?.querySelector('.delete-btn');
              const tableProgressContainer = document.getElementById('skill-will-progress-container');
 
-             if (!nameField || !mapField || !saveButton || !deleteButton || !tableProgressContainer) return;
+             if (!nameField || !mapField || !saveButton || !deleteButton || !tableProgressContainer) { console.error('Delete Error: Table elements missing for row:', rowIdentifier); return; }
              // Allow deletion only if row is not already saved (i.e., fields are enabled)
              if (nameField.disabled || mapField.disabled) { console.warn("Cannot delete saved row:", rowIdentifier); return; }
 
@@ -863,8 +883,8 @@
          function checkSkillWillCompletion(checkDisabledState = false) {
              let completedRowCount = 0;
              for (let i = 1; i <= 6; i++) { // Check all potential rows
-                 const nameField = document.getElementById(`team-member${i}`);
-                 const mapField = document.getElementById(`coaching-map${i}`);
+                 const nameField = document.getElementById(`team-member${i}`); // Use ID
+                 const mapField = document.getElementById(`coaching-map${i}`);   // Use ID
 
                  if (checkDisabledState) {
                      // Count as complete only if BOTH fields in the row are disabled
@@ -876,8 +896,8 @@
                      const currentUser = getCurrentUser(); if (!currentUser?.email) continue;
                      let allAnswers = {}; try { const d = localStorage.getItem(localStorageKey); if (d) allAnswers = JSON.parse(d) || {}; } catch (e) {}
                      const userPageAnswers = allAnswers[currentUser.email] || {};
-                     const nameVal = userPageAnswers[`team-member${i}`]?.trim();
-                     const mapVal = userPageAnswers[`coaching-map${i}`]?.trim();
+                     const nameVal = userPageAnswers[`team-member${i}`]?.trim(); // Use ID as key
+                     const mapVal = userPageAnswers[`coaching-map${i}`]?.trim(); // Use ID as key
                      if (nameVal && mapVal) {
                          completedRowCount++;
                      }
