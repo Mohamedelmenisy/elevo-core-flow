@@ -116,10 +116,14 @@
             border-left: 5px solid var(--primary-color); /* Accent border */
             transition: opacity 0.3s ease, border-left-color 0.3s ease, border 0.3s ease; /* Added border transition */
         }
-        .question-block.saved { /* Style when question is saved locally */
+        .question-block.saved { /* Style when question is saved locally OR submitted */
             border-left-color: var(--success-green); /* Green border when saved */
             opacity: 0.9; /* Slightly fade saved questions */
         }
+         .question-block.submitted { /* Added style for already submitted */
+              border-left-color: var(--warn-yellow); /* Orange border */
+              opacity: 0.8;
+         }
 
         .question-text {
             font-weight: 600;
@@ -161,7 +165,7 @@
             transition: all 0.2s ease-in-out;
             position: relative;
         }
-        .options-container label:hover {
+        .options-container label:hover:not(:has(input:disabled)) { /* Only hover effect if not disabled */
             background-color: #eff6ff;
             border-color: #93c5fd; /* Lighter blue */
         }
@@ -349,7 +353,6 @@
     <!-- User Bar -->
     <div class="user-bar">
         <div class="user-info">
-            <!-- SVG Icon -->
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"> <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path> <circle cx="12" cy="7" r="4"></circle> </svg>
             <div class="user-details">
                 <span class="user-name" id="userName">Loading...</span>
@@ -357,7 +360,6 @@
             </div>
         </div>
         <button class="logout-button" onclick="logout()">
-            <!-- SVG Icon -->
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"> <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path> <polyline points="16 17 21 12 16 7"></polyline> <line x1="21" y1="12" x2="9" y2="12"></line> </svg>
             Logout
         </button>
@@ -537,7 +539,9 @@
              const targetUrl_assess = hasSignedUp_immediate_assess ? 'login.html' : 'signup.html';
              console.error(`%cAssessment Page IMMEDIATE Redirect: Not logged in. Redirecting to ${targetUrl_assess}...`, "color: orange;");
              window.location.replace(targetUrl_assess);
-             throw new Error("Redirecting user: Not logged in."); // Prevent script execution
+             // Stop further script execution immediately after redirection call
+             // This is important to prevent potential errors from running code without a user
+             throw new Error("Redirecting user: Not logged in.");
          } else {
              console.log("%cAssessment Page IMMEDIATE Check: User IS logged in. Proceeding.", "color: green;");
          }
@@ -545,13 +549,14 @@
 
 
         // --- Initialization ---
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', async function() { // Made async
             console.log("%cAssessment page: DOMContentLoaded event fired.", "color: green;");
             mainContainer = document.getElementById('mainContainer');
 
             if (!supabase) {
                 console.error("Supabase client failed to initialize. Stopping page load.");
                 if (mainContainer) mainContainer.innerHTML = '<p class="error-message" style="display: block; text-align:center;">Connection Error. Cannot load assessment.</p>';
+                 if(mainContainer) mainContainer.style.display = 'block'; // Show the error
                 return;
             }
 
@@ -572,7 +577,7 @@
                 progressText = document.getElementById('progressText');
                 questionBlocks = quizForm.querySelectorAll('.question-block');
 
-                if (!mainContainer || !quizForm || !submitQuizButton || !userNameDisplay || !userEmailDisplay || !resultsContainer || !progressBar || !progressText || !questionBlocks || questionBlocks.length === 0) {
+                if (!mainContainer || !quizForm || !submitQuizButton /* ... other checks ... */ || !questionBlocks || questionBlocks.length === 0) {
                     throw new Error("Essential DOM elements for assessment page not found!");
                 }
 
@@ -581,21 +586,22 @@
                 console.log(`Total questions: ${totalQuestions}, MCQ questions: ${totalMcqQuestions}`);
 
 
-                const currentUser = getCurrentUser(); // Re-check user after DOM load
+                const currentUser = getCurrentUser();
                 if (!currentUser || !currentUser.id || !currentUser.email) {
-                    console.error("Assessment DOMContentLoaded: Failsafe check - User data invalid! Redirecting.");
-                    const failsafeTarget = localStorage.getItem(SIGNUP_FLAG_KEY) === 'true' ? 'login.html' : 'signup.html';
-                    window.location.replace(failsafeTarget);
-                    return;
+                     // This case should ideally be caught by immediate redirect, but as a failsafe:
+                    throw new Error("User data invalid or missing after DOM load.");
                 }
 
                 console.log(`%cAssessment DOMContentLoaded: User verified (${currentUser.email}, ID: ${currentUser.id}). Initializing.`, "color: green;");
-                initializePageContent(currentUser);
-                if(mainContainer) mainContainer.style.display = 'block';
+
+                // --- Initialize Page Content (Now Async) ---
+                await initializePageContent(currentUser); // Wait for initialization checks
+
+                if(mainContainer) mainContainer.style.display = 'block'; // Show content AFTER initialization
                 console.log("Assessment page initialized and displayed.");
 
             } catch (error) {
-                 console.error("CRITICAL ERROR during Assessment DOMContentLoaded:", error);
+                 console.error("CRITICAL ERROR during Assessment DOMContentLoaded or Initialization:", error);
                  if(mainContainer){
                      mainContainer.innerHTML = `<p class="error-message" style="display: block; text-align:center;">An error occurred loading the assessment. Please refresh. Details: ${error.message}</p>`;
                      mainContainer.style.display = 'block';
@@ -605,150 +611,172 @@
             }
         });
 
-        function initializePageContent(currentUser) {
+        // --- MODIFIED: Initialize Page Content (Async) ---
+        async function initializePageContent(currentUser) {
             console.log("%cAssessment page: Running initializePageContent()...", "color: blue;");
-            if (!currentUser) { console.error("InitializePageContent: currentUser is null!"); return; }
+            if (!currentUser || !currentUser.id) { console.error("InitializePageContent: currentUser or ID is null!"); return; }
+
             displayUserInfo(currentUser);
-            addEventListeners();
-            loadAnswersFromLocalStorage();
-            updateProgressBar();
+            addEventListeners(); // Add listeners regardless of submission status
+
+            // --- Check if Assessment Already Submitted ---
+            console.log(`Checking Supabase if user ${currentUser.id} submitted quiz ${QUIZ_ID}...`);
+            let hasSubmitted = false; // Flag to track submission status
+            try {
+                const { data: existingSubmission, error: checkError } = await supabase
+                    .from('assessments')
+                    .select('score, is_correct, submitted_at')
+                    .eq('user_id', currentUser.id)
+                    .eq('question_id', QUIZ_ID) // Use question_id from assessments table
+                    .limit(1)
+                    .maybeSingle(); // Use maybeSingle to handle "not found" gracefully
+
+                if (checkError) {
+                    // Don't throw, just log the error and proceed assuming not submitted
+                    console.error(`Error checking existing submission (continuing as if not submitted): ${checkError.message}`);
+                }
+
+                if (existingSubmission) {
+                    hasSubmitted = true;
+                    console.log(`%cUser HAS already submitted this assessment on ${existingSubmission.submitted_at}. Loading answers from DB.`, "color: purple; font-weight: bold;");
+                    if (quizForm) showError("You have already completed this assessment. Your previous answers are displayed.", quizForm);
+                    await loadAndDisplaySubmittedAnswers(currentUser.id); // Load from DB
+                    if(submitQuizButton) submitQuizButton.style.display = 'none';
+                    if(progressBarContainer) progressBarContainer.style.display = 'none';
+
+                    // Display results immediately since it's already submitted
+                    const score = existingSubmission.score;
+                    const passed = existingSubmission.is_correct === 'passed';
+                    const perc = totalMcqQuestions > 0 ? Math.round((score / totalMcqQuestions) * 100) : 0;
+                    displayFinalResults(score, totalMcqQuestions, perc, passed);
+                    if (quizForm) quizForm.style.display = 'none'; // Hide form if results shown
+
+                } else {
+                    // --- USER HAS NOT SUBMITTED YET ---
+                    console.log("%cUser has not submitted this assessment yet. Loading from localStorage.", "color: green;");
+                    loadAnswersFromLocalStorage(); // Load temporary answers
+                    updateProgressBar(); // Update progress based on local answers
+                    if(submitQuizButton) submitQuizButton.style.display = 'block';
+                    if(resultsContainer) resultsContainer.style.display = 'none'; // Ensure results are hidden
+                }
+
+            } catch (error) {
+                 console.error("Error during initial assessment check:", error);
+                 showError(`Error checking assessment status: ${error.message}. Loading local data as fallback.`);
+                 // Fallback: Load from local storage
+                 loadAnswersFromLocalStorage();
+                 updateProgressBar();
+            }
+
             console.log("initializePageContent() finished.");
         }
+        // --- END initializePageContent ---
 
-        // --- Core User Functions ---
+
+        // --- NEW Function: Load Submitted Answers from Supabase ---
+        async function loadAndDisplaySubmittedAnswers(userId) {
+            console.log(`Fetching submitted answers for user ${userId} and quiz ${QUIZ_ID} from user_progress...`);
+            try {
+                // Fetch answers from user_progress where section_id matches the QUIZ_ID
+                const { data: submittedAnswers, error } = await supabase
+                    .from('user_progress')
+                    .select('question_id, answer')
+                    .eq('user_id', userId)
+                    .eq('section_id', QUIZ_ID); // Filter by section_id matching the Quiz ID
+
+                if (error) {
+                    throw new Error(`Error fetching submitted answers: ${error.message}`);
+                }
+
+                 savedAnswers = {}; // Reset local state, rely only on DB data now
+                 const answerMap = {}; // Helper map
+
+                if (!submittedAnswers || submittedAnswers.length === 0) {
+                    console.warn("No detailed submitted answers found in user_progress for this quiz.");
+                    // Still disable everything as the assessment record exists
+                } else {
+                    console.log("Fetched submitted answers:", submittedAnswers);
+                     submittedAnswers.forEach(item => {
+                         answerMap[item.question_id] = item.answer;
+                         savedAnswers[item.question_id] = item.answer; // Populate state for progress bar
+                     });
+                }
+
+
+                // Populate UI and disable elements
+                questionBlocks.forEach(block => {
+                    const questionId = block.dataset.questionId;
+                    const questionType = block.dataset.questionType;
+                    const dbAnswer = answerMap[questionId]; // Get answer from DB map
+                    const inputs = block.querySelectorAll('input, textarea');
+                    const saveButton = block.querySelector('.save-question-button');
+
+                    if (dbAnswer !== undefined && dbAnswer !== null) {
+                        if (questionType === 'mcq') {
+                            const radioToCheck = block.querySelector(`input[value="${dbAnswer}"]`);
+                            if (radioToCheck) radioToCheck.checked = true;
+                        } else if (questionType === 'text') {
+                            const textArea = block.querySelector('textarea');
+                            if (textArea) textArea.value = dbAnswer;
+                        }
+                    } else {
+                         // If no answer in DB for this question ID (maybe added later?)
+                         if (questionType === 'mcq') { block.querySelectorAll('input[type="radio"]').forEach(r => r.checked = false); }
+                         else if (questionType === 'text') { block.querySelector('textarea').value = ''; }
+                    }
+
+                    // Disable everything for this block since it's submitted
+                    inputs.forEach(input => input.disabled = true);
+                    if(saveButton) {
+                        saveButton.textContent = 'Submitted'; // Indicate final state
+                        saveButton.disabled = true;
+                        // Hide save button entirely for submitted state
+                        saveButton.style.display = 'none';
+                    }
+                    block.classList.add('submitted'); // Use 'submitted' class
+                    block.classList.remove('saved'); // Remove temporary 'saved' class if present
+                });
+                updateProgressBar(); // Update progress (should be 100%)
+
+
+            } catch (error) {
+                 console.error("Error in loadAndDisplaySubmittedAnswers:", error);
+                 showError(`Could not load previous answers: ${error.message}`);
+                  if (quizForm) {
+                      quizForm.querySelectorAll('input, textarea, button').forEach(el => el.disabled = true);
+                  }
+            }
+        }
+
+
+        // --- Core User Functions (Keep as is) ---
         function getCurrentUser() { try { const userData = localStorage.getItem(CURRENT_USER_KEY); if (!userData) return null; const user = JSON.parse(userData); if (user && typeof user === 'object' && user.email && user.id) { if (!user.name) user.name = user.email.split('@')[0]; return user; } else { console.warn("Stored user data is invalid or missing ID. Clearing."); localStorage.removeItem(CURRENT_USER_KEY); localStorage.removeItem(LOGGED_IN_KEY); return null; } } catch (e) { console.error("Error parsing current user data:", e); localStorage.removeItem(CURRENT_USER_KEY); localStorage.removeItem(LOGGED_IN_KEY); return null; } }
         function displayUserInfo(currentUser) { try { let uN = 'User'; let uE = ''; if (currentUser) { uN = currentUser.name || currentUser.email.split('@')[0]; uE = currentUser.email || ''; } if (userNameDisplay) userNameDisplay.textContent = `Welcome, ${uN}`; if (userEmailDisplay) userEmailDisplay.textContent = uE; } catch (err) { console.error("Error in displayUserInfo:", err); if (userNameDisplay) userNameDisplay.textContent = 'Welcome'; if (userEmailDisplay) userEmailDisplay.textContent = ''; } }
         function logout() { try { localStorage.removeItem(LOGGED_IN_KEY); localStorage.removeItem(CURRENT_USER_KEY); localStorage.removeItem(LOCAL_ANSWERS_KEY); console.log("User logged out, keys cleared."); window.location.href = 'login.html'; } catch (e) { console.error("Logout error:", e); window.location.href = 'login.html'; } }
 
-        // --- Event Listeners ---
+        // --- Event Listeners (Keep as is) ---
         function addEventListeners() { try{if(quizForm){quizForm.addEventListener('submit',handleQuizSubmit);}questionBlocks.forEach(block=>{const saveButton=block.querySelector('.save-question-button');if(saveButton){saveButton.addEventListener('click',handleSaveQuestion);}const inputs=block.querySelectorAll('input[type="radio"], textarea');inputs.forEach(input=>{input.addEventListener('input',()=>{const errorMsgElement=block.querySelector('.question-error-message');if(errorMsgElement)errorMsgElement.style.display='none';});});});}catch(err){console.error("Error adding event listeners:",err);}}
 
-        // --- Load Saved Answers from LocalStorage ---
-        function loadAnswersFromLocalStorage() { try{const storedAnswers=JSON.parse(localStorage.getItem(LOCAL_ANSWERS_KEY)||'{}');savedAnswers=storedAnswers;if(Object.keys(savedAnswers).length>0){console.log("%cLoading temporary answers from localStorage:","color: orange;",savedAnswers);questionBlocks.forEach(block=>{const questionId=block.dataset.questionId;const questionType=block.dataset.questionType;const savedAnswer=savedAnswers[questionId];if(savedAnswer!==undefined&&savedAnswer!==null){const inputs=block.querySelectorAll('input, textarea');const saveButton=block.querySelector('.save-question-button');const errorMsgElement=block.querySelector('.question-error-message');if(errorMsgElement)errorMsgElement.style.display='none';if(questionType==='mcq'){const radioToCheck=block.querySelector(`input[value="${savedAnswer}"]`);if(radioToCheck)radioToCheck.checked=true;}else if(questionType==='text'){const textArea=block.querySelector('textarea');if(textArea)textArea.value=savedAnswer;}inputs.forEach(input=>input.disabled=true);if(saveButton){saveButton.textContent='Saved ✓';saveButton.disabled=true;}block.classList.add('saved');}});}}catch(e){console.error("Error loading answers from localStorage:",e);localStorage.removeItem(LOCAL_ANSWERS_KEY);savedAnswers={};}}
+        // --- Load Saved Answers from LocalStorage (Used only if not submitted) ---
+        function loadAnswersFromLocalStorage() { /* ... (Keep Original Logic - only runs if not submitted) ... */ try{const storedAnswers=JSON.parse(localStorage.getItem(LOCAL_ANSWERS_KEY)||'{}');savedAnswers=storedAnswers;if(Object.keys(savedAnswers).length>0){console.log("%cLoading temporary answers from localStorage:","color: orange;",savedAnswers);questionBlocks.forEach(block=>{const questionId=block.dataset.questionId;const questionType=block.dataset.questionType;const savedAnswer=savedAnswers[questionId];if(savedAnswer!==undefined&&savedAnswer!==null){const inputs=block.querySelectorAll('input, textarea');const saveButton=block.querySelector('.save-question-button');const errorMsgElement=block.querySelector('.question-error-message');if(errorMsgElement)errorMsgElement.style.display='none';if(questionType==='mcq'){const radioToCheck=block.querySelector(`input[value="${savedAnswer}"]`);if(radioToCheck)radioToCheck.checked=true;}else if(questionType==='text'){const textArea=block.querySelector('textarea');if(textArea)textArea.value=savedAnswer;}inputs.forEach(input=>input.disabled=true);if(saveButton){saveButton.textContent='Saved ✓';saveButton.disabled=true;}block.classList.add('saved');}});}}catch(e){console.error("Error loading answers from localStorage:",e);localStorage.removeItem(LOCAL_ANSWERS_KEY);savedAnswers={};}}
 
         // --- Handle Saving Individual Question (to localStorage ONLY) ---
-        function handleSaveQuestion(event) { const saveButton=event.target;const questionBlock=saveButton.closest('.question-block');const questionId=questionBlock.dataset.questionId;const questionType=questionBlock.dataset.questionType;const errorMsgElement=questionBlock.querySelector('.question-error-message');const radioGroupName=questionType==='mcq'?questionBlock.querySelector('input[type="radio"]')?.name:null;let userAnswer=null;let isValid=false;if(errorMsgElement)errorMsgElement.style.display='none';if(questionType==='mcq'){if(!radioGroupName){console.error(`Could not find radio group name for ${questionId}`);return;}const selectedRadio=questionBlock.querySelector(`input[name="${radioGroupName}"]:checked`);if(selectedRadio){userAnswer=selectedRadio.value;isValid=true;}else{showQuestionError("Please select an option.",errorMsgElement);}}else if(questionType==='text'){const textArea=questionBlock.querySelector('textarea');if(textArea){userAnswer=textArea.value.trim();if(userAnswer.length>=MIN_ESSAY_LENGTH){isValid=true;}else if(userAnswer.length===0){showQuestionError("Please enter your answer.",errorMsgElement);}else{showQuestionError(`Answer must be at least ${MIN_ESSAY_LENGTH} characters long.`,errorMsgElement);}}}if(isValid&&userAnswer!==null){console.log(`Locally saving answer for ${questionId}:`,userAnswer);savedAnswers[questionId]=userAnswer;try{localStorage.setItem(LOCAL_ANSWERS_KEY,JSON.stringify(savedAnswers));console.log(`%cUpdated localStorage with ${questionId}.`,'color: orange;');}catch(e){console.error("Error saving answer to localStorage:",e);showQuestionError("Could not save answer locally.",errorMsgElement);return;}const inputs=questionBlock.querySelectorAll('input, textarea');inputs.forEach(input=>input.disabled=true);saveButton.textContent='Saved ✓';saveButton.disabled=true;questionBlock.classList.add('saved');updateProgressBar();hideError();}}
+        function handleSaveQuestion(event) { /* ... (Keep Original Logic) ... */ const saveButton=event.target;const questionBlock=saveButton.closest('.question-block');const questionId=questionBlock.dataset.questionId;const questionType=questionBlock.dataset.questionType;const errorMsgElement=questionBlock.querySelector('.question-error-message');const radioGroupName=questionType==='mcq'?questionBlock.querySelector('input[type="radio"]')?.name:null;let userAnswer=null;let isValid=false;if(errorMsgElement)errorMsgElement.style.display='none';if(questionType==='mcq'){if(!radioGroupName){console.error(`Could not find radio group name for ${questionId}`);return;}const selectedRadio=questionBlock.querySelector(`input[name="${radioGroupName}"]:checked`);if(selectedRadio){userAnswer=selectedRadio.value;isValid=true;}else{showQuestionError("Please select an option.",errorMsgElement);}}else if(questionType==='text'){const textArea=questionBlock.querySelector('textarea');if(textArea){userAnswer=textArea.value.trim();if(userAnswer.length>=MIN_ESSAY_LENGTH){isValid=true;}else if(userAnswer.length===0){showQuestionError("Please enter your answer.",errorMsgElement);}else{showQuestionError(`Answer must be at least ${MIN_ESSAY_LENGTH} characters long.`,errorMsgElement);}}}if(isValid&&userAnswer!==null){console.log(`Locally saving answer for ${questionId}:`,userAnswer);savedAnswers[questionId]=userAnswer;try{localStorage.setItem(LOCAL_ANSWERS_KEY,JSON.stringify(savedAnswers));console.log(`%cUpdated localStorage with ${questionId}.`,'color: orange;');}catch(e){console.error("Error saving answer to localStorage:",e);showQuestionError("Could not save answer locally.",errorMsgElement);return;}const inputs=questionBlock.querySelectorAll('input, textarea');inputs.forEach(input=>input.disabled=true);saveButton.textContent='Saved ✓';saveButton.disabled=true;questionBlock.classList.add('saved');updateProgressBar();hideError();}}
 
-        // --- Update Progress Bar ---
+        // --- Update Progress Bar (Based on savedAnswers state) ---
         function updateProgressBar() { const savedCount=Object.keys(savedAnswers).length;const percentage=totalQuestions>0?Math.round((savedCount/totalQuestions)*100):0;if(progressBar&&progressText){progressBar.style.width=`${percentage}%`;progressText.textContent=`${percentage}% Completed (${savedCount}/${totalQuestions})`;}}
 
-        // --- Handle Final Quiz Submission (Includes CORRECTED User Status Update) ---
-        async function handleQuizSubmit(event) {
-            event.preventDefault();
-            console.log("Final Submission: Starting...");
-            hideError();
-             questionBlocks.forEach(block => {
-                 const errorMsgElement = block.querySelector('.question-error-message');
-                 if (errorMsgElement) errorMsgElement.style.display = 'none';
-             });
-
-            // --- >> RE-VERIFY currentUser here << ---
-            const currentUser = getCurrentUser();
-            if (!currentUser || !currentUser.id || !currentUser.email) {
-                 console.error("handleQuizSubmit Error: Cannot get valid currentUser object with ID.");
-                 showError("User session error. Please log out and log back in.", quizForm);
-                 setButtonLoading(false); // Re-enable button if user check fails here
-                 return;
-             }
-             console.log(`handleQuizSubmit: User verified - ID: ${currentUser.id}, Email: ${currentUser.email}`);
-             const userName = currentUser.name || currentUser.email.split('@')[0];
-             // --- >> End Re-verification << ---
-
-            // 1. Validation: Check if ALL questions are saved locally
-            const savedCount = Object.keys(savedAnswers).length;
-            if (savedCount < totalQuestions) {
-                 showError(`Please answer and save all ${totalQuestions} questions before submitting. You have saved ${savedCount}.`, quizForm);
-                  questionBlocks.forEach(block => {
-                       if (!savedAnswers[block.dataset.questionId]) {
-                           block.style.border = '2px solid var(--error-red)';
-                           setTimeout(() => { block.style.border = ''; block.style.borderLeft = '5px solid var(--primary-color)'; }, 3000);
-                           const errorMsgElement = block.querySelector('.question-error-message');
-                            if(errorMsgElement) showQuestionError("Please save your answer.", errorMsgElement);
-                       }
-                  });
-                 setButtonLoading(false); // Re-enable button if validation fails
-                 return;
-            }
-
-            setButtonLoading(true, 'Submitting...');
-
-            // 2. Process Results
-            let mcqScore = 0; const resultsForDB = []; const submissionTime = new Date();
-            questionBlocks.forEach(block => {
-                const questionId = block.dataset.questionId; const questionType = block.dataset.questionType;
-                const questionTextElement = block.querySelector('.question-text');
-                const questionText = questionTextElement ? (questionTextElement.dataset.questionText || questionTextElement.textContent.trim()) : 'Unknown Question Text';
-                const userAnswer = savedAnswers[questionId]; let isCorrect = null; let scoreValue = 0;
-                if (questionType === 'mcq') { const correctAnswer = correctAnswers[questionId]; isCorrect = userAnswer === correctAnswer; if (isCorrect) { mcqScore++; scoreValue = 1; } }
-                resultsForDB.push({ question_id: questionId, question_type: questionType, user_answer: userAnswer, is_correct: isCorrect, score: scoreValue, question_text: questionText });
-            });
-            const percentage = totalMcqQuestions > 0 ? Math.round((mcqScore / totalMcqQuestions) * 100) : 0;
-            const isPassedOverall = percentage >= 50;
-            console.log(`Final Check - MCQ Score: ${mcqScore}/${totalMcqQuestions}, Percentage: ${percentage}%, Passed: ${isPassedOverall}`);
-
-            // 3. Prepare Payloads
-            const assessmentSummaryPayload = { name: userName, question_id: QUIZ_ID, answer: 'N/A', is_correct: isPassedOverall ? 'passed' : 'failed', score: mcqScore, submitted_at: submissionTime.toISOString(), goal_answer: null, section_id: QUIZ_ID, completion_status: 'completed', question_text: SECTION_TITLE, user_id: currentUser.id, page: PAGE_NAME, type: SECTION_TYPE, user_email: currentUser.email };
-            const userProgressPayloadArray = resultsForDB.map(result => ({ user_id: currentUser.id, section_type: SECTION_TYPE, section_id: QUIZ_ID, section_title: SECTION_TITLE, question_id: result.question_id, question_text: result.question_text, page: PAGE_NAME, progress_percentage: 100, score: result.score, status: 'completed', submitted_at: submissionTime.toISOString(), updated_at: submissionTime.toISOString(), is_passed: result.question_type === 'mcq' ? result.is_correct : null, email: currentUser.email, answer: result.user_answer }));
-
-            // 4. Send Data to Supabase & Update User Status
-            try {
-                 console.log("Upserting summary to 'assessments'...");
-                 const { error: assessmentError } = await supabase.from('assessments').upsert([assessmentSummaryPayload], { onConflict: ['user_id', 'question_id', 'type'] }).select();
-                 if (assessmentError) throw new Error(`Database error (assessments): ${assessmentError.message}`);
-                 console.log('%cSupabase Upsert Success (assessments)', 'color: green;');
-
-                 console.log("Upserting details to 'user_progress'...");
-                 const { error: progressError } = await supabase.from('user_progress').upsert(userProgressPayloadArray, { onConflict: ['user_id', 'question_id'] }).select();
-                 if (progressError) throw new Error(`Database error (user progress): ${progressError.message}`);
-                 console.log('%cSupabase Upsert Success (user_progress)', 'color: green;');
-
-                // ***** ---> CORRECTED USER STATUS UPDATE WITH DEBUGGING --- *****
-                 console.log(`%cAttempting to update user assessment_completed for user ID: ${currentUser.id}...`, "color: blue; font-weight: bold;");
-
-                 // --- Using the core logic you provided ---
-                 const { data: updateData, error: updateError } = await supabase
-                    .from('users') // Ensure 'users' is your correct table name
-                    .update({ assessment_completed: true }) // Field to update
-                    .eq('id', currentUser.id); // Condition: match the user ID
-                    // Removed .select() as it's often not needed/useful for simple updates unless debugging RLS issues
-
-                 // --- Check and Log the Result ---
-                 if (updateError) {
-                     console.error(`%cCRITICAL: Failed to update user assessment_completed status for user ${currentUser.id}. Supabase Error:`, "color: red; font-weight: bold;", updateError);
-                     console.error("Error Details:", JSON.stringify(updateError, null, 2));
-                     // Log critical failure but continue to show results
-                 } else {
-                     // Since .select() was removed, data might be null or just indicate success without returning rows
-                     console.log(`%cSuccessfully initiated update for assessment_completed status for user ${currentUser.id}. Response data (if any):`, "color: green;", updateData);
-                 }
-                 // ***** ---> END USER STATUS UPDATE --- *****
-
-
-                // 5. Update UI on Final Success
-                displayFinalResults(mcqScore, totalMcqQuestions, percentage, isPassedOverall);
-                if (quizForm) quizForm.style.display = 'none';
-                if (progressBarContainer) progressBarContainer.style.display = 'none';
-
-                localStorage.removeItem(LOCAL_ANSWERS_KEY);
-                console.log("%cCleared temporary answers from localStorage.", 'color: orange;');
-
-            } catch (error) { // Catch errors from *any* of the await calls above
-                console.error("Error during Supabase submission process:", error);
-                showError(`Submission failed: ${error.message}. Please check your connection and try again, or contact support if the issue persists.`);
-                setButtonLoading(false); // Re-enable submit button on failure
-            }
-        }
-        // --- END handleQuizSubmit ---
-
+        // --- Handle Final Quiz Submission (Includes User Status Update) ---
+        async function handleQuizSubmit(event) { /* ... (Keep the corrected version from previous message - no changes needed here) ... */ event.preventDefault();console.log("Final Submission: Starting...");hideError();questionBlocks.forEach(block=>{const errorMsgElement=block.querySelector('.question-error-message');if(errorMsgElement)errorMsgElement.style.display='none';});const currentUser=getCurrentUser();if(!currentUser||!currentUser.id||!currentUser.email){console.error("handleQuizSubmit Error: Cannot get valid currentUser object with ID.");showError("User session error. Please log out and log back in.",quizForm);setButtonLoading(false);return;}console.log(`handleQuizSubmit: User verified - ID: ${currentUser.id}, Email: ${currentUser.email}`);const userName=currentUser.name||currentUser.email.split('@')[0];const savedCount=Object.keys(savedAnswers).length;if(savedCount<totalQuestions){showError(`Please answer and save all ${totalQuestions} questions before submitting. You have saved ${savedCount}.`,quizForm);questionBlocks.forEach(block=>{if(!savedAnswers[block.dataset.questionId]){block.style.border='2px solid var(--error-red)';setTimeout(()=>{block.style.border='';block.style.borderLeft='5px solid var(--primary-color)';},3000);const errorMsgElement=block.querySelector('.question-error-message');if(errorMsgElement)showQuestionError("Please save your answer.",errorMsgElement);}});setButtonLoading(false);return;}setButtonLoading(true,'Submitting...');let mcqScore=0;const resultsForDB=[];const submissionTime=new Date();questionBlocks.forEach(block=>{const questionId=block.dataset.questionId;const questionType=block.dataset.questionType;const questionTextElement=block.querySelector('.question-text');const questionText=questionTextElement?(questionTextElement.dataset.questionText||questionTextElement.textContent.trim()):'Unknown Question Text';const userAnswer=savedAnswers[questionId];let isCorrect=null;let scoreValue=0;if(questionType==='mcq'){const correctAnswer=correctAnswers[questionId];isCorrect=userAnswer===correctAnswer;if(isCorrect){mcqScore++;scoreValue=1;}}resultsForDB.push({question_id:questionId,question_type:questionType,user_answer:userAnswer,is_correct:isCorrect,score:scoreValue,question_text:questionText});});const percentage=totalMcqQuestions>0?Math.round((mcqScore/totalMcqQuestions)*100):0;const isPassedOverall=percentage>=50;console.log(`Final Check - MCQ Score: ${mcqScore}/${totalMcqQuestions}, Percentage: ${percentage}%, Passed: ${isPassedOverall}`);const assessmentSummaryPayload={name:userName,question_id:QUIZ_ID,answer:'N/A',is_correct:isPassedOverall?'passed':'failed',score:mcqScore,submitted_at:submissionTime.toISOString(),goal_answer:null,section_id:QUIZ_ID,completion_status:'completed',question_text:SECTION_TITLE,user_id:currentUser.id,page:PAGE_NAME,type:SECTION_TYPE,user_email:currentUser.email};const userProgressPayloadArray=resultsForDB.map(result=>({user_id:currentUser.id,section_type:SECTION_TYPE,section_id:QUIZ_ID,section_title:SECTION_TITLE,question_id:result.question_id,question_text:result.question_text,page:PAGE_NAME,progress_percentage:100,score:result.score,status:'completed',submitted_at:submissionTime.toISOString(),updated_at:submissionTime.toISOString(),is_passed:result.question_type==='mcq'?result.is_correct:null,email:currentUser.email,answer:result.user_answer}));try{console.log("Upserting summary to 'assessments'...");const{error:assessmentError}=await supabase.from('assessments').upsert([assessmentSummaryPayload],{onConflict:['user_id','question_id','type']}).select();if(assessmentError)throw new Error(`Database error (assessments): ${assessmentError.message}`);console.log('%cSupabase Upsert Success (assessments)','color: green;');console.log("Upserting details to 'user_progress'...");const{error:progressError}=await supabase.from('user_progress').upsert(userProgressPayloadArray,{onConflict:['user_id','question_id']}).select();if(progressError)throw new Error(`Database error (user progress): ${progressError.message}`);console.log('%cSupabase Upsert Success (user_progress)','color: green;');console.log(`%cAttempting to update user ${currentUser.id} assessment_completed status...`,"color: blue; font-weight: bold;");const{data:updateData,error:updateError}=await supabase.from('users').update({assessment_completed:true}).eq('id',currentUser.id);if(updateError){console.error(`%cCRITICAL: Failed to update user assessment_completed status for user ${currentUser.id}. Supabase Error:`,"color: red; font-weight: bold;",updateError);console.error("Error Details:",JSON.stringify(updateError,null,2));}else{console.log(`%cSuccessfully initiated update for assessment_completed status for user ${currentUser.id}. Response data (if any):`,"color: green;",updateData);}displayFinalResults(mcqScore,totalMcqQuestions,percentage,isPassedOverall);if(quizForm)quizForm.style.display='none';if(progressBarContainer)progressBarContainer.style.display='none';localStorage.removeItem(LOCAL_ANSWERS_KEY);console.log("%cCleared temporary answers from localStorage.",'color: orange;');}catch(error){console.error("Error during Supabase submission process:",error);showError(`Submission failed: ${error.message}. Please check your connection and try again, or contact support if the issue persists.`);setButtonLoading(false);}}
 
         // --- Display Final Results ---
-        function displayFinalResults(finalMcqScore, totalMcq, perc, passedOverall) { /* ... (unchanged) ... */ if(!resultsContainer||!scoreText||!resultsMessage||!resultEmoji)return;let emoji='';let message='';if(totalMcq>0){scoreText.textContent=`Your Score (MCQ): ${finalMcqScore} / ${totalMcq} (${perc}%)`;if(passedOverall){emoji='🎉';message="Excellent work! You've successfully completed the assessment. Your essay answers have also been recorded.";}else{emoji='💡';message="Assessment complete. Your essay answers have been recorded. We encourage you to review the course materials to solidify your understanding!";}}else{scoreText.textContent="Assessment Submitted";emoji='✅';message="Thank you for submitting your responses!";}resultEmoji.textContent=emoji;resultsMessage.textContent=message;resultsContainer.style.display='block';resultsContainer.scrollIntoView({behavior:'smooth',block:'center'});}
+        function displayFinalResults(finalMcqScore, totalMcq, perc, passedOverall) { /* ... (Keep Original Logic) ... */ if(!resultsContainer||!scoreText||!resultsMessage||!resultEmoji)return;let emoji='';let message='';if(totalMcq>0){scoreText.textContent=`Your Score (MCQ): ${finalMcqScore} / ${totalMcq} (${perc}%)`;if(passedOverall){emoji='🎉';message="Excellent work! You've successfully completed the assessment. Your essay answers have also been recorded.";}else{emoji='💡';message="Assessment complete. Your essay answers have been recorded. We encourage you to review the course materials to solidify your understanding!";}}else{scoreText.textContent="Assessment Submitted";emoji='✅';message="Thank you for submitting your responses!";}resultEmoji.textContent=emoji;resultsMessage.textContent=message;resultsContainer.style.display='block';resultsContainer.scrollIntoView({behavior:'smooth',block:'center'});}
 
         // --- Utility Functions ---
-        function showQuestionError(message, element) { /* ... (unchanged) ... */ if(element){element.textContent=message;element.style.display="block";} }
-        function setButtonLoading(isLoading, text = 'Submit Assessment') { /* ... (unchanged) ... */ if(!submitQuizButton)return;submitQuizButton.disabled=isLoading;submitQuizButton.textContent=isLoading?'Submitting...':text; }
-        function showError(message, contextElement = quizErrorMessage) { /* ... (unchanged) ... */ const errorElement=contextElement===quizForm?quizErrorMessage:contextElement;if(errorElement){errorElement.innerHTML=message;errorElement.style.display="block";errorElement.scrollIntoView({behavior:'smooth',block:'nearest'});}console.error("Displayed Error:",message);}
-        function hideError() { /* ... (unchanged) ... */ if(quizErrorMessage)quizErrorMessage.style.display="none"; }
+        function showQuestionError(message, element) { /* ... (Keep Original Logic) ... */ if(element){element.textContent=message;element.style.display="block";} }
+        function setButtonLoading(isLoading, text = 'Submit Assessment') { /* ... (Keep Original Logic) ... */ if(!submitQuizButton)return;submitQuizButton.disabled=isLoading;submitQuizButton.textContent=isLoading?'Submitting...':text; }
+        function showError(message, contextElement = quizErrorMessage) { /* ... (Keep Original Logic) ... */ const errorElement=contextElement===quizForm?quizErrorMessage:contextElement;if(errorElement){errorElement.innerHTML=message;errorElement.style.display="block";errorElement.scrollIntoView({behavior:'smooth',block:'nearest'});}console.error("Displayed Error:",message);}
+        function hideError() { /* ... (Keep Original Logic) ... */ if(quizErrorMessage)quizErrorMessage.style.display="none"; }
 
     </script>
 </body>
