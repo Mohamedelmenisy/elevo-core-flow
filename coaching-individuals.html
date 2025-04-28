@@ -8,6 +8,8 @@
     <link rel="apple-touch-icon" sizes="180x180" href="https://cdn-icons-png.flaticon.com/512/3281/3281289.png">
     <link rel="icon" type="image/png" sizes="32x32" href="https://cdn-icons-png.flaticon.com/512/3281/3281289.png">
     <link rel="icon" type="image/png" sizes="16x16" href="https://cdn-icons-png.flaticon.com/512/3281/3281289.png">
+    <!-- Supabase JS Library -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         /* --- Global Styles --- */
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
@@ -33,7 +35,15 @@
         /* Main Content Styles */
         h1 { color: #fff; background-color: #e67e22; padding: 20px; border-radius: 8px; text-align: center; margin: 25px auto; max-width: 800px; font-size: 26px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
         h1 + p { text-align: center; margin-top: -15px; margin-bottom: 25px; color: #555; font-size: 15px; }
-        .container { max-width: 800px; margin: 0 auto 30px; background: white; padding: 30px; box-shadow: 0 0 10px rgba(0,0,0,0.1); border-radius: 8px; }
+        .container {
+            max-width: 800px;
+            margin: 0 auto 30px;
+            background: white;
+            padding: 30px;
+            padding-top: 80px; /* Increased top padding */
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            border-radius: 8px;
+        }
         .section-title { color: #e67e22; font-size: 1.6em; margin: 30px 0 15px 0; border-bottom: 2px solid #e67e22; padding-bottom: 8px; font-weight: 600; }
         .highlight-section { background-color: rgba(230, 126, 34, 0.07); padding: 20px; border-left: 5px solid #e67e22; border-radius: 6px; margin: 25px 0; }
         .action-card { background-color: #e67e22; color: white; padding: 20px; border-radius: 6px; margin: 25px 0; border-left: 5px solid #d35400; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
@@ -50,18 +60,16 @@
         textarea.editable-answer { min-height: 100px; }
         .editable-answer:focus { outline: none; border-color: #e67e22; box-shadow: 0 0 0 3px rgba(230, 126, 34, 0.2); }
         .editable-answer::placeholder { color: #aaa; opacity: 1; }
+        .editable-answer:disabled { background-color: #f8f9fa; cursor: not-allowed; color: #6c757d; } /* Disabled state */
         .save-btn, .delete-btn { color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer; transition: all 0.3s ease; font-size: 14px; font-weight: 500; }
         .save-btn { background-color: #27ae60; margin-right: 8px; }
         .delete-btn { background-color: #e74c3c; }
-        .save-btn:hover { background-color: #2ecc71; transform: translateY(-1px); }
-        .delete-btn:hover { background-color: #c0392b; transform: translateY(-1px); }
+        .save-btn:hover:not(:disabled) { background-color: #2ecc71; transform: translateY(-1px); }
+        .delete-btn:hover:not(:disabled) { background-color: #c0392b; transform: translateY(-1px); }
         .save-btn:active, .delete-btn:active { transform: translateY(0); }
-        .saved-message { color: #27ae60; font-size: 13px; margin-left: 5px; display: none; font-weight: 500; }
-        .saved-message.deleted { color: #6c757d; }
+        .save-btn:disabled, .delete-btn:disabled { background-color: #bdc3c7; cursor: not-allowed; box-shadow: none; transform: none;} /* Disabled button state */
+        /* Removed saved-message styles */
         .inline-error-message { color: #e74c3c; font-size: 13px; margin-left: 5px; display: none; font-weight: 500; }
-        /* Feedback messages inside action cards */
-        .action-card .saved-message { color: #d1e7dd; }
-        .action-card .saved-message.deleted { color: #e9ecef; }
         .action-card .inline-error-message { color: #f8d7da; }
         /* Tables */
         table { width: 100%; border-collapse: collapse; margin: 25px 0; font-size: 14px; }
@@ -72,10 +80,24 @@
         .action-table td { vertical-align: top; color: #333; }
         .skill-will-table { width: 100%; border-collapse: collapse; margin: 25px 0; font-size: 14px; }
         .skill-will-table th { background-color: #e67e22; color: white; text-align: center; }
-        .skill-will-table td { vertical-align: middle; background-color: rgba(230, 126, 34, 0.05); }
-        .skill-will-table .editable-answer { width: auto; min-width: 150px; margin: 5px 0; padding: 8px 10px; font-size: 14px; display: inline-block; vertical-align: middle; flex-grow: 1; color: #333; background-color: white; border: 1px solid #ccc; }
+        .skill-will-table td { vertical-align: middle; background-color: rgba(230, 126, 34, 0.05); padding: 10px; }
+        .skill-will-table .editable-answer { /* Input/Select styles within table */
+            width: auto; /* Let flexbox handle width */
+            min-width: 150px;
+            margin: 0; /* Remove default margins */
+            padding: 8px 10px;
+            font-size: 14px;
+            display: inline-block;
+            vertical-align: middle;
+            flex-grow: 1; /* Allow input to grow */
+            color: #333;
+            background-color: white;
+            border: 1px solid #ccc;
+         }
+         .skill-will-table select.editable-answer { padding-right: 30px; } /* Space for dropdown arrow */
         .skill-will-table input.editable-answer::placeholder { color: #888; }
         .table-input-group { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+        .answer-buttons { display: flex; gap: 8px; align-items: center; flex-shrink: 0; /* Prevent buttons shrinking */ }
         /* Navigation Buttons */
         .button-container { display: flex; justify-content: space-between; margin-top: 40px; gap: 20px; border-top: 1px solid #eee; padding-top: 25px; }
         .button { text-decoration: none; padding: 12px 20px; color: white; border-radius: 4px; font-weight: 600; flex: 1; text-align: center; transition: all 0.3s ease; font-size: 15px; border: none; cursor: pointer; }
@@ -106,29 +128,44 @@
         .step-number { background-color: #3498db; color: white; width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-right: 15px; flex-shrink: 0; font-weight: bold; }
         .drawing-together { display: flex; align-items: center; gap: 20px; background-color: rgba(155, 89, 182, 0.1); padding: 20px; border-radius: 6px; margin: 25px 0; border-left: 5px solid #9b59b6; }
         .drawing-icon { font-size: 28px; color: #9b59b6; flex-shrink: 0; }
-        .answer-buttons { display: flex; gap: 8px; align-items: center; margin-top: 10px; flex-wrap: wrap; }
-        /* Modal Styles */
-        .modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); z-index: 1000; justify-content: center; align-items: center; animation: modalFadeInBackground 0.3s ease-out; }
-        @keyframes modalFadeInBackground { from { background: rgba(0,0,0,0); } to { background: rgba(0,0,0,0.6); } }
-        .modal-content { background: white; padding: 30px 40px; border-radius: 8px; max-width: 450px; text-align: center; box-shadow: 0 5px 20px rgba(0,0,0,0.2); position: relative; animation: modalSlideIn 0.3s ease-out; }
-        @keyframes modalSlideIn { from { opacity: 0; transform: translateY(-30px); } to { opacity: 1; transform: translateY(0); } }
-        .modal-button { background-color: #27ae60; color: white; border: none; padding: 12px 25px; border-radius: 5px; cursor: pointer; margin-top: 25px; font-weight: bold; transition: all 0.3s; font-size: 15px; }
-        .modal-button:hover { background-color: #219653; transform: translateY(-2px); }
-        .close-modal { position: absolute; top: 15px; right: 15px; background: none; border: none; font-size: 24px; cursor: pointer; color: #aaa; transition: color 0.3s; }
-        .close-modal:hover { color: #555; }
         .required-star { color: #e74c3c; font-weight: bold; margin-left: 2px; }
 
          /* --- Progress Bar Styles --- */
-        .question-progress-container { margin-top: 15px; background-color: #ecf0f1; border-radius: 5px; overflow: hidden; height: 12px; width: 100%; display: none; /* Hidden by default */ }
-        .question-progress-bar { height: 100%; width: 0%; background: linear-gradient(90deg, #3498db, #2980b9); /* Blue gradient */ border-radius: 5px; transition: width 0.6s ease-in-out; display: flex; align-items: center; justify-content: center; }
-        .question-progress-text { font-size: 9px; font-weight: 600; color: white; text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.2); white-space: nowrap; overflow: hidden; padding: 0 4px; }
+        .question-progress-container {
+            margin-top: 15px;
+            background-color: #ecf0f1;
+            border-radius: 5px;
+            overflow: hidden;
+            height: 12px;
+            width: 100%;
+            display: none; /* Hidden by default */
+        }
+        .question-progress-bar {
+            height: 100%;
+            width: 100%; /* Always 100% when shown */
+            background: linear-gradient(90deg, #2ecc71, #27ae60); /* Green gradient */
+            border-radius: 5px;
+            transition: opacity 0.5s ease-in-out;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .question-progress-text {
+            font-size: 9px;
+            font-weight: 600;
+            color: white;
+            text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.2);
+            white-space: nowrap;
+            overflow: hidden;
+            padding: 0 4px;
+        }
         #skill-will-progress-container { margin-top: 5px; } /* Adjust margin for table progress */
 
         /* Responsive Adjustments */
         @media (max-width: 768px) {
              h1 { font-size: 22px; padding: 15px; margin: 20px 15px; }
              h1 + p { font-size: 14px; margin: -10px 15px 20px; }
-             .container { padding: 20px; margin: 0 15px 20px; }
+             .container { padding: 20px; padding-top: 40px; /* Consistent padding */ margin: 0 15px 20px; }
              .user-bar { padding: 10px 15px; font-size: 13px; }
              .user-name { font-size: 13px; }
              .user-email { font-size: 11px; }
@@ -136,7 +173,7 @@
              .nav-tab { padding: 10px 5px; }
              .nav-tab a { margin: 0 5px; padding: 7px 10px; font-size: 13px;}
              .section-title { font-size: 1.4em; margin: 25px 0 10px 0; }
-             .highlight-section, .action-card, .question-item, .model-section, .trust-section, .rapport-section, .informal-tips, .drawing-together { padding: 15px; margin: 20px 0; }
+             .highlight-section, .action-card, .question-item, .model-section, .trust-section, .rapport-section, .informal-tips, .drawing-together, .metaphor-section { padding: 15px; margin: 20px 0; }
              .editable-answer { font-size: 14px; padding: 10px; }
              textarea.editable-answer { min-height: 80px; }
              .save-btn, .delete-btn { padding: 7px 13px; font-size: 13px; }
@@ -144,20 +181,23 @@
              .button { font-size: 14px; padding: 12px 15px;}
              .grow-model { grid-template-columns: 1fr; }
              .skill-will-matrix { grid-template-columns: 1fr; }
-             .modal-content { max-width: 90%; padding: 20px 25px; }
-             .modal-button { padding: 10px 20px; font-size: 14px; }
-             .close-modal { top: 10px; right: 10px; font-size: 20px; }
              .table-input-group { flex-direction: column; align-items: stretch; }
              .skill-will-table .editable-answer { width: 100%; display: block; }
              .answer-buttons { justify-content: flex-start;}
              .warning-message { font-size: 13px; }
-             /* Responsive Tables */
+             /* Responsive Tables (Non-Action) */
              table:not(.action-table), table:not(.action-table) thead, table:not(.action-table) tbody, table:not(.action-table) th, table:not(.action-table) td, table:not(.action-table) tr { display: block; }
              table:not(.action-table) thead tr { position: absolute; top: -9999px; left: -9999px; }
              table:not(.action-table) tr { border: 1px solid #ccc; margin-bottom: 10px; border-radius: 4px; }
-             table:not(.action-table) td { border: none; border-bottom: 1px solid #eee; position: relative; padding-left: 50%; text-align: right; }
-             table:not(.action-table) td:before { position: absolute; top: 6px; left: 6px; width: 45%; padding-right: 10px; white-space: nowrap; content: attr(data-label); font-weight: bold; text-align: left;}
+             table:not(.action-table) td { border: none; border-bottom: 1px solid #eee; position: relative; padding-left: 40% !important; /* Ensure padding for label */ text-align: right; min-height: 40px; /* Ensure height for content */ }
+             table:not(.action-table) td:before { position: absolute; top: 10px; left: 6px; width: 35%; padding-right: 10px; white-space: nowrap; content: attr(data-label); font-weight: bold; text-align: left;}
+             .skill-will-table td:before { top: 50%; transform: translateY(-50%); } /* Center label vertically */
+             .table-input-group { flex-direction: column; align-items: flex-end; gap: 5px; } /* Stack elements */
+             .skill-will-table .editable-answer { min-width: 0; } /* Allow shrinking */
+             .answer-buttons { justify-content: flex-end; }
+             .metaphor-section input[type="text"] { padding: 8px; font-size: 13px; }
         }
+        @media (max-width: 480px) { h1 { font-size: 20px; } h2 { font-size: 1.3em; } h3 { font-size: 1.1em; } .container { padding: 15px; padding-top: 30px; margin: 0 10px 15px; } .warning-message { font-size: 12px; padding: 10px 15px; } .metaphor-section input[type="text"] { font-size: 12px; } .button-group { gap: 8px; } }
 
     </style>
 </head>
@@ -166,10 +206,23 @@
     <div class="user-bar"> <div class="user-info"> <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.8;"> <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path> <circle cx="12" cy="7" r="4"></circle> </svg> <div class="user-details"> <span class="user-name" id="userName">Welcome back</span> <span class="user-email" id="userEmail">user@example.com</span> </div> </div> <button class="logout-button" onclick="logout()"> <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"> <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path> <polyline points="16 17 21 12 16 7"></polyline> <line x1="21" y1="12" x2="9" y2="12"></line> </svg> Logout </button> </div>
 
     <!-- Navigation Tabs -->
-    <nav class="nav-tab"> <a href="index.html">Home</a> <a href="article1.html">Article 1</a> <a href="coaching-skills.html">Coaching Skills</a> <a href="coaching-individuals.html" class="active">Coaching Individuals</a> <a href="coaching-team.html">Team Coaching</a> <a href="coaching-yourself.html">Self Coaching</a> <a href="action-plan.html">Action Plan</a> </nav>
+    <nav class="nav-tab">
+        <a href="dashboard.html">Dashboard</a>
+        <a href="index.html">Home</a>
+        <a href="introduction.html">Introduction</a>
+        <a href="coaching-skills.html">Coaching Skills</a>
+        <a href="coaching-individuals.html" class="active">Coaching Individuals</a>
+        <a href="coaching-team.html">Team Coaching</a>
+        <a href="coaching-yourself.html">Self Coaching</a>
+        <a href="action-plan.html">Action Plan</a>
+        <a href="ass.html">Assessment</a>
+    </nav>
 
     <h1>Coaching Individuals</h1>
     <p>Professional development through effective coaching techniques</p>
+
+     <!-- Floating Warning Message for Validation -->
+    <div class="warning-message" id="generalWarningMessage"> <strong>Action Required:</strong> Please complete all required answers (marked with <span class="required-star">*</span>). </div>
 
     <div class="container">
         <h2 class="section-title">The Power of Individual Coaching</h2>
@@ -189,33 +242,35 @@
 
         <!-- Skill/Will Matrix Section -->
         <div class="model-section" id="skill-will-container"> <h3>2. The Skill/Will Matrix</h3> <p>Your team members all have their own needs, personalities, skills and abilities. This means that you will need to tailor your approach to fit each individual.</p> <p>The Skill/Will Matrix, developed by coach and author Max Landsberg in 2003, can enable you to find the appropriate coaching style for every situation.</p> <div class="skill-will-matrix"> <div class="matrix-quadrant guide"> <h4>Guide</h4> <p>(High Will, Low Skill) Motivated but needs direction/training.</p> </div> <div class="matrix-quadrant delegate"> <h4>Delegate</h4> <p>(High Will, High Skill) Capable & motivated - give autonomy.</p> </div> <div class="matrix-quadrant direct"> <h4>Direct</h4> <p>(Low Will, Low Skill) Needs clear instructions & supervision.</p> </div> <div class="matrix-quadrant excite"> <h4>Excite</h4> <p>(Low Will, High Skill) Capable but needs motivation/inspiration.</p> </div> </div>
-            <table class="action-table"> <thead> <tr> <th colspan="2">ACTION: Create Your Coaching Map</th> </tr> <tr> <td style="width: 30%; font-weight:bold;">Instructions</td> <td>List your team members and identify where they fall on the Skill/Will Matrix. Only map members you intend to coach. (Complete at least one row for progress)<span class="required-star">*</span></td> </tr> </thead> </table>
-            <table class="skill-will-table"> <thead> <tr> <th>Name of Team Member</th> <th>Coaching Map Quadrant</th> </tr> </thead> <tbody> <!-- Rows 1-6 --> <tr data-row-id="team1"> <td><input type="text" class="editable-answer" placeholder="Enter name" data-question="team-member1"></td> <td> <div class="table-input-group"> <select class="editable-answer" data-question="coaching-map1"> <option value="">Select quadrant...</option> <option value="Guide">Guide</option> <option value="Delegate">Delegate</option> <option value="Direct">Direct</option> <option value="Excite">Excite</option> </select> <div class="answer-buttons"> <button class="save-btn" onclick="saveCombinedAnswer('team1')">Save Row</button> <button class="delete-btn" onclick="deleteCombinedAnswer('team1')">Delete Row</button> <span class="saved-message" id="save-status-team1"></span> <span class="inline-error-message" id="error-team1"></span> </div> </div> </td> </tr> <tr data-row-id="team2"> <td><input type="text" class="editable-answer" placeholder="Enter name" data-question="team-member2"></td> <td> <div class="table-input-group"> <select class="editable-answer" data-question="coaching-map2"> <option value="">Select quadrant...</option> <option value="Guide">Guide</option> <option value="Delegate">Delegate</option> <option value="Direct">Direct</option> <option value="Excite">Excite</option> </select> <div class="answer-buttons"> <button class="save-btn" onclick="saveCombinedAnswer('team2')">Save Row</button> <button class="delete-btn" onclick="deleteCombinedAnswer('team2')">Delete Row</button> <span class="saved-message" id="save-status-team2"></span> <span class="inline-error-message" id="error-team2"></span> </div> </div> </td> </tr> <tr data-row-id="team3"> <td><input type="text" class="editable-answer" placeholder="Enter name" data-question="team-member3"></td> <td> <div class="table-input-group"> <select class="editable-answer" data-question="coaching-map3"> <option value="">Select quadrant...</option> <option value="Guide">Guide</option> <option value="Delegate">Delegate</option> <option value="Direct">Direct</option> <option value="Excite">Excite</option> </select> <div class="answer-buttons"> <button class="save-btn" onclick="saveCombinedAnswer('team3')">Save Row</button> <button class="delete-btn" onclick="deleteCombinedAnswer('team3')">Delete Row</button> <span class="saved-message" id="save-status-team3"></span> <span class="inline-error-message" id="error-team3"></span> </div> </div> </td> </tr> <tr data-row-id="team4"> <td><input type="text" class="editable-answer" placeholder="Enter name" data-question="team-member4"></td> <td> <div class="table-input-group"> <select class="editable-answer" data-question="coaching-map4"> <option value="">Select quadrant...</option> <option value="Guide">Guide</option> <option value="Delegate">Delegate</option> <option value="Direct">Direct</option> <option value="Excite">Excite</option> </select> <div class="answer-buttons"> <button class="save-btn" onclick="saveCombinedAnswer('team4')">Save Row</button> <button class="delete-btn" onclick="deleteCombinedAnswer('team4')">Delete Row</button> <span class="saved-message" id="save-status-team4"></span> <span class="inline-error-message" id="error-team4"></span> </div> </div> </td> </tr> <tr data-row-id="team5"> <td><input type="text" class="editable-answer" placeholder="Enter name" data-question="team-member5"></td> <td> <div class="table-input-group"> <select class="editable-answer" data-question="coaching-map5"> <option value="">Select quadrant...</option> <option value="Guide">Guide</option> <option value="Delegate">Delegate</option> <option value="Direct">Direct</option> <option value="Excite">Excite</option> </select> <div class="answer-buttons"> <button class="save-btn" onclick="saveCombinedAnswer('team5')">Save Row</button> <button class="delete-btn" onclick="deleteCombinedAnswer('team5')">Delete Row</button> <span class="saved-message" id="save-status-team5"></span> <span class="inline-error-message" id="error-team5"></span> </div> </div> </td> </tr> <tr data-row-id="team6"> <td><input type="text" class="editable-answer" placeholder="Enter name" data-question="team-member6"></td> <td> <div class="table-input-group"> <select class="editable-answer" data-question="coaching-map6"> <option value="">Select quadrant...</option> <option value="Guide">Guide</option> <option value="Delegate">Delegate</option> <option value="Direct">Direct</option> <option value="Excite">Excite</option> </select> <div class="answer-buttons"> <button class="save-btn" onclick="saveCombinedAnswer('team6')">Save Row</button> <button class="delete-btn" onclick="deleteCombinedAnswer('team6')">Delete Row</button> <span class="saved-message" id="save-status-team6"></span> <span class="inline-error-message" id="error-team6"></span> </div> </div> </td> </tr> </tbody> </table>
-             <!-- Progress Bar for Skill/Will Table -->
+            <!-- Action Table Header -->
+            <table class="action-table"> <thead> <tr> <th colspan="2">ACTION: Create Your Coaching Map</th> </tr> <tr> <td style="width: 30%; font-weight:bold;">Instructions</td> <td>List your team members and identify where they fall on the Skill/Will Matrix. Only map members you intend to coach. (Complete at least <strong>3 rows</strong> for progress)<span class="required-star">*</span></td> </tr> </thead> </table>
+            <!-- Skill/Will Data Table -->
+            <table class="skill-will-table"> <thead> <tr> <th>Name of Team Member</th> <th>Coaching Map Quadrant</th> </tr> </thead> <tbody> <!-- Rows 1-6 --> <tr data-row-id="team1"> <td data-label="Name"><input type="text" class="editable-answer" placeholder="Enter name" data-question="team-member1"></td> <td data-label="Quadrant"> <div class="table-input-group"> <select class="editable-answer" data-question="coaching-map1"> <option value="">Select quadrant...</option> <option value="Guide">Guide</option> <option value="Delegate">Delegate</option> <option value="Direct">Direct</option> <option value="Excite">Excite</option> </select> <div class="answer-buttons"> <button class="save-btn" onclick="saveCombinedAnswer('team1')">Save Row</button> <button class="delete-btn" onclick="deleteCombinedAnswer('team1')">Delete Row</button> <span class="inline-error-message" id="error-team1"></span> </div> </div> </td> </tr> <tr data-row-id="team2"> <td data-label="Name"><input type="text" class="editable-answer" placeholder="Enter name" data-question="team-member2"></td> <td data-label="Quadrant"> <div class="table-input-group"> <select class="editable-answer" data-question="coaching-map2"> <option value="">Select quadrant...</option> <option value="Guide">Guide</option> <option value="Delegate">Delegate</option> <option value="Direct">Direct</option> <option value="Excite">Excite</option> </select> <div class="answer-buttons"> <button class="save-btn" onclick="saveCombinedAnswer('team2')">Save Row</button> <button class="delete-btn" onclick="deleteCombinedAnswer('team2')">Delete Row</button> <span class="inline-error-message" id="error-team2"></span> </div> </div> </td> </tr> <tr data-row-id="team3"> <td data-label="Name"><input type="text" class="editable-answer" placeholder="Enter name" data-question="team-member3"></td> <td data-label="Quadrant"> <div class="table-input-group"> <select class="editable-answer" data-question="coaching-map3"> <option value="">Select quadrant...</option> <option value="Guide">Guide</option> <option value="Delegate">Delegate</option> <option value="Direct">Direct</option> <option value="Excite">Excite</option> </select> <div class="answer-buttons"> <button class="save-btn" onclick="saveCombinedAnswer('team3')">Save Row</button> <button class="delete-btn" onclick="deleteCombinedAnswer('team3')">Delete Row</button> <span class="inline-error-message" id="error-team3"></span> </div> </div> </td> </tr> <tr data-row-id="team4"> <td data-label="Name"><input type="text" class="editable-answer" placeholder="Enter name" data-question="team-member4"></td> <td data-label="Quadrant"> <div class="table-input-group"> <select class="editable-answer" data-question="coaching-map4"> <option value="">Select quadrant...</option> <option value="Guide">Guide</option> <option value="Delegate">Delegate</option> <option value="Direct">Direct</option> <option value="Excite">Excite</option> </select> <div class="answer-buttons"> <button class="save-btn" onclick="saveCombinedAnswer('team4')">Save Row</button> <button class="delete-btn" onclick="deleteCombinedAnswer('team4')">Delete Row</button> <span class="inline-error-message" id="error-team4"></span> </div> </div> </td> </tr> <tr data-row-id="team5"> <td data-label="Name"><input type="text" class="editable-answer" placeholder="Enter name" data-question="team-member5"></td> <td data-label="Quadrant"> <div class="table-input-group"> <select class="editable-answer" data-question="coaching-map5"> <option value="">Select quadrant...</option> <option value="Guide">Guide</option> <option value="Delegate">Delegate</option> <option value="Direct">Direct</option> <option value="Excite">Excite</option> </select> <div class="answer-buttons"> <button class="save-btn" onclick="saveCombinedAnswer('team5')">Save Row</button> <button class="delete-btn" onclick="deleteCombinedAnswer('team5')">Delete Row</button> <span class="inline-error-message" id="error-team5"></span> </div> </div> </td> </tr> <tr data-row-id="team6"> <td data-label="Name"><input type="text" class="editable-answer" placeholder="Enter name" data-question="team-member6"></td> <td data-label="Quadrant"> <div class="table-input-group"> <select class="editable-answer" data-question="coaching-map6"> <option value="">Select quadrant...</option> <option value="Guide">Guide</option> <option value="Delegate">Delegate</option> <option value="Direct">Direct</option> <option value="Excite">Excite</option> </select> <div class="answer-buttons"> <button class="save-btn" onclick="saveCombinedAnswer('team6')">Save Row</button> <button class="delete-btn" onclick="deleteCombinedAnswer('team6')">Delete Row</button> <span class="inline-error-message" id="error-team6"></span> </div> </div> </td> </tr> </tbody> </table>
+             <!-- Progress Bar for Skill/Will Table Requirement -->
              <div class="question-progress-container" id="skill-will-progress-container">
                 <div class="question-progress-bar" id="progress-bar-skill-will">
-                    <span class="question-progress-text" id="progress-text-skill-will"></span>
+                    <span class="question-progress-text" id="progress-text-skill-will">✔️ Requirement Met</span>
                 </div>
             </div>
-            <p style="font-size: 0.9em; color: #555;">Note: Saving a row requires both Name and Quadrant. Complete at least one row for progress.</p>
+            <p style="font-size: 0.9em; color: #555;">Note: Complete at least 3 rows (Name and Quadrant) for this section's progress.</p>
         </div>
 
         <!-- Solution-Focused Coaching Section -->
         <div class="model-section"> <h3>3. Solution-Focused Coaching</h3> <p>The Solution-Focused Coaching approach helps you to identify what your team member wants, and how he can achieve it. Your aim is not to examine why a specific problem is occurring, but to find a solution. This helps you to avoid dwelling on the negatives. It's a simple and positive way to coach someone.</p> <div class="solution-model"> <div class="solution-step"> <div class="step-number">1</div> <div><h4>Identify Goal/Solution:</h4><p>Define a clear, specific outcome.</p></div> </div> <div class="solution-step"> <div class="step-number">2</div> <div><h4>Create Plan:</h4><p>Develop actionable steps together.</p></div> </div> <div class="solution-step"> <div class="step-number">3</div> <div><h4>Take Action & Monitor:</h4><p>Implement, track results, adjust.</p></div> </div> <div class="solution-step"> <div class="step-number">4</div> <div><h4>Change What Isn't Working:</h4><p>Adapt based on effectiveness.</p></div> </div> </div>
             <div class="action-card"> <strong>ACTION: Reflect on Solution-Focused Coaching</strong><br> Think about a team member or situation where this approach could be beneficial. Answer the questions below. </div>
-            <div class="question-item" id="question-container-solution-goal"> <div class="question-text">1. What specific goal could you help a team member identify using this approach?<span class="required-star">*</span></div> <textarea class="editable-answer required-answer" data-question="solution-goal" placeholder="e.g., Improve presentation delivery confidence, Reduce time spent on email admin..."></textarea> <div class="answer-buttons"> <button class="save-btn" onclick="saveAnswer('solution-goal')">Save</button> <button class="delete-btn" onclick="deleteAnswer('solution-goal')">Delete</button> <span class="saved-message" id="save-status-solution-goal"></span> <span class="inline-error-message" id="error-solution-goal"></span> </div>
+            <div class="question-item" id="question-container-solution-goal"> <div class="question-text">1. What specific goal could you help a team member identify using this approach?<span class="required-star">*</span></div> <textarea class="editable-answer required-answer" data-question="solution-goal" placeholder="e.g., Improve presentation delivery confidence, Reduce time spent on email admin..."></textarea> <div class="answer-buttons"> <button class="save-btn" onclick="saveAnswer('solution-goal')">Save</button> <button class="delete-btn" onclick="deleteAnswer('solution-goal')">Delete</button>  <span class="inline-error-message" id="error-solution-goal"></span> </div>
                  <!-- Progress Bar -->
                 <div class="question-progress-container" id="progress-container-solution-goal">
                     <div class="question-progress-bar" id="progress-bar-solution-goal">
-                        <span class="question-progress-text" id="progress-text-solution-goal"></span>
+                        <span class="question-progress-text" id="progress-text-solution-goal">✔️ Completed</span>
                     </div>
                 </div>
              </div>
-            <div class="question-item" id="question-container-solution-plan"> <div class="question-text">2. How would you help them create an effective action plan (Step 2)?<span class="required-star">*</span></div> <textarea class="editable-answer required-answer" data-question="solution-plan" placeholder="e.g., Break goal into smaller steps, identify resources needed, set mini-deadlines..."></textarea> <div class="answer-buttons"> <button class="save-btn" onclick="saveAnswer('solution-plan')">Save</button> <button class="delete-btn" onclick="deleteAnswer('solution-plan')">Delete</button> <span class="saved-message" id="save-status-solution-plan"></span> <span class="inline-error-message" id="error-solution-plan"></span> </div>
+            <div class="question-item" id="question-container-solution-plan"> <div class="question-text">2. How would you help them create an effective action plan (Step 2)?<span class="required-star">*</span></div> <textarea class="editable-answer required-answer" data-question="solution-plan" placeholder="e.g., Break goal into smaller steps, identify resources needed, set mini-deadlines..."></textarea> <div class="answer-buttons"> <button class="save-btn" onclick="saveAnswer('solution-plan')">Save</button> <button class="delete-btn" onclick="deleteAnswer('solution-plan')">Delete</button>  <span class="inline-error-message" id="error-solution-plan"></span> </div>
                  <!-- Progress Bar -->
                  <div class="question-progress-container" id="progress-container-solution-plan">
                     <div class="question-progress-bar" id="progress-bar-solution-plan">
-                        <span class="question-progress-text" id="progress-text-solution-plan"></span>
+                        <span class="question-progress-text" id="progress-text-solution-plan">✔️ Completed</span>
                     </div>
                 </div>
              </div>
@@ -237,27 +292,27 @@
         <div class="action-card"> <strong>ACTION: Practice Informal Coaching</strong><br> Identify an opportunity for informal coaching this week. Afterward, reflect on the experience using the questions below. </div>
 
         <!-- Informal Coaching Questions -->
-        <div class="question-item" id="question-container-informal-initiate"> <div class="question-text">1. How did you initiate the informal coaching conversation?<span class="required-star">*</span></div> <textarea class="editable-answer required-answer" data-question="informal-initiate" placeholder="e.g., 'Noticed you seemed stuck on X, got a minute?' or 'How are things going with Y?'..."></textarea> <div class="answer-buttons"> <button class="save-btn" onclick="saveAnswer('informal-initiate')">Save</button> <button class="delete-btn" onclick="deleteAnswer('informal-initiate')">Delete</button> <span class="saved-message" id="save-status-informal-initiate"></span> <span class="inline-error-message" id="error-informal-initiate"></span> </div>
+        <div class="question-item" id="question-container-informal-initiate"> <div class="question-text">1. How did you initiate the informal coaching conversation?<span class="required-star">*</span></div> <textarea class="editable-answer required-answer" data-question="informal-initiate" placeholder="e.g., 'Noticed you seemed stuck on X, got a minute?' or 'How are things going with Y?'..."></textarea> <div class="answer-buttons"> <button class="save-btn" onclick="saveAnswer('informal-initiate')">Save</button> <button class="delete-btn" onclick="deleteAnswer('informal-initiate')">Delete</button>  <span class="inline-error-message" id="error-informal-initiate"></span> </div>
             <!-- Progress Bar -->
             <div class="question-progress-container" id="progress-container-informal-initiate">
                 <div class="question-progress-bar" id="progress-bar-informal-initiate">
-                    <span class="question-progress-text" id="progress-text-informal-initiate"></span>
+                    <span class="question-progress-text" id="progress-text-informal-initiate">✔️ Completed</span>
                 </div>
             </div>
          </div>
-        <div class="question-item" id="question-container-informal-benefit"> <div class="question-text">2. What clues suggested the person might benefit from the session?<span class="required-star">*</span></div> <textarea class="editable-answer required-answer" data-question="informal-benefit" placeholder="e.g., Body language (slumped shoulders), verbal cues (frustration), repeated mistakes..."></textarea> <div class="answer-buttons"> <button class="save-btn" onclick="saveAnswer('informal-benefit')">Save</button> <button class="delete-btn" onclick="deleteAnswer('informal-benefit')">Delete</button> <span class="saved-message" id="save-status-informal-benefit"></span> <span class="inline-error-message" id="error-informal-benefit"></span> </div>
+        <div class="question-item" id="question-container-informal-benefit"> <div class="question-text">2. What clues suggested the person might benefit from the session?<span class="required-star">*</span></div> <textarea class="editable-answer required-answer" data-question="informal-benefit" placeholder="e.g., Body language (slumped shoulders), verbal cues (frustration), repeated mistakes..."></textarea> <div class="answer-buttons"> <button class="save-btn" onclick="saveAnswer('informal-benefit')">Save</button> <button class="delete-btn" onclick="deleteAnswer('informal-benefit')">Delete</button>  <span class="inline-error-message" id="error-informal-benefit"></span> </div>
             <!-- Progress Bar -->
             <div class="question-progress-container" id="progress-container-informal-benefit">
                 <div class="question-progress-bar" id="progress-bar-informal-benefit">
-                    <span class="question-progress-text" id="progress-text-informal-benefit"></span>
+                    <span class="question-progress-text" id="progress-text-informal-benefit">✔️ Completed</span>
                 </div>
             </div>
          </div>
-        <div class="question-item" id="question-container-informal-receptive"> <div class="question-text">3. Was your team member receptive? How did you gauge this?<span class="required-star">*</span></div> <textarea class="editable-answer required-answer" data-question="informal-receptive" placeholder="e.g., Yes, they opened up; No, seemed distracted; Initially hesitant but then engaged..."></textarea> <div class="answer-buttons"> <button class="save-btn" onclick="saveAnswer('informal-receptive')">Save</button> <button class="delete-btn" onclick="deleteAnswer('informal-receptive')">Delete</button> <span class="saved-message" id="save-status-informal-receptive"></span> <span class="inline-error-message" id="error-informal-receptive"></span> </div>
+        <div class="question-item" id="question-container-informal-receptive"> <div class="question-text">3. Was your team member receptive? How did you gauge this?<span class="required-star">*</span></div> <textarea class="editable-answer required-answer" data-question="informal-receptive" placeholder="e.g., Yes, they opened up; No, seemed distracted; Initially hesitant but then engaged..."></textarea> <div class="answer-buttons"> <button class="save-btn" onclick="saveAnswer('informal-receptive')">Save</button> <button class="delete-btn" onclick="deleteAnswer('informal-receptive')">Delete</button>  <span class="inline-error-message" id="error-informal-receptive"></span> </div>
              <!-- Progress Bar -->
             <div class="question-progress-container" id="progress-container-informal-receptive">
                 <div class="question-progress-bar" id="progress-bar-informal-receptive">
-                    <span class="question-progress-text" id="progress-text-informal-receptive"></span>
+                    <span class="question-progress-text" id="progress-text-informal-receptive">✔️ Completed</span>
                 </div>
             </div>
         </div>
@@ -267,135 +322,183 @@
         <h2 class="section-title">2.4 Drawing This Together</h2>
         <div class="drawing-together"> <div class="drawing-icon">✓</div> <div> <p>In this chapter, we discussed how to coach an individual member of your team. We outlined several models (GROW, Skill/Will, Solution-Focused) to guide your approach, and found out how to get your coaching relationships off to a great start by building trust and rapport. We also explored the value of informal coaching opportunities.</p> <p>The next chapter focuses on how to coach a team. We'll look at how group coaching works, and examine several models and processes that you can use to do it.</p> </div> </div>
 
-        <!-- General Warning Message (for Next Button click) -->
-        <div class="warning-message" id="generalWarningMessage"> <strong>Action Required:</strong> Please complete all required answers (marked with <span class="required-star">*</span>) and ensure table rows are complete if started. </div>
-
         <!-- Navigation Buttons -->
         <div class="button-container"> <a href="coaching-skills.html" class="button back">← Back to Coaching Skills</a> <button type="button" class="button" id="nextButton">Next: Team Coaching →</button> </div>
     </div>
 
-    <!-- Success Modal (Keep for potential future use, but next button won't trigger it now) -->
-    <div id="successModal" class="modal-overlay"> <div class="modal-content"> <button class="close-modal" onclick="closeModal()">×</button> <h3 style="color: #27ae60;">Section Complete!</h3> <p>All required answers for this section have been saved.</p> <p>You can now proceed to the next section.</p> <button class="modal-button" onclick="redirectToNextPage()">CONTINUE TO TEAM COACHING</button> </div> </div>
-
     <script>
+        // --- Supabase Configuration ---
+        const SUPABASE_URL = 'https://lgcutmuspcaralydycmg.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxnY3V0bXVzcGNhcmFseWR5Y21nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU0NDY3MDEsImV4cCI6MjA2MTAyMjcwMX0.3u5Y7pkH2NNnnoGLMWVfAa5b8fq88o1itRYnG1K38tE';
+        let supabase = null;
+
         // --- Configuration ---
-        const formspreeEndpoint = 'https://formspree.io/f/xzzeqvea';
+        // REMOVED: Formspree Endpoint
         const localStorageKey = 'allUserAnswers_coachingIndividuals';
         const SECTION_ID = 'individuals'; // Unique ID for this section
+        const PAGE_NAME = 'coaching-individuals.html';
+        const REQUIRED_TABLE_ROWS = 3; // <<< Updated Constant for Skill/Will table validation
 
         // --- Unified Keys ---
         const LOGGED_IN_KEY = 'isUserLoggedIn';
         const CURRENT_USER_KEY = 'currentUser';
 
+         // Initialize Supabase Client
+         try {
+             if (window.supabase && window.supabase.createClient) {
+                 supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+                 console.log(`Supabase client initialized successfully on ${PAGE_NAME}.`);
+             } else { throw new Error("Supabase library not found."); }
+         } catch (error) { console.error("CRITICAL ERROR initializing Supabase:", error); }
+
         // --- Initialization ---
         document.addEventListener('DOMContentLoaded', function() {
-            const currentUser = getCurrentUser();
-             if (!currentUser) {
-                 console.error(`${SECTION_ID} page: User not logged in. Redirecting...`);
+             console.log(`%c${PAGE_NAME}: DOMContentLoaded event fired.`, "color: green;");
+             if (!supabase) {
+                 console.error(`Supabase client failed to initialize on ${PAGE_NAME}. Some features might not work.`);
+                 // Optionally display an error to the user
+             }
+
+             const currentUser = getCurrentUser();
+              if (!currentUser || !currentUser.id || !currentUser.email) { // Added ID check
+                 console.error(`%c${PAGE_NAME}: User not logged in or essential data missing. Redirecting...`, "color: red;");
                   if (!window.location.search.includes('redir_attempt')) { window.location.href = `login.html?redirect=${encodeURIComponent(window.location.pathname + window.location.search)}&redir_attempt=1`; }
                   else { console.error("REDIRECTION LOOP DETECTED."); document.body.innerHTML = '<p style="color: red; padding: 20px;">Login check failed repeatedly.</p>'; }
                  return;
              }
-            console.log(`%c${SECTION_ID} page: User validated (${currentUser.email}). Initializing.`, "color: green;");
-            displayUserInfo(currentUser);
-            loadUserAnswers(currentUser.email);
-            setupEventListeners(currentUser.email);
-            highlightActiveNav();
-            addRequiredStars();
-            setupMobileTableLabels();
-            console.log(`%c${SECTION_ID} page: Initialization complete.`, "color: blue;");
+             console.log(`%c${PAGE_NAME}: User validated (${currentUser.email}, ID: ${currentUser.id}). Initializing.`, "color: green;");
+             displayUserInfo(currentUser);
+             loadUserAnswers(currentUser); // Pass full user object
+             setupEventListeners(currentUser); // Pass full user object
+             highlightActiveNav();
+             // Removed addRequiredStars as they are hardcoded now
+             setupMobileTableLabels();
+             console.log(`%c${PAGE_NAME}: Initialization complete.`, "color: blue;");
         });
 
-        // --- User Info & Authentication ---
-        function getCurrentUser() { /* ... consistent ... */ try { const d = localStorage.getItem(CURRENT_USER_KEY); if (!d) return null; const p = JSON.parse(d); if (p && typeof p === 'object' && p.email && p.name) { if (typeof p.progress !== 'object' || p.progress === null) p.progress = {}; return p; } else { localStorage.removeItem(CURRENT_USER_KEY); localStorage.removeItem(LOGGED_IN_KEY); return null; } } catch (e) { console.error("GUC Error:", e); localStorage.removeItem(CURRENT_USER_KEY); localStorage.removeItem(LOGGED_IN_KEY); return null; } }
+        // --- User Info & Auth ---
+        function getCurrentUser() { /* ... consistent ... */ try { const d = localStorage.getItem(CURRENT_USER_KEY); if (!d) return null; const p = JSON.parse(d); if (p && typeof p === 'object' && p.email && p.name && p.id) { if (typeof p.progress !== 'object' || p.progress === null) p.progress = {}; return p; } else { localStorage.removeItem(CURRENT_USER_KEY); localStorage.removeItem(LOGGED_IN_KEY); return null; } } catch (e) { console.error("GUC Error:", e); localStorage.removeItem(CURRENT_USER_KEY); localStorage.removeItem(LOGGED_IN_KEY); return null; } }
         function saveCurrentUser(userObject) { /* ... consistent ... */ try { if (!userObject || typeof userObject !== 'object') throw new Error("Invalid user object"); localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(userObject)); console.log("Saved user data."); } catch (error) { console.error("SCU Error:", error); } }
-        function displayUserInfo(user) { /* ... consistent ... */ document.getElementById('userName').textContent = `Welcome, ${user.name || 'User'}`; document.getElementById('userEmail').textContent = user.email; }
+        function displayUserInfo(user) { /* ... consistent ... */ if(!user) return; document.getElementById('userName').textContent=`Welcome, ${user.name || user.email.split('@')[0]}`; document.getElementById('userEmail').textContent=user.email;}
         function logout() { /* ... consistent ... */ localStorage.removeItem(LOGGED_IN_KEY); localStorage.removeItem(CURRENT_USER_KEY); window.location.href = 'login.html';}
-        function highlightActiveNav() { /* ... consistent ... */ const cP=window.location.pathname.split('/').pop()||'index.html'; document.querySelectorAll('.nav-tab a').forEach(l=>{const lP=(l.getAttribute('href')||'').split('/').pop(); l.classList.toggle('active',lP===cP);}); }
-        function addRequiredStars() { /* ... consistent ... */ document.querySelectorAll('.required-answer').forEach(f=>{const p=f.closest('.question-item'); let l=p?.querySelector('.question-text'); if(!l&&f.tagName==='TEXTAREA'&&f.closest('.action-card')){l=f.previousElementSibling;if(!l||l.tagName!=='P')l=f.closest('.action-card').querySelector('h3');} if(l&&!l.querySelector('.required-star'))l.insertAdjacentHTML('beforeend','<span class="required-star">*</span>');}); document.querySelectorAll('p:has(.required-star)').forEach(n=>n.style.display='none'); }
+        function highlightActiveNav() { /* ... consistent ... */ const cP=window.location.pathname.split('/').pop()||PAGE_NAME; document.querySelectorAll('.nav-tab a').forEach(l=>{const lP=(l.getAttribute('href')||'').split('/').pop(); l.classList.toggle('active',lP===cP);}); }
         function setupMobileTableLabels() { /* ... consistent ... */ document.querySelectorAll('table:not(.action-table) tbody tr').forEach(r=>{const h=Array.from(r.closest('table').querySelectorAll('thead th')).map(th=>th.textContent); r.querySelectorAll('td').forEach((t,i)=>t.setAttribute('data-label',h[i]||''));});}
 
 
-        // --- Answer Handling (Local Storage) ---
-        function loadUserAnswers(userEmail) { /* ... consistent load logic ... */
-            if (!userEmail) return;
+        // --- Answer Handling (Local Storage & UI Locking) ---
+        function loadUserAnswers(currentUser) {
+            if (!currentUser || !currentUser.email) return;
             let allAnswers = {};
             try { const d = localStorage.getItem(localStorageKey); if (d) allAnswers = JSON.parse(d) || {}; }
             catch(e) { console.error("Load Answers Error:", e); }
-            const userPageAnswers = allAnswers[userEmail] || {};
-            const currentProgress = updateSectionProgress(SECTION_ID); // Calc initial overall progress
+            const userPageAnswers = allAnswers[currentUser.email] || {};
 
             // Load textareas
-            document.querySelectorAll('textarea.required-answer').forEach(field => {
+            document.querySelectorAll('textarea.required-answer, textarea[data-question^="solution-"]').forEach(field => { // Include solution textareas
                  const qId = field.dataset.question;
                  const qContainer = document.getElementById(`question-container-${qId}`);
-                 loadFieldState(field, qId, userPageAnswers, qContainer, currentProgress);
+                 loadFieldState(field, qId, userPageAnswers, qContainer); // Handles disabling and progress bar
             });
 
              // Load Skill/Will table state and check completion for progress bar
-             loadTableState('skillWill', ['team-member', 'coaching-map'], userPageAnswers, currentProgress);
+             loadTableState('skillWill', ['team-member', 'coaching-map'], userPageAnswers);
         }
 
-        // Updated loadFieldState
-        function loadFieldState(field, questionId, userAnswers, questionContainer, overallProgress, showBar = true) {
-            const statusId = `save-status-${questionId}`;
-            hideMessages(statusId, `error-${questionId}`, field); // Clear previous state
+        // Helper to load state for any field (Textarea, Input, Select)
+        function loadFieldState(field, questionId, userAnswers, questionContainer) {
+            if (!field) return;
+            const errorId = `error-${questionId}`;
+            const buttonGroup = field.closest('td') ? field.closest('td').querySelector('.answer-buttons') : field.parentElement.querySelector('.answer-buttons'); // Find button group relative to field
+            const saveButton = buttonGroup?.querySelector('.save-btn');
+            const deleteButton = buttonGroup?.querySelector('.delete-btn');
 
-            if (userAnswers[questionId] !== undefined) {
+            hideMessages(errorId, field); // Clear previous state
+
+            // Check if an answer exists AND it's not just whitespace
+            if (userAnswers[questionId] !== undefined && userAnswers[questionId] !== null && userAnswers[questionId].trim() !== '') {
                 field.value = userAnswers[questionId];
-                // Only show bar if the field has content and showBar is true
-                if (field.value.trim() !== '' && showBar && questionContainer) {
-                    showQuestionProgressBar(questionContainer, overallProgress);
-                } else if (showBar && questionContainer) {
-                     hideQuestionProgressBar(questionContainer); // Hide if loaded answer is empty
+                field.disabled = true; // Disable field
+                field.classList.remove('required-field');
+                if (saveButton) {
+                    saveButton.disabled = true;
+                    saveButton.textContent = 'Saved ✔️';
                 }
+                if (deleteButton) {
+                    deleteButton.disabled = true;
+                    deleteButton.style.display = 'none'; // Hide delete button
+                }
+                // Show individual progress bar if the container exists
+                const individualProgressContainer = document.getElementById(`progress-container-${questionId}`);
+                if (individualProgressContainer) {
+                     showQuestionProgressBar(individualProgressContainer);
+                }
+
             } else {
-                field.value = (field.tagName === 'SELECT') ? '' : ''; // Reset field
-                 if (showBar && questionContainer) { // Hide bar if no answer saved
-                     hideQuestionProgressBar(questionContainer);
-                 }
+                // Ensure fields are enabled if no answer is found or answer is empty/whitespace
+                field.value = (field.tagName === 'SELECT') ? '' : ''; // Reset field value
+                field.disabled = false;
+                if (saveButton) {
+                    saveButton.disabled = false;
+                    saveButton.textContent = 'Save';
+                     // Special case for row save button text
+                    if (field.closest('.skill-will-table')) saveButton.textContent = 'Save Row';
+                }
+                if (deleteButton) {
+                    deleteButton.disabled = false;
+                    deleteButton.style.display = 'inline-block'; // Show delete button
+                    if (field.closest('.skill-will-table')) deleteButton.textContent = 'Delete Row';
+                }
+                 // Hide individual progress bar
+                 const individualProgressContainer = document.getElementById(`progress-container-${questionId}`);
+                if (individualProgressContainer) {
+                    hideQuestionProgressBar(individualProgressContainer);
+                }
             }
         }
 
          // Helper to load state for Skill/Will table & check completion
-         function loadTableState(tableType, prefixes, userAnswers, overallProgress) {
-             const tableContainer = document.getElementById(`${tableType}-container`) || document.querySelector('.skill-will-table')?.closest('.model-section'); // Find table container
+         function loadTableState(tableType, prefixes, userAnswers) {
              const tableProgressContainer = document.getElementById(`${tableType}-progress-container`);
-             let isTableComplete = false; // Flag to track if *at least one row* is complete
+             let completedRows = 0;
 
-             for (let i = 1; i <= 6; i++) { // Loop through rows
-                 let rowComplete = true; // Assume complete initially
+             for (let i = 1; i <= 6; i++) { // Loop through potential rows
+                 let rowComplete = true;
                  let rowStarted = false;
                  for (const prefix of prefixes) {
                      const questionId = `${prefix}${i}`;
                      const field = document.querySelector(`[data-question="${questionId}"]`);
                      if (field) {
-                          loadFieldState(field, questionId, userAnswers, null, 0, false); // Load field state without showing bar
-                          if(userAnswers[questionId] !== undefined && userAnswers[questionId].trim() !== '') rowStarted = true;
-                          if(field.value.trim() === '') rowComplete = false; // Incomplete if any field is empty
+                          loadFieldState(field, questionId, userAnswers, null); // Load field state, handles disabling
+                          if (field.disabled) { // If field is disabled, it's considered part of a completed row for counting purposes
+                             rowStarted = true;
+                          } else {
+                             rowComplete = false; // If any field in the row is enabled, the row isn't 'complete' for the requirement check yet
+                          }
                      } else {
-                         rowComplete = false; // Incomplete if a field doesn't exist
+                         rowComplete = false; // Row cannot be complete if a field is missing
                      }
                  }
-                  if(rowStarted && rowComplete) { // Check if row was started AND is complete
-                      isTableComplete = true; // Mark table as complete if any row is done
-                 }
+                  // A row contributes to the count only if *both* its fields are disabled (saved)
+                  if(rowStarted && rowComplete) {
+                     completedRows++;
+                  }
              }
 
-             // Show/Hide the specific progress bar below the table
-             if (isTableComplete && tableProgressContainer) {
-                  showQuestionProgressBar(tableProgressContainer, overallProgress);
+             // Show/Hide the specific progress bar below the table based on the count
+             if (completedRows >= REQUIRED_TABLE_ROWS && tableProgressContainer) {
+                  showQuestionProgressBar(tableProgressContainer);
              } else if (tableProgressContainer) {
                   hideQuestionProgressBar(tableProgressContainer);
              }
         }
 
+
         function saveAnswerToStorage(userEmail, questionId, answer) { /* ... consistent ... */ if(!userEmail) return false; let a={}; try{const d=localStorage.getItem(localStorageKey); if(d) a=JSON.parse(d)||{};}catch(e){console.error("Save Parse Err:",e); a={};} if(!a[userEmail]) a[userEmail]={}; a[userEmail][questionId]=answer; try{localStorage.setItem(localStorageKey,JSON.stringify(a)); return true;} catch(e){console.error("Save Storage Err:",e); return false;} }
         function deleteAnswerFromStorage(userEmail, questionId) { /* ... consistent ... */ if(!userEmail) return false; let a={}; try{const d=localStorage.getItem(localStorageKey); if(d) a=JSON.parse(d)||{}; else return false;} catch(e){console.error("Del Parse Err:",e); return false;} let u=false; if(a[userEmail]?.[questionId]!==undefined){delete a[userEmail][questionId]; u=true; if(Object.keys(a[userEmail]).length===0) delete a[userEmail];} if(u){try{localStorage.setItem(localStorageKey,JSON.stringify(a)); return true;}catch(e){console.error("Del Storage Err:", e); return false;}} return false; }
 
         // --- Event Listeners Setup ---
-        function setupEventListeners(userEmail) { /* ... consistent ... */
-            if (!userEmail) return;
+        function setupEventListeners(currentUser) { /* ... consistent ... */
+            if (!currentUser?.email) return;
             document.querySelectorAll('.editable-answer').forEach(field => {
                 const eventType = (field.tagName === 'SELECT') ? 'change' : 'input';
                 field.addEventListener(eventType, function() {
@@ -407,7 +510,7 @@
                      const tableRow = this.closest('tr[data-row-id]');
                      if(tableRow) {
                           const rowId = tableRow.dataset.rowId;
-                          clearTableErrorIfRowComplete('skillWill', rowId); // Check combined state
+                          clearTableErrorIfRowComplete(rowId); // Check combined state
                      }
                 });
             });
@@ -416,7 +519,7 @@
         }
 
         function handleNextButtonClick(e) { /* ... consistent ... */ if (!validateAllAnswers(true)) { e.preventDefault(); showGeneralWarningMessage(); } else { window.location.href = 'coaching-team.html'; /* Direct navigation on success */ } }
-        function clearTableErrorIfRowComplete(tableType, rowId) { /* ... consistent ... */
+        function clearTableErrorIfRowComplete(rowId) { /* ... consistent ... */
              const errorId = `error-${rowId}`; // Use row-specific error ID
              const errorElement = document.getElementById(errorId);
              if (!errorElement) return;
@@ -430,172 +533,402 @@
         }
 
         // --- UI Feedback & Validation ---
-        function validateAllAnswers(showErrors = false) { /* ... consistent ... */
-            let allValid = true; let firstInvalidField = null;
-            // Textareas
-            document.querySelectorAll('textarea.required-answer').forEach(f => { const qId=f.dataset.question; const eId=`error-${qId}`; hideError(eId); if(f.value.trim()===''){allValid=false; if(!firstInvalidField) firstInvalidField=f; if(showErrors){f.classList.add('required-field'); showError(eId,null,'Please enter an answer.');}} else {f.classList.remove('required-field');} });
-            // Skill/Will Table
-             if (!validateSkillWillTable(showErrors)) {
-                 allValid = false;
-                  if (!firstInvalidField) firstInvalidField = document.querySelector('.skill-will-table .required-field');
-             }
-            // Scroll
-            if (!allValid && showErrors && firstInvalidField) { firstInvalidField.scrollIntoView({behavior:'smooth',block:'center'}); setTimeout(()=>firstInvalidField.focus({preventScroll:true}),400); }
-            return allValid;
-        }
+        function validateAllAnswers(showErrors = false) {
+             let allValid = true;
+             let firstInvalidField = null;
+             console.log(`Running validation (Show Errors: ${showErrors})`);
 
-        // Skill/Will Table specific validation
-        function validateSkillWillTable(showErrors) {
-             let tableIsValid = true;
+             // Textareas and Solution-Focused Inputs
+             document.querySelectorAll('textarea.required-answer, textarea[data-question^="solution-"]').forEach(field => {
+                 const qId = field.dataset.question;
+                 const eId = `error-${qId}`;
+                 if (!field.disabled && field.value.trim() === '') { // Only validate enabled fields
+                     allValid = false;
+                     if (showErrors) showError(eId, field);
+                     if (!firstInvalidField) firstInvalidField = field;
+                 } else if (!field.disabled) { // Clear errors for enabled, filled fields
+                     hideError(eId); field.classList.remove('required-field');
+                 } else { // Clear errors for disabled (already saved) fields
+                      hideError(eId); field.classList.remove('required-field');
+                 }
+             });
+
+             // Skill/Will Table Validation (Check individual started rows AND overall requirement)
+             let completedRowCount = 0;
              for (let i = 1; i <= 6; i++) {
                  const rowId = `team${i}`;
                  const nameField = document.querySelector(`[data-question="team-member${i}"]`);
                  const mapField = document.querySelector(`[data-question="coaching-map${i}"]`);
                  const errorId = `error-${rowId}`;
-                 hideError(errorId); // Clear previous row error
-                 nameField?.classList.remove('required-field'); mapField?.classList.remove('required-field');
 
                  if (nameField && mapField) {
-                     const nameValue = nameField.value.trim();
-                     const mapValue = mapField.value.trim();
-                     if (nameValue && !mapValue) { // Name entered, but map missing
-                         tableIsValid = false;
-                         if (showErrors) { mapField.classList.add('required-field'); showError(errorId, null, 'Quadrant required if name is entered.'); }
-                     } else if (!nameValue && mapValue) { // Map selected, but name missing
-                          tableIsValid = false;
-                          if (showErrors) { nameField.classList.add('required-field'); showError(errorId, null, 'Name required if quadrant is selected.'); }
+                     // Clear previous errors for the row
+                     hideError(errorId);
+                     nameField.classList.remove('required-field');
+                     mapField.classList.remove('required-field');
+
+                     if (!nameField.disabled || !mapField.disabled) { // Only validate rows that are not fully saved
+                         const nameValue = nameField.value.trim();
+                         const mapValue = mapField.value.trim();
+
+                         if (nameValue && !mapValue) { // Name entered, but map missing
+                             allValid = false;
+                             if (showErrors) { mapField.classList.add('required-field'); showError(errorId, null, 'Quadrant required.'); }
+                             if (!firstInvalidField) firstInvalidField = mapField;
+                         } else if (!nameValue && mapValue) { // Map selected, but name missing
+                              allValid = false;
+                              if (showErrors) { nameField.classList.add('required-field'); showError(errorId, null, 'Name required.'); }
+                              if (!firstInvalidField) firstInvalidField = nameField;
+                         } else if (nameValue && mapValue) {
+                              completedRowCount++; // Count enabled but completed rows towards the requirement check
+                         }
+                     } else {
+                          completedRowCount++; // Count disabled (saved) rows
                      }
                  }
              }
-              // Optional: Check if at least one row is complete? Depends on requirement.
-              // If requirement is >= 1 row, add check here and potentially show a table-level error.
-              // For now, we just check individual row validity if started.
-             return tableIsValid;
+
+             // Check if overall table requirement is met
+             if (completedRowCount < REQUIRED_TABLE_ROWS) {
+                  allValid = false;
+                  console.log(`Skill/Will Table Count: ${completedRowCount}/${REQUIRED_TABLE_ROWS}`);
+                  if (showErrors) {
+                     // Show error near the first incomplete *enabled* row, or a general table error
+                     const firstIncompleteEnabledRow = document.querySelector('.skill-will-table tr[data-row-id]:not(:has(input:disabled))');
+                      if (firstIncompleteEnabledRow) {
+                           const errorId = `error-${firstIncompleteEnabledRow.dataset.rowId}`;
+                           const nameField = firstIncompleteEnabledRow.querySelector('[data-question^="team-member"]');
+                           const mapField = firstIncompleteEnabledRow.querySelector('[data-question^="coaching-map"]');
+                            if(nameField && mapField && !nameField.value.trim() && !mapField.value.trim()) { // Only show general error if row hasn't been started
+                                 showError(errorId, null, `Complete at least ${REQUIRED_TABLE_ROWS} rows.`);
+                                  if (!firstInvalidField) firstInvalidField = nameField; // Focus the first field of that row
+                            } else if (nameField && mapField && !nameField.value.trim()) {
+                                 showError(errorId, null, 'Name required.');
+                                  if (!firstInvalidField) firstInvalidField = nameField;
+                            } else if (nameField && mapField && !mapField.value.trim()) {
+                                  showError(errorId, null, 'Quadrant required.');
+                                   if (!firstInvalidField) firstInvalidField = mapField;
+                            }
+                      } else {
+                           // If all rows are saved but count is still low (edge case), show general warning
+                           showGeneralWarningMessage(`Please complete at least ${REQUIRED_TABLE_ROWS} rows in the Coaching Map table.`);
+                           if (!firstInvalidField) firstInvalidField = document.querySelector('.skill-will-table input');
+                      }
+                  }
+             } else {
+                  // Requirement met, clear any remaining row-level errors on enabled rows
+                  for (let i = 1; i <= 6; i++) {
+                      const rowId = `team${i}`;
+                      const nameField = document.querySelector(`[data-question="team-member${i}"]`);
+                      if(nameField && !nameField.disabled) { // Check only enabled rows
+                           hideError(`error-${rowId}`);
+                           nameField.classList.remove('required-field');
+                           const mapField = document.querySelector(`[data-question="coaching-map${i}"]`);
+                           if(mapField) mapField.classList.remove('required-field');
+                      }
+                  }
+             }
+
+
+             if (!allValid && showErrors && firstInvalidField) { firstInvalidField.scrollIntoView({behavior:'smooth',block:'center'}); setTimeout(()=>firstInvalidField.focus({preventScroll:true}),400); }
+             console.log("Validation result:", allValid);
+             return allValid;
+        }
+
+
+        function showGeneralWarningMessage(message = "Please complete all required fields marked with *.") { /* ... consistent ... */ const w=document.getElementById('generalWarningMessage'); if(!w) return; w.innerHTML=`<strong>Action Required:</strong> ${message}`; w.style.animation='none'; void w.offsetWidth; w.style.display='block'; w.style.animation='slideDownFadeInWarn 0.4s ease-out'; clearTimeout(w.timer); w.timer=setTimeout(()=>{w.style.animation='fadeOutUpWarn 0.5s ease-out forwards'; setTimeout(()=>{if(w.style.animationName==='fadeOutUpWarn'){w.style.display='none';w.style.animation='';}},500);},4000); }
+        // Removed show/hideSaveStatus as it's handled by button state
+        function showError(errorId, fieldToFocus, message = 'Required field.') { /* ... consistent ... */ const e=document.getElementById(errorId); if(!e) return; e.textContent=message; const aC=e.closest('.action-card'); if(aC) e.style.color='#f8d7da'; else e.style.color='#e74c3c'; e.style.display='inline-block'; if(fieldToFocus) fieldToFocus.classList.add('required-field'); }
+        function hideError(errorId) { /* ... consistent ... */ const e=document.getElementById(errorId); if(e) e.style.display='none';}
+        function hideMessages(errorId, field) { // Simplified helper
+             hideError(errorId);
+             if (field) field.classList.remove('required-field');
          }
 
-        function showGeneralWarningMessage() { /* ... consistent ... */ const w=document.getElementById('generalWarningMessage'); if(!w) return; w.style.animation='none'; void w.offsetWidth; w.style.display='block'; w.style.animation='slideDownFadeIn 0.4s ease-out'; clearTimeout(w.timer); w.timer=setTimeout(()=>{w.style.animation='fadeOutUp 0.5s ease-out forwards'; setTimeout(()=>{if(w.style.animationName==='fadeOutUp'){w.style.display='none';w.style.animation='';}},500);},4000); }
-        function showSaveStatus(statusId, message = '✓ Saved') { /* ... consistent ... */ const s=document.getElementById(statusId); if(!s) return; s.textContent=message; s.classList.remove('deleted'); s.style.color=''; const aC=s.closest('.action-card'); if(aC) s.style.color='#d1e7dd'; else s.style.color='#27ae60'; if(message.includes('Deleted')){s.classList.add('deleted'); if(aC) s.style.color='#e9ecef'; else s.style.color='#6c757d';} s.style.display='inline-block'; clearTimeout(s.timer); s.timer=setTimeout(()=>s.style.display='none',3000); }
-        function showError(errorId, fieldToFocus, message = 'Required field.') { /* ... consistent ... */ const e=document.getElementById(errorId); if(!e) return; e.textContent=message; const aC=e.closest('.action-card'); if(aC) e.style.color='#f8d7da'; else e.style.color='#e74c3c'; e.style.display='inline-block'; }
-        function hideError(errorId) { /* ... consistent ... */ const e=document.getElementById(errorId); if(e) e.style.display='none';}
-        function hideMessages(statusId, errorId, field) { /* ... consistent ... */ hideError(errorId); const s=statusId?document.getElementById(statusId):null; if(s)s.style.display='none'; if(field)field.classList.remove('required-field');}
 
-        // --- Actions (Save, Delete for Textareas) ---
-        window.saveAnswer = function(questionId) { /* ... consistent, includes progress update/show */
-             const currentUser = getCurrentUser(); if (!currentUser?.email) return;
-             const field = document.querySelector(`textarea[data-question="${questionId}"]`);
-             const qContainer = document.getElementById(`question-container-${questionId}`);
-             if (!field || !qContainer) return;
-             const statusId = `save-status-${questionId}`; const errorId = `error-${questionId}`;
-             const answer = field.value; const trimmedAnswer = answer.trim();
+        // --- Actions (Save, Delete for Textareas/Standard Inputs) ---
+        window.saveAnswer = async function(questionId) {
+             if (!supabase) { alert('Database connection error. Cannot save.'); return; }
+             const currentUser = getCurrentUser(); if (!currentUser?.email || !currentUser.id) { alert('Session expired.'); return; }
+
+             const field = document.querySelector(`[data-question="${questionId}"]`);
+             const questionContainer = field?.closest('.question-item') || field?.closest('.metaphor-entry'); // Adjust container finding
+             const errorId = `error-${questionId}`;
+             const saveButton = field?.parentElement?.querySelector('.save-btn') || field?.parentElement?.querySelector('.save-button'); // Look for both classes
+             const deleteButton = field?.parentElement?.querySelector('.delete-btn') || field?.parentElement?.querySelector('.delete-button');
+
+              if (!field || !questionContainer || !saveButton || !deleteButton) { console.error("Save Error: Required elements missing for", questionId); return; }
+              if (field.disabled) { console.warn("Attempted to save already saved question:", questionId); return; }
+
+             const answer = field.value;
+             const trimmedAnswer = answer.trim();
              const isRequired = field.classList.contains('required-answer');
-             hideMessages(statusId, errorId, field);
-             if (isRequired && !trimmedAnswer) { showError(errorId, field, 'Please enter an answer.'); hideQuestionProgressBar(qContainer); updateSectionProgress(SECTION_ID); return; }
-             if (saveAnswerToStorage(currentUser.email, questionId, answer)) {
-                 if(trimmedAnswer) submitToFormspree(currentUser.email, questionId, answer);
-                 showSaveStatus(statusId);
-                 const currentProgress = updateSectionProgress(SECTION_ID);
-                 showQuestionProgressBar(qContainer, currentProgress);
+             const isMetaphor = field.classList.contains('metaphor-input'); // Check if it's a metaphor input
+
+             hideMessages(errorId, field);
+
+             if (isRequired && trimmedAnswer === '') {
+                 showError(errorId, field);
+                 const progressContainer = isMetaphor ? document.getElementById('metaphor-group-progress-container') : document.getElementById(`progress-container-${questionId}`);
+                  if (progressContainer && !isMetaphor) hideQuestionProgressBar(progressContainer);
+                 return;
+             }
+
+             saveButton.disabled = true; saveButton.textContent = 'Saving...'; deleteButton.disabled = true;
+
+             try {
+                let questionText = `Answer for ${questionId}`; // Default
+                 if (isMetaphor) {
+                     questionText = `Metaphor #${questionId.substring(1)}`;
+                 } else {
+                     const qTextElement = questionContainer.querySelector('.question-text') || questionContainer.querySelector('p > strong'); // Find text label
+                     if (qTextElement) questionText = qTextElement.textContent.replace('*','').trim();
+                 }
+
+                 const submissionTime = new Date().toISOString();
+                 const userProgressPayload = {
+                     user_id: currentUser.id, email: currentUser.email, question_id: questionId,
+                     question_text: questionText, answer: answer, page: PAGE_NAME, status: 'completed',
+                     submitted_at: submissionTime, updated_at: submissionTime, section_type: 'article',
+                     section_id: SECTION_ID, section_title: document.title || 'Coaching Individuals',
+                     progress_percentage: 100, score: null, is_passed: null
+                 };
+
+                 console.log("Attempting to upsert to user_progress:", userProgressPayload);
+                 const { data, error } = await supabase.from('user_progress').upsert([userProgressPayload], { onConflict: ['user_id', 'question_id'] }).select();
+                 if (error) throw new Error(`Supabase error: ${error.message}`);
+                 console.log("Supabase upsert successful:", data);
+
+                 // --- Update UI on SUCCESS ---
+                 field.disabled = true; saveButton.textContent = 'Saved ✔️'; deleteButton.style.display = 'none';
+                 saveAnswerToStorage(currentUser.email, questionId, answer);
+
+                  // Update Progress Bar(s)
+                 updateSectionProgress(SECTION_ID); // Recalculate overall progress
+                 const individualProgressContainer = document.getElementById(`progress-container-${questionId}`);
+                 if (individualProgressContainer) showQuestionProgressBar(individualProgressContainer);
+
+                 if (isMetaphor) {
+                     const metaphorGroupProgressContainer = document.getElementById('metaphor-group-progress-container');
+                     if (checkMetaphorGroupCompletion(true) && metaphorGroupProgressContainer) { // Check disabled state
+                         showQuestionProgressBar(metaphorGroupProgressContainer);
+                     }
+                 }
+                 // REMOVED Formspree call
+
+             } catch (error) {
+                 console.error(`Failed to save answer for ${questionId}:`, error);
+                 showError(errorId, field, `Save failed. Try again.`);
+                 saveButton.disabled = false; saveButton.textContent = 'Save'; deleteButton.disabled = false;
              }
         }
-        window.deleteAnswer = function(questionId) { /* ... consistent, includes progress update/show */
-            const currentUser = getCurrentUser(); if (!currentUser?.email) return;
-            const field = document.querySelector(`textarea[data-question="${questionId}"]`);
-            const qContainer = document.getElementById(`question-container-${questionId}`);
-            if (!field || !qContainer) return;
-            const statusId = `save-status-${questionId}`; const errorId = `error-${questionId}`;
-            hideMessages(statusId, errorId, field); field.value = '';
-            if (deleteAnswerFromStorage(currentUser.email, questionId)) { showSaveStatus(statusId, '✓ Deleted'); }
-            field.classList.remove('required-field'); // Ensure removed on delete
-             const currentProgress = updateSectionProgress(SECTION_ID);
-             if (currentProgress > 0) { showQuestionProgressBar(qContainer, currentProgress); }
-             else { hideQuestionProgressBar(qContainer); }
+
+        window.deleteAnswer = function(questionId) { /* ... consistent for non-table fields ... */
+            const currentUser = getCurrentUser(); if (!currentUser?.email) { alert('Session expired.'); return; }
+            const field = document.querySelector(`[data-question="${questionId}"]`);
+             const questionContainer = field?.closest('.question-item') || field?.closest('.metaphor-entry'); // Adjust container finding
+             const errorId = `error-${questionId}`;
+             const isMetaphor = field?.classList.contains('metaphor-input');
+
+             if (!field || field.disabled) { console.warn("Cannot delete: Field not found or already saved", questionId); return; }
+
+             hideMessages(errorId, field); field.value = '';
+             deleteAnswerFromStorage(currentUser.email, questionId); console.log("Cleared answer locally for", questionId);
+
+             updateSectionProgress(SECTION_ID); // Recalculate overall progress
+             const individualProgressContainer = document.getElementById(`progress-container-${questionId}`);
+             if(individualProgressContainer) hideQuestionProgressBar(individualProgressContainer);
+
+             if (isMetaphor) {
+                 const metaphorGroupProgressContainer = document.getElementById('metaphor-group-progress-container');
+                 if (!checkMetaphorGroupCompletion() && metaphorGroupProgressContainer) { // Check local storage state
+                     hideQuestionProgressBar(metaphorGroupProgressContainer);
+                 }
+             }
         }
 
         // --- Actions (Save, Delete for Combined Skill/Will Rows) ---
-        window.saveCombinedAnswer = function(rowIdentifier) { /* ... consistent, includes progress update/show */
-             const currentUser = getCurrentUser(); if (!currentUser?.email) return;
+        window.saveCombinedAnswer = async function(rowIdentifier) {
+             if (!supabase) { alert('Database connection error.'); return; }
+             const currentUser = getCurrentUser(); if (!currentUser?.email || !currentUser.id) { alert('Session expired.'); return; }
+
              const rowNum = rowIdentifier.match(/(\d+)$/)?.[1]; if (!rowNum) return;
              const nameQId = `team-member${rowNum}`; const mapQId = `coaching-map${rowNum}`;
-             const statusId = `save-status-${rowIdentifier}`; const errorId = `error-${rowIdentifier}`;
+             const errorId = `error-${rowIdentifier}`;
              const nameField = document.querySelector(`[data-question="${nameQId}"]`);
              const mapField = document.querySelector(`[data-question="${mapQId}"]`);
+             const buttonGroup = nameField?.closest('td')?.querySelector('.answer-buttons'); // Find buttons in the row
+             const saveButton = buttonGroup?.querySelector('.save-btn');
+             const deleteButton = buttonGroup?.querySelector('.delete-btn');
              const tableProgressContainer = document.getElementById('skill-will-progress-container');
-             if (!nameField || !mapField || !tableProgressContainer) return;
+
+             if (!nameField || !mapField || !saveButton || !deleteButton || !tableProgressContainer) { console.error('Table elements missing for row:', rowIdentifier); return; }
+             if (nameField.disabled || mapField.disabled) { console.warn('Row already saved:', rowIdentifier); return; }
+
              const nameVal = nameField.value; const mapVal = mapField.value;
              const tName = nameVal.trim(); const tMap = mapVal.trim();
-             hideMessages(statusId, errorId, null); nameField.classList.remove('required-field'); mapField.classList.remove('required-field');
-             let rowValid = true; let focusField = null;
-             if (tName && !tMap) { rowValid=false; mapField.classList.add('required-field'); showError(errorId,null,'Quadrant required'); if(!focusField) focusField=mapField; }
-             else if (!tName && tMap) { rowValid=false; nameField.classList.add('required-field'); showError(errorId,null,'Name required'); if(!focusField) focusField=nameField; }
-             else if (!tName && !tMap) { deleteAnswerFromStorage(currentUser.email,nameQId); deleteAnswerFromStorage(currentUser.email,mapQId); const prog = updateSectionProgress(SECTION_ID); if(checkSkillWillCompletion()) showQuestionProgressBar(tableProgressContainer, prog); else hideQuestionProgressBar(tableProgressContainer); showSaveStatus(statusId, '✓ Row cleared'); return; }
-             if (!rowValid) { if(focusField) setTimeout(()=>focusField.focus({preventScroll:true}),100); return; }
-             let saved = saveAnswerToStorage(currentUser.email, nameQId, nameVal); saved = saveAnswerToStorage(currentUser.email, mapQId, mapVal) && saved;
-             if (saved) { submitToFormspree(currentUser.email, nameQId, nameVal); submitToFormspree(currentUser.email, mapQId, mapVal); showSaveStatus(statusId); const prog = updateSectionProgress(SECTION_ID); if(checkSkillWillCompletion()) showQuestionProgressBar(tableProgressContainer, prog); else hideQuestionProgressBar(tableProgressContainer); hideError(errorId); }
+
+             hideMessages(errorId, null); nameField.classList.remove('required-field'); mapField.classList.remove('required-field');
+
+              let rowValid = true; let focusField = null;
+              if (!tName && !tMap) { // Both empty, allow clearing if needed, but don't proceed to save
+                    // deleteAnswerFromStorage(currentUser.email,nameQId); // Optional: clear local storage too
+                    // deleteAnswerFromStorage(currentUser.email,mapQId);
+                    console.log('Attempted to save empty row, clearing any errors.');
+                    return; // Don't save empty row
+              }
+              else if (tName && !tMap) { rowValid=false; mapField.classList.add('required-field'); showError(errorId,null,'Quadrant required'); if(!focusField) focusField=mapField; }
+              else if (!tName && tMap) { rowValid=false; nameField.classList.add('required-field'); showError(errorId,null,'Name required'); if(!focusField) focusField=nameField; }
+
+              if (!rowValid) { if(focusField) setTimeout(()=>focusField.focus({preventScroll:true}),100); return; }
+
+
+             saveButton.disabled = true; saveButton.textContent = 'Saving...'; deleteButton.disabled = true;
+
+             try {
+                  const submissionTime = new Date().toISOString();
+                  // Payload for Name
+                  const namePayload = { user_id: currentUser.id, email: currentUser.email, question_id: nameQId, question_text: `Skill/Will - Member (Row ${rowNum})`, answer: nameVal, page: PAGE_NAME, status: 'completed', submitted_at: submissionTime, updated_at: submissionTime, section_type: 'article', section_id: SECTION_ID, section_title: document.title || 'Coaching Individuals', progress_percentage: 100, score: null, is_passed: null };
+                  // Payload for Quadrant
+                  const mapPayload = { user_id: currentUser.id, email: currentUser.email, question_id: mapQId, question_text: `Skill/Will - Quadrant (Row ${rowNum})`, answer: mapVal, page: PAGE_NAME, status: 'completed', submitted_at: submissionTime, updated_at: submissionTime, section_type: 'article', section_id: SECTION_ID, section_title: document.title || 'Coaching Individuals', progress_percentage: 100, score: null, is_passed: null };
+
+                  console.log("Upserting row:", namePayload, mapPayload);
+                  const [nameResult, mapResult] = await Promise.all([
+                       supabase.from('user_progress').upsert([namePayload], { onConflict: ['user_id', 'question_id'] }).select(),
+                       supabase.from('user_progress').upsert([mapPayload], { onConflict: ['user_id', 'question_id'] }).select()
+                   ]);
+
+                  if (nameResult.error) throw new Error(`Supabase error (name): ${nameResult.error.message}`);
+                  if (mapResult.error) throw new Error(`Supabase error (map): ${mapResult.error.message}`);
+                  console.log("Supabase row upsert successful.");
+
+                  // --- Update UI on SUCCESS ---
+                  nameField.disabled = true; mapField.disabled = true;
+                  saveButton.textContent = 'Saved ✔️'; deleteButton.style.display = 'none';
+                  saveAnswerToStorage(currentUser.email, nameQId, nameVal);
+                  saveAnswerToStorage(currentUser.email, mapQId, mapVal);
+
+                  updateSectionProgress(SECTION_ID); // Recalculate overall progress
+                  if (checkSkillWillCompletion(true)) { // Check disabled state
+                      showQuestionProgressBar(tableProgressContainer);
+                  }
+                   // REMOVED Formspree calls
+
+              } catch(error) {
+                  console.error(`Failed to save row ${rowIdentifier}:`, error);
+                  showError(errorId, null, `Save failed. Try again.`);
+                  saveButton.disabled = false; saveButton.textContent = 'Save Row'; deleteButton.disabled = false;
+              }
          }
+
          window.deleteCombinedAnswer = function(rowIdentifier) { /* ... consistent, includes progress update/show */
              const currentUser = getCurrentUser(); if (!currentUser?.email) return;
              const rowNum = rowIdentifier.match(/(\d+)$/)?.[1]; if (!rowNum) return;
              const nameQId = `team-member${rowNum}`; const mapQId = `coaching-map${rowNum}`;
-             const statusId = `save-status-${rowIdentifier}`; const errorId = `error-${rowIdentifier}`;
+             const errorId = `error-${rowIdentifier}`;
              const nameField = document.querySelector(`[data-question="${nameQId}"]`);
              const mapField = document.querySelector(`[data-question="${mapQId}"]`);
+              const buttonGroup = nameField?.closest('td')?.querySelector('.answer-buttons'); // Find buttons in the row
+             const saveButton = buttonGroup?.querySelector('.save-btn');
+             const deleteButton = buttonGroup?.querySelector('.delete-btn');
              const tableProgressContainer = document.getElementById('skill-will-progress-container');
-             if (!nameField || !mapField || !tableProgressContainer) return;
-             hideMessages(statusId, errorId, null); nameField.classList.remove('required-field'); mapField.classList.remove('required-field'); nameField.value=''; mapField.value='';
-             let d1=deleteAnswerFromStorage(currentUser.email,nameQId); let d2=deleteAnswerFromStorage(currentUser.email,mapQId);
-             if(d1||d2) showSaveStatus(statusId, '✓ Deleted');
-             const prog = updateSectionProgress(SECTION_ID);
-             if(checkSkillWillCompletion()) showQuestionProgressBar(tableProgressContainer, prog); else hideQuestionProgressBar(tableProgressContainer);
+
+             if (!nameField || !mapField || !saveButton || !deleteButton || !tableProgressContainer) return;
+             // Allow deletion only if row is not already saved (i.e., fields are enabled)
+             if (nameField.disabled || mapField.disabled) { console.warn("Cannot delete saved row:", rowIdentifier); return; }
+
+             hideMessages(errorId, null); nameField.classList.remove('required-field'); mapField.classList.remove('required-field'); nameField.value=''; mapField.value='';
+             deleteAnswerFromStorage(currentUser.email,nameQId);
+             deleteAnswerFromStorage(currentUser.email,mapQId);
+             console.log("Cleared answer locally for row", rowIdentifier);
+
+             updateSectionProgress(SECTION_ID); // Recalculate overall progress
+             if(!checkSkillWillCompletion()) { // Check local storage state
+                  hideQuestionProgressBar(tableProgressContainer);
+             }
+             // No Supabase delete needed as it only happens before save
          }
 
-        // --- Formspree Submission ---
-        function submitToFormspree(userEmail, questionId, answer) { /* ... consistent ... */ if(!answer?.trim()) return; if(!formspreeEndpoint) return; if(!userEmail) return; const fd=new FormData(); fd.append('email',userEmail); fd.append('page',document.title); fd.append('page_key',SECTION_ID); fd.append('question_id',questionId); fd.append('answer_text',answer); const u=getCurrentUser(); if(u?.name) fd.append('user_name',u.name); let ctx=`Q-ID: ${questionId}`; const fE=document.querySelector(`[data-question="${questionId}"]`); if(fE){const qI=fE.closest('.question-item'); const t=fE.closest('.skill-will-table'); let qT=null; if(qI)qT=qI.querySelector('.question-text'); else if(t){if(questionId.startsWith('team-member'))qT=`Skill/Will - Member (Row ${questionId.slice(-1)})`; else qT=`Skill/Will - Quadrant (Row ${questionId.slice(-1)})`;} if(qT) ctx=typeof qT==='string'?qT:qT.textContent.replace('*','').trim();} fd.append('question_context',ctx); fetch(formspreeEndpoint,{method:'POST',body:fd,headers:{'Accept':'application/json'}}) .then(r=>{if(r.ok)console.log(`FS OK: ${questionId}`); else{r.json().then(d=>console.error(`FS Err (${questionId}):`,d.errors?.map(e=>e.message||e.code).join(', ')||`Status ${r.status}`)).catch(()=>console.error(`FS non-JSON Err (${questionId}): Status ${r.status}`));}}) .catch(e=>console.error(`FS Network Err (${questionId}):`,e)); }
+        // REMOVED: Formspree Submission Function
 
-        // --- Progress Bar Functions ---
+        // --- Progress Functions ---
         function updateSectionProgress(sectionId) {
              const currentUser = getCurrentUser(); if (!currentUser) return 0;
-             let allAnswers = {}; try { const d = localStorage.getItem(localStorageKey); if (d) allAnswers = JSON.parse(d) || {}; } catch (e) {}
-             const userPageAnswers = allAnswers[currentUser.email] || {};
 
-             const requiredTextareas = document.querySelectorAll('textarea.required-answer');
-             const totalTextareas = requiredTextareas.length;
-             let answeredTextareas = 0;
-             requiredTextareas.forEach(f => { if (userPageAnswers[f.dataset.question]?.trim()) answeredTextareas++; });
+             const standardRequiredFields = document.querySelectorAll('.required-answer:not([data-question^="team-"]):not([data-question^="coaching-map"])'); // Select standard required fields excluding table
+             const totalStandardQuestions = standardRequiredFields.length;
+             let answeredStandardCount = 0;
+             standardRequiredFields.forEach(field => {
+                 if (field.disabled) { // Count if saved (disabled)
+                     answeredStandardCount++;
+                 }
+             });
 
-             const skillWillComplete = checkSkillWillCompletion() ? 1 : 0;
-             const totalRequirements = totalTextareas + 1; // +1 for the table requirement
+             // Check skill/will table requirement based on disabled state
+             const skillWillRequirementMet = checkSkillWillCompletion(true) ? 1 : 0; // Pass true to check disabled state
+             const totalRequirements = totalStandardQuestions + 1; // +1 for the table requirement
 
-             const totalAnswered = answeredTextareas + skillWillComplete;
+             const totalAnswered = answeredStandardCount + skillWillRequirementMet;
              const progressPercentage = totalRequirements > 0 ? Math.round((totalAnswered / totalRequirements) * 100) : 0;
 
              if (!currentUser.progress) currentUser.progress = {};
              currentUser.progress[sectionId] = progressPercentage;
-             saveCurrentUser(currentUser);
+             saveCurrentUser(currentUser); // Save updated progress
+
              console.log(`Section '${sectionId}' progress: ${progressPercentage}% (${totalAnswered}/${totalRequirements})`);
              return progressPercentage;
         }
 
-         // Helper to check if skill/will table requirement (>=1 complete row) is met
-         function checkSkillWillCompletion() {
-             const currentUser = getCurrentUser(); if (!currentUser?.email) return false;
-             let allAnswers = {}; try { const d = localStorage.getItem(localStorageKey); if (d) allAnswers = JSON.parse(d) || {}; } catch (e) {}
-             const userPageAnswers = allAnswers[currentUser.email] || {};
-             for (let i = 1; i <= 6; i++) {
-                 const nameVal = userPageAnswers[`team-member${i}`]?.trim();
-                 const mapVal = userPageAnswers[`coaching-map${i}`]?.trim();
-                 if (nameVal && mapVal) return true; // Found at least one complete row
+        // Helper to check if skill/will table requirement (>= REQUIRED_TABLE_ROWS complete rows) is met
+         function checkSkillWillCompletion(checkDisabledState = false) {
+             let completedRowCount = 0;
+             for (let i = 1; i <= 6; i++) { // Check all potential rows
+                 const nameField = document.querySelector(`[data-question="team-member${i}"]`);
+                 const mapField = document.querySelector(`[data-question="coaching-map${i}"]`);
+
+                 if (checkDisabledState) {
+                     // Count as complete only if BOTH fields in the row are disabled
+                     if (nameField && mapField && nameField.disabled && mapField.disabled) {
+                         completedRowCount++;
+                     }
+                 } else {
+                     // Check local storage (alternative way, useful for initial load)
+                     const currentUser = getCurrentUser(); if (!currentUser?.email) continue;
+                     let allAnswers = {}; try { const d = localStorage.getItem(localStorageKey); if (d) allAnswers = JSON.parse(d) || {}; } catch (e) {}
+                     const userPageAnswers = allAnswers[currentUser.email] || {};
+                     const nameVal = userPageAnswers[`team-member${i}`]?.trim();
+                     const mapVal = userPageAnswers[`coaching-map${i}`]?.trim();
+                     if (nameVal && mapVal) {
+                         completedRowCount++;
+                     }
+                 }
              }
-             return false; // No complete rows found
+             return completedRowCount >= REQUIRED_TABLE_ROWS;
          }
 
 
-        function showQuestionProgressBar(containerElement, percentage) { /* ... consistent ... */ if(!containerElement)return; const pC=containerElement.querySelector('.question-progress-container')||containerElement; const b=pC.querySelector('.question-progress-bar'); const t=pC.querySelector('.question-progress-text'); if(pC&&b&&t){percentage=Math.max(0,Math.min(100,Math.round(percentage))); b.style.width=`${percentage}%`; t.textContent=`${percentage}%`; pC.style.display='block';} else {console.warn("Progress elements missing in:", containerElement);} }
-        function hideQuestionProgressBar(containerElement) { /* ... consistent ... */ if(!containerElement)return; const pC=containerElement.querySelector('.question-progress-container')||containerElement; if(pC) pC.style.display='none'; }
+        // Shows the 100% completed bar for a specific question/group
+        function showQuestionProgressBar(containerElement) {
+             if (!containerElement) return;
+             const barContainer = containerElement.querySelector('.question-progress-container') || containerElement; // Allow passing container directly
+             const bar = barContainer.querySelector('.question-progress-bar');
+             const text = barContainer.querySelector('.question-progress-text');
+             if (barContainer && bar && text) {
+                 bar.style.width = `100%`; // Always 100%
+                 // Use specific text for table vs individual questions
+                 const isTableBar = barContainer.id.includes('skill-will') || barContainer.id.includes('metaphor-group');
+                 text.textContent = isTableBar ? `✔️ Requirement Met` : `✔️ Completed`;
+                 barContainer.style.display = 'block';
+             } else { /* console.warn("Progress elements missing in:", containerElement); */ }
+        }
 
-        // --- Modal Handling ---
-        function showSuccessModal() { /* ... consistent ... */ const m=document.getElementById('successModal'); if(m) m.style.display='flex'; }
-        function closeModal() { /* ... consistent ... */ const m=document.getElementById('successModal'); if(m) m.style.display='none'; }
-        function redirectToNextPage() { /* ... consistent ... */ window.location.href = 'coaching-team.html'; /* Update target */ }
+        // Hides the progress bar for a specific question/group
+        function hideQuestionProgressBar(containerElement) {
+             if (!containerElement) return;
+             const barContainer = containerElement.querySelector('.question-progress-container') || containerElement; // Allow passing container directly
+             if (barContainer) barContainer.style.display = 'none';
+        }
+
 
     </script>
 </body>
