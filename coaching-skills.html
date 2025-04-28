@@ -70,8 +70,19 @@
         table th { background-color: #f8f9fa; font-weight: 600; color: #34495e; }
         table tr:nth-child(even) td { background-color: #fdfdfd; }
         .metaphor-table th { background-color: #3498db; color: white; text-align: center; }
-        .metaphor-table input[type="text"] { margin: 0; display: block; min-height: auto; padding: 10px; font-size: 14px; }
-        .metaphor-table .button-group { margin-top: 5px; }
+        /* CSS Modification: Remove top margin specifically for inputs inside the metaphor table */
+        .metaphor-table td input[type="text"] {
+            margin-top: 0; /* Removed top margin */
+            margin-bottom: 0; /* Removed bottom margin */
+            display: block;
+            min-height: auto;
+            padding: 10px;
+            font-size: 14px;
+        }
+        .metaphor-table .button-group {
+             margin-top: 10px; /* Keep margin for button group */
+             margin-bottom: 5px; /* Add some bottom margin */
+         }
         table thead th { position: sticky; top: 50px; /* Adjust based on nav height */ z-index: 1; }
         .button-group { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 15px; }
         .save-button, .delete-button { color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer; transition: all 0.3s ease; font-size: 14px; font-weight: 500; }
@@ -605,7 +616,7 @@
         let supabase = null;
 
         // --- Configuration ---
-        // REMOVED: const formspreeEndpoint = '...';
+        // REMOVED: Formspree Endpoint
         const localStorageAnswersKey = 'allUserAnswers_coachingSkills'; // Page specific key
         const SECTION_ID = 'skills'; // Unique ID for this section's progress
         const PAGE_NAME = 'coaching-skills.html'; // Page name for Supabase
@@ -800,16 +811,18 @@
                  allValid = false;
                  console.log(`Metaphor Count: ${metaphorCount}/${REQUIRED_METAPHOR_COUNT}`);
                  if (showErrors) {
-                     // Find the first *enabled* empty metaphor field (among all 4) to show error
-                     const firstEmptyMetaphor = Array.from(metaphorFields).find(f => !f.disabled && f.value.trim() === '');
-                     if (firstEmptyMetaphor) {
-                          const qId = firstEmptyMetaphor.dataset.question;
+                     // Find the first *enabled* empty required metaphor field (m1 or m2) to show error
+                     const firstEmptyRequiredMetaphor = Array.from(metaphorFields).find(f => !f.disabled && f.value.trim() === '' && f.classList.contains('required-answer'));
+                     if (firstEmptyRequiredMetaphor) {
+                          const qId = firstEmptyRequiredMetaphor.dataset.question;
                           const eId = `error-${qId}`;
-                          showError(eId, firstEmptyMetaphor, `Enter at least ${REQUIRED_METAPHOR_COUNT} metaphors.`);
-                          if (!firstInvalidField) firstInvalidField = firstEmptyMetaphor;
+                          showError(eId, firstEmptyRequiredMetaphor, `Enter at least ${REQUIRED_METAPHOR_COUNT} metaphors.`);
+                          if (!firstInvalidField) firstInvalidField = firstEmptyRequiredMetaphor;
                      } else {
-                         // If somehow count is low but no enabled empty field found (shouldn't happen), show general warning maybe
+                         // If somehow count is low but no enabled empty required field found, show general warning
                          showWarningMessage(`Metaphor requirement not met (need at least ${REQUIRED_METAPHOR_COUNT}).`);
+                         // Try to focus the first metaphor field overall if no specific empty one found
+                         if (!firstInvalidField) firstInvalidField = document.querySelector('input.metaphor-input');
                      }
                  }
              } else {
@@ -836,9 +849,9 @@
                   if (f.disabled || (!f.disabled && f.value.trim() !== '')) metaphorCount++;
              });
              if (metaphorCount >= REQUIRED_METAPHOR_COUNT) {
-                  // Clear errors only on the enabled fields if requirement is met
+                  // Clear errors only on the enabled, required fields (m1, m2) if the condition is met
                   mFields.forEach(f => {
-                      if (!f.disabled) {
+                      if (!f.disabled && f.classList.contains('required-answer')) {
                            hideError(`error-${f.dataset.question}`);
                            f.classList.remove('required-field');
                       }
@@ -888,7 +901,8 @@
             if (isRequired && trimmedAnswer === '') {
                  showError(errorId, field);
                  const progressContainer = document.getElementById(`progress-container-${questionId}`) || document.getElementById('metaphor-group-progress-container');
-                 if(progressContainer) hideQuestionProgressBar(progressContainer);
+                 if(progressContainer && !isMetaphor) hideQuestionProgressBar(progressContainer); // Hide individual bar
+                 // Don't hide group bar on individual empty required metaphor save fail, let validateAll handle it
                  return; // Stop if required field is empty
             }
             // Allow saving empty non-required fields (e.g., optional metaphors m3, m4)
@@ -950,7 +964,7 @@
                      }
                 }
 
-                // REMOVED: Formspree call
+                // REMOVED: Formspree Call
 
             } catch (error) {
                 console.error(`Failed to save answer for ${questionId}:`, error);
