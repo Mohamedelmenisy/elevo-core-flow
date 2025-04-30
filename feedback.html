@@ -452,7 +452,8 @@
         const localStorageKey = 'allUserAnswers_feedback'; // Unique key for this page (stores SAVED status)
         const SECTION_ID = 'feedback'; // Unique ID for progress tracking (on this page)
         const PAGE_NAME = 'feedback.html'; // Page name
-        const FEEDBACK_TABLE = 'feedback_responses'; // Name of the Supabase table where ALL feedback goes
+        // *** CRITICAL: Ensure ALL feedback answers go ONLY to this table ***
+        const FEEDBACK_TABLE = 'feedback_responses';
 
         // --- Unified Keys ---
         const LOGGED_IN_KEY = 'isUserLoggedIn';
@@ -469,31 +470,20 @@
         // --- Supabase Table Structure & RLS (Informational Comment) ---
         /*
             REQUIRED Supabase Table: feedback_responses
-            Columns should include at least:
-            - id (pk, auto-increment or uuid)
-            - user_id (uuid, references auth.users.id) - IMPORTANT for RLS, CHECK NAME EXACTLY
+            Columns MUST include at least:
+            - user_id (uuid)
             - email (text)
-            - name (text, nullable)                     <-- ADDED NAME COLUMN
+            - name (text, nullable)
             - question (text)
             - answer (text)
-            - submitted_at (timestamp with time zone, default now())
-            - created_at (timestamp with time zone, default now())
+            - submitted_at (timestamp with time zone)
+            (Other columns like id, created_at are standard)
 
             REQUIRED RLS Policies on `feedback_responses`:
-            1. Enable RLS on the table.
-            2. Policy for SELECT: Users can select their own feedback.
-               - `(auth.uid() = user_id)` [CHECK user_id column name]
-            3. Policy for INSERT: Users can insert feedback for themselves.
-               - `WITH CHECK (auth.uid() = user_id)` [CHECK user_id column name]
-            4. Policy for UPDATE (Needed for upsert): Users can update their own feedback.
-               - `USING (auth.uid() = user_id)` [CHECK user_id column name]
-               - `WITH CHECK (auth.uid() = user_id)` [CHECK user_id column name]
-            5. Policy for DELETE: Users can delete their own feedback (if needed).
-               - `(auth.uid() = user_id)` [CHECK user_id column name]
-
-            NOTE: If using `.insert()`, ensure you handle potential duplicate key errors (code 23505)
-                  if a user tries to save the same question twice.
-                  If using `.upsert()`, ensure a UNIQUE constraint exists on (user_id, question).
+            - Ensure RLS is ENABLED.
+            - Ensure INSERT policy allows insert WHERE auth.uid() = user_id.
+              (Example: WITH CHECK (auth.uid() = user_id) )
+            - Ensure column names in policy (user_id) MATCH table EXACTLY.
         */
 
         // --- DOM Element References --- (Added Modal Elements)
@@ -560,6 +550,11 @@
              // Add default text dataset for button helper
              document.querySelectorAll('.save-button, .delete-button').forEach(btn => { btn.dataset.defaultText = btn.textContent; });
              if(originalSubmitButton) originalSubmitButton.dataset.defaultText = originalSubmitButton.textContent;
+
+             // ***** CRITICAL DEBUG STEP *****
+             // Check if any *other* script might be interfering
+             console.warn(`%c${PAGE_NAME}: Checking for conflicting save logic. Ensure ONLY 'saveAnswer' function in this script handles saving to '${FEEDBACK_TABLE}'. Search project for supabase calls targeting 'user_progress' from textareas on this page.`, "color: orange; font-weight: bold;");
+             // -----------------------------
 
              console.log(`%c${PAGE_NAME}: Initialization complete.`, "color: blue;");
         });
@@ -657,7 +652,7 @@
 
 
         // --- Actions (Save to DB, Delete unsaved) ---
-        // ***** START MODIFIED saveAnswer Function (Adds Name, Ensures Target Table) *****
+        // ***** START saveAnswer Function (Confirmed to target FEEDBACK_TABLE and include Name) *****
         window.saveAnswer = async function(questionId) {
              // Ensure Supabase client is available
              if (!supabase) { showGeneralWarningMessage('Database connection error. Cannot save.', true); return; }
@@ -665,7 +660,8 @@
              // Ensure user is logged in and has necessary info
              const currentUser = getCurrentUser();
              if (!currentUser?.email || !currentUser.id) { showGeneralWarningMessage('Session expired. Please log in again.', true); setTimeout(logout, 3000); return; }
-             console.log(`Attempting to save answer for question: ${questionId} to table '${FEEDBACK_TABLE}' for user: ${currentUser.email} (ID: ${currentUser.id}, Name: ${currentUser.name})`);
+             // Log the intended action clearly
+             console.log(`==> Attempting SAVE for QID: ${questionId} to TABLE: '${FEEDBACK_TABLE}' | User: ${currentUser.email} (ID: ${currentUser.id}, Name: ${currentUser.name})`);
 
              // Get DOM elements for the specific question
              const container = document.getElementById(`question-container-${questionId}`);
@@ -706,6 +702,7 @@
                      isValid = true;
                      answer = null;
                  }
+                 console.log(`Validation for QID ${questionId} (Radio): Value='${answer}', IsValid=${isValid}`);
              } else { // Textarea or other text-based inputs
                  answer = field.value;
                  trimmedAnswer = answer.trim();
@@ -719,15 +716,17 @@
                      answer = trimmedAnswer; // Store the trimmed answer
                      isValid = true;
                  }
+                 console.log(`Validation for QID ${questionId} (Text): Value='${answer}', IsValid=${isValid}`);
              }
 
              // If validation failed, stop here
              if (!isValid) {
                 setButtonLoading(saveButton, false, saveButton.dataset.defaultText); // Reset button state if validation fails early
                 deleteButton.disabled = false;
+                console.warn(`Validation failed for QID: ${questionId}. Aborting save.`);
                 updateStickyProgressBar();
                 return;
-            }
+             }
 
              // --- Prepare for Supabase Call ---
              setButtonLoading(saveButton, true, 'Saving...', saveButton.dataset.defaultText);
@@ -747,41 +746,41 @@
 
                  // --- Construct the payload for Supabase ---
                  const feedbackPayload = {
-                     user_id: currentUser.id,        // From logged-in user
-                     email: currentUser.email,       // From logged-in user
-                     name: currentUser.name || null, // <<<< ADDED: User's name (or null if not available)
-                     question: questionText,         // Determined question text
-                     answer: answer,                 // Validated answer (could be string or null)
-                     submitted_at: submissionTime    // Current timestamp
+                     user_id: currentUser.id,
+                     email: currentUser.email,
+                     name: currentUser.name || null, // User's name (or null)
+                     question: questionText,
+                     answer: answer,
+                     submitted_at: submissionTime
                  };
 
-                 console.log(`Inserting into ${FEEDBACK_TABLE}:`, JSON.stringify(feedbackPayload));
+                 console.log(`==> Inserting into table '${FEEDBACK_TABLE}':`, JSON.stringify(feedbackPayload));
 
-                 // --- Perform the INSERT operation into FEEDBACK_TABLE ---
+                 // --- Perform the INSERT operation ONLY into FEEDBACK_TABLE ---
                  const { data, error } = await supabase
-                     .from(FEEDBACK_TABLE) // Ensure this targets the correct feedback table
+                     .from(FEEDBACK_TABLE) // Explicitly using FEEDBACK_TABLE variable
                      .insert([feedbackPayload])
                      .select();
 
                  // --- Handle Supabase Response ---
                  if (error) {
-                     // Handle duplicate key violation (code 23505) specifically for insert
-                     if (error.code === '23505') {
+                     // Handle potential errors like RLS violation or duplicates
+                     if (error.code === '23505') { // Duplicate key error
                          console.error(`Insert failed (Likely Duplicate): QID=${questionId}, UserID=${currentUser.id}. Error: ${error.message}`);
                          showError(errorId, field.type === 'radio' ? null : field, `Feedback already submitted.`);
-                          // Stop further execution on duplicate error
                           setButtonLoading(saveButton, false, saveButton.dataset.defaultText);
                           deleteButton.disabled = false;
                           if (statusElement) statusElement.style.display = 'none';
                           return; // Stop here
                      } else {
-                         // Throw other Supabase errors to be caught below
-                         throw new Error(`Supabase insert error (Code: ${error.code}): ${error.message}`);
+                        // Handle other errors (like RLS 403 Forbidden)
+                         console.error(`Supabase insert error for QID: ${questionId} into ${FEEDBACK_TABLE}. Code: ${error.code}, Message: ${error.message}`, error);
+                         throw new Error(`Supabase insert error (Code: ${error.code}): ${error.message}`); // Throw to be caught below
                      }
                  }
 
                  // --- Runs ONLY if Supabase insert was successful ---
-                 console.log(`Supabase insert successful for QID: ${questionId} into ${FEEDBACK_TABLE}. Result:`, data);
+                 console.log(`%c==> Supabase insert SUCCESS for QID: ${questionId} into ${FEEDBACK_TABLE}. Result:`, "color: green;", data);
 
                  // --- Update UI on Success ---
                  if(field.type === 'radio') {
@@ -802,9 +801,10 @@
                  updateStickyProgressBar(); // Update progress bar
 
              } catch (error) {
-                 // --- Handle any error during the try block (validation, Supabase call, etc.) ---
-                 console.error(`Failed to save answer for QID: ${questionId}. Error:`, error);
-                 showError(errorId, field.type === 'radio' ? null : field, `Save failed (Q:${questionId}). Check console/RLS.`);
+                 // --- Handle any error during the try block ---
+                 console.error(`%c==> FAILED to save answer for QID: ${questionId} to ${FEEDBACK_TABLE}. Error:`, "color: red;", error);
+                 // Display user-friendly error (mentioning RLS is a common cause)
+                 showError(errorId, field.type === 'radio' ? null : field, `Save failed (Q:${questionId}). Check console/RLS policies.`);
 
                  // --- Revert UI to pre-saving state ---
                  if(field.type === 'radio') {
@@ -821,7 +821,7 @@
                  if (statusElement) statusElement.style.display = 'none';
              }
          };
-        // ***** END MODIFIED saveAnswer Function *****
+        // ***** END saveAnswer Function *****
 
 
         // --- Delete Unsaved Answer Function (Unchanged: deleteAnswer) ---
