@@ -114,18 +114,42 @@
         .export-button:hover { background-color: var(--primary-darker); }
         .export-button i { width: 16px; height: 16px; }
 
-        .charts-container { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 2rem; margin-bottom: 2rem; background-color: var(--bg-white); padding: 1.5rem; border-radius: 0.5rem; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
-        .chart-box { position: relative; height: 300px; } /* MODIFIED: Set a fixed height (e.g., 300px) */
-        .chart-box h5 { /* Changed from h4 in previous step, keep as h5 */
-            text-align: center; margin-bottom: 1rem; font-size: 1.1rem; color: var(--text-dark);
-            /* Adjustments for title positioning if needed */
-            position: relative; /* Needed if absolute positioning canvas */
-            z-index: 1; /* Ensure title is above canvas if overlaps */
-            padding-bottom: 5px; /* Add some space below title */
+        /* MODIFIED: Chart Layout CSS */
+        .charts-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem; /* Increased gap slightly */
+            margin-bottom: 2rem;
+            background-color: var(--bg-white);
+            padding: 1.5rem;
+            border-radius: 0.5rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
         }
-        .chart-box canvas { /* Ensure canvas fills the box */
-             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+        .chart-box {
+            position: relative; /* Keep relative for potential absolute children if needed later, but not for canvas now */
+            /* MODIFIED: Reduced default height */
+            height: 260px; /* e.g., Reduced from 300px */
+            display: flex; /* Use flexbox for layout */
+            flex-direction: column; /* Stack title and canvas vertically */
         }
+        .chart-box h5 {
+            text-align: center;
+            margin-bottom: 0.8rem; /* Adjusted margin */
+            font-size: 1.05rem; /* Slightly smaller font */
+            color: var(--text-dark);
+            padding-bottom: 5px;
+            flex-shrink: 0; /* Prevent title from shrinking */
+        }
+        .chart-box canvas {
+            /* MODIFIED: Removed absolute positioning to let it flow after h5 */
+            /* position: absolute; top: 0; left: 0; */
+            width: 100%;
+            /* MODIFIED: Let flexbox handle the height */
+            /* height: 100%; */
+            flex-grow: 1; /* Allow canvas to take remaining space */
+            min-height: 0; /* Important for flexbox height calculation in some browsers */
+        }
+        /* END OF MODIFIED Chart Layout CSS */
 
         .table-container { overflow-x: auto; background-color: var(--bg-white); border-radius: 0.5rem; box-shadow: 0 2px 10px rgba(0,0,0,0.05); padding: 0.5rem; }
         .admin-table { width: 100%; border-collapse: collapse; margin-top: 1rem; font-size: 0.9rem; }
@@ -187,7 +211,10 @@
             .filters select, .filters input, .filters button { width: 100%; margin-bottom: 0.5rem;}
              .export-button { width: 100%; }
             .charts-container { grid-template-columns: 1fr; }
-            .chart-box { height: 300px; } /* Adjust chart height */
+            /* MODIFIED: Responsive Chart Height */
+            .chart-box {
+                 height: 280px; /* Keep responsive height adjustment, maybe slightly larger than default now */
+            }
              .modal-content { width: 90%; margin: 10% auto; }
         }
         @media (max-width: 480px) {
@@ -203,7 +230,10 @@
              .pagination-info { font-size: 0.8rem; }
              .feedback-content { max-width: 150px; }
              .charts-container { gap: 1rem; }
-             .chart-box { height: 280px; } /* Further adjust chart height */
+             /* MODIFIED: Responsive Chart Height */
+             .chart-box {
+                  height: 250px; /* Adjust responsive height */
+             }
         }
     </style>
 </head>
@@ -380,16 +410,18 @@
                               <i data-feather="download"></i>Export Results CSV
                           </button>
                      </div>
+                     <!-- MODIFIED: Chart Box structure -->
                     <div class="charts-container">
                          <div class="chart-box">
-                             <h5>Assessment Status</h5> <!-- Title now inside options -->
+                             <h5>Assessment Status</h5>
                              <canvas id="statusChart"></canvas>
                          </div>
                           <div class="chart-box">
-                             <h5>Score Distribution</h5> <!-- Title now inside options -->
+                             <h5>Score Distribution</h5>
                              <canvas id="scoreChart"></canvas>
                          </div>
                     </div>
+                    <!-- END MODIFIED Chart Box structure -->
                     <div class="table-container">
                           <table class="admin-table" id="assessmentResultsTable">
                               <thead>
@@ -674,20 +706,35 @@
                     allProgressData = progress;
                     allFeedbackData = feedback;
 
-                     // *** Manually add user details to progress and feedback data ***
+                    // *** Manually add user details to progress and feedback data ***
                     allProgressData.forEach(p => {
                         const userInfo = userMap[p.user_id] || { name: 'Unknown User', email: 'N/A' };
                         p.user_name = userInfo.name;
                         p.user_email = userInfo.email;
                     });
+
+                    // *** MODIFYING FEEDBACK MERGE FOR LOGGING ***
+                    console.log("Merging feedback data with user info...");
                     allFeedbackData.forEach(f => {
-                        const userInfo = userMap[f.user_id] || { name: 'Unknown User', email: 'N/A' };
-                        f.user_name = userInfo.name;
-                        f.user_email = userInfo.email;
-                        // Add feedback summary here too, after fetching
-                        f.feedback_summary = f.feedback_text?.substring(0, 50) + (f.feedback_text?.length > 50 ? '...' : '');
+                        const userInfo = userMap[f.user_id];
+                        // *** ADDED: Logging for each feedback item ***
+                        console.log(`Processing feedback ID ${f.id} for user_id ${f.user_id}. UserInfo found in map:`, !!userInfo);
+                        if (userInfo) {
+                            f.user_name = userInfo.name;
+                            f.user_email = userInfo.email;
+                        } else {
+                            f.user_name = 'Unknown User';
+                            f.user_email = 'N/A';
+                            // *** ADDED: Warning if user not found ***
+                            console.warn(`User ID ${f.user_id} not found in userMap for feedback ID ${f.id}. Check if user exists or if user_id in feedback_responses is correct.`);
+                        }
+                        // Ensure feedback_text exists before summarizing
+                        f.feedback_summary = f.feedback_text ? (f.feedback_text.substring(0, 50) + (f.feedback_text.length > 50 ? '...' : '')) : 'N/A';
                     });
-                     // Add user details to assessment data IF name/email wasn't fetched directly (depends on fetchAllAssessmentData)
+                    console.log("Feedback data merging complete.");
+                    // *** END OF FEEDBACK MERGE LOGGING ***
+
+                     // Add user details to assessment data IF name/email wasn't fetched directly
                       allAssessmentData.forEach(a => {
                           if (!a.name || !a.user_email) { // If name/email weren't part of the 'assessments' fetch
                              const userInfo = userMap[a.user_id] || { name: 'Unknown User', email: 'N/A' };
@@ -704,7 +751,7 @@
                     assessmentCurrentPage = 1;
                     progressCurrentPage = 1;
                     feedbackCurrentPage = 1;
-                    renderAdminSections();
+                    renderAdminSections(); // Ensure this is called AFTER merging
 
                     adminLoadingIndicator.style.display = 'none';
                     adminDataContainer.style.display = 'block';
@@ -778,19 +825,16 @@
             }
         }
 
-         // Fetches assessment submissions (Can keep user_email/name if they exist directly in 'assessments' table)
+         // Fetches assessment submissions
          async function fetchAllAssessmentData() {
              if (!supabase) return [];
              try {
                  const { data, error } = await supabase
                      .from('assessments')
-                      // Select necessary fields. Keep name/user_email if they are *directly* in this table.
-                      // If not, they will be added manually later using the userMap.
                      .select('user_id, name, user_email, question_id, question_text, score, is_correct, completion_status, submitted_at')
                      .order('submitted_at', { ascending: false });
                  if (error) throw error;
                  console.log(`Fetched ${data?.length || 0} assessment records.`);
-                 // Default name/email is now handled during the merge step if needed
                  return data || [];
              } catch (error) { console.error("Error fetchAllAssessmentData:", error); showDashboardError(error.message); return []; }
          }
@@ -807,9 +851,7 @@
                     .order('submitted_at', { ascending: false });
 
                 if (error) {
-                    // Log specific error related to relationship if it occurs, though it shouldn't with this select
                     console.error("Error fetching user progress data:", error.message);
-                     // If the error is specifically about relationships, inform the user in the console
                      if (error.message.includes("relationship")) {
                         console.warn("Note: The fetch query was modified to avoid relationship errors. Ensure user data merging works correctly.");
                     }
@@ -972,9 +1014,11 @@
             renderPaginationControls(paginationContainer, totalItems, validCurrentPage, rowsPerPage);
         }
 
+        // MODIFIED: Added detailed logging for created_at
         function populateUserOverviewRow(user, tableBody) {
              const row = tableBody.insertRow();
-             console.log(`Rendering user: ${user.email}, Raw created_at value: ${user.created_at}`); // Log the raw value
+             // *** ADDED: Detailed logging for created_at ***
+             console.log(`Rendering user: ${user.email}, Raw created_at value: ${user.created_at}, Type: ${typeof user.created_at}`);
 
              let registrationDate = 'N/A';
              if (user.created_at) {
@@ -985,21 +1029,22 @@
                           registrationDate = dateObj.toLocaleDateString();
                      } else {
                           console.warn(`Invalid date format received for user ${user.email}: ${user.created_at}`);
-                          registrationDate = 'Invalid Date';
+                          registrationDate = 'Invalid Date'; // Keep original value if parsing fails
                      }
                  } catch (e) {
                      console.error(`Error parsing date "${user.created_at}" for user ${user.email}:`, e);
                      registrationDate = 'Error Parsing';
                  }
              } else {
-                  // This case handles when user.created_at is null or undefined coming from Supabase
-                  console.log(`created_at is null or undefined for user ${user.email}. Check Supabase table/RLS.`);
+                  // This case handles when user.created_at is null, undefined, or empty string coming from Supabase
+                  console.log(`created_at is null, undefined, or empty for user ${user.email}. Check Supabase table value and RLS SELECT permissions for the 'created_at' column.`);
              }
 
              const createStatusBadge = (status) => {
                  let text = 'Pending', className = 'pending';
                  if (status === true) { text = 'Completed'; className = 'true'; }
                  else if (status === false) { text = 'Not Completed'; className = 'false'; }
+                 // Explicitly check for null or undefined
                  else if (status === null || typeof status === 'undefined') { text = 'Pending'; className = 'null'; }
                  return `<span class="admin-status-badge ${className}">${text}</span>`;
              };
@@ -1229,7 +1274,7 @@
             renderAssessmentResults();
         }
 
-        // Chart Rendering (MODIFIED options for title plugin)
+        // Chart Rendering (MODIFIED options for title plugin and optional fonts)
         function renderCharts(data) {
             if (!statusChartCanvas || !scoreChartCanvas || !data) {
                  console.warn("Chart canvas not found or no data to render charts."); return;
@@ -1256,6 +1301,7 @@
                 return 'rgba(245, 158, 11, 0.7)'; // Amber/Yellow for unknown
             });
             if (statusChartInstance) statusChartInstance.destroy();
+            // MODIFIED Chart Options
             statusChartInstance = new Chart(ctxStatus, {
                 type: 'pie',
                 data: {
@@ -1266,15 +1312,24 @@
                      responsive: true,
                      maintainAspectRatio: false, // Allow height control via CSS container
                      plugins: {
-                         legend: { position: 'top', align: 'center' }, // Keep legend on top
-                         title: { // *** ADDED/MODIFIED Title Plugin Config ***
-                             display: false, // Set to false as title is now in H5 above canvas
-                             // text: 'Assessment Status',
-                             // position: 'top',
-                             // align: 'center',
-                             // font: { size: 16 },
-                             // padding: { top: 5, bottom: 10 }
-                         }
+                         legend: {
+                             position: 'top',
+                             align: 'center',
+                             labels: {
+                                 boxWidth: 15, // Smaller color box
+                                 font: {
+                                     size: 11 // Smaller legend font size
+                                 },
+                                 padding: 10 // Padding between legend items
+                             }
+                         },
+                         title: {
+                             display: false, // Title is handled by H5
+                         },
+                         tooltip: { // Optional: Adjust tooltip font
+                            bodyFont: { size: 12 },
+                            titleFont: { size: 13 }
+                        }
                      }
                  }
             });
@@ -1289,10 +1344,12 @@
                  acc[range]=(acc[range] || 0)+1; return acc;
              }, {});
              const scoreOrder = ['0-49%', '50-74%', '75-100%', 'N/A'];
-             const scoreLabels = scoreOrder.filter(label => scoreCounts[label] > 0 || label === 'N/A');
+             const scoreLabels = scoreOrder.filter(label => scoreCounts[label] > 0 || label === 'N/A'); // Only show relevant ranges + N/A if present
              const scoreData = scoreLabels.map(l => scoreCounts[l] || 0);
 
+
              if (scoreChartInstance) scoreChartInstance.destroy();
+             // MODIFIED Chart Options
              scoreChartInstance = new Chart(ctxScore, {
                  type: 'bar',
                  data: {
@@ -1302,16 +1359,18 @@
                  options: {
                      responsive: true,
                      maintainAspectRatio: false, // Allow height control
-                     scales:{ y:{beginAtZero: true, title:{display:true, text:'Number of Users'}}, x:{title:{display:true, text:'Score Range (%)'}} },
+                     scales:{
+                         y:{beginAtZero: true, title:{display:true, text:'Number of Users', font:{size: 11}}, ticks:{font:{size:10}}}, // Smaller axis labels/title
+                         x:{title:{display:true, text:'Score Range (%)', font:{size: 11}}, ticks:{font:{size:10}}} // Smaller axis labels/title
+                     },
                      plugins:{
                          legend:{display:false},
-                         title: { // *** ADDED/MODIFIED Title Plugin Config ***
-                             display: false, // Set to false as title is now in H5 above canvas
-                             // text: 'Score Distribution',
-                             // position: 'top',
-                             // align: 'center',
-                             // font: { size: 16 },
-                             // padding: { top: 5, bottom: 10 }
+                         title: {
+                             display: false, // Title is handled by H5
+                         },
+                         tooltip: { // Optional: Adjust tooltip font
+                            bodyFont: { size: 12 },
+                            titleFont: { size: 13 }
                          }
                      }
                  }
