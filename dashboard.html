@@ -715,7 +715,6 @@
              statusFilter = document.getElementById('statusFilter');
              typeFilter = document.getElementById('typeFilter');
              searchFilter = document.getElementById('searchFilter');
-             // exportCsvBtn = document.getElementById('exportCsvBtn'); // Removed - multiple buttons now
              sectionProgressTableBody = document.getElementById('sectionProgressTableBody');
              sectionProgressPagination = document.getElementById('sectionProgressPagination');
              feedbackTableBody = document.getElementById('feedbackTableBody'); // Table for Q&A
@@ -724,11 +723,9 @@
              modalBody = document.getElementById('modalBody');
              modalTitle = document.getElementById('modalTitle');
 
-             // Check essential elements, including new buttons if admin
-             if (!mainContainer || !userNameDisplay || !adminDashboardSection || !detailsModal || !userOverviewTableBody || !assessmentResultsTableBody || !sectionProgressTableBody || !feedbackTableBody) { // Removed chart check as they might fail gracefully
+             if (!mainContainer || !userNameDisplay || !adminDashboardSection || !detailsModal || !userOverviewTableBody || !assessmentResultsTableBody || !sectionProgressTableBody || !feedbackTableBody) {
                  throw new Error("Essential dashboard DOM elements missing!");
              }
-             // Note: Export buttons are checked within setupEventListeners after potentially being added
              if(isAdmin && (!statusChartCanvas || !scoreChartCanvas)) {
                  console.warn("Admin Chart canvas elements missing!");
              }
@@ -740,7 +737,6 @@
                  if (event.key === 'Enter' || searchFilter.value === '') { applyAdminFilters(); }
              });
 
-             // General click handler for admin area (includes export buttons)
              if (adminDataContainer) {
                  adminDataContainer.addEventListener('click', handleAdminClicks);
              }
@@ -748,13 +744,13 @@
                  if (event.target == detailsModal) { closeDetailsModal(); }
              });
 
-             // Explicitly check and log if export buttons are found after DOM setup
              if (isAdmin) {
                  const exportButtons = document.querySelectorAll('.admin-export-button');
                  if (exportButtons.length > 0) {
-                     console.log(`Found ${exportButtons.length} export buttons. Event listeners will be handled by delegation.`);
+                     console.log(`Found ${exportButtons.length} export buttons. Event listeners handled by delegation.`);
                  } else {
-                     console.warn("Could not find any admin export buttons after DOM setup.");
+                     // This might still appear briefly if the error happens before full render
+                     console.warn("Could not find any admin export buttons immediately after DOM setup (may resolve after data load).");
                  }
              }
          }
@@ -777,47 +773,23 @@
                     allUserData = await fetchAllUsers();
                      if (!allUserData) throw new Error("Failed to fetch user data.");
 
-                     // Create user map *only needed for assessment and progress tables now*
-                     const userMap = allUserData.reduce((map, user) => {
-                          map[user.id] = { name: user.name, email: user.email };
-                          return map;
-                     }, {});
+                     const userMap = allUserData.reduce((map, user) => { map[user.id] = { name: user.name, email: user.email }; return map; }, {});
 
-                    // Fetch all data including the "feedback" data (now Q&A structure)
                     const [assessments, progress, feedback] = await Promise.all([
-                        fetchAllAssessmentData(),
-                        fetchAllUserProgressData(),
-                        fetchAllFeedbackData() // Fetches data for the feedback/Q&A section
+                        fetchAllAssessmentData(), fetchAllUserProgressData(), fetchAllFeedbackData()
                     ]);
 
                     allAssessmentData = assessments;
                     allProgressData = progress;
-                    allFeedbackData = feedback; // Assign fetched Q&A data
+                    allFeedbackData = feedback;
 
-                    // Merge user details into progress data (still needed)
-                    allProgressData.forEach(p => {
-                        const userInfo = userMap[p.user_id] || { name: 'Unknown User', email: 'N/A' };
-                        p.user_name = userInfo.name;
-                        p.user_email = userInfo.email;
-                    });
+                    allProgressData.forEach(p => { const userInfo = userMap[p.user_id] || { name: 'Unknown User', email: 'N/A' }; p.user_name = userInfo.name; p.user_email = userInfo.email; });
+                    allAssessmentData.forEach(a => { if (!a.name || !a.user_email) { const userInfo = userMap[a.user_id] || { name: 'Unknown User', email: 'N/A' }; a.name = userInfo.name; a.user_email = userInfo.email; } });
 
-                    // Merge user details into assessment data (still needed if not fetched directly)
-                      allAssessmentData.forEach(a => {
-                          if (!a.name || !a.user_email) { // Check if merge is necessary
-                             const userInfo = userMap[a.user_id] || { name: 'Unknown User', email: 'N/A' };
-                              a.name = userInfo.name;
-                              a.user_email = userInfo.email;
-                          }
-                      });
-
-
-                    filteredAssessmentData = [...allAssessmentData]; // For assessment filtering
+                    filteredAssessmentData = [...allAssessmentData];
                     console.log(`Data fetched: ${allUserData.length} users, ${assessments.length} assessments, ${progress.length} progress entries, ${feedback.length} feedback/Q&A entries.`);
 
-                    userOverviewCurrentPage = 1;
-                    assessmentCurrentPage = 1;
-                    progressCurrentPage = 1;
-                    feedbackCurrentPage = 1;
+                    userOverviewCurrentPage = 1; assessmentCurrentPage = 1; progressCurrentPage = 1; feedbackCurrentPage = 1;
 
                     renderAdminSections(); // Renders all sections
 
@@ -826,21 +798,29 @@
 
                 } else {
                     adminDashboardSection.style.display = 'none';
-                    adminRestrictionMsg.style.display = 'flex'; // Use flex for icon alignment
-                    feather.replace(); // Make sure non-admin icons render
+                    adminRestrictionMsg.style.display = 'flex';
+                    // feather.replace(); // Call below instead
                 }
             } catch (error) {
                 console.error("Error initializing dashboard sections:", error);
-                showDashboardError(`Failed to load dashboard data: ${error.message}`);
+                // Specific check for the function missing error
+                 if (error instanceof ReferenceError && error.message.includes("renderAssessmentResults")) {
+                     showDashboardError(`Critical setup error: ${error.message}. Ensure the function is defined correctly.`);
+                     handleFatalError(`Failed to load admin data: ${error.message}`); // Show fatal error for this
+                 } else {
+                     showDashboardError(`Failed to load dashboard data: ${error.message}`);
+                 }
+
                 if (adminLoadingIndicator) adminLoadingIndicator.style.display = 'none';
-                if (isAdmin && adminDataContainer) {
+                if (isAdmin && adminDataContainer && !adminDataContainer.innerHTML.includes('Failed to load')) { // Avoid overwriting fatal error message
                      adminDataContainer.innerHTML = `<p style="color: var(--error-red); text-align: center; padding: 2rem;">Failed to load admin data: ${error.message}</p>`;
                      adminDataContainer.style.display = 'block';
-                } else if(isAdmin){
+                } else if(isAdmin && !adminDashboardSection.innerHTML.includes('Failed to load')){
                      adminDashboardSection.innerHTML = `<p style="color: var(--error-red); text-align: center; padding: 2rem;">Failed to load admin data: ${error.message}</p>`;
+                     adminDashboardSection.style.display = 'block';
                 }
             }
-            // Ensure icons in static timeline AND potentially added admin buttons are rendered
+            // Ensure all icons are rendered *after* initialization attempt (success or fail)
             feather.replace();
         }
 
@@ -850,139 +830,31 @@
         // --- (Keep these functions exactly as they were in the previous version) ---
         async function fetchAdminStatus(userId) {
              if (!supabase || !userId) return false;
-             try {
-                 const { data, error, status } = await supabase.from('users').select('is_admin').eq('id', userId).single();
-                 if (error && status !== 406) { console.error('Error fetching admin status:', error.message); return false; }
-                 return data?.is_admin === true;
-             } catch (error) { console.error("Exception during fetchAdminStatus:", error); return false; }
+             try { const { data, error, status } = await supabase.from('users').select('is_admin').eq('id', userId).single(); if (error && status !== 406) { console.error('Error fetching admin status:', error.message); return false; } return data?.is_admin === true; } catch (error) { console.error("Exception during fetchAdminStatus:", error); return false; }
          }
-        async function fetchUserProgress(userId) { // Fetches module status for current user
+        async function fetchUserProgress(userId) {
              if (!supabase || !userId) return {};
-             try {
-                 const { data, error } = await supabase
-                     .from('assessments') // Or 'user_progress' if it holds overall module status
-                     .select('question_id, completion_status, is_correct') // question_id here maps to module/assessment ID
-                     .eq('user_id', userId);
-                 if (error) throw error;
-                 const progressMap = {};
-                 data?.forEach(item => {
-                     let progressKey = Object.keys(ASSESSMENT_ID_MAP).find(key => ASSESSMENT_ID_MAP[key] === item.question_id) || item.question_id;
-                     let statusValue = item.completion_status;
-                     if (!statusValue && item.is_correct !== null) {
-                         statusValue = item.is_correct ? 'passed' : 'failed';
-                     }
-                     progressMap[progressKey] = statusValue || 'unknown';
-                 });
-                 console.log("Current User Progress Map for Modules:", progressMap);
-                 return progressMap;
-             } catch (error) { console.error("Error fetchUserProgress:", error); showDashboardError(error.message); return {}; }
+             try { const { data, error } = await supabase.from('assessments').select('question_id, completion_status, is_correct').eq('user_id', userId); if (error) throw error; const progressMap = {}; data?.forEach(item => { let progressKey = Object.keys(ASSESSMENT_ID_MAP).find(key => ASSESSMENT_ID_MAP[key] === item.question_id) || item.question_id; let statusValue = item.completion_status; if (!statusValue && item.is_correct !== null) { statusValue = item.is_correct ? 'passed' : 'failed'; } progressMap[progressKey] = statusValue || 'unknown'; }); console.log("Current User Progress Map for Modules:", progressMap); return progressMap; } catch (error) { console.error("Error fetchUserProgress:", error); showDashboardError(error.message); return {}; }
          }
-        async function fetchAllUsers() { // Fetches all users for admin overview
+        async function fetchAllUsers() {
             if (!supabase) return null;
-            try {
-                console.log("Fetching all users...");
-                const { data, error } = await supabase
-                    .from('users')
-                    .select('id, name, email, created_at, assessment_completed, final_assessment_completed')
-                    .order('created_at', { ascending: false });
-                if (error) throw error;
-                console.log(`Fetched ${data?.length || 0} user records.`);
-                return (data || []).map(u => ({...u, name: u.name || u.email?.split('@')[0] || 'Unknown User'}));
-            } catch (error) {
-                 console.error("CRITICAL Error fetchAllUsers:", error);
-                 showDashboardError(`Failed to fetch user list: ${error.message}. Check RLS.`);
-                 return null;
-            }
+            try { console.log("Fetching all users..."); const { data, error } = await supabase.from('users').select('id, name, email, created_at, assessment_completed, final_assessment_completed').order('created_at', { ascending: false }); if (error) throw error; console.log(`Fetched ${data?.length || 0} user records.`); return (data || []).map(u => ({...u, name: u.name || u.email?.split('@')[0] || 'Unknown User'})); } catch (error) { console.error("CRITICAL Error fetchAllUsers:", error); showDashboardError(`Failed to fetch user list: ${error.message}. Check RLS.`); return null;}
         }
-         async function fetchAllAssessmentData() { // Fetches detailed assessment results
+         async function fetchAllAssessmentData() {
              if (!supabase) return [];
-             try {
-                 console.log("Fetching all assessment data...");
-                 const { data, error } = await supabase
-                     .from('assessments') // Assuming assessments table holds main quiz/assessment results
-                     .select('user_id, name, user_email, question_id, question_text, score, is_correct, completion_status, submitted_at')
-                     .order('submitted_at', { ascending: false });
-                 if (error) throw error;
-                 console.log(`Fetched ${data?.length || 0} assessment records.`);
-                 return data || [];
-             } catch (error) { console.error("Error fetchAllAssessmentData:", error); showDashboardError(error.message); return []; }
+             try { console.log("Fetching all assessment data..."); const { data, error } = await supabase.from('assessments').select('user_id, name, user_email, question_id, question_text, score, is_correct, completion_status, submitted_at').order('submitted_at', { ascending: false }); if (error) throw error; console.log(`Fetched ${data?.length || 0} assessment records.`); return data || []; } catch (error) { console.error("Error fetchAllAssessmentData:", error); showDashboardError(error.message); return []; }
          }
-        async function fetchAllUserProgressData() { // Fetches detailed section progress (Q&A)
+        async function fetchAllUserProgressData() {
             if (!supabase) return [];
-            try {
-                console.log("Fetching all user progress (Section Q&A)...");
-                const { data, error } = await supabase
-                    .from('user_progress') // This table should contain section-specific answers
-                    .select('id, user_id, section_id, question_id, question_text, answer, is_passed, submitted_at')
-                    .order('submitted_at', { ascending: false });
-                if (error) throw error;
-                 console.log(`Fetched ${data?.length || 0} user progress records.`);
-                 return data || [];
-            } catch (error) {
-                 console.error("Error during fetchAllUserProgressData:", error);
-                 showDashboardError(`Failed to load section progress: ${error.message}. Check RLS.`);
-                 return [];
-            }
+            try { console.log("Fetching all user progress (Section Q&A)..."); const { data, error } = await supabase.from('user_progress').select('id, user_id, section_id, question_id, question_text, answer, is_passed, submitted_at').order('submitted_at', { ascending: false }); if (error) throw error; console.log(`Fetched ${data?.length || 0} user progress records.`); return data || []; } catch (error) { console.error("Error during fetchAllUserProgressData:", error); showDashboardError(`Failed to load section progress: ${error.message}. Check RLS.`); return []; }
         }
         async function fetchAllFeedbackData() {
              if (!supabase) return [];
-             try {
-                 console.log("Fetching all feedback data (as Q&A)...");
-                 const { data, error } = await supabase
-                     .from('feedback_responses') // Using the table name user specified
-                     .select('id, user_id, name, email, question, answer, submitted_at')
-                     .order('submitted_at', { ascending: false });
-                 if (error) {
-                     console.error("Error fetching feedback (Q&A) data:", error.message);
-                     if (error.message.includes('column') && error.message.includes('does not exist')) {
-                        console.error(`---> Potential Issue: A column requested in fetchAllFeedbackData (name, email, question, answer) might not exist in the 'feedback_responses' table. Please verify table structure in Supabase.`);
-                     }
-                     throw error; // Re-throw
-                 }
-                 console.log(`Fetched ${data?.length || 0} feedback/Q&A records.`);
-                 return data || [];
-             } catch (error) {
-                 console.error("Error during fetchAllFeedbackData:", error);
-                 showDashboardError(`Failed to load feedback/Q&A data: ${error.message}. Check table/column names and RLS.`);
-                 return []; // Return empty array on failure
-             }
+             try { console.log("Fetching all feedback data (as Q&A)..."); const { data, error } = await supabase.from('feedback_responses').select('id, user_id, name, email, question, answer, submitted_at').order('submitted_at', { ascending: false }); if (error) { console.error("Error fetching feedback (Q&A) data:", error.message); if (error.message.includes('column') && error.message.includes('does not exist')) { console.error(`---> Potential Issue: A column requested in fetchAllFeedbackData (name, email, question, answer) might not exist in the 'feedback_responses' table. Please verify table structure in Supabase.`); } throw error; } console.log(`Fetched ${data?.length || 0} feedback/Q&A records.`); return data || []; } catch (error) { console.error("Error during fetchAllFeedbackData:", error); showDashboardError(`Failed to load feedback/Q&A data: ${error.message}. Check table/column names and RLS.`); return []; }
          }
         async function fetchUserDetailsForModal(userId, identifier, type = 'assessment') {
              if (!supabase || !userId || !identifier) return null;
-             try {
-                 console.log(`Fetching modal details for User: ${userId}, Identifier: ${identifier}, Type: ${type}`);
-                 let query;
-                 if (type === 'assessment') {
-                     query = supabase.from('user_progress')
-                         .select('question_text, answer, is_passed, score, submitted_at')
-                         .eq('user_id', userId)
-                         .eq('question_id', identifier)
-                         .order('submitted_at', { ascending: true });
-
-                 } else if (type === 'section') {
-                      query = supabase.from('user_progress').select('question_text, answer, is_passed, submitted_at').eq('user_id', userId).eq('section_id', identifier).order('submitted_at', { ascending: true });
-                 } else if (type === 'feedback') {
-                      query = supabase.from('feedback_responses')
-                         .select('question, answer, submitted_at')
-                         .eq('id', identifier)
-                         .single();
-                 } else {
-                     throw new Error("Invalid detail type requested");
-                 }
-                 const { data, error } = await query;
-                 if (error && !(type === 'feedback' && error.code === 'PGRST116')) {
-                     if (type === 'feedback' && error.message.includes('column') && error.message.includes('does not exist')) {
-                         console.error(`---> Potential Issue: Column 'question' or 'answer' might not exist in 'feedback_responses' table needed for the modal.`);
-                     }
-                     throw error;
-                 }
-                  console.log(`Fetched Modal Details (Type: ${type}):`, data);
-                 return (type === 'feedback' && data) ? [data] : (data || []);
-             } catch (error) {
-                  console.error(`Error fetching user ${type} details:`, error);
-                  showDashboardError(`Could not load details: ${error.message}`);
-                  return null;
-             }
+             try { console.log(`Fetching modal details for User: ${userId}, Identifier: ${identifier}, Type: ${type}`); let query; if (type === 'assessment') { query = supabase.from('user_progress').select('question_text, answer, is_passed, score, submitted_at').eq('user_id', userId).eq('question_id', identifier).order('submitted_at', { ascending: true }); } else if (type === 'section') { query = supabase.from('user_progress').select('question_text, answer, is_passed, submitted_at').eq('user_id', userId).eq('section_id', identifier).order('submitted_at', { ascending: true }); } else if (type === 'feedback') { query = supabase.from('feedback_responses').select('question, answer, submitted_at').eq('id', identifier).single(); } else { throw new Error("Invalid detail type requested"); } const { data, error } = await query; if (error && !(type === 'feedback' && error.code === 'PGRST116')) { if (type === 'feedback' && error.message.includes('column') && error.message.includes('does not exist')) { console.error(`---> Potential Issue: Column 'question' or 'answer' might not exist in 'feedback_responses' table needed for the modal.`); } throw error; } console.log(`Fetched Modal Details (Type: ${type}):`, data); return (type === 'feedback' && data) ? [data] : (data || []); } catch (error) { console.error(`Error fetching user ${type} details:`, error); showDashboardError(`Could not load details: ${error.message}`); return null; }
          }
 
 
@@ -990,57 +862,24 @@
         // updateModuleCards (Keep as is from previous version)
         function updateModuleCards(progressMap) {
              const moduleCards = document.querySelectorAll('.module-card');
-             let previousModuleCompleted = true; // Start assuming the first module is unlocked
-
              moduleCards.forEach(card => {
-                 const moduleId = card.dataset.moduleId;
-                 const status = progressMap[moduleId] || 'not-started';
-                 const statusBadge = card.querySelector('.status-badge');
-                 const actionButton = card.querySelector('.module-action-button');
-                 const cardIcon = card.querySelector('h4 i');
-                 const previousModuleId = card.dataset.previousModule;
-
+                 const moduleId = card.dataset.moduleId; const status = progressMap[moduleId] || 'not-started'; const statusBadge = card.querySelector('.status-badge'); const actionButton = card.querySelector('.module-action-button'); const cardIcon = card.querySelector('h4 i'); const previousModuleId = card.dataset.previousModule;
                  const isCompleted = ['completed', 'passed'].includes(status);
-                 const isAttempted = isCompleted || ['failed', 'needs-support', 'in-progress', 'unknown'].includes(status);
-
-                 if (statusBadge) {
-                      statusBadge.textContent = status.replace(/[-_]/g, ' ').replace('unknown', 'Not Started');
-                      statusBadge.className = 'status-badge';
-                      if (isCompleted) statusBadge.classList.add('completed');
-                      else if (status === 'in-progress') statusBadge.classList.add('in-progress');
-                      else statusBadge.classList.add('not-started');
-                  }
-
-                 const isPreviousCompleted = !previousModuleId || ['completed', 'passed'].includes(progressMap[previousModuleId]);
-                 let allowAccess = isAdmin || isPreviousCompleted;
-
+                 if (statusBadge) { statusBadge.textContent = status.replace(/[-_]/g, ' ').replace('unknown', 'Not Started'); statusBadge.className = 'status-badge'; if (isCompleted) statusBadge.classList.add('completed'); else if (status === 'in-progress') statusBadge.classList.add('in-progress'); else statusBadge.classList.add('not-started'); }
+                 const isPreviousCompleted = !previousModuleId || ['completed', 'passed'].includes(progressMap[previousModuleId]); let allowAccess = isAdmin || isPreviousCompleted;
                  if (allowAccess) {
                      card.classList.remove('locked');
                      if (actionButton) {
                          actionButton.disabled = false;
-                         if (isCompleted) {
-                             actionButton.innerHTML = `<i data-feather="eye"></i><span>View Module</span>`;
-                             if(cardIcon) cardIcon.setAttribute('data-feather', 'check-square');
-                         } else if (status === 'in-progress') {
-                             actionButton.innerHTML = `<i data-feather="play-circle"></i><span>Continue Module</span>`;
-                             if(cardIcon) cardIcon.setAttribute('data-feather', 'play-circle');
-                         } else {
-                             let buttonText = 'Start Module';
-                             actionButton.innerHTML = `<i data-feather="arrow-right-circle"></i><span>${buttonText}</span>`;
-                              if(cardIcon) cardIcon.setAttribute('data-feather', 'play-circle');
-                         }
+                         if (isCompleted) { actionButton.innerHTML = `<i data-feather="eye"></i><span>View Module</span>`; if(cardIcon) cardIcon.setAttribute('data-feather', 'check-square'); }
+                         else if (status === 'in-progress') { actionButton.innerHTML = `<i data-feather="play-circle"></i><span>Continue Module</span>`; if(cardIcon) cardIcon.setAttribute('data-feather', 'play-circle'); }
+                         else { let buttonText = 'Start Module'; actionButton.innerHTML = `<i data-feather="arrow-right-circle"></i><span>${buttonText}</span>`; if(cardIcon) cardIcon.setAttribute('data-feather', 'play-circle'); }
                      }
                  } else {
                      card.classList.add('locked');
-                     if (actionButton) {
-                         actionButton.disabled = true;
-                         actionButton.innerHTML = `<i data-feather="lock"></i><span>Locked</span>`;
-                         if(cardIcon) cardIcon.setAttribute('data-feather', 'lock');
-                     }
+                     if (actionButton) { actionButton.disabled = true; actionButton.innerHTML = `<i data-feather="lock"></i><span>Locked</span>`; if(cardIcon) cardIcon.setAttribute('data-feather', 'lock'); }
                  }
              });
-             // Don't call feather.replace here, call it once after initializeDashboard
-             // feather.replace();
              console.log("Module cards updated based on progress and admin status.");
          }
 
@@ -1051,93 +890,56 @@
             if (!isAdmin) return;
             console.log("Rendering all admin sections...");
             renderPaginatedTable(allUserData, userOverviewTableBody, userOverviewPagination, userOverviewCurrentPage, populateUserOverviewRow, 5);
-            applyAdminFilters(); // Renders assessment table + charts
+            applyAdminFilters(); // Renders assessment table + charts via renderAssessmentResults
             renderPaginatedTable(allProgressData, sectionProgressTableBody, sectionProgressPagination, progressCurrentPage, populateSectionProgressRow, 7);
-            renderPaginatedTable(allFeedbackData, feedbackTableBody, feedbackPagination, feedbackCurrentPage, populateFeedbackRow, 6); // ColSpan 6 for feedback
-            // feather.replace(); // Call once after all potential DOM changes
+            renderPaginatedTable(allFeedbackData, feedbackTableBody, feedbackPagination, feedbackCurrentPage, populateFeedbackRow, 6);
         }
+
+        // *** FUNCTION RESTORED ***
+        // Renders assessment table AND charts
+        function renderAssessmentResults() {
+             if (!isAdmin) return;
+             console.log(`Rendering assessment results - Page ${assessmentCurrentPage}`);
+             const totalAssessmentPages = Math.ceil(filteredAssessmentData.length / rowsPerPage) || 1;
+             assessmentCurrentPage = Math.max(1, Math.min(assessmentCurrentPage, totalAssessmentPages));
+             renderPaginatedTable(filteredAssessmentData, assessmentResultsTableBody, assessmentPaginationContainer, assessmentCurrentPage, populateAssessmentResultRow, 7);
+             renderCharts(filteredAssessmentData); // Update charts with filtered data
+             // feather.replace(); // No longer needed here, called once at end of initializeDashboard
+         }
 
         function renderPaginatedTable(fullData, tableBody, paginationContainer, currentPage, rowRenderer, colSpan) {
             if (!tableBody || !paginationContainer) { console.error("Missing table body or pagination container."); return; }
             if (!fullData) { console.error("No data provided to renderPaginatedTable"); tableBody.innerHTML = `<tr><td colspan="${colSpan}">Error loading data.</td></tr>`; return; }
-
-            const totalItems = fullData.length;
-            const totalPages = Math.ceil(totalItems / rowsPerPage) || 1;
-            let validCurrentPage = Math.max(1, Math.min(currentPage, totalPages));
-            const startIndex = (validCurrentPage - 1) * rowsPerPage;
-            const endIndex = startIndex + rowsPerPage;
-            const paginatedData = fullData.slice(startIndex, endIndex);
-
-            tableBody.innerHTML = ''; // Clear previous content
-            if (paginatedData.length === 0) {
-                 const filterActive = (fullData === filteredAssessmentData && (statusFilter?.value !== 'all' || typeFilter?.value !== 'all' || searchFilter?.value !== ''));
-                 tableBody.innerHTML = `<tr><td colspan="${colSpan}" style="text-align:center;">No data available${filterActive ? ' matching filters' : ''}.</td></tr>`;
-            } else {
-                paginatedData.forEach(item => rowRenderer(item, tableBody));
-            }
+            const totalItems = fullData.length; const totalPages = Math.ceil(totalItems / rowsPerPage) || 1; let validCurrentPage = Math.max(1, Math.min(currentPage, totalPages)); const startIndex = (validCurrentPage - 1) * rowsPerPage; const endIndex = startIndex + rowsPerPage; const paginatedData = fullData.slice(startIndex, endIndex);
+            tableBody.innerHTML = '';
+            if (paginatedData.length === 0) { const filterActive = (fullData === filteredAssessmentData && (statusFilter?.value !== 'all' || typeFilter?.value !== 'all' || searchFilter?.value !== '')); tableBody.innerHTML = `<tr><td colspan="${colSpan}" style="text-align:center;">No data available${filterActive ? ' matching filters' : ''}.</td></tr>`; }
+            else { paginatedData.forEach(item => rowRenderer(item, tableBody)); }
             renderPaginationControls(paginationContainer, totalItems, validCurrentPage, rowsPerPage);
-            // Don't call feather replace here repeatedly
         }
 
         // populateUserOverviewRow, populateAssessmentResultRow, populateSectionProgressRow, populateFeedbackRow
         // --- (Keep these functions exactly as they were in the previous version) ---
          function populateUserOverviewRow(user, tableBody) {
              const row = tableBody.insertRow();
-             let registrationDate = 'N/A';
-             if (user.created_at) {
-                 try { const dateObj = new Date(user.created_at); if (!isNaN(dateObj.getTime())) { registrationDate = dateObj.toLocaleDateString(); } else { console.warn(`Invalid date format for user ${user.email}: ${user.created_at}`); registrationDate = 'Invalid Date'; } } catch (e) { console.error(`Error parsing date "${user.created_at}" for ${user.email}:`, e); registrationDate = 'Error Parsing'; }
-             }
              const createStatusBadge = (status) => { let t='Pending', c='unknown'; if(status===true){t='Completed';c='true';} else if(status===false){t='Not Completed';c='false';} else if (status === null || typeof status === 'undefined') { t = 'Pending'; c='unknown'} return `<span class="admin-status-badge ${c}">${t}</span>`; };
              row.innerHTML = `<td>${user.name||'N/A'}</td><td>${user.email||'N/A'}</td><td>${formatDateForDisplay(user.created_at)}</td><td>${createStatusBadge(user.assessment_completed)}</td><td>${createStatusBadge(user.final_assessment_completed)}</td>`;
          }
          function populateAssessmentResultRow(item, tableBody) {
-            const row = tableBody.insertRow();
-            let displayStatus = item.completion_status;
-            let statusClass = item.completion_status?.toLowerCase().replace(/[\s_]+/g, '-');
-            if (!displayStatus && item.is_correct !== null && typeof item.is_correct !== 'undefined') { displayStatus = item.is_correct ? 'Passed' : 'Failed'; statusClass = item.is_correct ? 'passed' : 'failed'; }
-            else if (displayStatus === 'completed') { statusClass = 'completed'; displayStatus = 'Completed'; }
-            else if (displayStatus === 'in-progress') { statusClass = 'in-progress'; displayStatus = 'In Progress'; }
-            else if (displayStatus === 'needs-support') { statusClass = 'failed'; displayStatus = 'Needs Support'; }
-            else { displayStatus = 'Unknown'; statusClass = 'unknown'; }
-            let assessmentName = SECTION_ID_FRIENDLY_NAMES[item.question_id] || item.question_text || item.question_id || 'N/A';
+            const row = tableBody.insertRow(); let displayStatus = item.completion_status; let statusClass = item.completion_status?.toLowerCase().replace(/[\s_]+/g, '-'); if (!displayStatus && item.is_correct !== null && typeof item.is_correct !== 'undefined') { displayStatus = item.is_correct ? 'Passed' : 'Failed'; statusClass = item.is_correct ? 'passed' : 'failed'; } else if (displayStatus === 'completed') { statusClass = 'completed'; displayStatus = 'Completed'; } else if (displayStatus === 'in-progress') { statusClass = 'in-progress'; displayStatus = 'In Progress'; } else if (displayStatus === 'needs-support') { statusClass = 'failed'; displayStatus = 'Needs Support'; } else { displayStatus = 'Unknown'; statusClass = 'unknown'; } let assessmentName = SECTION_ID_FRIENDLY_NAMES[item.question_id] || item.question_text || item.question_id || 'N/A';
             row.innerHTML = `<td>${item.name || 'N/A'}</td><td>${item.user_email || 'N/A'}</td><td>${assessmentName}</td><td><span class="admin-status-badge ${statusClass}">${displayStatus}</span></td><td>${item.score ?? 'N/A'}</td><td>${formatDateForDisplay(item.submitted_at)}</td><td><button class="view-details-btn" data-type="assessment" data-userid="${item.user_id}" data-identifier="${item.question_id}" data-username="${item.name || item.user_email}" title="View Assessment Details"><i data-feather="eye"></i></button></td>`;
         }
         function populateSectionProgressRow(item, tableBody) {
-            const row = tableBody.insertRow();
-            const sectionName = SECTION_ID_FRIENDLY_NAMES[item.section_id] || item.section_id || 'N/A';
-            const answerPreview = item.answer?.substring(0, 40) + (item.answer?.length > 40 ? '...' : '');
+            const row = tableBody.insertRow(); const sectionName = SECTION_ID_FRIENDLY_NAMES[item.section_id] || item.section_id || 'N/A'; const answerPreview = item.answer?.substring(0, 40) + (item.answer?.length > 40 ? '...' : '');
             row.innerHTML = `<td>${item.user_name || 'N/A'}</td><td>${item.user_email || 'N/A'}</td><td>${sectionName}</td><td>${item.question_text || item.question_id || 'N/A'}</td><td class="truncated-content" title="${item.answer || ''}">${answerPreview || 'N/A'}</td><td>${formatDateForDisplay(item.submitted_at)}</td><td><button class="view-details-btn" data-type="section" data-userid="${item.user_id}" data-identifier="${item.section_id}" data-username="${item.user_name || item.user_email}" title="View All Section Answers"><i data-feather="list"></i></button></td>`;
         }
          function populateFeedbackRow(item, tableBody) {
-            const row = tableBody.insertRow();
-            const userName = item.name || 'N/A';
-            const userEmail = item.email || 'N/A';
-            const questionText = item.question || 'N/A';
-            const answerText = item.answer || 'N/A';
-            const answerPreview = answerText.substring(0, 40) + (answerText.length > 40 ? '...' : '');
-            row.innerHTML = `
-                <td>${userName}</td>
-                <td>${userEmail}</td>
-                <td>${questionText}</td>
-                <td class="truncated-content" title="${answerText}">${answerPreview}</td>
-                <td>${formatDateForDisplay(item.submitted_at)}</td>
-                <td>
-                     <button class="view-details-btn" data-type="feedback" data-userid="${item.user_id}" data-identifier="${item.id}" data-username="${userName || userEmail}" title="View Full Answer">
-                         <i data-feather="file-text"></i>
-                     </button>
-                </td>
-            `;
+            const row = tableBody.insertRow(); const userName = item.name || 'N/A'; const userEmail = item.email || 'N/A'; const questionText = item.question || 'N/A'; const answerText = item.answer || 'N/A'; const answerPreview = answerText.substring(0, 40) + (answerText.length > 40 ? '...' : '');
+            row.innerHTML = `<td>${userName}</td><td>${userEmail}</td><td>${questionText}</td><td class="truncated-content" title="${answerText}">${answerPreview}</td><td>${formatDateForDisplay(item.submitted_at)}</td><td><button class="view-details-btn" data-type="feedback" data-userid="${item.user_id}" data-identifier="${item.id}" data-username="${userName || userEmail}" title="View Full Answer"><i data-feather="file-text"></i></button></td>`;
         }
 
 
         function renderPaginationControls(container, totalItems, currentPage, itemsPerPage) {
-             if (!container) return;
-             container.innerHTML = '';
-             const totalPages = Math.ceil(totalItems / itemsPerPage) || 1;
-             if (totalPages <= 1) return;
-             const prevButton = document.createElement('button'); prevButton.innerHTML = '« Prev'; prevButton.classList.add('pagination-button'); prevButton.disabled = currentPage === 1; prevButton.dataset.page = currentPage - 1; container.appendChild(prevButton);
-             const pageInfo = document.createElement('span'); pageInfo.classList.add('pagination-info'); pageInfo.textContent = `Page ${currentPage} of ${totalPages}`; container.appendChild(pageInfo);
-             const nextButton = document.createElement('button'); nextButton.innerHTML = 'Next »'; nextButton.classList.add('pagination-button'); nextButton.disabled = currentPage === totalPages; nextButton.dataset.page = currentPage + 1; container.appendChild(nextButton);
+             if (!container) return; container.innerHTML = ''; const totalPages = Math.ceil(totalItems / itemsPerPage) || 1; if (totalPages <= 1) return; const prevButton = document.createElement('button'); prevButton.innerHTML = '« Prev'; prevButton.classList.add('pagination-button'); prevButton.disabled = currentPage === 1; prevButton.dataset.page = currentPage - 1; container.appendChild(prevButton); const pageInfo = document.createElement('span'); pageInfo.classList.add('pagination-info'); pageInfo.textContent = `Page ${currentPage} of ${totalPages}`; container.appendChild(pageInfo); const nextButton = document.createElement('button'); nextButton.innerHTML = 'Next »'; nextButton.classList.add('pagination-button'); nextButton.disabled = currentPage === totalPages; nextButton.dataset.page = currentPage + 1; container.appendChild(nextButton);
          }
 
         // --- Event Handling ---
@@ -1148,302 +950,103 @@
              // Handle Pagination
              const paginationButton = target.closest('.pagination-button');
              if (paginationButton && !paginationButton.disabled) {
-                 const targetPage = parseInt(paginationButton.dataset.page, 10);
-                 const paginationContainer = target.closest('.pagination-container');
+                 const targetPage = parseInt(paginationButton.dataset.page, 10); const paginationContainer = target.closest('.pagination-container');
                  if (targetPage && paginationContainer) {
                      if (paginationContainer.id === 'userOverviewPagination') { userOverviewCurrentPage = targetPage; renderPaginatedTable(allUserData, userOverviewTableBody, userOverviewPagination, userOverviewCurrentPage, populateUserOverviewRow, 5); }
-                     else if (paginationContainer.id === 'assessmentPaginationContainer') { assessmentCurrentPage = targetPage; renderAssessmentResults(); }
+                     else if (paginationContainer.id === 'assessmentPaginationContainer') { assessmentCurrentPage = targetPage; renderAssessmentResults(); } // Calls restored function
                      else if (paginationContainer.id === 'sectionProgressPagination') { progressCurrentPage = targetPage; renderPaginatedTable(allProgressData, sectionProgressTableBody, sectionProgressPagination, progressCurrentPage, populateSectionProgressRow, 7); }
                      else if (paginationContainer.id === 'feedbackPagination') { feedbackCurrentPage = targetPage; renderPaginatedTable(allFeedbackData, feedbackTableBody, feedbackPagination, feedbackCurrentPage, populateFeedbackRow, 6); }
-                     feather.replace(); // Update icons potentially in newly rendered rows
+                     feather.replace();
                  }
-                 return; // Handled pagination
+                 return;
              }
 
              // Handle Details Button
              const detailsButton = target.closest('.view-details-btn');
              if (detailsButton) {
-                 const userId = detailsButton.dataset.userid;
-                 const identifier = detailsButton.dataset.identifier;
-                 const type = detailsButton.dataset.type;
-                 const userName = detailsButton.dataset.username;
-                 console.log(`Details clicked - Type: ${type}, UserID: ${userId}, Identifier: ${identifier}`);
-                 openDetailsModal(userId, identifier, type, userName);
-                 return; // Handled details button
+                 const userId = detailsButton.dataset.userid; const identifier = detailsButton.dataset.identifier; const type = detailsButton.dataset.type; const userName = detailsButton.dataset.username;
+                 console.log(`Details clicked - Type: ${type}, UserID: ${userId}, Identifier: ${identifier}`); openDetailsModal(userId, identifier, type, userName); return;
              }
 
-             // *** NEW: Handle Export Button Clicks ***
+             // Handle Export Button Clicks
              const exportButton = target.closest('.admin-export-button');
              if (exportButton) {
                  const exportType = exportButton.dataset.exportType;
                  console.log(`Export button clicked for type: ${exportType}`);
                  switch (exportType) {
-                     case 'users':
-                         handleExportUserCsv();
-                         break;
-                     case 'assessments':
-                         handleExportAssessmentCsv();
-                         break;
-                     case 'progress':
-                         handleExportProgressCsv();
-                         break;
-                     case 'feedback':
-                         handleExportFeedbackCsv();
-                         break;
-                     default:
-                         console.warn(`Unknown export type: ${exportType}`);
+                     case 'users': handleExportUserCsv(); break;
+                     case 'assessments': handleExportAssessmentCsv(); break;
+                     case 'progress': handleExportProgressCsv(); break;
+                     case 'feedback': handleExportFeedbackCsv(); break;
+                     default: console.warn(`Unknown export type: ${exportType}`);
                  }
-                 return; // Handled export button
+                 return;
              }
          }
 
         // openDetailsModal, closeDetailsModal (Keep as is from previous version)
         async function openDetailsModal(userId, identifier, type, userName) {
-             if (!detailsModal || !modalBody || !modalTitle) return;
-             let titlePrefix = "Details";
-             if (type === 'assessment') titlePrefix = `Assessment Details (${SECTION_ID_FRIENDLY_NAMES[identifier] || identifier})`;
-             else if (type === 'section') titlePrefix = `Section Answers (${SECTION_ID_FRIENDLY_NAMES[identifier] || identifier})`;
-             else if (type === 'feedback') titlePrefix = `Feedback Details`;
-             modalTitle.textContent = `${titlePrefix} for ${userName || 'User ' + userId.substring(0, 6)}`;
-             modalBody.innerHTML = '<p class="loading-indicator-small">Loading details...</p>';
-             detailsModal.style.display = "block";
-             const details = await fetchUserDetailsForModal(userId, identifier, type);
-             if (details === null) { modalBody.innerHTML = '<p style="color: var(--error-red);">Could not load details.</p>'; }
-             else if (details.length === 0) { modalBody.innerHTML = `<p>No details found for this ${type}.</p>`; }
-             else {
-                 let detailsHtml = '';
-                  if (type === 'assessment' || type === 'section') {
-                      details.forEach((item, index) => {
-                           let answerDisplay = item.answer || 'N/A';
-                           let correctnessClass = '';
-                           if (item.is_passed === true) correctnessClass = 'correct';
-                           if (item.is_passed === false) correctnessClass = 'incorrect';
-                            const submitted = item.submitted_at ? `<span style='font-size:0.8em; color: var(--text-light);'>(${new Date(item.submitted_at).toLocaleString()})</span>` : '';
-                           detailsHtml += `
-                               <div class="detail-item">
-                                   <strong>${index + 1}. ${item.question_text || (type === 'assessment' ? `Question ID: ${identifier}` : 'Question')}</strong>
-                                   <span class="${correctnessClass}">${answerDisplay}</span>
-                                   ${item.score !== null && typeof item.score !== 'undefined' ? `<span style='font-size:0.8em; color: var(--text-light);'> (Score: ${item.score})</span>` : ''}
-                                   ${submitted}
-                               </div>`;
-                      });
-                  } else if (type === 'feedback') {
-                      const item = details[0];
-                      const submitted = item.submitted_at ? `Submitted: ${new Date(item.submitted_at).toLocaleString()}` : '';
-                      detailsHtml += `
-                           <div class="detail-item">
-                               <strong>Question:</strong>
-                               <span>${item.question || 'N/A'}</span>
-                           </div>
-                           <div class="detail-item">
-                               <strong>Answer:</strong>
-                               <span>${item.answer || 'N/A'}</span>
-                           </div>
-                           ${submitted ? `<div class="detail-item"><strong style='font-size:0.9em;'>${submitted}</strong></div>` : ''}
-                       `;
-                  }
-                 modalBody.innerHTML = detailsHtml;
-             }
+             if (!detailsModal || !modalBody || !modalTitle) return; let titlePrefix = "Details"; if (type === 'assessment') titlePrefix = `Assessment Details (${SECTION_ID_FRIENDLY_NAMES[identifier] || identifier})`; else if (type === 'section') titlePrefix = `Section Answers (${SECTION_ID_FRIENDLY_NAMES[identifier] || identifier})`; else if (type === 'feedback') titlePrefix = `Feedback Details`; modalTitle.textContent = `${titlePrefix} for ${userName || 'User ' + userId.substring(0, 6)}`; modalBody.innerHTML = '<p class="loading-indicator-small">Loading details...</p>'; detailsModal.style.display = "block"; const details = await fetchUserDetailsForModal(userId, identifier, type);
+             if (details === null) { modalBody.innerHTML = '<p style="color: var(--error-red);">Could not load details.</p>'; } else if (details.length === 0) { modalBody.innerHTML = `<p>No details found for this ${type}.</p>`; }
+             else { let detailsHtml = ''; if (type === 'assessment' || type === 'section') { details.forEach((item, index) => { let answerDisplay = item.answer || 'N/A'; let correctnessClass = ''; if (item.is_passed === true) correctnessClass = 'correct'; if (item.is_passed === false) correctnessClass = 'incorrect'; const submitted = item.submitted_at ? `<span style='font-size:0.8em; color: var(--text-light);'>(${new Date(item.submitted_at).toLocaleString()})</span>` : ''; detailsHtml += `<div class="detail-item"><strong>${index + 1}. ${item.question_text || (type === 'assessment' ? `Question ID: ${identifier}` : 'Question')}</strong><span class="${correctnessClass}">${answerDisplay}</span>${item.score !== null && typeof item.score !== 'undefined' ? `<span style='font-size:0.8em; color: var(--text-light);'> (Score: ${item.score})</span>` : ''}${submitted}</div>`; }); } else if (type === 'feedback') { const item = details[0]; const submitted = item.submitted_at ? `Submitted: ${new Date(item.submitted_at).toLocaleString()}` : ''; detailsHtml += `<div class="detail-item"><strong>Question:</strong><span>${item.question || 'N/A'}</span></div><div class="detail-item"><strong>Answer:</strong><span>${item.answer || 'N/A'}</span></div>${submitted ? `<div class="detail-item"><strong style='font-size:0.9em;'>${submitted}</strong></div>` : ''}`; } modalBody.innerHTML = detailsHtml; }
         }
-        function closeDetailsModal() {
-             if (detailsModal) detailsModal.style.display = "none";
-             if (modalBody) modalBody.innerHTML = '';
-        }
+        function closeDetailsModal() { if (detailsModal) detailsModal.style.display = "none"; if (modalBody) modalBody.innerHTML = ''; }
 
         // --- Assessment Filtering & Charts ---
         // applyAdminFilters, renderCharts (Keep as is from previous version)
         function applyAdminFilters() {
-            if (!allAssessmentData) return;
-            console.log("Applying assessment filters...");
-            const statusValue = statusFilter.value;
-            const typeValue = typeFilter.value;
-            const searchValue = searchFilter.value.toLowerCase().trim();
+            if (!allAssessmentData) return; console.log("Applying assessment filters..."); const statusValue = statusFilter.value; const typeValue = typeFilter.value; const searchValue = searchFilter.value.toLowerCase().trim();
             filteredAssessmentData = allAssessmentData.filter(item => {
-                let statusMatch = true;
-                if (statusValue !== 'all') {
-                     let itemStatusStr = 'unknown';
-                     if (item.completion_status) { itemStatusStr = item.completion_status; }
-                     else if (item.is_correct !== null && typeof item.is_correct !== 'undefined') { itemStatusStr = item.is_correct ? 'passed' : 'failed'; }
-                    if (statusValue === 'passed') { statusMatch = (itemStatusStr === 'passed'); }
-                    else if (statusValue === 'failed') { statusMatch = (itemStatusStr === 'failed' || itemStatusStr === 'needs-support'); }
-                    else if (statusValue === 'completed') { statusMatch = (itemStatusStr === 'completed'); }
-                    else if (statusValue === 'in-progress') { statusMatch = (itemStatusStr === 'in-progress'); }
-                    else if (statusValue === 'unknown') { statusMatch = (itemStatusStr === 'unknown' || itemStatusStr === null || typeof itemStatusStr === 'undefined'); }
-                    else { statusMatch = false; }
-                 }
-                const typeMatch = typeValue === 'all' || item.question_id === typeValue;
-                const searchMatch = searchValue === '' || (item.name && item.name.toLowerCase().includes(searchValue)) || (item.user_email && item.user_email.toLowerCase().includes(searchValue));
+                let statusMatch = true; if (statusValue !== 'all') { let itemStatusStr = 'unknown'; if (item.completion_status) { itemStatusStr = item.completion_status; } else if (item.is_correct !== null && typeof item.is_correct !== 'undefined') { itemStatusStr = item.is_correct ? 'passed' : 'failed'; } if (statusValue === 'passed') { statusMatch = (itemStatusStr === 'passed'); } else if (statusValue === 'failed') { statusMatch = (itemStatusStr === 'failed' || itemStatusStr === 'needs-support'); } else if (statusValue === 'completed') { statusMatch = (itemStatusStr === 'completed'); } else if (statusValue === 'in-progress') { statusMatch = (itemStatusStr === 'in-progress'); } else if (statusValue === 'unknown') { statusMatch = (itemStatusStr === 'unknown' || itemStatusStr === null || typeof itemStatusStr === 'undefined'); } else { statusMatch = false; } }
+                const typeMatch = typeValue === 'all' || item.question_id === typeValue; const searchMatch = searchValue === '' || (item.name && item.name.toLowerCase().includes(searchValue)) || (item.user_email && item.user_email.toLowerCase().includes(searchValue));
                 return statusMatch && typeMatch && searchMatch;
             });
-            console.log(`Filtering assessments complete. Found ${filteredAssessmentData.length} records.`);
-            assessmentCurrentPage = 1;
-            renderAssessmentResults();
+            console.log(`Filtering assessments complete. Found ${filteredAssessmentData.length} records.`); assessmentCurrentPage = 1;
+            renderAssessmentResults(); // Calls restored function
         }
         function renderCharts(data) {
-            if (!statusChartCanvas || !scoreChartCanvas || !data) { console.warn("Chart elements missing or no data."); return; }
-            const ctxStatus = statusChartCanvas.getContext('2d'); const ctxScore = scoreChartCanvas.getContext('2d');
-            if (!ctxStatus || !ctxScore) { console.error("Failed to get chart context."); return; }
-            const statusCounts = data.reduce((acc, item) => { let s = 'unknown'; if (item.completion_status) { s = item.completion_status; } else if (item.is_correct !== null && typeof item.is_correct !== 'undefined') { s = item.is_correct ? 'passed' : 'failed'; } if (s === 'needs-support') s = 'failed'; acc[s] = (acc[s] || 0) + 1; return acc; }, {});
-            const statusLabels=Object.keys(statusCounts); const statusData=Object.values(statusCounts); const statusColors=statusLabels.map(l=>{if(l==='passed') return'rgba(34,197,94,0.7)'; if(l==='completed') return 'rgba(14, 165, 233, 0.7)'; if(l==='failed') return'rgba(239,68,68,0.7)'; if(l==='in-progress') return'rgba(59,130,246,0.7)'; return'rgba(245,158,11,0.7)'; });
-            if(statusChartInstance)statusChartInstance.destroy();
-            statusChartInstance=new Chart(ctxStatus,{type:'pie',data:{labels:statusLabels.map(l=>l.charAt(0).toUpperCase()+l.slice(1).replace(/[-_]/g,' ')),datasets:[{data:statusData,backgroundColor:statusColors,borderWidth:1}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'top',align:'center',labels:{boxWidth:15,font:{size:11},padding:10}},title:{display:false},tooltip:{bodyFont:{size:12},titleFont:{size:13}}}}});
-            const scoreCounts=data.reduce((acc,item)=>{const s=item.score; let r='N/A'; if(typeof s==='number' && !isNaN(s)){if(s>=0&&s<=49)r='0-49%'; else if(s>=50&&s<=74)r='50-74%'; else if(s>=75&&s<=100)r='75-100%';} acc[r]=(acc[r]||0)+1; return acc;},{});
-            const scoreOrder=['0-49%','50-74%','75-100%','N/A']; const scoreLabels=scoreOrder.filter(label=>scoreCounts[label]>0); const scoreData=scoreLabels.map(l=>scoreCounts[l]||0);
-            if(scoreChartInstance)scoreChartInstance.destroy();
-            scoreChartInstance=new Chart(ctxScore,{type:'bar',data:{labels:scoreLabels,datasets:[{label:'Users by Score',data:scoreData,backgroundColor:'rgba(245,158,11,0.7)',borderColor:'rgba(217,119,6,1)',borderWidth:1}]},options:{responsive:true,maintainAspectRatio:false,scales:{y:{beginAtZero:true,title:{display:true,text:'Number of Users',font:{size:11}},ticks:{font:{size:10}}},x:{title:{display:true,text:'Score Range (%)',font:{size:11}},ticks:{font:{size:10}}}},plugins:{legend:{display:false},title:{display:false},tooltip:{bodyFont:{size:12},titleFont:{size:13}}}}});
+            if (!statusChartCanvas || !scoreChartCanvas || !data) { console.warn("Chart elements missing or no data."); return; } const ctxStatus = statusChartCanvas.getContext('2d'); const ctxScore = scoreChartCanvas.getContext('2d'); if (!ctxStatus || !ctxScore) { console.error("Failed to get chart context."); return; }
+            const statusCounts = data.reduce((acc, item) => { let s = 'unknown'; if (item.completion_status) { s = item.completion_status; } else if (item.is_correct !== null && typeof item.is_correct !== 'undefined') { s = item.is_correct ? 'passed' : 'failed'; } if (s === 'needs-support') s = 'failed'; acc[s] = (acc[s] || 0) + 1; return acc; }, {}); const statusLabels=Object.keys(statusCounts); const statusData=Object.values(statusCounts); const statusColors=statusLabels.map(l=>{if(l==='passed') return'rgba(34,197,94,0.7)'; if(l==='completed') return 'rgba(14, 165, 233, 0.7)'; if(l==='failed') return'rgba(239,68,68,0.7)'; if(l==='in-progress') return'rgba(59,130,246,0.7)'; return'rgba(245,158,11,0.7)'; }); if(statusChartInstance)statusChartInstance.destroy(); statusChartInstance=new Chart(ctxStatus,{type:'pie',data:{labels:statusLabels.map(l=>l.charAt(0).toUpperCase()+l.slice(1).replace(/[-_]/g,' ')),datasets:[{data:statusData,backgroundColor:statusColors,borderWidth:1}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'top',align:'center',labels:{boxWidth:15,font:{size:11},padding:10}},title:{display:false},tooltip:{bodyFont:{size:12},titleFont:{size:13}}}}});
+            const scoreCounts=data.reduce((acc,item)=>{const s=item.score; let r='N/A'; if(typeof s==='number' && !isNaN(s)){if(s>=0&&s<=49)r='0-49%'; else if(s>=50&&s<=74)r='50-74%'; else if(s>=75&&s<=100)r='75-100%';} acc[r]=(acc[r]||0)+1; return acc;},{}); const scoreOrder=['0-49%','50-74%','75-100%','N/A']; const scoreLabels=scoreOrder.filter(label=>scoreCounts[label]>0); const scoreData=scoreLabels.map(l=>scoreCounts[l]||0); if(scoreChartInstance)scoreChartInstance.destroy(); scoreChartInstance=new Chart(ctxScore,{type:'bar',data:{labels:scoreLabels,datasets:[{label:'Users by Score',data:scoreData,backgroundColor:'rgba(245,158,11,0.7)',borderColor:'rgba(217,119,6,1)',borderWidth:1}]},options:{responsive:true,maintainAspectRatio:false,scales:{y:{beginAtZero:true,title:{display:true,text:'Number of Users',font:{size:11}},ticks:{font:{size:10}}},x:{title:{display:true,text:'Score Range (%)',font:{size:11}},ticks:{font:{size:10}}}},plugins:{legend:{display:false},title:{display:false},tooltip:{bodyFont:{size:12},titleFont:{size:13}}}}});
             console.log("Charts rendered/updated.");
         }
 
 
         // --- START: CSV Export Logic ---
 
-        // Helper to safely format values for CSV (quote if necessary)
-        function escapeCsvField(field) {
-            const value = (field === null || typeof field === 'undefined') ? '' : String(field);
-            // If the value contains a comma, double quote, or newline, enclose it in double quotes
-            if (value.includes(',') || value.includes('"') || value.includes('\n')) {
-                // Escape existing double quotes by doubling them
-                return `"${value.replace(/"/g, '""')}"`;
-            }
-            return value; // No quoting needed
-        }
+        function escapeCsvField(field) { const value = (field === null || typeof field === 'undefined') ? '' : String(field); if (value.includes(',') || value.includes('"') || value.includes('\n')) { return `"${value.replace(/"/g, '""')}"`; } return value; }
+        function formatDateForCsv(dateString) { if (!dateString) return ''; try { const date = new Date(dateString); if (isNaN(date.getTime())) return ''; const year = date.getFullYear(); const month = String(date.getMonth() + 1).padStart(2, '0'); const day = String(date.getDate()).padStart(2, '0'); return `${year}-${month}-${day}`; } catch (e) { console.error("Error formatting date for CSV:", e); return ''; } }
+        function formatDateForDisplay(dateString) { if (!dateString) return 'N/A'; try { const date = new Date(dateString); if (isNaN(date.getTime())) return 'Invalid Date'; return date.toLocaleDateString(); } catch (e) { console.error("Error formatting date for display:", e); return 'Error'; } }
 
-        // Helper to format dates for CSV (e.g., YYYY-MM-DD)
-        function formatDateForCsv(dateString) {
-            if (!dateString) return '';
-            try {
-                const date = new Date(dateString);
-                if (isNaN(date.getTime())) return ''; // Invalid date
-                const year = date.getFullYear();
-                const month = String(date.getMonth() + 1).padStart(2, '0');
-                const day = String(date.getDate()).padStart(2, '0');
-                return `${year}-${month}-${day}`;
-            } catch (e) {
-                console.error("Error formatting date for CSV:", e);
-                return '';
-            }
-        }
-        // Helper to format dates for display (e.g., locale date string)
-         function formatDateForDisplay(dateString) {
-             if (!dateString) return 'N/A';
-             try {
-                 const date = new Date(dateString);
-                 if (isNaN(date.getTime())) return 'Invalid Date';
-                 return date.toLocaleDateString(); // Adjust locale as needed
-             } catch (e) {
-                 console.error("Error formatting date for display:", e);
-                 return 'Error';
-             }
-         }
-
-
-        // Generic core CSV download function
         function triggerCsvDownload(headers, dataRows, filename) {
-             if (!dataRows || dataRows.length === 0) {
-                 alert("No data available to export.");
-                 console.log(`CSV Export Aborted: No data for ${filename}`);
-                 return;
-             }
-             console.log(`Generating CSV for ${filename}. Rows: ${dataRows.length}`);
-             const csv = [];
-             csv.push(headers.map(escapeCsvField).join(',')); // Add header row
-
-             dataRows.forEach(rowArray => {
-                 csv.push(rowArray.map(escapeCsvField).join(',')); // Add data rows
-             });
-
-             const csvContent = csv.join('\n');
-             const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' }); // Add BOM for Excel compatibility
-             const link = document.createElement("a");
-
-             if (link.download !== undefined) {
-                 const url = URL.createObjectURL(blob);
-                 link.setAttribute("href", url);
-                 link.setAttribute("download", filename);
-                 link.style.visibility = 'hidden';
-                 document.body.appendChild(link);
-                 link.click();
-                 document.body.removeChild(link);
-                 URL.revokeObjectURL(url);
-                 console.log(`CSV Export Success: ${filename}`);
-             } else {
-                 alert("CSV export is not supported in your browser.");
-                 console.error(`CSV Export Failed: Browser lacks download attribute support.`);
-             }
+             if (!dataRows || dataRows.length === 0) { alert("No data available to export."); console.log(`CSV Export Aborted: No data for ${filename}`); return; }
+             console.log(`Generating CSV for ${filename}. Rows: ${dataRows.length}`); const csv = [headers.map(escapeCsvField).join(',')];
+             dataRows.forEach(rowArray => { csv.push(rowArray.map(escapeCsvField).join(',')); });
+             const csvContent = csv.join('\n'); const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' }); const link = document.createElement("a");
+             if (link.download !== undefined) { const url = URL.createObjectURL(blob); link.setAttribute("href", url); link.setAttribute("download", filename); link.style.visibility = 'hidden'; document.body.appendChild(link); link.click(); document.body.removeChild(link); URL.revokeObjectURL(url); console.log(`CSV Export Success: ${filename}`); }
+             else { alert("CSV export is not supported in your browser."); console.error(`CSV Export Failed: Browser lacks download attribute support.`); }
          }
 
-        // Export Handler for User Management
         function handleExportUserCsv() {
             const headers = ["Name", "Email", "Registered At", "Intro Assessment Completed", "Final Assessment Completed"];
-            const dataRows = allUserData.map(user => {
-                const introStatus = user.assessment_completed === true ? 'Completed' : (user.assessment_completed === false ? 'Not Completed' : 'Pending');
-                const finalStatus = user.final_assessment_completed === true ? 'Completed' : (user.final_assessment_completed === false ? 'Not Completed' : 'Pending');
-                return [
-                    user.name || 'N/A',
-                    user.email || 'N/A',
-                    formatDateForCsv(user.created_at),
-                    introStatus,
-                    finalStatus
-                ];
-            });
+            const dataRows = allUserData.map(user => { const introStatus = user.assessment_completed === true ? 'Completed' : (user.assessment_completed === false ? 'Not Completed' : 'Pending'); const finalStatus = user.final_assessment_completed === true ? 'Completed' : (user.final_assessment_completed === false ? 'Not Completed' : 'Pending'); return [ user.name || 'N/A', user.email || 'N/A', formatDateForCsv(user.created_at), introStatus, finalStatus ]; });
             triggerCsvDownload(headers, dataRows, `user_management_${formatDateForCsv(new Date())}.csv`);
         }
-
-        // Export Handler for Assessment Results (Exports Filtered Data)
         function handleExportAssessmentCsv() {
             const headers = ["User Name", "Email", "Assessment Name", "Assessment ID", "Status", "Score", "Submitted At"];
-             const dataRows = filteredAssessmentData.map(item => {
-                 const assessmentName = SECTION_ID_FRIENDLY_NAMES[item.question_id] || item.question_text || item.question_id || 'N/A';
-                 let displayStatus = item.completion_status;
-                 if (!displayStatus && item.is_correct !== null && typeof item.is_correct !== 'undefined') { displayStatus = item.is_correct ? 'Passed' : 'Failed'; }
-                 else if (!displayStatus) { displayStatus = 'Unknown'; }
-
-                 return [
-                     item.name || 'N/A',
-                     item.user_email || 'N/A',
-                     assessmentName,
-                     item.question_id || 'N/A',
-                     displayStatus,
-                     item.score ?? '', // Use empty string for null/undefined score
-                     formatDateForCsv(item.submitted_at)
-                 ];
-             });
+             const dataRows = filteredAssessmentData.map(item => { const assessmentName = SECTION_ID_FRIENDLY_NAMES[item.question_id] || item.question_text || item.question_id || 'N/A'; let displayStatus = item.completion_status; if (!displayStatus && item.is_correct !== null && typeof item.is_correct !== 'undefined') { displayStatus = item.is_correct ? 'Passed' : 'Failed'; } else if (!displayStatus) { displayStatus = 'Unknown'; } return [ item.name || 'N/A', item.user_email || 'N/A', assessmentName, item.question_id || 'N/A', displayStatus, item.score ?? '', formatDateForCsv(item.submitted_at) ]; });
             triggerCsvDownload(headers, dataRows, `assessment_results_${formatDateForCsv(new Date())}.csv`);
         }
-
-        // Export Handler for Section Progress
         function handleExportProgressCsv() {
              const headers = ["User Name", "Email", "Section ID", "Section Name", "Question", "Answer", "Submitted At"];
-             const dataRows = allProgressData.map(item => {
-                 const sectionName = SECTION_ID_FRIENDLY_NAMES[item.section_id] || item.section_id || 'N/A';
-                 return [
-                     item.user_name || 'N/A',
-                     item.user_email || 'N/A',
-                     item.section_id || 'N/A',
-                     sectionName,
-                     item.question_text || item.question_id || 'N/A',
-                     item.answer || '',
-                     formatDateForCsv(item.submitted_at)
-                 ];
-             });
+             const dataRows = allProgressData.map(item => { const sectionName = SECTION_ID_FRIENDLY_NAMES[item.section_id] || item.section_id || 'N/A'; return [ item.user_name || 'N/A', item.user_email || 'N/A', item.section_id || 'N/A', sectionName, item.question_text || item.question_id || 'N/A', item.answer || '', formatDateForCsv(item.submitted_at) ]; });
              triggerCsvDownload(headers, dataRows, `section_progress_${formatDateForCsv(new Date())}.csv`);
          }
-
-        // Export Handler for Feedback Responses
         function handleExportFeedbackCsv() {
             const headers = ["User Name", "Email", "Question", "Answer", "Submitted At"];
-             const dataRows = allFeedbackData.map(item => {
-                 return [
-                     item.name || 'N/A',
-                     item.email || 'N/A',
-                     item.question || 'N/A',
-                     item.answer || '',
-                     formatDateForCsv(item.submitted_at)
-                 ];
-             });
+             const dataRows = allFeedbackData.map(item => { return [ item.name || 'N/A', item.email || 'N/A', item.question || 'N/A', item.answer || '', formatDateForCsv(item.submitted_at) ]; });
             triggerCsvDownload(headers, dataRows, `feedback_responses_${formatDateForCsv(new Date())}.csv`);
         }
-
         // --- END: CSV Export Logic ---
 
 
