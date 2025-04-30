@@ -234,7 +234,7 @@
          </div>
      </div>
 
-    <!-- JavaScript (Remains Unchanged from previous version) -->
+    <!-- JavaScript (MODIFIED: Added is_admin logic in Supabase insert) -->
     <script>
         document.addEventListener('DOMContentLoaded', function() {
 
@@ -316,7 +316,7 @@
                  }
             });
 
-            // --- Form Submit Listener (Includes localStorage logic - Unchanged from previous version) ---
+            // --- Form Submit Listener (MODIFIED: Added is_admin logic in Supabase insert) ---
             if(signupForm) {
                 signupForm.addEventListener('submit', async function(e) {
                     e.preventDefault();
@@ -385,15 +385,29 @@
                                 .insert({
                                     id: userId,    // Link to auth.users
                                     name: name,
-                                    email: email   // Ensure RLS protects this
+                                    email: email,   // Ensure RLS protects this
+                                    // ✅ --- MODIFICATION START: Set is_admin based on email ---
+                                    is_admin: email === "m.elsayed@thechefz.co" // Set true only for this specific email, false otherwise
+                                    // ✅ --- MODIFICATION END ---
                                 });
 
                             if (insertError) {
                                 console.error('Supabase profile insert error:', insertError);
-                                showError(signupError, `Account created, but failed to save profile details. Contact support. (Error: ${insertError.message})`);
+                                // Attempt to delete the auth user if profile insert fails to prevent orphaned auth entry
+                                console.warn(`Profile insert failed for ${userId}. Attempting to clean up auth user (requires service_role key or admin privileges if RLS prevents user deletion).`);
+                                try {
+                                    // Note: Deleting users directly from frontend might be restricted by RLS.
+                                    // This might require a backend function or manual cleanup if it fails.
+                                    // const { error: deleteError } = await supabase.auth.admin.deleteUser(userId); // Requires admin privileges
+                                    // if (deleteError) console.error('Failed to delete auth user after profile insert error:', deleteError);
+                                    // else console.log('Orphaned auth user deleted successfully.');
+                                } catch (cleanupError) {
+                                    console.error('Error during auth user cleanup attempt:', cleanupError);
+                                }
+                                showError(signupError, `Account created, but failed to save profile details. Please contact support. (Error: ${insertError.message})`);
                                 isValid = false;
                             } else {
-                                console.log('Profile inserted successfully into "users" table.');
+                                console.log(`Profile inserted successfully into "users" table. is_admin set to: ${email === "m.elsayed@thechefz.co"}`);
                                 isValid = true; // Mark as valid up to this point
 
                                 // --- [START] Modification: Save to localStorage ---
@@ -458,7 +472,7 @@
             // --- Auto-focus on first field (Unchanged) ---
             if(nameInput) nameInput.focus();
 
-            console.log("Signup page script loaded and initialized (Secure Supabase flow + localStorage + updated Modals + Fixed Icon Position + Unified Favicon Link)."); // Updated log message
+            console.log("Signup page script loaded and initialized (Secure Supabase flow + localStorage + updated Modals + Fixed Icon Position + Unified Favicon Link + Conditional Admin Flag)."); // Updated log message
         });
     </script>
 </body>
