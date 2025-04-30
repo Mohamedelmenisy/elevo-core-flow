@@ -351,6 +351,7 @@
             <p>What part of the course did you find most valuable or insightful?</p>
             <textarea placeholder="e.g., Learning about the GROW model, the section on team dynamics, the practical exercises..." class="editable-answer required-answer" data-question="feedback_q2"></textarea>
             <div class="button-group">
+                 <!-- Ensure onclick calls saveAnswer with the correct question ID -->
                 <button class="save-button" onclick="saveAnswer('feedback_q2')">Save</button>
                 <button class="delete-button" onclick="deleteAnswer('feedback_q2')">Delete</button>
                  <span class="error-message" id="error-feedback_q2"></span>
@@ -364,6 +365,7 @@
             <p>Was there any part of the course you found less helpful or clear? (Optional)</p>
             <textarea placeholder="Your honest feedback helps us improve..." class="editable-answer" data-question="feedback_q3"></textarea> <!-- Not required -->
             <div class="button-group">
+                 <!-- Ensure onclick calls saveAnswer with the correct question ID -->
                 <button class="save-button" onclick="saveAnswer('feedback_q3')">Save</button>
                 <button class="delete-button" onclick="deleteAnswer('feedback_q3')">Delete</button>
                  <span class="error-message" id="error-feedback_q3"></span> <!-- Still include for potential future validation -->
@@ -403,6 +405,7 @@
             <p>Do you have any suggestions for how this course could be improved? (Topics, examples, format, etc.)</p>
             <textarea placeholder="We appreciate your ideas!" class="editable-answer" data-question="feedback_q5"></textarea> <!-- Not required -->
             <div class="button-group">
+                 <!-- Ensure onclick calls saveAnswer with the correct question ID -->
                 <button class="save-button" onclick="saveAnswer('feedback_q5')">Save</button>
                 <button class="delete-button" onclick="deleteAnswer('feedback_q5')">Delete</button>
                  <span class="error-message" id="error-feedback_q5"></span>
@@ -449,7 +452,7 @@
         const localStorageKey = 'allUserAnswers_feedback'; // Unique key for this page (stores SAVED status)
         const SECTION_ID = 'feedback'; // Unique ID for progress tracking (on this page)
         const PAGE_NAME = 'feedback.html'; // Page name
-        const FEEDBACK_TABLE = 'feedback_responses'; // Name of the new Supabase table
+        const FEEDBACK_TABLE = 'feedback_responses'; // Name of the Supabase table where ALL feedback goes
 
         // --- Unified Keys ---
         const LOGGED_IN_KEY = 'isUserLoggedIn';
@@ -470,6 +473,7 @@
             - id (pk, auto-increment or uuid)
             - user_id (uuid, references auth.users.id) - IMPORTANT for RLS, CHECK NAME EXACTLY
             - email (text)
+            - name (text, nullable)                     <-- ADDED NAME COLUMN
             - question (text)
             - answer (text)
             - submitted_at (timestamp with time zone, default now())
@@ -546,7 +550,7 @@
                   else { console.error("REDIRECTION LOOP DETECTED."); document.body.innerHTML = '<p style="color: red; padding: 20px;">Login check failed repeatedly. Please log in again.</p>'; }
                  return;
              }
-             console.log(`%c${PAGE_NAME}: User validated (${currentUser.email}, ID: ${currentUser.id}). Initializing.`, "color: green;");
+             console.log(`%c${PAGE_NAME}: User validated (${currentUser.email}, ID: ${currentUser.id}, Name: ${currentUser.name}). Initializing.`, "color: green;"); // Added name to log
              displayUserInfo();
              loadUserAnswers(currentUser); // Load SAVED state from localStorage
              updateStickyProgressBar(); // Initial progress calculation based on loaded state
@@ -653,16 +657,20 @@
 
 
         // --- Actions (Save to DB, Delete unsaved) ---
-        // ***** START MODIFIED saveAnswer Function *****
+        // ***** START MODIFIED saveAnswer Function (Adds Name, Ensures Target Table) *****
         window.saveAnswer = async function(questionId) {
+             // Ensure Supabase client is available
              if (!supabase) { showGeneralWarningMessage('Database connection error. Cannot save.', true); return; }
+
+             // Ensure user is logged in and has necessary info
              const currentUser = getCurrentUser();
              if (!currentUser?.email || !currentUser.id) { showGeneralWarningMessage('Session expired. Please log in again.', true); setTimeout(logout, 3000); return; }
-             console.log(`Attempting to save answer for question: ${questionId} for user: ${currentUser.email} (ID: ${currentUser.id})`);
+             console.log(`Attempting to save answer for question: ${questionId} to table '${FEEDBACK_TABLE}' for user: ${currentUser.email} (ID: ${currentUser.id}, Name: ${currentUser.name})`);
 
+             // Get DOM elements for the specific question
              const container = document.getElementById(`question-container-${questionId}`);
              if (!container) { console.error("Save Error: Question container not found for", questionId); return; }
-             const field = container.querySelector(`.editable-answer[data-question="${questionId}"]`);
+             const field = container.querySelector(`.editable-answer[data-question="${questionId}"]`); // Could be radio or textarea
              const errorId = `error-${questionId}`;
              const statusId = `save-status-${questionId}`;
              const statusElement = document.getElementById(statusId);
@@ -671,53 +679,62 @@
              const deleteButton = buttonGroup?.querySelector('.delete-button');
              const radioOptionsContainer = container.querySelector('.rating-options');
 
+             // Basic check for essential elements
              if (!field || !buttonGroup || !saveButton || !deleteButton) { console.error(`Save Error: Required elements missing for ${questionId}.`); return; }
+
+             // Prevent saving if already saved (field is disabled)
              if (field.disabled) { console.warn(`Attempted save on already disabled field/group: ${questionId}.`); return; }
 
              let answer = null;
              let trimmedAnswer = null;
              let isValid = false;
              const isRequired = requiredQuestionIds.includes(questionId);
-             let questionText = `Feedback Question ID: ${questionId}`; // Define questionText outside try block, provide default
+             let questionText = `Feedback Question ID: ${questionId}`; // Default question text
 
-             hideMessages(statusId, errorId, field);
+             hideMessages(statusId, errorId, field); // Clear previous messages
 
-             // Validation logic remains the same
+             // --- Validate input based on type ---
              if (field.type === 'radio') {
                  const checkedRadio = container.querySelector(`input[type="radio"][data-question="${questionId}"]:checked`);
                  if (checkedRadio) {
                      answer = checkedRadio.value;
-                     trimmedAnswer = answer;
                      isValid = true;
                  } else if (isRequired) {
                      showError(errorId, null, 'Please select a rating.');
                      isValid = false;
-                 } else {
+                 } else { // Optional radio
                      isValid = true;
                      answer = null;
                  }
-             } else {
+             } else { // Textarea or other text-based inputs
                  answer = field.value;
                  trimmedAnswer = answer.trim();
                  if (isRequired && trimmedAnswer === '') {
                      showError(errorId, field, 'Please provide your feedback for this required question.');
                      isValid = false;
-                 } else if (!isRequired && trimmedAnswer === '') {
-                     answer = null;
+                 } else if (!isRequired && trimmedAnswer === '') { // Optional and empty
+                     answer = null; // Store null if optional and empty
                      isValid = true;
-                 } else {
-                     answer = trimmedAnswer;
+                 } else { // Required & filled, or Optional & filled
+                     answer = trimmedAnswer; // Store the trimmed answer
                      isValid = true;
                  }
              }
 
-             if (!isValid) { updateStickyProgressBar(); return; }
+             // If validation failed, stop here
+             if (!isValid) {
+                setButtonLoading(saveButton, false, saveButton.dataset.defaultText); // Reset button state if validation fails early
+                deleteButton.disabled = false;
+                updateStickyProgressBar();
+                return;
+            }
 
+             // --- Prepare for Supabase Call ---
              setButtonLoading(saveButton, true, 'Saving...', saveButton.dataset.defaultText);
              deleteButton.disabled = true;
 
              try {
-                 // Determine the question text (now questionText is defined in outer scope)
+                 // Get the actual question text from H3 or P tag
                  const h3 = container.querySelector('h3');
                  if (h3) {
                      questionText = h3.textContent.replace(/\s*\*$/g, '').trim();
@@ -728,87 +745,80 @@
 
                  const submissionTime = new Date().toISOString();
 
-                 // Prepare payload for Supabase
+                 // --- Construct the payload for Supabase ---
                  const feedbackPayload = {
-                     user_id: currentUser.id,
-                     email: currentUser.email,
-                     question: questionText,
-                     answer: answer,
-                     submitted_at: submissionTime
+                     user_id: currentUser.id,        // From logged-in user
+                     email: currentUser.email,       // From logged-in user
+                     name: currentUser.name || null, // <<<< ADDED: User's name (or null if not available)
+                     question: questionText,         // Determined question text
+                     answer: answer,                 // Validated answer (could be string or null)
+                     submitted_at: submissionTime    // Current timestamp
                  };
 
-                 console.log(`Inserting into ${FEEDBACK_TABLE}:`, JSON.stringify(feedbackPayload)); // Log the payload
+                 console.log(`Inserting into ${FEEDBACK_TABLE}:`, JSON.stringify(feedbackPayload));
 
-                 // ****** Use insert instead of upsert ******
+                 // --- Perform the INSERT operation into FEEDBACK_TABLE ---
                  const { data, error } = await supabase
-                     .from(FEEDBACK_TABLE)
-                     .insert([feedbackPayload]) // <--- USING INSERT
+                     .from(FEEDBACK_TABLE) // Ensure this targets the correct feedback table
+                     .insert([feedbackPayload])
                      .select();
 
+                 // --- Handle Supabase Response ---
                  if (error) {
                      // Handle duplicate key violation (code 23505) specifically for insert
                      if (error.code === '23505') {
-                         console.error(`Insert failed: Duplicate entry for user_id='${currentUser.id}' and question='${questionText}'. Error: ${error.message}`);
-                         // Show specific error to user
-                         showError(errorId, field.type === 'radio' ? null : field, `Feedback for this question already submitted.`);
-                         // *** Stop further execution on duplicate error ***
-                          setButtonLoading(saveButton, false, saveButton.dataset.defaultText); // Reset button
-                          deleteButton.disabled = false; // Enable delete button
+                         console.error(`Insert failed (Likely Duplicate): QID=${questionId}, UserID=${currentUser.id}. Error: ${error.message}`);
+                         showError(errorId, field.type === 'radio' ? null : field, `Feedback already submitted.`);
+                          // Stop further execution on duplicate error
+                          setButtonLoading(saveButton, false, saveButton.dataset.defaultText);
+                          deleteButton.disabled = false;
                           if (statusElement) statusElement.style.display = 'none';
-                          return; // <-- Important: Stop here
+                          return; // Stop here
                      } else {
-                         // Throw other errors to be caught by the catch block
-                         throw new Error(`Supabase insert error: ${error.message} (Code: ${error.code})`);
+                         // Throw other Supabase errors to be caught below
+                         throw new Error(`Supabase insert error (Code: ${error.code}): ${error.message}`);
                      }
                  }
 
-                 // --- Code below runs ONLY if insert was successful (no error or handled duplicate) ---
-                 console.log("Supabase insert successful for question:", questionId, "Result:", data); // Log success
+                 // --- Runs ONLY if Supabase insert was successful ---
+                 console.log(`Supabase insert successful for QID: ${questionId} into ${FEEDBACK_TABLE}. Result:`, data);
 
-                 // --- UI Updates on Success ---
+                 // --- Update UI on Success ---
                  if(field.type === 'radio') {
                      container.querySelectorAll(`input[type="radio"][data-question="${questionId}"]`).forEach(radio => radio.disabled = true);
                      if(radioOptionsContainer) radioOptionsContainer.classList.add('disabled');
                  } else {
-                     field.disabled = true;
+                     field.disabled = true; // Disable textarea/input
                  }
-                 field.classList.remove('required-field');
-                 buttonGroup.style.display = 'none';
+                 field.classList.remove('required-field'); // Remove validation border
+                 buttonGroup.style.display = 'none'; // Hide buttons
                  if (statusElement) {
                      statusElement.textContent = 'Saved ✅';
-                     statusElement.style.display = 'inline-block';
+                     statusElement.style.display = 'inline-block'; // Show saved status
                  }
 
-                 // Mark as saved in local storage
+                 // Mark as saved in local storage (store the actual answer value)
                  markAnswerAsSavedInStorage(currentUser.email, questionId, answer);
-                 updateStickyProgressBar();
+                 updateStickyProgressBar(); // Update progress bar
 
              } catch (error) {
-                 // Use questionId which is guaranteed to be defined here
-                 console.error(`Failed to save/insert answer for questionId: ${questionId}. Error:`, error);
-                 // Display a user-friendly error message
-                 showError(errorId, field.type === 'radio' ? null : field, `Save failed (Q:${questionId}). Check console or RLS.`);
+                 // --- Handle any error during the try block (validation, Supabase call, etc.) ---
+                 console.error(`Failed to save answer for QID: ${questionId}. Error:`, error);
+                 showError(errorId, field.type === 'radio' ? null : field, `Save failed (Q:${questionId}). Check console/RLS.`);
 
-                 // --- Revert UI on any Failure in the catch block ---
+                 // --- Revert UI to pre-saving state ---
                  if(field.type === 'radio') {
-                     container.querySelectorAll(`input[type="radio"][data-question="${questionId}"]`).forEach(radio => radio.disabled = false); // Re-enable radios
+                     container.querySelectorAll(`input[type="radio"][data-question="${questionId}"]`).forEach(radio => radio.disabled = false);
                      if(radioOptionsContainer) radioOptionsContainer.classList.remove('disabled');
                  } else {
                      field.disabled = false; // Re-enable text field
                  }
-
-                 // Reset buttons
                  setButtonLoading(saveButton, false, saveButton.dataset.defaultText || (field.type === 'radio' ? 'Save Rating' : 'Save'));
                  deleteButton.disabled = false;
-                  // Ensure delete button is visible
                   if (deleteButton.style.display !== 'inline-block') {
                       deleteButton.style.display = 'inline-block';
                   }
-                 // Hide status message
                  if (statusElement) statusElement.style.display = 'none';
-
-                 // Do NOT update progress bar on failure
-                 // updateStickyProgressBar(); // Maybe recalculate if needed? Generally no.
              }
          };
         // ***** END MODIFIED saveAnswer Function *****
