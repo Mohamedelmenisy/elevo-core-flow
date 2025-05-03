@@ -256,7 +256,7 @@
         const PAGE_NAME = 'index.html';
         const DEFAULT_SCORE = 10; // Assign score for completion
         const COMPLETION_STATUS = 'completed';
-        const IS_CORRECT_VALUE = true; // As requested, though 'null' might be more semantically correct for a goal
+        const IS_CORRECT_VALUE = true; // For this goal-setting question
 
         // Initialize Supabase Client
         try {
@@ -266,7 +266,7 @@
             } else { throw new Error("Supabase library not found."); }
         } catch (error) { console.error("CRITICAL ERROR initializing Supabase:", error); /* Consider user feedback */ }
 
-        // ***** ---> IMMEDIATE REDIRECTION LOGIC <--- ***** (Keep as is)
+        // ***** ---> IMMEDIATE REDIRECTION LOGIC <--- *****
          console.log("%cIndex Page: Running IMMEDIATE redirection check...", "color: purple; font-weight: bold;"); function quickCheckCurrentUser() { const data = localStorage.getItem(CURRENT_USER_KEY); return data && data.startsWith('{') && data.endsWith('}'); } const isLoggedIn_immediate = localStorage.getItem(LOGGED_IN_KEY) === 'true' && quickCheckCurrentUser(); const hasSignedUp_immediate = localStorage.getItem(SIGNUP_FLAG_KEY) === 'true'; const currentPage_immediate = window.location.pathname.split('/').pop() || 'index.html'; console.log(`Index Page IMMEDIATE Check: isLoggedIn=${isLoggedIn_immediate}, hasSignedUp=${hasSignedUp_immediate}, currentPage=${currentPage_immediate}`); if (!isLoggedIn_immediate && (currentPage_immediate === 'index.html' || currentPage_immediate === '')) { const targetUrl = hasSignedUp_immediate ? 'login.html' : 'signup.html'; console.error(`%cIndex Page IMMEDIATE Redirect: Not logged in. Redirecting to ${targetUrl}...`, "color: orange;"); window.location.replace(targetUrl); throw new Error("Redirecting user based on initial check."); } else if (isLoggedIn_immediate) { console.log("%cIndex Page IMMEDIATE Check: User IS logged in. Proceeding.", "color: green;"); } else { console.log(`%cIndex Page IMMEDIATE Check: Not logged in but not on index.html (${currentPage_immediate}). No redirect needed.`, "color: grey;"); }
 
 
@@ -310,7 +310,7 @@
                      console.error("Index DOMContentLoaded: Failsafe check - User data or ID missing! Redirecting.");
                      const failsafeTarget = localStorage.getItem(SIGNUP_FLAG_KEY) === 'true' ? 'login.html' : 'signup.html';
                      window.location.replace(failsafeTarget);
-                     return;
+                     return; // Stop further execution
                 }
 
                 console.log(`%cIndex DOMContentLoaded: User verified (${currentUser.email}, ID: ${currentUser.id}). Initializing page content.`, "color: green;");
@@ -330,27 +330,26 @@
         }
 
         // --- Core User Functions ---
-        function getCurrentUser() { /* ... keep same as previous good version ... */
+        function getCurrentUser() {
              try { const userData = localStorage.getItem(CURRENT_USER_KEY); if (!userData) return null; const user = JSON.parse(userData); if (user && typeof user === 'object' && user.email && user.id) { if (!user.name) user.name = user.email.split('@')[0]; return user; } else { console.warn("Stored user data is invalid or missing ID. Clearing."); localStorage.removeItem(CURRENT_USER_KEY); localStorage.removeItem(LOGGED_IN_KEY); return null; } } catch (e) { console.error("Error parsing current user data:", e); localStorage.removeItem(CURRENT_USER_KEY); localStorage.removeItem(LOGGED_IN_KEY); return null; }
         }
-        function saveCurrentUser(userObject) { /* ... keep original ... */ localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(userObject));}
-        function displayUserInfo(currentUser) { /* ... keep same as previous good version ... */
+        function saveCurrentUser(userObject) { localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(userObject));}
+        function displayUserInfo(currentUser) {
              try { let uN = 'Guest'; let uE = ''; if (currentUser) { uN = currentUser.name || currentUser.email.split('@')[0]; uE = currentUser.email || ''; } if (userNameDisplay) userNameDisplay.textContent = `Welcome, ${uN}`; if (userEmailDisplay) userEmailDisplay.textContent = uE; } catch (err) { console.error("Error in displayUserInfo:", err); }
         }
-        function logout() { /* ... keep same as previous good version, clearing relevant keys ... */
+        function logout() {
              try { localStorage.removeItem(LOGGED_IN_KEY); localStorage.removeItem(CURRENT_USER_KEY); localStorage.removeItem(INTRO_GOAL_COMPLETED_KEY); localStorage.removeItem(INTRO_GOAL_ANSWER_KEY); localStorage.removeItem(SIGNUP_FLAG_KEY); console.log("User logged out, relevant keys cleared."); window.location.href = 'login.html'; } catch (e) { console.error("Logout error:", e); window.location.href = 'login.html'; }
         }
 
         // --- Check Intro Goal Status ---
         function checkIntroGoalStatus() {
             try {
-                // **** THIS IS THE KEY LOGIC FOR YOUR REQUIREMENT ****
                 const isCompleted = localStorage.getItem(INTRO_GOAL_COMPLETED_KEY) === 'true';
                 const savedAnswer = localStorage.getItem(INTRO_GOAL_ANSWER_KEY);
 
                 if (isCompleted) {
                     // --- STATE: GOAL ALREADY COMPLETED ---
-                    console.log("Intro goal already completed.");
+                    console.log("Intro goal already completed (based on localStorage).");
                     if (goalAnswerInput && savedAnswer) {
                         goalAnswerInput.value = savedAnswer;
                         goalAnswerInput.disabled = true; // Disable input
@@ -398,51 +397,80 @@
 
         // --- Supabase Interaction Functions ---
 
-        // 1. Send data to 'assessments' table
+        // 1. Send data to 'assessments' table (USING UPSERT with MODIFIED onConflict)
+        /**
+         * Sends assessment data to the 'assessments' table using UPSERT.
+         * Attempts to insert a new record. If a conflict occurs based on the
+         * unique constraint specified in `onConflict` (TARGETING 'user_id, type'),
+         * it updates the existing record for that user and type instead.
+         *
+         * @param {object} assessmentPayload - The data object to be inserted or updated.
+         *                                     Must include user_id and type.
+         * @returns {Promise<boolean>} - True if the upsert operation was successful, false otherwise.
+         */
         async function sendAssessmentData(assessmentPayload) {
+            // Ensure Supabase client is available
             if (!supabase) {
-                console.error("Supabase client not initialized.");
+                console.error("Supabase client not initialized. Cannot send assessment data.");
                 showError("Database connection error. Submission failed. Please refresh or contact support.");
                 return false;
             }
-            console.log("Attempting to insert into 'assessments':", assessmentPayload);
+
+            // **** LOGGING THE TARGETED CONFLICT HANDLING ****
+            console.log("Attempting to UPSERT into 'assessments' based on user_id and type:", assessmentPayload);
+
             try {
                 const { data, error } = await supabase
                     .from('assessments')
-                    .insert([assessmentPayload])
-                    .select();
+                    .upsert([assessmentPayload], { // Pass payload as an array
+                        // *** THIS IS THE ONLY CHANGE IN THIS FUNCTION ***
+                        // Targeting the constraint likely named 'assessments_type_key'
+                        // Assuming it covers the combination of user_id and type
+                        onConflict: 'user_id, type'
+                    })
+                    .select(); // Optionally select the inserted/updated data
 
                 if (error) {
-                    console.error('%cSupabase Insert Error (assessments):', 'color: red;', error);
-                    showError(`Database submission failed (assessments): ${error.message}. Please try again.`);
+                    console.error('%cSupabase Upsert Error (assessments):', 'color: red;', error);
+                    showError(`Database submission failed (assessments): ${error.message}. Please try again or contact support if the issue persists.`);
                     return false;
                 }
-                console.log('%cSupabase Insert Success (assessments):', 'color: green;', data);
+
+                console.log('%cSupabase Upsert Success (assessments):', 'color: green;', data);
                 return true; // Indicate success
+
             } catch (networkError) {
-                console.error('%cNetwork/Other Error (assessments submission):', 'color: red;', networkError);
-                showError(`Network Error: ${networkError.message}. Please try submitting again later.`);
+                console.error('%cNetwork/Other Error (assessments upsert):', 'color: red;', networkError);
+                showError(`Network Error during submission: ${networkError.message}. Please check your connection and try again.`);
                 return false;
             }
         }
 
+
         // 2. Send data to 'user_progress' table (using UPSERT)
+        // (No changes needed in this function based on the requirement)
         async function updateUserProgressData(progressPayload) {
             if (!supabase) {
                 console.error("Supabase client not initialized.");
                 console.error("Cannot update user_progress, Supabase client missing.");
+                // Consider if showError should be called here too
                 return false;
             }
             console.log("Attempting to UPSERT into 'user_progress':", progressPayload);
             try {
                 const { data, error } = await supabase
                     .from('user_progress')
-                    .upsert(progressPayload, { onConflict: 'user_id, question_id' }) // Define conflict columns
+                    .upsert(progressPayload, {
+                        // Define conflict columns for user_progress
+                        // Assuming a unique record per user per question on this page/section
+                        onConflict: 'user_id, question_id' // Keep this as is for user_progress unless needed otherwise
+                     })
                     .select();
 
                 if (error) {
                     console.error('%cSupabase Upsert Error (user_progress):', 'color: red;', error);
                     console.error(`Failed to upsert user progress tracker: ${error.message}`);
+                    // Don't necessarily show this error to the user unless it's critical
                     return false; // Indicate progress update failure
                 }
                 console.log('%cSupabase Upsert Success (user_progress):', 'color: green;', data);
@@ -450,16 +478,18 @@
             } catch (networkError) {
                 console.error('%cNetwork/Other Error (user_progress upsert):', 'color: red;', networkError);
                 console.error(`Network error upserting user progress: ${networkError.message}`);
+                // Don't necessarily show this error to the user
                 return false;
             }
         }
 
 
         // --- Form Submit Handler ---
+        // (No changes needed in this function)
         async function handleGoalSubmit(event) {
             event.preventDefault();
             console.log("handleGoalSubmit: Starting...");
-            hideError();
+            hideError(); // Clear previous errors
 
             const currentUser = getCurrentUser();
             if (!currentUser || !currentUser.id || !currentUser.email) {
@@ -476,105 +506,124 @@
                 return;
             }
 
-            setButtonLoading(true, 'Submitting...');
+            setButtonLoading(true, 'Submitting...'); // Disable button and show loading text
 
             // Prepare data payloads
-            const submissionTime = new Date();
+            const submissionTime = new Date(); // Use consistent timestamp
+
+            // Payload for 'assessments' table
             const assessmentPayload = {
                 user_id: currentUser.id,
                 user_email: currentUser.email,
-                name: userName,
-                question_id: QUESTION_ID,
+                name: userName, // Add user's name
+                question_id: QUESTION_ID, // Use constant
                 answer: answer,
-                type: SECTION_TYPE, // 'intro'
-                submitted_at: submissionTime, // Explicitly set
-                is_correct: IS_CORRECT_VALUE, // true
-                score: DEFAULT_SCORE,          // 10
-                completion_status: COMPLETION_STATUS, // 'completed'
-                question_text: QUESTION_TEXT,
-                page: PAGE_NAME,              // 'index.html'
-                section_id: SECTION_ID,        // 'intro-goal'
-                goal_answer: answer            // Added goal_answer
+                type: SECTION_TYPE, // 'intro' - THIS IS USED BY onConflict NOW
+                submitted_at: submissionTime.toISOString(), // Use ISO string for consistency
+                is_correct: IS_CORRECT_VALUE, // Use constant
+                score: DEFAULT_SCORE,         // Use constant
+                completion_status: COMPLETION_STATUS, // Use constant
+                question_text: QUESTION_TEXT, // Use constant
+                page: PAGE_NAME,              // Use constant
+                section_id: SECTION_ID,       // Use constant
+                goal_answer: answer           // Include the goal answer specifically if needed
+                // Add other relevant fields if your table has them
             };
 
+            // Payload for 'user_progress' table
             const progressPayload = {
-                is_passed: true,
-                email: currentUser.email,
                 user_id: currentUser.id,
-                progress_percentage: 100,     // Corrected key name
-                section_type: SECTION_TYPE,    // 'intro'
-                section_id: SECTION_ID,        // 'intro-goal'
-                section_title: SECTION_TITLE,  // 'Introduction Goal Setting'
-                question_id: QUESTION_ID,
-                question_text: QUESTION_TEXT,  // Added missing field
-                page: PAGE_NAME,               // Added missing field
-                score: DEFAULT_SCORE,
-                status: COMPLETION_STATUS,     // 'completed'
-                submitted_at: submissionTime,
-                updated_at: submissionTime
+                email: currentUser.email, // Ensure email is included if needed by constraint/trigger
+                question_id: QUESTION_ID, // Use constant
+                is_passed: true,          // Since it's a goal, mark as passed on completion
+                progress_percentage: 100, // 100% completion for this step
+                section_type: SECTION_TYPE,    // Use constant
+                section_id: SECTION_ID,        // Use constant
+                section_title: SECTION_TITLE,  // Use constant
+                question_text: QUESTION_TEXT,  // Use constant
+                page: PAGE_NAME,               // Use constant
+                score: DEFAULT_SCORE,          // Use constant
+                status: COMPLETION_STATUS,     // Use constant
+                submitted_at: submissionTime.toISOString(), // Match assessments timestamp
+                updated_at: submissionTime.toISOString()   // Use ISO string
+                // Add other relevant fields if your table has them
             };
 
 
             try {
-                // Step 1: Submit to assessments table
+                // Step 1: Submit to assessments table (using UPSERT with corrected onConflict)
                 const assessmentSuccess = await sendAssessmentData(assessmentPayload);
 
                 if (assessmentSuccess) {
-                    console.log("Assessment data submitted successfully.");
+                    console.log("Assessment data upserted successfully.");
 
-                    // Step 2: Submit/Update user_progress table (best effort)
+                    // Step 2: Submit/Update user_progress table (best effort, using UPSERT)
                     const progressSuccess = await updateUserProgressData(progressPayload);
                     if (!progressSuccess) {
-                         console.warn("User progress upsert failed, but assessment was saved. Proceeding with UI updates.");
+                         console.warn("User progress upsert failed, but assessment was saved/updated. Proceeding with UI updates.");
+                         // Decide if you need to inform the user or just log this backend issue.
+                    } else {
+                         console.log("User progress data upserted successfully.");
                     }
 
-                    // Step 3: Update Local Storage (only after DB success)
+                    // Step 3: Update Local Storage (only after DB success/update)
                     localStorage.setItem(INTRO_GOAL_COMPLETED_KEY, 'true');
                     localStorage.setItem(INTRO_GOAL_ANSWER_KEY, answer);
 
                     // Step 4: UI Updates
-                    goalAnswerInput.disabled = true;
+                    if (goalAnswerInput) goalAnswerInput.disabled = true;
                     if (introQuestionSection) introQuestionSection.style.opacity = '0.8';
-                    submitGoalButton.style.display = 'none'; // Hide submit button
+                    if (submitGoalButton) submitGoalButton.style.display = 'none'; // Hide submit button
                     if (lockPromptText) lockPromptText.classList.add('hidden'); // Smoothly hide prompt
 
-                    // Show Progress Bar (now that it's submitted)
-                    goalProgressContainer.style.display = 'block';
-                    requestAnimationFrame(() => {
-                        goalProgressBar.style.width = '100%';
-                        goalProgressText.textContent = '100%';
-                    });
+                    // Show Progress Bar animation
+                    if (goalProgressContainer && goalProgressBar && goalProgressText) {
+                        goalProgressContainer.style.display = 'block';
+                        // Use requestAnimationFrame for smoother visual updates
+                        requestAnimationFrame(() => {
+                            goalProgressBar.style.width = '100%';
+                            goalProgressText.textContent = '100%';
+                        });
+                    }
 
 
                     // Show temporary success message
-                    successMessageArea.classList.add('visible');
+                    if (successMessageArea) {
+                        successMessageArea.textContent = 'Excellent! Your goal has been submitted successfully.'; // Reset text if needed
+                         successMessageArea.classList.add('visible');
+                    }
 
                     // Hide success message & show next steps after delay
                     setTimeout(() => {
-                        successMessageArea.classList.remove('visible');
-                        scrollIndicator.style.display = 'block';
-                        requestAnimationFrame(() => {
-                            scrollIndicator.style.opacity = '1';
-                        });
+                        if (successMessageArea) successMessageArea.classList.remove('visible');
+                        if (scrollIndicator) {
+                             scrollIndicator.style.display = 'block';
+                            requestAnimationFrame(() => {
+                                scrollIndicator.style.opacity = '1';
+                            });
+                        }
                         unlockStartQuiz();
-                        startQuizSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        if (startQuizSection) {
+                            startQuizSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        }
                     }, 2000); // 2 seconds delay
 
                 } else {
                     // Error already shown by sendAssessmentData
-                    console.warn("Assessment submission failed. Button will be re-enabled.");
-                    setButtonLoading(false); // Re-enable button only on assessment failure
+                    console.warn("Assessment upsert failed. Button will be re-enabled.");
+                    setButtonLoading(false); // Re-enable button ONLY on assessment failure
                 }
 
             } catch (err) {
-                // Catch unexpected errors in the flow
+                // Catch unexpected errors in the overall submit flow
                 console.error("CRITICAL Error in handleGoalSubmit logic:", err);
-                showError(`An unexpected error occurred: ${err.message}. Please try again.`);
-                setButtonLoading(false); // Re-enable on unexpected error
+                showError(`An unexpected error occurred during submission: ${err.message}. Please try again.`);
+                setButtonLoading(false); // Re-enable button on unexpected error
             }
         }
 
         // --- UI Control Functions ---
+        // (No changes needed in these functions)
         function lockStartQuiz() {
              if (startQuizButton) {
                 startQuizButton.classList.add('locked');
@@ -595,11 +644,18 @@
              }
         }
 
-        function setButtonLoading(isLoading, text = 'Submit Your Answer') {
+        function setButtonLoading(isLoading, loadingText = 'Submitting...', defaultText = 'Submit Your Answer') {
             if (!submitGoalButton) return;
             submitGoalButton.disabled = isLoading;
-            submitGoalButton.textContent = isLoading ? 'Submitting...' : text;
+            submitGoalButton.textContent = isLoading ? loadingText : defaultText;
+             // Optional: Add/remove a loading class for styling
+             if (isLoading) {
+                 submitGoalButton.classList.add('button-loading'); // Add a class if you have specific loading styles
+             } else {
+                 submitGoalButton.classList.remove('button-loading');
+             }
         }
+
 
         function showError(message, field) {
             try {
@@ -607,39 +663,25 @@
                     goalErrorMessage.textContent = message;
                     goalErrorMessage.style.display = "block";
                 }
-                if (field && !field.disabled) { // Only focus if not disabled
+                if (field && !field.disabled) { // Only style/focus if not disabled
                     field.classList.add('invalid-field-style');
-                    field.focus();
+                    // Avoid focusing if multiple errors could occur quickly
+                    // field.focus();
                 }
                 console.error("Displayed error to user:", message);
-            } catch (err) { console.error("Error in showError:", err); }
+            } catch (err) { console.error("Error in showError utility:", err); }
         }
 
         function hideError() {
             try {
                 if (goalErrorMessage) goalErrorMessage.style.display = "none";
                 if (goalAnswerInput) goalAnswerInput.classList.remove('invalid-field-style');
-            } catch (err) { console.error("Error in hideError:", err); }
+            } catch (err) { console.error("Error in hideError utility:", err); }
         }
 
     </script>
 
-    <!-- 
-        REMOVED the following two redundant script blocks as they conflict with the main script's logic
-        and use incorrect localStorage keys/element IDs. The main script handles the state correctly.
-    -->
-    <!--
-    <script>
-        document.addEventListener('DOMContentLoaded', function () {
-            // ... redundant code ...
-        });
-    </script>
-    <script>
-        document.addEventListener('DOMContentLoaded', function () {
-            // ... redundant code ...
-        });
-    </script>
-    -->
+    <!-- Removed redundant script blocks -->
 
 </body>
 </html>
