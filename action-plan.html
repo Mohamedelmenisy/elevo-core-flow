@@ -65,7 +65,7 @@
             padding: 30px;
             box-shadow: 0 0 10px rgba(0,0,0,0.1);
             border-radius: 8px;
-            position: relative;
+            position: relative; /* Needed for positioning inline warning */
         }
         .highlight-section { background-color: rgba(230, 126, 34, 0.07); padding: 20px; border-left: 5px solid #e67e22; border-radius: 6px; margin: 25px 0; }
         .image-container { text-align: center; margin: 30px 0; }
@@ -110,6 +110,12 @@
         .required-field { border: 2px solid #e74c3c !important; background-color: #fff2f1 !important; box-shadow: none !important; }
         .required-star { color: #e74c3c; font-weight: bold; margin-left: 2px; }
         .question-progress-container { display: none !important; } /* Hide old progress bars */
+         /* Inline Warning Message Style */
+         #generalInlineWarningMessage {
+            color: #e74c3c; font-weight: 500; margin-top: 15px; margin-bottom: 0; /* Adjusted margin */
+            text-align: center; display: none;
+            padding: 10px; background-color: #fff2f1; border: 1px solid #e74c3c; border-radius: 4px;
+        }
 
         /* --- Responsive Adjustments --- */
         @media (max-width: 768px) {
@@ -136,6 +142,7 @@
              .completion-message { padding: 20px; }
              .completion-message h3 { font-size: 1.2em; }
              .answer-buttons { justify-content: flex-start; margin-top: 8px; }
+             #generalInlineWarningMessage { font-size: 13px; } /* Adjust inline warning size */
         }
         @media (max-width: 480px) {
              #sticky-progress-container { top: 48px; }
@@ -148,6 +155,7 @@
              h1 { font-size: 20px; } h2 { font-size: 1.3em; } h3 { font-size: 1.1em; }
              .container { padding: 15px; margin: 10px auto 15px; }
              .button-group { gap: 8px; }
+              #generalInlineWarningMessage { font-size: 12px; } /* Adjust inline warning size */
          }
     </style>
 </head>
@@ -167,7 +175,7 @@
         <a href="coaching-team.html">Team Coaching</a>
         <a href="coaching-yourself.html">Self Coaching</a>
         <a href="action-plan.html" class="active">Action Plan</a>
-        <a href="final-assessment.html">Assessment</a> <!-- <<< MODIFIED LINK HERE -->
+        <a href="ass.html">Assessment</a> <!-- Corrected Link -->
     </nav>
 
     <!-- Sticky Progress Bar -->
@@ -180,7 +188,7 @@
     </div>
 
     <h1>Your Coaching Action Plan</h1>
-    <div class="floating-warning" id="generalWarningMessage"></div> <!-- General warning moved outside container -->
+    <div class="floating-warning" id="generalWarningMessage"></div> <!-- General floating warning -->
 
     <div class="container"> <!-- Content starts here -->
 
@@ -493,7 +501,7 @@
         <div class="completion-message" id="completionMessage"> <h3>Congratulations on Completing Your Coaching Action Plan!</h3> <p>Thank you for taking the time to thoughtfully complete this action plan. You've taken important steps toward becoming a more effective coach for your team and yourself.</p> <p>Remember to review your plan regularly (starting on the date you set above!) and adjust as needed. Consistent application of these strategies will help you see the best results.</p> <p>Good luck with your coaching journey!</p> </div>
 
          <!-- General Warning Placeholder - Content added by JS -->
-         <div class="warning-message" id="generalInlineWarningMessage" style="color: #e74c3c; font-weight: 500; margin-top: 15px; text-align: center; display: none;"></div>
+         <div id="generalInlineWarningMessage"></div> <!-- Removed inline styles, added CSS rule -->
 
         <!-- Navigation Buttons -->
         <div class="navigation-buttons"> <a href="coaching-yourself.html" class="button back" id="backButton">← Back to Self Coaching</a> <button type="button" class="button" id="completeButton">Mark Action Plan as Complete</button> </div>
@@ -514,15 +522,18 @@
         const LOGGED_IN_KEY = 'isUserLoggedIn';
         const CURRENT_USER_KEY = 'currentUser';
 
-        // --- Required Question IDs for Progress Bar ---
-        const requiredQuestionIds = [
-            'excitement', 'personal-gain', 'team-benefits',
-            'habits-to-change', 'blockers', 'first-step', 'support-needed', 'discussion-plan', 'resources',
-            'listening-strength', 'listening-tip1', 'listening-tip2', 'assumption-plan', 'question1', 'question2', 'emotion-challenge', 'own-mood', 'improvement-plan', 'trust-building', 'strengths-application',
-            'model-choice', 'model-reason', 'preparation', 'best-interests', 'integrity', 'tip1', 'tip2',
-            'shop-floor', 'intervention', 'team-group', 'team-issue', 'personality-test', 'strengths-appreciation', 'charter-steps', 'conflict-resolution', 'positive-model', 'practice-model',
-            'swot-highlights', 'swot-actions', 'grow-goal', 'first-grow-action', 'review-date', 'self-changes', 'team-changes'
-        ];
+        // --- Required Question IDs ---
+        // Regenerated to ensure accuracy by querying the DOM (can be kept static if preferred)
+        let requiredQuestionIds = [];
+         function populateRequiredIds() {
+            requiredQuestionIds = [];
+            document.querySelectorAll('.required-answer[data-question]').forEach(field => {
+                if (field.dataset.question) {
+                    requiredQuestionIds.push(field.dataset.question);
+                }
+            });
+             console.log("Required Question IDs populated:", requiredQuestionIds.length, requiredQuestionIds);
+        }
 
         // Initialize Supabase Client
         try {
@@ -536,6 +547,7 @@
         // --- Initialization ---
         document.addEventListener('DOMContentLoaded', function() {
              console.log(`%c${PAGE_NAME}: DOMContentLoaded event fired.`, "color: green;");
+             populateRequiredIds(); // Populate the required IDs based on current HTML
              if (!supabase) {
                  console.error(`Supabase client failed to initialize on ${PAGE_NAME}.`);
                  showGeneralWarningMessage('Database connection failed. Progress might not save correctly.', true);
@@ -561,7 +573,7 @@
         function getCurrentUser() { try { const d = localStorage.getItem(CURRENT_USER_KEY); if (!d) return null; const p = JSON.parse(d); if (p && typeof p === 'object' && p.email && p.name && p.id) { if (typeof p.progress !== 'object' || p.progress === null) p.progress = {}; return p; } else { localStorage.removeItem(CURRENT_USER_KEY); localStorage.removeItem(LOGGED_IN_KEY); return null; } } catch (e) { console.error("GUC Error:", e); localStorage.removeItem(CURRENT_USER_KEY); localStorage.removeItem(LOGGED_IN_KEY); return null; } }
         function saveCurrentUser(userObject) { try { if (!userObject || typeof userObject !== 'object') throw new Error("Invalid user object"); localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(userObject)); } catch (error) { console.error("SCU Error:", error); } }
         function displayUserInfo() { const u=getCurrentUser(); if(u){document.getElementById('userName').textContent=`Welcome, ${u.name || u.email.split('@')[0]}`; document.getElementById('userEmail').textContent=u.email;}else{console.warn("DIU: No user");}}
-        function logout() { const u=getCurrentUser(); const e=u?u.email:null; localStorage.removeItem(LOGGED_IN_KEY); localStorage.removeItem(CURRENT_USER_KEY); if(e){const k=`${localStorageKey}_completed_${e}`; localStorage.removeItem(k); console.log(`Removed completion key: ${k}`);} window.location.href = 'login.html';}
+        function logout() { const u=getCurrentUser(); const e=u?u.email:null; localStorage.removeItem(LOGGED_IN_KEY); localStorage.removeItem(CURRENT_USER_KEY); if(e){const k=`${localStorageKey}_completed_${e}`; localStorage.removeItem(k); console.log(`Removed completion key: ${k}`);} localStorage.removeItem(localStorageKey); /* Also clear page answers */ window.location.href = 'login.html';}
         function highlightActiveNav() { const cP=window.location.pathname.split('/').pop()||PAGE_NAME; document.querySelectorAll('.nav-tab a').forEach(l=>{const lP=(l.getAttribute('href')||'').split('/').pop(); l.classList.toggle('active',lP===cP);}); }
 
 
@@ -579,14 +591,18 @@
             // updateStickyProgressBar() called after this in DOMContentLoaded
         }
 
-        // Modified loadFieldState for 'Save Once'
         function loadFieldState(field, questionId, userAnswers) {
-            if (!field) return;
+            if (!field || !questionId) return;
             const errorId = `error-${questionId}`;
             const statusId = `save-status-${questionId}`;
             const statusElement = document.getElementById(statusId);
-            const buttonContainer = field.closest('li, .question-box') || field.parentElement;
-            const buttonGroup = buttonContainer?.querySelector('.answer-buttons');
+            // Use robust button finding from saveAnswer logic
+            const container = field.closest('li') || field.closest('.question-box');
+            let buttonGroup = null;
+            if (container) { buttonGroup = container.querySelector('.answer-buttons'); }
+            if (!buttonGroup) { buttonGroup = field.nextElementSibling?.classList.contains('answer-buttons') ? field.nextElementSibling : null; }
+            if (!buttonGroup) { buttonGroup = Array.from(field.parentElement.children).find(el => el.classList.contains('answer-buttons')); }
+
             const saveButton = buttonGroup?.querySelector('.save-button');
             const deleteButton = buttonGroup?.querySelector('.delete-button');
 
@@ -597,23 +613,33 @@
                 if (buttonGroup) buttonGroup.style.display = 'none';
                 if (statusElement) { statusElement.textContent = 'Saved ✅'; statusElement.style.display = 'inline-block'; statusElement.classList.remove('deleted'); statusElement.style.color = '#27ae60'; }
             } else {
-                 field.value = (field.type === 'date') ? '' : ''; field.disabled = false; field.classList.remove('required-field');
-                 if (buttonGroup) { buttonGroup.style.display = 'flex'; if (saveButton) { saveButton.disabled = false; saveButton.textContent = 'Save'; } if (deleteButton) { deleteButton.disabled = false; deleteButton.style.display = 'inline-block'; } }
+                 field.value = (field.type === 'date' || field.tagName === 'SELECT') ? '' : ''; // Clear date/select if empty
+                 field.disabled = false; field.classList.remove('required-field');
+                 if (buttonGroup) {
+                      buttonGroup.style.display = 'flex';
+                      if (saveButton) { saveButton.disabled = false; saveButton.textContent = 'Save'; }
+                      if (deleteButton) { deleteButton.disabled = false; deleteButton.style.display = 'inline-block'; }
+                 }
                  if (statusElement) statusElement.style.display = 'none';
             }
         }
 
-        function saveAnswerToStorage(userEmail, questionId, answer) { if(!userEmail) return false; let a={}; try{const d=localStorage.getItem(localStorageKey); if(d)a=JSON.parse(d)||{};}catch(e){a={};} if(!a[userEmail])a[userEmail]={}; a[userEmail][questionId]=answer; try{localStorage.setItem(localStorageKey,JSON.stringify(a)); return true;}catch(e){console.error("AP Save Err:",e);return false;} }
-        function deleteAnswerFromStorage(userEmail, questionId) { if(!userEmail) return false; let a={}; try{const d=localStorage.getItem(localStorageKey); if(d)a=JSON.parse(d)||{}; else return false;}catch(e){return false;} let u=false; if(a[userEmail]?.[questionId]!==undefined){delete a[userEmail][questionId]; u=true; if(Object.keys(a[userEmail]).length===0)delete a[userEmail];} if(u){try{localStorage.setItem(localStorageKey,JSON.stringify(a)); return true;}catch(e){return false;}} return false;}
+        function saveAnswerToStorage(userEmail, questionId, answer) { if(!userEmail || !questionId) return false; let a={}; try{const d=localStorage.getItem(localStorageKey); if(d)a=JSON.parse(d)||{};}catch(e){a={};} if(!a[userEmail])a[userEmail]={}; a[userEmail][questionId]=answer; try{localStorage.setItem(localStorageKey,JSON.stringify(a)); return true;}catch(e){console.error("AP Save Err:",e);return false;} }
+        function deleteAnswerFromStorage(userEmail, questionId) { if(!userEmail || !questionId) return false; let a={}; try{const d=localStorage.getItem(localStorageKey); if(d)a=JSON.parse(d)||{}; else return false;}catch(e){return false;} let u=false; if(a[userEmail]?.[questionId]!==undefined){delete a[userEmail][questionId]; u=true; if(Object.keys(a[userEmail]).length===0)delete a[userEmail];} if(u){try{localStorage.setItem(localStorageKey,JSON.stringify(a)); return true;}catch(e){return false;}} return false;}
 
         // --- Sticky Progress Bar Function ---
         function updateStickyProgressBar() {
             const currentUser = getCurrentUser(); if (!currentUser?.email) return;
             let allAnswers = {}; try { const d = localStorage.getItem(localStorageKey); if (d) allAnswers = JSON.parse(d) || {}; } catch (e) { console.error("Progress Bar LS Error:", e); return; }
             const userAnswers = allAnswers[currentUser.email] || {};
-            const totalRequired = requiredQuestionIds.length; if (totalRequired === 0) return;
+            const totalRequired = requiredQuestionIds.length; if (totalRequired === 0) { console.warn("Progress Bar: No required fields found!"); return; } // Added check
             let savedRequiredCount = 0;
-            requiredQuestionIds.forEach(qId => { if (userAnswers[qId] !== undefined && userAnswers[qId] !== null && String(userAnswers[qId]).trim() !== '') { savedRequiredCount++; } });
+            requiredQuestionIds.forEach(qId => {
+                // Check if answer exists and is not just whitespace
+                 if (userAnswers[qId] !== undefined && userAnswers[qId] !== null && String(userAnswers[qId]).trim() !== '') {
+                     savedRequiredCount++;
+                 }
+            });
             const percentage = Math.round((savedRequiredCount / totalRequired) * 100);
             const barElement = document.getElementById('sticky-progress-bar'); const textElement = document.getElementById('sticky-progress-text');
             if (barElement && textElement) { barElement.style.width = `${percentage}%`; textElement.textContent = `Progress: ${percentage}%`; }
@@ -625,44 +651,124 @@
         function setupEventListeners(currentUser) {
             if (!currentUser?.email) return;
             document.querySelectorAll('.editable-answer').forEach(f=>{
-                const eT=(f.tagName==='TEXTAREA'||f.type==='text'||f.type==='date')?'input':'change';
+                 const eT=(f.tagName==='TEXTAREA'||f.type==='text'||f.type==='date' || f.tagName === 'SELECT')?'input':'change'; // Use 'input' for most, 'change' for others
                 f.addEventListener(eT, function(){
                     const qId=this.dataset.question; if(!qId) return;
-                    hideError(`error-${qId}`); if (this.value.trim() !== '') this.classList.remove('required-field');
-                    if (!this.disabled) { const buttonGroup = this.closest('li, .question-box')?.querySelector('.answer-buttons'); const saveButton = buttonGroup?.querySelector('.save-button'); if(saveButton) saveButton.disabled = false; }
+                    hideError(`error-${qId}`); if (String(this.value).trim() !== '') this.classList.remove('required-field'); // Use String() for robustness
+                    if (!this.disabled) {
+                        // Use robust button finding
+                         const container = this.closest('li') || this.closest('.question-box');
+                         let buttonGroup = null;
+                         if (container) { buttonGroup = container.querySelector('.answer-buttons'); }
+                         if (!buttonGroup) { buttonGroup = this.nextElementSibling?.classList.contains('answer-buttons') ? this.nextElementSibling : null; }
+                         if (!buttonGroup) { buttonGroup = Array.from(this.parentElement.children).find(el => el.classList.contains('answer-buttons')); }
+                         const saveButton = buttonGroup?.querySelector('.save-button');
+                         if(saveButton) saveButton.disabled = false;
+                     }
                 });
             });
             const cB=document.getElementById('completeButton'); if(cB) { cB.addEventListener('click',()=>handleCompleteButtonClick(currentUser.email)); } else { console.warn("Complete button not found."); }
          }
-        function handleCompleteButtonClick(userEmail) { if (!userEmail) { alert("Session error."); logout(); return; } if (!validateAllAnswers(true)) { showGeneralWarningMessage(); console.log("Validation failed."); } else { console.log("Validation passed."); markPlanAsComplete(userEmail); } }
+
+        function handleCompleteButtonClick(userEmail) {
+            if (!userEmail) { alert("Session error."); logout(); return; }
+            if (!validateAllAnswers(true)) { // Pass true to show errors visually
+                 console.log("Validation failed on Complete button click.");
+                 // Warning messages (floating and inline) are shown inside validateAllAnswers
+             } else {
+                 console.log("Validation passed on Complete button click.");
+                 markPlanAsComplete(userEmail);
+             }
+        }
+
 
         // --- UI Feedback & Validation ---
         function validateAllAnswers(showErrors = false) {
-            let allValid=true; let firstInvalidField=null; console.log("AP: Validating all answers...");
-            const generalWarningDiv = document.getElementById('generalInlineWarningMessage'); if(generalWarningDiv) generalWarningDiv.style.display = 'none';
-            hideWarningMessage();
+            let allValid = true;
+            let firstInvalidField = null;
+            console.log(`%cAP: Validating all answers (Show Errors: ${showErrors})...`, "color: orange;");
+            const generalWarningDiv = document.getElementById('generalInlineWarningMessage');
+            if (generalWarningDiv) generalWarningDiv.style.display = 'none'; // Hide inline warning first
+            hideGeneralWarningMessage(); // Hide floating warning first
 
             requiredQuestionIds.forEach(qId => {
-                const field = document.querySelector(`[data-question="${qId}"]`);
+                const field = document.querySelector(`.required-answer[data-question="${qId}"]`);
                 if (field) {
-                    const eId=`error-${qId}`; hideError(eId); field.classList.remove('required-field');
+                    const eId = `error-${qId}`;
+                    hideError(eId); field.classList.remove('required-field'); // Clear previous errors
+
+                    // Check if the field is active (not disabled) and its trimmed value is empty
                     if (!field.disabled && String(field.value).trim() === '') {
-                         allValid = false; if (!firstInvalidField) firstInvalidField = field;
-                         if (showErrors) { field.classList.add('required-field'); showError(eId, null, 'Required.'); }
-                     }
-                } else { console.warn(`Required field ${qId} not found!`); allValid = false; }
+                        allValid = false;
+                        console.log(`%cValidation FAIL: Field [${qId}] is active and empty.`, "color: red;");
+                        if (!firstInvalidField) firstInvalidField = field; // Track the first error field
+                        if (showErrors) {
+                            field.classList.add('required-field');
+                            showError(eId, null, 'Required.'); // Show specific error message
+                        }
+                    } else if (field.disabled) {
+                        // Optional: Double-check local storage for saved-but-empty state?
+                        // This adds complexity but ensures integrity if UI state somehow differs from stored data.
+                        // const currentUser = getCurrentUser();
+                        // const userAnswers = currentUser ? JSON.parse(localStorage.getItem(localStorageKey) || '{}')[currentUser.email] : {};
+                        // if (!userAnswers?.[qId]?.trim()) {
+                        //     allValid = false; // Saved but effectively empty
+                        //     console.log(`%cValidation WARN: Field [${qId}] is saved but empty in storage.`, "color: #cc8800;");
+                        //     if (showErrors) { showError(eId, null, 'Saved answer is empty.'); }
+                        //     // Note: We usually trust the disabled state set upon successful save.
+                        // }
+                    }
+                } else {
+                    console.warn(`Validation FAIL: Required field with data-question="${qId}" not found in DOM!`);
+                    allValid = false; // Cannot validate if field is missing
+                }
             });
 
-            if(!allValid && showErrors && firstInvalidField){ firstInvalidField.scrollIntoView({behavior:'smooth',block:'center'}); setTimeout(()=>{ try{ firstInvalidField.focus({preventScroll:true}); } catch(e){} }, 400); showGeneralWarningMessage(); }
-             else if (!allValid && showErrors) { showGeneralWarningMessage(); if (generalWarningDiv) { generalWarningDiv.textContent = 'Please scroll up and complete all required fields marked with *.'; generalWarningDiv.style.display = 'block'; } }
-            console.log("AP Validation result:", allValid); return allValid;
+            // Handle scrolling and warning messages
+            if (!allValid && showErrors) {
+                 showGeneralWarningMessage(); // Show floating warning
+                 if (generalWarningDiv) { // Show inline warning
+                    generalWarningDiv.textContent = 'Please scroll up and complete all required fields marked with *.';
+                    generalWarningDiv.style.display = 'block';
+                 }
+                 if (firstInvalidField) {
+                    console.log(`%cScrolling to first invalid field: [${firstInvalidField.dataset.question}]`, "color: red;");
+                    firstInvalidField.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    // Try focusing after a short delay for scrolling
+                    setTimeout(() => {
+                        try {
+                            firstInvalidField.focus({ preventScroll: true });
+                        } catch (e) {
+                            console.warn(`Could not focus on field [${firstInvalidField.dataset.question}]:`, e);
+                        }
+                    }, 400);
+                } else {
+                     console.log("%cValidation failed, but no specific invalid field identified to focus.", "color: red;");
+                     // Optionally scroll to the top or the inline warning message
+                     if (generalWarningDiv) {
+                         generalWarningDiv.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                     }
+                }
+            } else if (allValid) {
+                hideGeneralWarningMessage(); // Hide floating warning if validation passed
+                 if (generalWarningDiv) generalWarningDiv.style.display = 'none'; // Hide inline warning
+            }
+
+            console.log(`%cAP Validation result: ${allValid}`, allValid ? "color: green;" : "color: red;");
+            return allValid;
         }
 
+        // showGeneralWarningMessage remains mostly the same, ensure it's called correctly
         function showGeneralWarningMessage(message = 'Action Required: Please complete all required fields marked with *', sticky = false) { const w=document.getElementById('generalWarningMessage'); if(!w) return; w.innerHTML = `<strong>${message.includes(':') ? message.split(':')[0] : 'Warning'}:</strong> ${message.includes(':') ? message.split(':')[1].trim() : message}`; w.style.animation='none'; void w.offsetWidth; w.style.display='block'; w.style.animation='slideDownFadeInWarn 0.4s ease-out'; clearTimeout(w.timer); if (!sticky) { w.timer=setTimeout(()=>{ w.style.animation='fadeOutUpWarn 0.5s ease-out forwards'; setTimeout(()=>{ if(w.style.animationName === 'fadeOutUpWarn'){w.style.display='none';w.style.animation='';} }, 500); }, 4000); } }
+        // hideGeneralWarningMessage remains the same
         function hideGeneralWarningMessage() { const w=document.getElementById('generalWarningMessage'); if(w && w.style.display !== 'none'){ w.style.animation='fadeOutUpWarn 0.5s ease-out forwards'; setTimeout(()=>{ if(w.style.animationName === 'fadeOutUpWarn'){w.style.display='none';w.style.animation='';} }, 500); } }
-        function showError(errorId, fieldToMark, message = 'Required.') { const e=document.getElementById(errorId); if(!e) return; e.textContent=message; e.style.color='#e74c3c'; e.style.display='block'; if(fieldToMark) fieldToMark.classList.add('required-field');}
+        // showError remains the same
+        function showError(errorId, fieldToMark, message = 'Required.') { const e=document.getElementById(errorId); if(!e) return; e.textContent=message; e.style.color='#e74c3c'; e.style.display='block'; if(fieldToMark && !fieldToMark.disabled) fieldToMark.classList.add('required-field');} // Only mark if active
+        // hideError remains the same
         function hideError(errorId) { const e=document.getElementById(errorId); if(e){e.style.display='none'; e.textContent='';}}
+        // hideMessages remains the same
         function hideMessages(statusId, errorId, field) { hideError(errorId); const s = statusId ? document.getElementById(statusId) : null; if(s)s.style.display='none'; if (field) field.classList.remove('required-field'); }
+
 
         // --- Actions (Save, Delete - 'Save Once' Logic) ---
         window.saveAnswer = async function(questionId) {
@@ -670,65 +776,252 @@
             const currentUser = getCurrentUser(); if (!currentUser?.email || !currentUser.id) { alert('Session expired.'); logout(); return; }
             const field = document.querySelector(`[data-question="${questionId}"]`); if (!field) { console.error("Save Error: Field missing for", questionId); return; }
             const errorId = `error-${questionId}`; const statusId = `save-status-${questionId}`; const statusElement = document.getElementById(statusId);
-            // Refined Button Finding
-            const container = field.closest('li, .question-box'); let buttonGroup = container?.querySelector('.answer-buttons'); if (!buttonGroup) buttonGroup = field.parentElement?.querySelector('.answer-buttons'); if (!buttonGroup && field.nextElementSibling?.classList.contains('answer-buttons')) buttonGroup = field.nextElementSibling; if (!buttonGroup) buttonGroup = Array.from(field.parentElement.children).find(el => el.classList.contains('answer-buttons'));
-            const saveButton = buttonGroup?.querySelector('.save-button'); const deleteButton = buttonGroup?.querySelector('.delete-button');
 
-            if (!buttonGroup || !saveButton || !deleteButton) { console.error(`Save Error: Button group or buttons missing for ${questionId}. Group Found:`, buttonGroup); showError(errorId, field, 'Internal Error: UI component missing.'); return; }
+            // Robust Button Finding Logic
+            const container = field.closest('li') || field.closest('.question-box');
+            let buttonGroup = null;
+            if (container) { buttonGroup = container.querySelector('.answer-buttons'); }
+            if (!buttonGroup) { buttonGroup = field.nextElementSibling?.classList.contains('answer-buttons') ? field.nextElementSibling : null; }
+            if (!buttonGroup) { buttonGroup = Array.from(field.parentElement.children).find(el => el.classList.contains('answer-buttons')); }
+
+            const saveButton = buttonGroup?.querySelector('.save-button');
+            const deleteButton = buttonGroup?.querySelector('.delete-button');
+
+             if (!buttonGroup || !saveButton || !deleteButton) {
+                 // Log specific context to help debug
+                console.error(`Save Error: UI components missing for ${questionId}. Field:`, field, "Container:", container, "Found Button Group:", buttonGroup);
+                showError(errorId, field, 'Internal Error: UI component missing.');
+                return;
+            }
+
             if (field.disabled) { console.warn(`Attempted save on disabled field: ${questionId}.`); return; }
 
             const answer = field.value; const trimmedAnswer = String(answer).trim(); const isRequired = field.classList.contains('required-answer');
-            hideMessages(statusId, errorId, field);
-            if (isRequired && trimmedAnswer === '') { showError(errorId, field); updateStickyProgressBar(); return; }
+            hideMessages(statusId, errorId, field); // Hide status first, then potential errors
+            if (isRequired && trimmedAnswer === '') {
+                showError(errorId, field, 'Required.'); // Show error if required and empty
+                updateStickyProgressBar(); // Update progress based on current state
+                return;
+            }
 
             saveButton.disabled = true; saveButton.textContent = 'Saving...'; deleteButton.disabled = true;
 
             try {
-                let questionText = `Answer for ${questionId}`; const qTextElement = field.closest('li')?.previousElementSibling || field.closest('.question-box')?.querySelector('h4') || field.previousElementSibling; if (qTextElement && (qTextElement.tagName === 'H4' || qTextElement.tagName === 'P' || qTextElement.tagName === 'LABEL')) { questionText = qTextElement.textContent.replace(/\*/g,'').replace(/\s+/g, ' ').trim(); } else { const parentBox = field.closest('.question-box'); const boxH4 = parentBox?.querySelector('h4'); if(boxH4) { questionText = boxH4.textContent.replace(/\*/g,'').replace(/\s+/g, ' ').trim() + ` (${questionId})`;} }
+                // Simplified Question Text Extraction
+                let questionText = `Answer for ${questionId}`;
+                 const h4Element = field.closest('.question-box')?.querySelector('h4');
+                 const liElement = field.closest('li');
+                 if (h4Element) {
+                     questionText = h4Element.textContent.replace('*','').trim();
+                     if (liElement) { // Append list item context if inside OL/UL
+                         questionText += ` (Item ${Array.from(liElement.parentNode.children).indexOf(liElement) + 1})`;
+                     }
+                 } else if (liElement) {
+                      // Try to get text from preceding element if no h4 (might be simple label)
+                     const precedingSiblingText = liElement.firstChild?.textContent?.trim();
+                      if(precedingSiblingText) {
+                            questionText = precedingSiblingText.replace('*','').trim();
+                      } else {
+                            questionText = `List item ${Array.from(liElement.parentNode.children).indexOf(liElement) + 1}`; // Fallback
+                      }
+                 }
+
                 const submissionTime = new Date().toISOString();
                 const userProgressPayload = { user_id: currentUser.id, email: currentUser.email, question_id: questionId, question_text: questionText.substring(0, 250), answer: answer, page: PAGE_NAME, status: 'completed', submitted_at: submissionTime, updated_at: submissionTime, section_type: 'action_plan', section_id: SECTION_ID, section_title: document.title || 'Coaching Action Plan', progress_percentage: 100, score: null, is_passed: true };
 
+                console.log(`%c[${questionId}] Upserting Payload:`, "color: #888", userProgressPayload);
                 const { data, error } = await supabase.from('user_progress').upsert([userProgressPayload], { onConflict: ['user_id', 'question_id'] }).select();
                 if (error) throw new Error(`Supabase error: ${error.message} (Code: ${error.code})`);
-                console.log(`%c[${questionId}] Supabase upsert successful.`, "color: green");
+                console.log(`%c[${questionId}] Supabase upsert successful. Response:`, "color: green", data);
 
-                // UI Update
-                console.log(`%c[${questionId}] Starting UI update...`, "color: blue");
+                // UI Update AFTER successful save
                 field.disabled = true; console.log(`%c[${questionId}] Field disabled.`, "color: blue");
-                field.classList.remove('required-field');
-                if (buttonGroup) { buttonGroup.style.display = 'none'; console.log(`%c[${questionId}] Button group hidden.`, "color: blue"); } else { console.error(`%c[${questionId}] UI Update Error: Button group NOT found!`, "color: red; font-weight: bold;"); }
+                field.classList.remove('required-field'); // Remove error class if present
+                if (buttonGroup) { buttonGroup.style.display = 'none'; console.log(`%c[${questionId}] Button group hidden.`, "color: blue"); } else { console.error(`%c[${questionId}] UI Update Error: Button group NOT found after save!`, "color: red; font-weight: bold;"); }
                 if (statusElement) { statusElement.textContent = 'Saved ✅'; statusElement.style.display = 'inline-block'; statusElement.classList.remove('deleted'); statusElement.style.color = '#27ae60'; console.log(`%c[${questionId}] Status element shown.`, "color: blue"); } else { console.warn(`%c[${questionId}] Status span #${statusId} not found.`, "color: orange"); }
-                saveAnswerToStorage(currentUser.email, questionId, answer); console.log(`%c[${questionId}] Answer saved to local storage.`, "color: blue");
-                updateStickyProgressBar(); console.log(`%c[${questionId}] Sticky progress bar updated.`, "color: blue");
+
+                // Save to local storage AFTER Supabase success and UI update
+                if (saveAnswerToStorage(currentUser.email, questionId, answer)) {
+                     console.log(`%c[${questionId}] Answer saved to local storage.`, "color: blue");
+                } else {
+                     console.error(`%c[${questionId}] FAILED to save answer to local storage after Supabase success!`, "color: red;");
+                     // Consider notifying the user or attempting retry?
+                }
+
+                updateStickyProgressBar(); // Update progress after successful save
+                 console.log(`%c[${questionId}] Save process complete.`, "color: green; font-weight: bold;");
 
             } catch (error) {
                  console.error(`[${questionId}] CAUGHT ERROR during save:`, error); showError(errorId, field, `Save failed. Try again.`);
-                 field.disabled = false;
-                 if (buttonGroup) { buttonGroup.style.display = 'flex'; if (saveButton) { saveButton.disabled = false; saveButton.textContent = 'Save'; } if (deleteButton) { deleteButton.disabled = false; deleteButton.style.display = 'inline-block';} }
-                 if (statusElement) statusElement.style.display = 'none'; updateStickyProgressBar();
+                 field.disabled = false; // Re-enable field on error
+                 if (buttonGroup) { buttonGroup.style.display = 'flex'; if (saveButton) { saveButton.disabled = false; saveButton.textContent = 'Save'; } if (deleteButton) { deleteButton.disabled = false; deleteButton.style.display = 'inline-block';} } else { console.error(`%c[${questionId}] Error Handling: Button group NOT found! Cannot re-enable buttons.`, "color: red;"); }
+                 if (statusElement) statusElement.style.display = 'none';
+                 updateStickyProgressBar(); // Update progress based on current (failed) state
             }
         };
 
+        // deleteAnswer remains largely the same, ensures it only works on non-disabled fields
         window.deleteAnswer = async function(questionId) {
             const field = document.querySelector(`[data-question="${questionId}"]`); if (!field) return;
-            if (field.disabled) { console.warn(`Cannot delete saved answer: ${questionId}.`); const errorId=`error-${questionId}`; showError(errorId, null, "Saved answers cannot be deleted."); setTimeout(()=>hideError(errorId),3000); return; }
+
+            // Prevent deletion of saved (disabled) answers
+            if (field.disabled) {
+                 console.warn(`Cannot delete saved answer: ${questionId}.`);
+                 const errorId=`error-${questionId}`;
+                 const statusId=`save-status-${questionId}`;
+                 const statusElement = document.getElementById(statusId);
+                  if (statusElement && statusElement.style.display !== 'none') { // Show message near status if visible
+                      statusElement.textContent = 'Cannot delete saved answer.'; statusElement.style.color = '#e74c3c';
+                      setTimeout(() => { statusElement.textContent = 'Saved ✅'; statusElement.style.color = '#27ae60'; }, 3000);
+                  } else { // Show error span otherwise
+                     showError(errorId, null, "Saved answers cannot be deleted."); setTimeout(()=>hideError(errorId),3000);
+                  }
+                 return;
+             }
+
+            // Proceed with clearing unsaved data
             const currentUser = getCurrentUser(); if (!currentUser?.email || !currentUser.id) return;
             const errorId = `error-${questionId}`; const statusId = `save-status-${questionId}`; const statusElement = document.getElementById(statusId);
-            const buttonContainer = field.closest('li, .question-box') || field.parentElement; const buttonGroup = buttonContainer?.querySelector('.answer-buttons');
-            const saveButton = buttonGroup?.querySelector('.save-button'); const deleteButton = buttonGroup?.querySelector('.delete-button');
 
-            hideMessages(statusId, errorId, field); field.value = (field.type === 'date') ? '' : '';
-            deleteAnswerFromStorage(currentUser.email, questionId); console.log("Cleared unsaved answer locally for", questionId);
-            field.classList.remove('required-field'); if (statusElement) statusElement.style.display = 'none';
-            if (saveButton) saveButton.disabled = false; if (deleteButton) deleteButton.disabled = false;
-            updateStickyProgressBar();
+             // Find buttons robustly
+             const container = field.closest('li') || field.closest('.question-box');
+             let buttonGroup = null;
+             if (container) { buttonGroup = container.querySelector('.answer-buttons'); }
+             if (!buttonGroup) { buttonGroup = field.nextElementSibling?.classList.contains('answer-buttons') ? field.nextElementSibling : null; }
+             if (!buttonGroup) { buttonGroup = Array.from(field.parentElement.children).find(el => el.classList.contains('answer-buttons')); }
+             const saveButton = buttonGroup?.querySelector('.save-button');
+             const deleteButton = buttonGroup?.querySelector('.delete-button');
+
+            hideMessages(statusId, errorId, field); // Hide status/error
+            field.value = (field.type === 'date' || field.tagName === 'SELECT') ? '' : ''; // Clear value
+
+            // Only delete from storage if it existed (shouldn't for unsaved, but good practice)
+            deleteAnswerFromStorage(currentUser.email, questionId);
+            console.log("Cleared unsaved/deleted answer locally for", questionId);
+
+            field.classList.remove('required-field'); // Remove error class
+            if (statusElement) statusElement.style.display = 'none'; // Ensure status is hidden
+
+            // Ensure buttons are visible and enabled
+            if (buttonGroup) {
+                 buttonGroup.style.display = 'flex';
+                 if (saveButton) saveButton.disabled = false;
+                 if (deleteButton) deleteButton.disabled = false;
+            } else {
+                 console.error(`%c[${questionId}] Delete Handling: Button group NOT found! Cannot ensure buttons are active.`, "color: red;");
+            }
+
+            updateStickyProgressBar(); // Update progress after clearing
         };
 
+
         // --- Completion Handling ---
-        function markPlanAsComplete(userEmail) { if (!userEmail) return; if (!validateAllAnswers(false)) { showGeneralWarningMessage('Cannot complete: Missing required answers.'); return; } const k=`${localStorageKey}_completed_${userEmail}`; console.log('AP: Marking complete with key:',k); try { localStorage.setItem(k,'true'); updateStickyProgressBar(); displayCompletionState(); const cM=document.getElementById('completionMessage'); if(cM) { cM.style.display='block'; cM.scrollIntoView({behavior:'smooth', block: 'center'}); } hideGeneralWarningMessage(); const generalWarningDiv = document.getElementById('generalInlineWarningMessage'); if(generalWarningDiv) generalWarningDiv.style.display = 'none'; logCompletionEvent(userEmail); } catch(e) { console.error("AP: Error saving completion status:", e); alert("Could not save completion status."); } }
-        async function logCompletionEvent(userEmail) { if (!supabase || !userEmail) return; const currentUser = getCurrentUser(); if (!currentUser || !currentUser.id) return; console.log(`Logging completion event for ${userEmail} on ${PAGE_NAME}`); try { const { error } = await supabase.from('user_progress').insert([{ user_id: currentUser.id, email: userEmail, question_id: `${SECTION_ID}_completion_marker`, question_text: `Action Plan Marked Complete`, answer: 'Completed', page: PAGE_NAME, status: 'completed', submitted_at: new Date().toISOString(), updated_at: new Date().toISOString(), section_type: 'completion_status', section_id: SECTION_ID, section_title: document.title || 'Coaching Action Plan', progress_percentage: 100, score: null, is_passed: true }]); if (error) console.error("Error logging completion event:", error); else console.log("Completion event logged."); } catch (e) { console.error("Exception logging completion event:", e); } }
-        function checkCompletionState(userEmail) { if (!userEmail) return; const completionKey = `${localStorageKey}_completed_${userEmail}`; const isComplete = localStorage.getItem(completionKey) === 'true'; const cM=document.getElementById('completionMessage'); const cB=document.getElementById('completeButton'); const bB=document.getElementById('backButton'); const generalWarningDiv = document.getElementById('generalInlineWarningMessage'); if(generalWarningDiv) generalWarningDiv.style.display = 'none'; if (isComplete) { console.log("AP: Plan already marked complete."); displayCompletionState(); } else { console.log("AP: Plan not complete."); if(cM) cM.style.display='none'; if(cB) { cB.style.display='block'; cB.disabled = false; } if(bB) { bB.textContent='← Back to Self Coaching'; bB.href='coaching-yourself.html'; } updateStickyProgressBar(); } }
-        function displayCompletionState() { console.log('AP: Displaying completion state UI'); const cM=document.getElementById('completionMessage'); const cB=document.getElementById('completeButton'); const bB=document.getElementById('backButton'); const generalWarningDiv = document.getElementById('generalInlineWarningMessage'); if (generalWarningDiv) generalWarningDiv.style.display = 'none'; if(cM) cM.style.display='block'; if(cB) { cB.style.display='none'; cB.disabled = true; } const cont=document.querySelector('.container'); if(cont){ cont.querySelectorAll('textarea, input, select').forEach(el=>{ el.disabled=true; el.style.backgroundColor='#f0f0f0'; el.style.cursor='not-allowed'; }); cont.querySelectorAll('.answer-buttons').forEach(el=> el.style.display = 'none'); /* Hide entire button group */ cont.querySelectorAll('.save-status').forEach(el => { const qId = el.id.replace('save-status-', ''); const currentUser = getCurrentUser(); const userAnswers = currentUser ? JSON.parse(localStorage.getItem(localStorageKey) || '{}')[currentUser.email] || {} : {}; if (userAnswers[qId] !== undefined && userAnswers[qId] !== null && String(userAnswers[qId]).trim() !== '') { el.textContent = 'Saved ✅'; el.style.display = 'inline-block'; el.style.color = '#27ae60'; } else { el.style.display = 'none'; } }); } if(bB){bB.textContent='← Back to Dashboard'; bB.href='dashboard.html';} updateStickyProgressBar(); hideGeneralWarningMessage(); }
+        function markPlanAsComplete(userEmail) {
+            if (!userEmail) return;
+            // Final validation check (showErrors = false, as they should be visible already if button was clicked)
+            if (!validateAllAnswers(false)) {
+                showGeneralWarningMessage('Cannot complete: Missing required answers.'); // Show floating warning
+                 const generalWarningDiv = document.getElementById('generalInlineWarningMessage'); if(generalWarningDiv) { generalWarningDiv.textContent = 'Please complete all required fields before marking as complete.'; generalWarningDiv.style.display = 'block'; } // Show inline warning
+                return;
+            }
+            const k = `${localStorageKey}_completed_${userEmail}`;
+            console.log('AP: Marking complete with key:', k);
+            try {
+                localStorage.setItem(k, 'true');
+                updateStickyProgressBar(); // Ensure progress shows 100%
+                displayCompletionState(); // Update UI to locked/completed state
+                const cM = document.getElementById('completionMessage');
+                if (cM) {
+                    cM.style.display = 'block';
+                    cM.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+                hideGeneralWarningMessage(); // Hide floating warning
+                const generalWarningDiv = document.getElementById('generalInlineWarningMessage'); if (generalWarningDiv) generalWarningDiv.style.display = 'none'; // Hide inline warning
+                logCompletionEvent(userEmail); // Log to backend
+            } catch (e) {
+                console.error("AP: Error saving completion status:", e);
+                alert("Could not save completion status. Please try again.");
+                 // Optionally revert UI changes if saving completion fails critically
+            }
+        }
+
+        async function logCompletionEvent(userEmail) { if (!supabase || !userEmail) return; const currentUser = getCurrentUser(); if (!currentUser || !currentUser.id) return; console.log(`Logging completion event for ${userEmail} on ${PAGE_NAME}`); try { const { error } = await supabase.from('user_progress').insert([{ user_id: currentUser.id, email: userEmail, question_id: `${SECTION_ID}_completion_marker`, question_text: `Action Plan Marked Complete`, answer: 'Completed', page: PAGE_NAME, status: 'completed', submitted_at: new Date().toISOString(), updated_at: new Date().toISOString(), section_type: 'completion_status', section_id: SECTION_ID, section_title: document.title || 'Coaching Action Plan', progress_percentage: 100, score: null, is_passed: true }]); if (error) console.error("Error logging completion event:", error); else console.log("Completion event logged successfully."); } catch (e) { console.error("Exception logging completion event:", e); } }
+
+        function checkCompletionState(userEmail) {
+            if (!userEmail) return;
+            const completionKey = `${localStorageKey}_completed_${userEmail}`;
+            const isComplete = localStorage.getItem(completionKey) === 'true';
+            const cM = document.getElementById('completionMessage');
+            const cB = document.getElementById('completeButton');
+            const bB = document.getElementById('backButton');
+            const generalWarningDiv = document.getElementById('generalInlineWarningMessage'); if (generalWarningDiv) generalWarningDiv.style.display = 'none'; // Hide inline warning by default
+
+            if (isComplete) {
+                console.log("AP: Plan already marked complete. Displaying completed state.");
+                displayCompletionState(); // Call the function to set the UI to completed view
+            } else {
+                console.log("AP: Plan not complete. Displaying active state.");
+                if (cM) cM.style.display = 'none'; // Hide completion message
+                if (cB) { cB.style.display = 'block'; cB.disabled = false; } // Show and enable complete button
+                if (bB) { bB.textContent = '← Back to Self Coaching'; bB.href = 'coaching-yourself.html'; } // Set back button to previous page
+                 // Ensure fields and buttons are active (handled by loadUserAnswers/loadFieldState)
+                 // Make sure progress bar reflects current saved state
+                 updateStickyProgressBar();
+            }
+        }
+
+        function displayCompletionState() {
+            console.log('AP: Displaying completion state UI');
+            const cM = document.getElementById('completionMessage');
+            const cB = document.getElementById('completeButton');
+            const bB = document.getElementById('backButton');
+            const generalWarningDiv = document.getElementById('generalInlineWarningMessage');
+            const container = document.querySelector('.container'); // Define container once
+
+            if (generalWarningDiv) generalWarningDiv.style.display = 'none'; // Hide inline warning
+            if (cM) cM.style.display = 'block'; // Show completion message
+            if (cB) { cB.style.display = 'none'; cB.disabled = true; } // Hide and disable complete button
+            if (bB) { bB.textContent = '← Back to Dashboard'; bB.href = 'dashboard.html'; } // Change back button link
+
+            if (container) {
+                // Disable all editable fields
+                container.querySelectorAll('.editable-answer[data-question]').forEach(field => {
+                    field.disabled = true;
+                    // Add visual cue for disabled state if needed (CSS already does this)
+                    // field.style.backgroundColor = '#f0f0f0';
+                    // field.style.cursor = 'not-allowed';
+                });
+
+                // Hide all answer button groups
+                container.querySelectorAll('.answer-buttons').forEach(group => {
+                    group.style.display = 'none';
+                });
+
+                // Show 'Saved ✅' status only for fields that have actual saved data
+                container.querySelectorAll('.save-status').forEach(statusElement => {
+                    const questionId = statusElement.id.replace('save-status-', '');
+                    const currentUser = getCurrentUser();
+                    // Ensure we get the latest answers from storage for this check
+                    let allAnswers = {}; try { const d = localStorage.getItem(localStorageKey); if (d) allAnswers = JSON.parse(d) || {}; } catch (e) {}
+                    const userAnswers = currentUser ? allAnswers[currentUser.email] || {} : {};
+
+                    if (userAnswers[questionId] !== undefined && userAnswers[questionId] !== null && String(userAnswers[questionId]).trim() !== '') {
+                        statusElement.textContent = 'Saved ✅';
+                        statusElement.style.display = 'inline-block';
+                        statusElement.style.color = '#27ae60';
+                    } else {
+                        // Important: Hide status if the field was empty when marked complete
+                        statusElement.style.display = 'none';
+                    }
+                });
+            } else {
+                console.error("AP: DisplayCompletionState Error - .container not found!");
+            }
+
+            updateStickyProgressBar(); // Ensure progress bar shows 100% in completed state
+            hideGeneralWarningMessage(); // Hide any lingering floating warnings
+        }
+
 
     </script>
 
