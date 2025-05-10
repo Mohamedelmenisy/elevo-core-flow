@@ -1,14 +1,21 @@
-const steps = [
-  "🔹 Ask the customer for their name.",
-  "🔹 Ask the customer to describe the issue.",
-  "🔹 Select the appropriate issue type from the options.",
-  "🔹 Provide a solution or escalate if needed.",
-  "✅ End the call and rate the outcome."
-];
-
+let steps = [];
 let currentStep = 0;
 
-document.getElementById("receiveCallBtn").addEventListener("click", () => {
+async function loadScenario() {
+  try {
+    const response = await fetch('../knowledge-base/kb.json');
+    const data = await response.json();
+
+    // You can switch the scenario key here
+    steps = data["order_delay"].steps;
+  } catch (error) {
+    console.error("Error loading scenario:", error);
+    steps = ["❌ Failed to load Knowledge Base."];
+  }
+}
+
+document.getElementById("receiveCallBtn").addEventListener("click", async () => {
+  await loadScenario();
   document.getElementById("stepContainer").style.display = "block";
   document.getElementById("receiveCallBtn").style.display = "none";
   document.getElementById("stepText").textContent = steps[currentStep];
