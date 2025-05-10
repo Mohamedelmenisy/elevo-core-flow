@@ -1,293 +1,203 @@
-/* CSS Variables for Theming */
-:root {
-    --primary-color: #007bff; /* Professional Blue */
-    --primary-hover-color: #0056b3;
-    --secondary-color: #6c757d; /* Muted Grey for secondary actions */
-    --secondary-hover-color: #545b62;
-    --accent-color: #17a2b8; /* Informational Cyan/Teal */
-    --success-color: #28a745;
-    --danger-color: #dc3545;
-    --danger-hover-color: #c82333;
-    --warning-color: #ffc107;
+document.addEventListener('DOMContentLoaded', async () => {
+    console.log("CoreFlow.js DOMContentLoaded - V2");
+
+    const supabaseUrl = 'https://lgcutmuspcaralydycmg.supabase.co';
+    const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxnY3V0bXVzcGNhcmFseWR5Y21nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU0NDY3MDEsImV4cCI6MjA2MTAyMjcwMX0.3u5Y7pkH2NNnnoGLMWVfAa5b8fq88o1itRYnG1K38tE';
     
-    --header-bg: #ffffff;
-    --header-text-color: #343a40;
-    --header-border-color: #e9ecef;
+    let supabase;
+    try {
+        supabase = window.supabase.createClient(supabaseUrl, supabaseAnonKey);
+        console.log("Supabase client initialized in coreFlow.js");
+    } catch (error) {
+        console.error("Supabase client initialization failed in coreFlow.js:", error);
+        const authLoadingDiv = document.getElementById('auth-loading');
+        if (authLoadingDiv) authLoadingDiv.innerHTML = '<p style="color:red;">Error: Could not connect to services. Please try again later.</p>';
+        return;
+    }
+
+    // DOM Elements
+    const authLoadingDiv = document.getElementById('auth-loading');
+    const initialViewDiv = document.getElementById('initial-view');
+    const callFlowViewDiv = document.getElementById('call-flow-view');
+    const receiveCallBtn = document.getElementById('receive-call-btn');
+    const stepsContainer = document.getElementById('steps-container');
+    const nextStepBtn = document.getElementById('next-step-btn');
+    const prevStepBtn = document.getElementById('prev-step-btn');
+    const endCallBtn = document.getElementById('end-call-btn');
+    const scenarioTitleElement = document.getElementById('scenario-title');
+    const userInfoDiv = document.getElementById('userInfo');
+    const userNameSpan = document.getElementById('userName');
+    const logoutButton = document.getElementById('logoutButton');
+
+    // State Variables
+    let currentScenarioName = null;
+    let currentSteps = [];
+    let currentStepIndex = 0;
+
+    // --- 1. CHECK AUTHENTICATION & USER INFO ---
+    try {
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+
+        if (sessionError) {
+            console.error("Error getting session:", sessionError);
+            if (authLoadingDiv) authLoadingDiv.innerHTML = '<p style="color:red;">Authentication error. Please try reloading.</p>';
+            return;
+        }
+
+        if (!session) {
+            console.log("User not authenticated. Redirecting to login.");
+            const currentPath = window.location.pathname.replace('/elevo-core-flow', '') + window.location.search + window.location.hash;
+            // Ensure the path is correct when deployed on GitHub Pages (if repo name is part of path)
+            // Example: if deployed at mohamedelmenisy.github.io/elevo-core-flow/
+            // login.html would be at mohamedelmenisy.github.io/elevo-core-flow/legacy/login.html
+            // So from core-flow/core-flow.html, path to legacy/login.html is `../legacy/login.html`
+            window.location.href = `../legacy/login.html?redirectTo=${encodeURIComponent(currentPath)}`;
+            return; 
+        }
+
+        console.log('User is authenticated:', session.user);
+        if (session.user.email && userNameSpan && userInfoDiv) {
+            const emailPrefix = session.user.email.split('@')[0];
+            userNameSpan.textContent = emailPrefix.charAt(0).toUpperCase() + emailPrefix.slice(1);
+            userInfoDiv.style.display = 'flex';
+        }
+        if(logoutButton) {
+            logoutButton.addEventListener('click', async () => {
+                const { error } = await supabase.auth.signOut();
+                if (error) {
+                    console.error("Logout error:", error);
+                    alert("Error logging out. Please try again.");
+                } else {
+                    console.log("User logged out. Redirecting to login.");
+                    window.location.href = '../legacy/login.html'; 
+                }
+            });
+        }
+        if (authLoadingDiv) authLoadingDiv.style.display = 'none';
+        if (initialViewDiv) initialViewDiv.style.display = 'block';
+
+    } catch (error) {
+        console.error("Error during auth check or user info display:", error);
+        if (authLoadingDiv) authLoadingDiv.innerHTML = `<p style="color:red;">An unexpected error occurred: ${error.message}</p>`;
+        return;
+    }
+
+    // --- 2. "RECEIVE CALL" BUTTON FUNCTIONALITY ---
+    if (receiveCallBtn) {
+        receiveCallBtn.addEventListener('click', () => {
+            console.log("Receive Call button clicked");
+            if (initialViewDiv) initialViewDiv.style.display = 'none';
+            if (callFlowViewDiv) callFlowViewDiv.style.display = 'block';
+            if (endCallBtn) endCallBtn.style.display = 'block';
+            loadScenarioAndDisplay('order_delay'); 
+        });
+    } else {
+        console.error("Receive Call Button not found!");
+    }
+
+
+    // --- 3. SCENARIO HANDLING FUNCTIONS ---
+    async function loadScenarioAndDisplay(scenarioName) {
+        currentScenarioName = scenarioName; 
+        if(scenarioTitleElement) scenarioTitleElement.textContent = `Scenario: ${scenarioName.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}`;
+        
+        if (stepsContainer) stepsContainer.innerHTML = '<p class="placeholder-text">Loading call steps...</p>';
+        try {
+            const response = await fetch('../knowledge-base/kb.json'); 
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            const kb = await response.json();
+            const scenario = kb[scenarioName];
+
+            if (scenario && scenario.steps && scenario.steps.length > 0) {
+                currentSteps = scenario.steps;
+                currentStepIndex = 0;
+                displayStep(currentStepIndex);
+            } else {
+                console.error('Scenario not found, has no steps, or steps array is empty:', scenarioName);
+                if (stepsContainer) stepsContainer.innerHTML = `<p style="color:red;">Error: Scenario '${scenarioName}' not found or is empty.</p>`;
+                if (nextStepBtn) nextStepBtn.style.display = 'none';
+                if (prevStepBtn) prevStepBtn.style.display = 'none';
+            }
+        } catch (error) {
+            console.error('Failed to load or parse kb.json:', error);
+            if (stepsContainer) stepsContainer.innerHTML = `<p style="color:red;">Error loading scenario: ${error.message}. Please check console.</p>`;
+            if (nextStepBtn) nextStepBtn.style.display = 'none';
+            if (prevStepBtn) prevStepBtn.style.display = 'none';
+        }
+    }
+
+    function displayStep(index) {
+        if (!stepsContainer) return;
+        if (index >= 0 && index < currentSteps.length) {
+            stepsContainer.innerHTML = `<p>${currentSteps[index]}</p>`;
+        } else if (index >= currentSteps.length && currentSteps.length > 0) {
+            stepsContainer.innerHTML = `<p><strong>End of scenario: ${currentScenarioName.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</strong></p><p>You have completed all steps.</p>`;
+        }
+        updateNavigationButtons();
+    }
     
-    --body-bg-color: #f8f9fa; /* Very light grey */
-    --card-bg-color: #ffffff;
-    --text-color-dark: #212529;
-    --text-color-medium: #495057;
-    --text-color-light: #6c757d;
-    --text-color-subtle: #adb5bd;
-    --border-color: #dee2e6;
+    function updateNavigationButtons() {
+        if (!prevStepBtn || !nextStepBtn || currentSteps.length === 0) {
+            if(prevStepBtn) prevStepBtn.style.display = 'none';
+            if(nextStepBtn) nextStepBtn.style.display = 'none';
+            return;
+        }
 
-    --font-family-main: 'Poppins', 'Roboto', 'Segoe UI', sans-serif;
-    --border-radius-sm: 0.2rem;
-    --border-radius-md: 0.375rem;
-    --border-radius-lg: 0.5rem;
+        prevStepBtn.style.display = (currentStepIndex > 0) ? 'inline-flex' : 'none';
 
-    --shadow-sm: 0 .125rem .25rem rgba(0,0,0,.075);
-    --shadow-md: 0 .5rem 1rem rgba(0,0,0,.1);
-    --shadow-lg: 0 1rem 3rem rgba(0,0,0,.12);
+        if (currentStepIndex < currentSteps.length - 1) {
+            nextStepBtn.innerHTML = `<span>Next Step</span><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>`;
+            nextStepBtn.style.display = 'inline-flex';
+        } else if (currentStepIndex === currentSteps.length - 1) {
+            nextStepBtn.innerHTML = `<span>Finish Scenario</span>`; // Icon removed for finish
+            nextStepBtn.style.display = 'inline-flex';
+        } else { 
+            nextStepBtn.style.display = 'none';
+            prevStepBtn.style.display = (currentSteps.length > 0) ? 'inline-flex' : 'none';
+        }
+    }
 
-    --transition-speed: 0.2s;
-}
+    if (nextStepBtn) {
+        nextStepBtn.addEventListener('click', () => {
+            if (currentStepIndex < currentSteps.length -1) {
+                currentStepIndex++;
+                displayStep(currentStepIndex);
+            } else if (currentStepIndex === currentSteps.length -1) {
+                currentStepIndex++; 
+                displayStep(currentStepIndex); 
+                console.log(`Scenario ${currentScenarioName} finished.`);
+            }
+        });
+    }
 
-/* Global Resets and Base Styles */
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-}
-
-body {
-    font-family: var(--font-family-main);
-    background-color: var(--body-bg-color);
-    color: var(--text-color-dark);
-    line-height: 1.6;
-    display: flex;
-    justify-content: center;
-    align-items: flex-start; /* Align app container to top */
-    min-height: 100vh;
-    font-size: 16px;
-    padding-top: 20px; /* Add some space at the top */
-    padding-bottom: 20px;
-}
-
-.app-container {
-    width: 100%;
-    max-width: 900px; /* Slightly narrower for focus */
-    display: flex;
-    flex-direction: column;
-    background-color: var(--card-bg-color);
-    box-shadow: var(--shadow-lg);
-    border-radius: var(--border-radius-lg);
-    overflow: hidden; /* To contain border-radius of children */
-}
-
-/* Header Styles */
-.app-header {
-    background: var(--header-bg);
-    color: var(--header-text-color);
-    padding: 1rem 1.5rem;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    border-bottom: 1px solid var(--header-border-color);
-}
-
-.logo-container {
-    display: flex;
-    align-items: center;
-}
-
-.company-logo {
-    height: 32px; 
-    width: 32px;
-    margin-right: 0.75rem;
-    color: var(--primary-color); /* Logo uses primary color */
-}
-.app-title {
-    font-size: 1.5em;
-    font-weight: 600;
-    color: var(--text-color-dark);
-}
-
-.user-info {
-    display: flex;
-    align-items: center;
-}
-
-.user-name-display {
-    margin-right: 1rem;
-    font-weight: 500;
-    color: var(--text-color-medium);
-}
-
-.logout-btn {
-    background-color: transparent;
-    color: var(--secondary-color);
-    border: 1px solid var(--border-color);
-    padding: 0.5rem 0.8rem;
-    border-radius: var(--border-radius-md);
-    cursor: pointer;
-    font-size: 0.9em;
-    font-weight: 500;
-    transition: all var(--transition-speed) ease;
-    display: inline-flex;
-    align-items: center;
-}
-.logout-btn svg {
-    margin-right: 0.3rem;
-}
-.logout-btn:hover {
-    background-color: var(--danger-color);
-    color: white;
-    border-color: var(--danger-color);
-}
-
-/* Main Content Area */
-.app-main {
-    flex-grow: 1;
-    padding: 2rem 2.5rem;
-    display: flex;
-    flex-direction: column;
-    justify-content: center; 
-    align-items: center; 
-}
-
-/* Card Styles */
-.card {
-    background-color: var(--card-bg-color);
-    padding: 2rem;
-    border-radius: var(--border-radius-lg);
-    box-shadow: var(--shadow-md);
-    text-align: center;
-    width: 100%;
-    max-width: 550px;
-    transition: opacity 0.3s ease, transform 0.3s ease;
-    margin-top: 1rem; /* Space if multiple cards were stacked */
-}
-.initial-card .card-icon {
-    color: var(--primary-color);
-    margin-bottom: 1rem;
-}
-.initial-card .card-icon svg {
-    width: 56px;
-    height: 56px;
-}
-
-.card-title {
-    color: var(--text-color-dark);
-    margin-bottom: 0.5rem;
-    font-size: 1.75em;
-    font-weight: 600;
-}
-.scenario-title-dynamic {
-    font-size: 1.5em;
-    margin-bottom: 1.25rem;
-}
-.card-subtitle {
-    color: var(--text-color-light);
-    margin-bottom: 1.75rem;
-    font-size: 1.05em;
-}
-
-/* Button Styles */
-.action-button, .nav-button {
-    border: none;
-    padding: 0.75rem 1.5rem;
-    border-radius: var(--border-radius-md);
-    font-size: 1em;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all var(--transition-speed) ease;
-    display: inline-flex; 
-    align-items: center;
-    justify-content: center;
-    text-decoration: none;
-    gap: 0.5rem; /* Space between icon and text */
-}
-.action-button:hover, .nav-button:hover {
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-sm);
-}
-
-.primary-button {
-    background-color: var(--primary-color);
-    color: white;
-}
-.primary-button:hover {
-    background-color: var(--primary-hover-color);
-}
-
-.secondary-button {
-    background-color: var(--secondary-color);
-    color: white;
-}
-.secondary-button:hover {
-    background-color: var(--secondary-hover-color);
-}
-
-.danger-button {
-    background-color: var(--danger-color);
-    color: white;
-}
-.danger-button:hover {
-    background-color: var(--danger-hover-color);
-}
-
-/* Call Flow Specific Styles */
-.steps-area {
-    background-color: var(--body-bg-color); 
-    border: 1px solid var(--border-color);
-    border-radius: var(--border-radius-md);
-    padding: 1.25rem;
-    margin-top: 1.25rem;
-    margin-bottom: 1.5rem;
-    min-height: 120px; 
-    text-align: left; 
-}
-.steps-area p {
-    font-size: 1.05em;
-    color: var(--text-color-medium);
-    margin-bottom: 0.75rem;
-    padding: 0.75rem;
-    border-radius: var(--border-radius-sm);
-    background-color: #e9ecef; /* Light background for individual steps */
-    border-left: 4px solid var(--accent-color); /* Accent border for steps */
-}
-.steps-area p:last-child {
-    margin-bottom: 0;
-}
-.steps-area .placeholder-text {
-    color: var(--text-color-subtle);
-    font-style: italic;
-    background-color: transparent;
-    border-left: none;
-}
-
-.navigation-buttons {
-    display: flex;
-    justify-content: space-between; 
-    align-items: center;
-    width: 100%;
-    margin-bottom: 1rem;
-}
-#end-call-btn {
-    width: 100%; /* Make end call button full width */
-}
-
-
-/* Footer Styles */
-.app-footer {
-    background-color: #343a40; 
-    color: #adb5bd; 
-    text-align: center;
-    padding: 1rem;
-    font-size: 0.875em;
-}
-
-/* Loading Container and Spinner */
-.loading-container {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 2rem;
-    color: var(--text-color-light);
-}
-.spinner {
-    border: 5px solid rgba(0, 0, 0, 0.1);
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    border-left-color: var(--primary-color);
-    margin-bottom: 1rem;
-    animation: spin 0.8s linear infinite;
-}
-@keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-}
+    if (prevStepBtn) {
+        prevStepBtn.addEventListener('click', () => { 
+            if (currentStepIndex > 0) {
+                currentStepIndex--;
+                displayStep(currentStepIndex);
+            }
+        });
+    }
+    
+    if (endCallBtn) {
+        endCallBtn.addEventListener('click', () => {
+            console.log("End Call button clicked.");
+            if (callFlowViewDiv) callFlowViewDiv.style.display = 'none';
+            if (initialViewDiv) initialViewDiv.style.display = 'block';
+            if (endCallBtn) endCallBtn.style.display = 'none';
+            if (prevStepBtn) prevStepBtn.style.display = 'none';
+            if (nextStepBtn) {
+                nextStepBtn.style.display = 'inline-flex'; 
+                nextStepBtn.innerHTML = `<span>Next Step</span><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>`;
+            }
+            if (stepsContainer) stepsContainer.innerHTML = '<p class="placeholder-text">Loading call steps...</p>';
+            currentSteps = [];
+            currentStepIndex = 0;
+            currentScenarioName = null;
+            if(scenarioTitleElement) scenarioTitleElement.textContent = "Call Scenario";
+        });
+    }
+    console.log("CoreFlow.js script fully loaded and event listeners attached. - V2");
+});
