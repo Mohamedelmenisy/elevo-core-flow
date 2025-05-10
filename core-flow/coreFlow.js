@@ -1,5 +1,5 @@
 document.addEventListener('DOMContentLoaded', async () => {
-    console.log("CoreFlow.js DOMContentLoaded - Fixed Dark Mode & Assistant Logic");
+    console.log("CoreFlow.js DOMContentLoaded - Timer always visible during call");
 
     const supabaseUrl = 'https://lgcutmuspcaralydycmg.supabase.co';
     const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxnY3V0bXVzcGNhcmFseWR5Y21nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU0NDY3MDEsImV4cCI6MjA2MTAyMjcwMX0.3u5Y7pkH2NNnnoGLMWVfAa5b8fq88o1itRYnG1K38tE';
@@ -28,12 +28,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     const userInfoDiv = document.getElementById('userInfo');
     const userNameSpan = document.getElementById('userName');
     const logoutButton = document.getElementById('logoutButton');
-    // Dark Mode Elements Removed
     const systemStatusDiv = document.getElementById('systemStatus');
     const callTimerDiv = document.getElementById('callTimer');
     const progressTrackerContainer = document.getElementById('progressTracker');
     const assistantBox = document.getElementById('assistantBox');
-    const assistantMessageElement = document.getElementById('assistantMessageElement'); // Ensured ID matches HTML
+    const assistantMessageElement = document.getElementById('assistantMessageElement');
 
     // State Variables
     let currentScenarioName = null;
@@ -50,6 +49,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (sessionError) throw sessionError;
         if (!session) {
             const currentPath = window.location.pathname.replace('/elevo-core-flow', '') + window.location.search + window.location.hash;
+            // Make sure this path is correct for your setup.
+            // If core-flow.html is at the root of elevo-core-flow folder (e.g. elevo-core-flow/core-flow.html)
+            // and login.html is at elevo-core-flow/legacy/login.html
+            // then the path from core-flow.html to legacy/login.html is '../legacy/login.html'
             window.location.href = `../legacy/login.html?redirectTo=${encodeURIComponent(currentPath)}`;
             return; 
         }
@@ -62,8 +65,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         if(logoutButton) {
             logoutButton.addEventListener('click', async () => { 
                 const { error } = await supabase.auth.signOut();
-                if (error) console.error("Logout error:", error);
-                else window.location.href = '../legacy/login.html'; 
+                if (error) {
+                    console.error("Logout error:", error);
+                    alert("Error logging out.");
+                } else {
+                     window.location.href = '../legacy/login.html'; 
+                }
             });
         }
         if (authLoadingDiv) authLoadingDiv.style.display = 'none';
@@ -88,10 +95,15 @@ document.addEventListener('DOMContentLoaded', async () => {
             systemStatusDiv.className = `status-indicator ${statusClass}`;
         }
     }
-
+    
     function startCallTimer() {
-        if (callTimerDiv) callTimerDiv.style.display = 'block';
+        console.log("Starting call timer.");
+        if (callTimerDiv) {
+            callTimerDiv.style.display = 'block'; 
+            callTimerDiv.textContent = '00:00'; 
+        }
         callStartTime = Date.now();
+        if (callTimerInterval) clearInterval(callTimerInterval); // Clear existing interval if any
         callTimerInterval = setInterval(() => {
             const elapsedTime = Math.floor((Date.now() - callStartTime) / 1000);
             const minutes = String(Math.floor(elapsedTime / 60)).padStart(2, '0');
@@ -101,8 +113,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     function stopCallTimer() {
+        console.log("Stopping call timer interval.");
         clearInterval(callTimerInterval);
         callTimerInterval = null;
+        // Timer display is handled by endCallBtn logic now
     }
 
     function renderProgressTracker() {
@@ -128,15 +142,15 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (index < currentSteps.length - 1) {
                 const separator = document.createElement('li');
                 separator.className = 'step-separator';
-                separator.innerHTML = '→'; // Right arrow
+                separator.innerHTML = '→'; 
                 stepperUl.appendChild(separator);
             }
         });
         progressTrackerContainer.appendChild(stepperUl);
-        progressTrackerContainer.style.display = 'block'; // Ensure it's block to take width
+        progressTrackerContainer.style.display = 'block'; 
     }
 
-    function typeWriterEffect(element, message, speed = 30, callback) { // Adjusted default speed
+    function typeWriterEffect(element, message, speed = 30, callback) { 
         if (typingInterval) clearInterval(typingInterval); 
         element.textContent = ''; 
         let i = 0;
@@ -159,7 +173,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             const showBox = () => {
                 assistantBox.style.display = 'flex'; 
-                // Delay adding 'show' class slightly to allow 'display:flex' to apply for transition
                 requestAnimationFrame(() => { 
                     assistantBox.classList.add('show');
                 });
@@ -173,10 +186,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                 });
             };
             
-            // If it's meant to be shown and currently hidden, or if showImmediately is true
             if (showImmediately || !assistantBox.classList.contains('show')) {
                 showBox();
-            } else if (assistantBox.classList.contains('show')) { // If already shown, just update text
+            } else if (assistantBox.classList.contains('show')) { 
                  typeWriterEffect(assistantMessageElement, message, 30, () => {
                     if (duration && duration > 0) {
                        assistantTimeout = setTimeout(() => {
@@ -219,9 +231,12 @@ document.addEventListener('DOMContentLoaded', async () => {
                          if (scenarioTitleElement) scenarioTitleElement.textContent = 'No Scenario';
                          updateSystemStatus("🔴 No Scenario", "status-waiting");
                     } else { throw error; }
+                    // If no scenario, make sure timer is hidden if it was somehow shown
+                    if (callTimerDiv) callTimerDiv.style.display = 'none';
                     return;
                 }
                 if (!scenario || !scenario.steps || scenario.steps.length === 0) {
+                    if (callTimerDiv) callTimerDiv.style.display = 'none'; // Hide timer if scenario is invalid
                     throw new Error("Loaded scenario is invalid or has no steps.");
                 }
 
@@ -231,10 +246,12 @@ document.addEventListener('DOMContentLoaded', async () => {
                 
                 if (scenarioTitleElement) scenarioTitleElement.textContent = currentScenarioName;
                 updateSystemStatus("🟢 In Call", "status-in-call");
-                startCallTimer();
+                
+                startCallTimer(); // ✅ Start and SHOW the timer
+                
                 renderProgressTracker();
                 renderStep(); 
-                showAssistantMessage(`🚀 Scenario "${currentScenarioName}" started!`, true, 0); // Sticky
+                showAssistantMessage(`🚀 Scenario "${currentScenarioName}" started!`, true, 0);
 
             } catch (err) {
                 console.error("Failed to fetch or process scenario:", err);
@@ -242,6 +259,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (scenarioTitleElement) scenarioTitleElement.textContent = 'Error Loading Scenario';
                 updateSystemStatus("🔴 Error", "status-waiting");
                 showAssistantMessage(`❗ Error: ${err.message}`, true, 7000);
+                if (callTimerDiv) callTimerDiv.style.display = 'none'; // Hide timer on error
             }
         });
     }
@@ -258,7 +276,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (currentStepIndex >= 0 && currentStepIndex < currentSteps.length) {
             const stepContent = currentSteps[currentStepIndex];
             stepsContainer.innerHTML = `<p>${stepContent}</p>`;
-            showAssistantMessage(`📌 ${stepContent.length > 45 ? stepContent.substring(0, 42) + "..." : stepContent}`, true, 0); // Sticky
+            showAssistantMessage(`📌 ${stepContent.length > 45 ? stepContent.substring(0, 42) + "..." : stepContent}`, true, 0); 
         }
         renderProgressTracker(); 
         if (prevStepBtn) prevStepBtn.style.display = currentStepIndex > 0 ? 'inline-flex' : 'none';
@@ -287,7 +305,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (nextStepBtn) nextStepBtn.style.display = 'none';
                 if (prevStepBtn) prevStepBtn.style.display = (currentSteps.length > 0) ? 'inline-flex' : 'none';
                 updateSystemStatus("✅ Call Completed", "status-completed");
-                stopCallTimer();
+                stopCallTimer(); // Stop the timer interval, but don't hide the display yet
                 showAssistantMessage("🎉 Scenario Complete! Well done.", true, 7000);
                 currentStepIndex++; 
                 renderProgressTracker(); 
@@ -314,11 +332,17 @@ document.addEventListener('DOMContentLoaded', async () => {
             currentScenarioName = null;
             currentSteps = [];
             currentStepIndex = 0;
+
             if (callFlowViewDiv) callFlowViewDiv.style.display = 'none';
             if (initialViewDiv) initialViewDiv.style.display = 'block';
             if (progressTrackerContainer) progressTrackerContainer.style.display = 'none';
-            stopCallTimer();
-            if (callTimerDiv) callTimerDiv.textContent = '00:00'; 
+            
+            stopCallTimer(); 
+            if (callTimerDiv) {
+                callTimerDiv.textContent = '00:00'; 
+                callTimerDiv.style.display = 'none'; // ✅ Hide the timer display
+            }
+            
             updateSystemStatus("🔴 Waiting for Call");
             if (nextStepBtn) {
                 nextStepBtn.innerHTML = `<span>Next Step</span><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>`;
@@ -336,5 +360,5 @@ document.addEventListener('DOMContentLoaded', async () => {
             });
         });
     }
-    console.log("CoreFlow.js script fully loaded - Fixed Dark Mode & Enhanced Assistant.");
+    console.log("CoreFlow.js script fully loaded - Timer always visible during call.");
 });
