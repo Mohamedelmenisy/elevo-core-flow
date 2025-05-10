@@ -117,7 +117,6 @@
         <div class="links"> Don't have an account? <a href="signup.html">Sign up</a> | <a href="#" id="forgotPasswordLink">Forgot password?</a> </div>
     </div>
 
-    <!-- *** ADD 'defer' ATTRIBUTE HERE *** -->
     <script defer>
         console.log("Login page script starting...");
 
@@ -255,11 +254,15 @@
              // Show signup success message if param is present
              if (signedUpParam) {
                   showMessage(loginMessage, "Signup successful! Please login below. ✅", false);
-                  // Clean the URL parameter
-                  window.history.replaceState({}, document.title, window.location.pathname);
+                  // Clean the URL parameter (except redirectTo if present)
+                  const currentParams = new URLSearchParams(window.location.search);
+                  currentParams.delete('signedup');
+                  currentParams.delete('email'); // Also remove email if it was only for prefill
+                  const newSearch = currentParams.toString();
+                  window.history.replaceState({}, document.title, window.location.pathname + (newSearch ? '?' + newSearch : ''));
+
               } else {
                   // Ensure the login message area is clear if not coming from signup
-                  // (Avoid showing old success message if user navigates back)
                   hideMessage(loginMessage);
               }
 
@@ -348,8 +351,111 @@
          }
 
          // --- Supabase Authentication Function ---
-         // NOTE: No changes needed here, it correctly handles login attempts
-         async function authenticateUserWithSupabase(userEmail, userPassword) { /* ... (keep existing implementation) ... */ if (!supabase) { console.error("Cannot authenticate: Supabase client not initialized."); showMessage(loginError, 'Authentication service unavailable.', true); setButtonLoading(false); return; } console.log(`Running authenticateUserWithSupabase for ${userEmail}. Will fetch profile by email, store data, and redirect securely on success.`); try { const { data: authData, error: authError } = await supabase.auth.signInWithPassword({ email: userEmail, password: userPassword, }); if (authError) { console.error("Supabase Login Error:", authError.message); let userMessage = 'Incorrect email or password.'; if (authError.message.toLowerCase().includes('invalid login credentials')) { userMessage = 'Incorrect email or password.'; } else if (authError.message.toLowerCase().includes('email not confirmed')) { userMessage = 'Please check your inbox to confirm your email address first.'; } else if (authError.message.toLowerCase().includes('rate limit exceeded')) { userMessage = 'Too many login attempts. Please try again later.'; } else { userMessage = 'Login failed. Please try again later.'; } showMessage(loginError, userMessage, true); setButtonLoading(false); return; } console.log("Supabase Authentication Successful. User:", authData.user); if (!authData.user) { console.error("Login succeeded but no user data received!"); showMessage(loginError, 'Login partially successful, but user data missing. Please try again.', true); setButtonLoading(false); return; } const userId = authData.user.id; console.log(`Fetching profile for user email: ${userEmail}`); const { data: profile, error: profileError } = await supabase .from('users') .select('is_admin, name') .eq('email', userEmail) .single(); let fullUserData = { id: userId, email: userEmail, is_admin: false, name: authData.user.user_metadata?.full_name || userEmail.split('@')[0], progress: {} }; if (!profileError && profile) { console.log("User profile fetched successfully:", profile); fullUserData.is_admin = profile.is_admin ?? false; fullUserData.name = profile.name || fullUserData.name; } else if (profileError && profileError.code !== 'PGRST116') { console.warn('Profile fetch failed:', profileError.message, 'Proceeding with basic user info.'); } else { console.log("Profile fetch did not return data or profile doesn't exist yet, proceeding with basic info."); } localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(fullUserData)); localStorage.setItem(LOGGED_IN_KEY, 'true'); console.log("Full user data (fetched via email, includes is_admin) stored in localStorage:", fullUserData); showMessage(loginMessage, "Login successful! Redirecting...", false); const destination = 'index.html'; console.log(`Redirecting securely to: ${destination}`); setTimeout(() => { window.location.href = destination; }, 500); } catch (unexpectedError) { console.error("Unexpected error during login process:", unexpectedError); showMessage(loginError, 'An unexpected error occurred during login. Please try again.', true); localStorage.removeItem(CURRENT_USER_KEY); localStorage.removeItem(LOGGED_IN_KEY); setButtonLoading(false); } }
+         async function authenticateUserWithSupabase(userEmail, userPassword) {
+             if (!supabase) {
+                 console.error("Cannot authenticate: Supabase client not initialized.");
+                 showMessage(loginError, 'Authentication service unavailable.', true);
+                 setButtonLoading(false);
+                 return;
+             }
+             console.log(`Running authenticateUserWithSupabase for ${userEmail}. Will fetch profile by email, store data, and redirect securely on success.`);
+             try {
+                 const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+                     email: userEmail,
+                     password: userPassword,
+                 });
+
+                 if (authError) {
+                     console.error("Supabase Login Error:", authError.message);
+                     let userMessage = 'Incorrect email or password.';
+                     if (authError.message.toLowerCase().includes('invalid login credentials')) {
+                         userMessage = 'Incorrect email or password.';
+                     } else if (authError.message.toLowerCase().includes('email not confirmed')) {
+                         userMessage = 'Please check your inbox to confirm your email address first.';
+                     } else if (authError.message.toLowerCase().includes('rate limit exceeded')) {
+                         userMessage = 'Too many login attempts. Please try again later.';
+                     } else {
+                         userMessage = 'Login failed. Please try again later.';
+                     }
+                     showMessage(loginError, userMessage, true);
+                     setButtonLoading(false);
+                     return;
+                 }
+
+                 console.log("Supabase Authentication Successful. User:", authData.user);
+                 if (!authData.user) {
+                     console.error("Login succeeded but no user data received!");
+                     showMessage(loginError, 'Login partially successful, but user data missing. Please try again.', true);
+                     setButtonLoading(false);
+                     return;
+                 }
+
+                 const userId = authData.user.id;
+                 console.log(`Fetching profile for user email: ${userEmail}`);
+                 const { data: profile, error: profileError } = await supabase
+                     .from('users')
+                     .select('is_admin, name')
+                     .eq('email', userEmail)
+                     .single();
+
+                 let fullUserData = {
+                     id: userId,
+                     email: userEmail,
+                     is_admin: false,
+                     name: authData.user.user_metadata?.full_name || userEmail.split('@')[0],
+                     progress: {}
+                 };
+
+                 if (!profileError && profile) {
+                     console.log("User profile fetched successfully:", profile);
+                     fullUserData.is_admin = profile.is_admin ?? false;
+                     fullUserData.name = profile.name || fullUserData.name;
+                 } else if (profileError && profileError.code !== 'PGRST116') { // PGRST116: 'Not a single row was found'
+                     console.warn('Profile fetch failed:', profileError.message, 'Proceeding with basic user info.');
+                 } else {
+                     console.log("Profile fetch did not return data or profile doesn't exist yet, proceeding with basic info.");
+                 }
+
+                 localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(fullUserData));
+                 localStorage.setItem(LOGGED_IN_KEY, 'true');
+                 console.log("Full user data (fetched via email, includes is_admin) stored in localStorage:", fullUserData);
+
+                 showMessage(loginMessage, "Login successful! Redirecting...", false);
+
+                // ✅ --- START: MODIFIED REDIRECTION LOGIC ---
+                const urlParams = new URLSearchParams(window.location.search);
+                const redirectToParam = urlParams.get('redirectTo'); // e.g., /core-flow/core-flow.html or core-flow/core-flow.html
+
+                let destination;
+                if (redirectToParam) {
+                    // redirectToParam is expected to be a path from the project root.
+                    // Since login.html is in legacy/, we need to go up one level (../)
+                    // and then append the path.
+                    // If redirectToParam starts with '/', remove it before prepending '../'
+                    // to avoid '.././path' if it's an absolute path from root.
+                    // However, `../` followed by an absolute path like `/core-flow/..` works fine.
+                    destination = `..${redirectToParam}`;
+                    console.log(`Redirecting to specified redirectTo: ${destination} (original param: ${redirectToParam})`);
+                } else {
+                    // Default redirection if no redirectTo param is found
+                    destination = '../core-flow/core-flow.html';
+                    console.log(`Redirecting to default (core-flow): ${destination}`);
+                }
+                // ✅ --- END: MODIFIED REDIRECTION LOGIC ---
+
+                 console.log(`Redirecting securely to: ${destination}`);
+                 setTimeout(() => {
+                     window.location.href = destination;
+                 }, 500);
+
+             } catch (unexpectedError) {
+                 console.error("Unexpected error during login process:", unexpectedError);
+                 showMessage(loginError, 'An unexpected error occurred during login. Please try again.', true);
+                 localStorage.removeItem(CURRENT_USER_KEY);
+                 localStorage.removeItem(LOGGED_IN_KEY);
+                 setButtonLoading(false);
+             }
+         }
 
          console.log("Login page script finished.");
     </script>
