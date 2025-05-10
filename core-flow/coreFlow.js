@@ -33,7 +33,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const callTimerDiv = document.getElementById('callTimer');
     const progressTrackerContainer = document.getElementById('progressTracker');
     const assistantBox = document.getElementById('assistantBox');
-    const assistantMessageElement = document.getElementById('assistantMessage'); // Changed ID for clarity
+    const assistantMessageElement = document.getElementById('assistantMessageElement'); // Ensured ID matches HTML
 
     // State Variables
     let currentScenarioName = null;
@@ -42,7 +42,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     let callTimerInterval = null;
     let callStartTime = 0;
     let assistantTimeout = null;
-
+    let typingInterval = null; 
 
     // --- 1. CHECK AUTHENTICATION & USER INFO ---
     try {
@@ -69,14 +69,17 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (authLoadingDiv) authLoadingDiv.style.display = 'none';
         if (initialViewDiv) initialViewDiv.style.display = 'block';
         updateSystemStatus("🔴 Waiting for Call");
-        showAssistantMessage("💡 Click 'Receive Call' when you're ready!", true, 7000); // Show for 7 seconds
+        showAssistantMessage("Welcome to Elevo Core!", true, 5000, () => {
+            if (initialViewDiv && initialViewDiv.style.display === 'block') {
+                showAssistantMessage("💡 Tip: Click 'Receive Call' to start.", true, 0); 
+            }
+        });
 
     } catch (error) {
         console.error("Auth error:", error);
         if (authLoadingDiv) authLoadingDiv.innerHTML = `<p style="color:red;">Auth Error: ${error.message}</p>`;
         return;
     }
-    // --- END OF AUTH CHECK SECTION ---
 
     // --- UTILITY FUNCTIONS ---
     function updateSystemStatus(statusText, statusClass = 'status-waiting') {
@@ -119,50 +122,72 @@ document.addEventListener('DOMContentLoaded', async () => {
             } else if (index === currentStepIndex) {
                 stepLi.classList.add('active');
             }
-            const stepName = step.length > 20 ? step.substring(0, 17) + "..." : step;
             stepLi.textContent = `Step ${index + 1}`; 
             stepperUl.appendChild(stepLi);
 
             if (index < currentSteps.length - 1) {
                 const separator = document.createElement('li');
                 separator.className = 'step-separator';
-                separator.innerHTML = '→';
+                separator.innerHTML = '→'; // Right arrow
                 stepperUl.appendChild(separator);
             }
         });
         progressTrackerContainer.appendChild(stepperUl);
-        progressTrackerContainer.style.display = 'block';
+        progressTrackerContainer.style.display = 'block'; // Ensure it's block to take width
     }
 
-    function showAssistantMessage(message, showImmediately = false, duration = 5000) {
-        if (assistantMessageElement && assistantBox) {
-            assistantMessageElement.textContent = message;
-            
-            clearTimeout(assistantTimeout); // Clear any existing timeout
-
-            if (showImmediately) {
-                assistantBox.classList.add('show');
-                assistantBox.style.display = 'flex'; 
+    function typeWriterEffect(element, message, speed = 30, callback) { // Adjusted default speed
+        if (typingInterval) clearInterval(typingInterval); 
+        element.textContent = ''; 
+        let i = 0;
+        typingInterval = setInterval(() => {
+            if (i < message.length) {
+                element.textContent += message.charAt(i);
+                i++;
             } else {
-                // If not showing immediately, it implies it was already shown and we are just updating text
-                // Or it will be shown by another logic path
-                if (!assistantBox.classList.contains('show')) { // If hidden, show it
-                     assistantBox.classList.add('show');
-                     assistantBox.style.display = 'flex'; 
-                }
+                clearInterval(typingInterval);
+                typingInterval = null;
+                if (callback) callback(); 
             }
+        }, speed);
+    }
+
+    function showAssistantMessage(message, showImmediately = false, duration = 5000, onHideCallback) {
+        if (assistantMessageElement && assistantBox) {
+            clearTimeout(assistantTimeout);
+            if (typingInterval) clearInterval(typingInterval); 
+
+            const showBox = () => {
+                assistantBox.style.display = 'flex'; 
+                // Delay adding 'show' class slightly to allow 'display:flex' to apply for transition
+                requestAnimationFrame(() => { 
+                    assistantBox.classList.add('show');
+                });
+                typeWriterEffect(assistantMessageElement, message, 30, () => { 
+                    if (duration && duration > 0) {
+                        assistantTimeout = setTimeout(() => {
+                            assistantBox.classList.remove('show');
+                            if (onHideCallback) onHideCallback();
+                        }, duration);
+                    }
+                });
+            };
             
-            // Hide after duration, unless duration is 0 or null (sticky)
-            if (duration && duration > 0) {
-                assistantTimeout = setTimeout(() => {
-                    assistantBox.classList.remove('show');
-                    // Optional: set display to none after transition
-                    // setTimeout(() => { if (!assistantBox.classList.contains('show')) assistantBox.style.display = 'none'; }, 300); 
-                }, duration);
+            // If it's meant to be shown and currently hidden, or if showImmediately is true
+            if (showImmediately || !assistantBox.classList.contains('show')) {
+                showBox();
+            } else if (assistantBox.classList.contains('show')) { // If already shown, just update text
+                 typeWriterEffect(assistantMessageElement, message, 30, () => {
+                    if (duration && duration > 0) {
+                       assistantTimeout = setTimeout(() => {
+                            assistantBox.classList.remove('show');
+                            if (onHideCallback) onHideCallback();
+                        }, duration);
+                    }
+                });
             }
         }
     }
-
 
     // --- 2. "RECEIVE CALL" BUTTON FUNCTIONALITY ---
     if (receiveCallBtn) {
@@ -209,7 +234,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 startCallTimer();
                 renderProgressTracker();
                 renderStep(); 
-                showAssistantMessage(`🚀 Scenario "${currentScenarioName}" started! Follow the steps.`, true, 6000);
+                showAssistantMessage(`🚀 Scenario "${currentScenarioName}" started!`, true, 0); // Sticky
 
             } catch (err) {
                 console.error("Failed to fetch or process scenario:", err);
@@ -233,9 +258,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (currentStepIndex >= 0 && currentStepIndex < currentSteps.length) {
             const stepContent = currentSteps[currentStepIndex];
             stepsContainer.innerHTML = `<p>${stepContent}</p>`;
-            showAssistantMessage(`📌 Current Step: ${stepContent.length > 40 ? stepContent.substring(0, 37) + "..." : stepContent}`, true, 5000);
-        } else {
-            // This case is handled by nextStepBtn logic when finishing scenario
+            showAssistantMessage(`📌 ${stepContent.length > 45 ? stepContent.substring(0, 42) + "..." : stepContent}`, true, 0); // Sticky
         }
         renderProgressTracker(); 
         if (prevStepBtn) prevStepBtn.style.display = currentStepIndex > 0 ? 'inline-flex' : 'none';
@@ -266,7 +289,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 updateSystemStatus("✅ Call Completed", "status-completed");
                 stopCallTimer();
                 showAssistantMessage("🎉 Scenario Complete! Well done.", true, 7000);
-                currentStepIndex++; // To mark all steps as completed in tracker
+                currentStepIndex++; 
                 renderProgressTracker(); 
             }
         });
@@ -274,7 +297,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (prevStepBtn) {
         prevStepBtn.addEventListener('click', () => { 
             if (currentStepIndex > 0) {
-                // If currentStepIndex was past the end (showing "Completed"), reset it to last step
                 if (currentStepIndex >= currentSteps.length) {
                     currentStepIndex = currentSteps.length -1;
                 } else {
@@ -300,15 +322,19 @@ document.addEventListener('DOMContentLoaded', async () => {
             updateSystemStatus("🔴 Waiting for Call");
             if (nextStepBtn) {
                 nextStepBtn.innerHTML = `<span>Next Step</span><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>`;
-                nextStepBtn.style.display = 'none'; // Hide it initially, receiveCall will show it
+                nextStepBtn.style.display = 'none'; 
             }
             if (prevStepBtn) prevStepBtn.style.display = 'none';
             if (endCallBtn) endCallBtn.style.display = 'none'; 
             
             if (scenarioTitleElement) scenarioTitleElement.textContent = "Call Scenario"; 
             if (stepsContainer) stepsContainer.innerHTML = '<p class="placeholder-text">Ready for a new call.</p>';
-            showAssistantMessage("💡 Ready for the next call!", true, 7000);
+            showAssistantMessage("💡 Ready for the next call!", true, 7000, () => {
+                if (initialViewDiv && initialViewDiv.style.display === 'block') {
+                    showAssistantMessage("💡 Tip: Click 'Receive Call' to start.", true, 0);
+                }
+            });
         });
     }
-    console.log("CoreFlow.js script fully loaded - Fixed Dark Mode & Assistant Logic.");
+    console.log("CoreFlow.js script fully loaded - Fixed Dark Mode & Enhanced Assistant.");
 });
