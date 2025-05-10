@@ -29,7 +29,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const userNameSpan = document.getElementById('userName');
     const logoutButton = document.getElementById('logoutButton');
     const systemStatusDiv = document.getElementById('systemStatus');
-    const callTimerDiv = document.getElementById('callTimer');
+    const callTimerDiv = document.getElementById('callTimer'); // The timer element
     const progressTrackerContainer = document.getElementById('progressTracker');
     const assistantBox = document.getElementById('assistantBox');
     const assistantMessageElement = document.getElementById('assistantMessageElement');
@@ -49,10 +49,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (sessionError) throw sessionError;
         if (!session) {
             const currentPath = window.location.pathname.replace('/elevo-core-flow', '') + window.location.search + window.location.hash;
-            // Make sure this path is correct for your setup.
-            // If core-flow.html is at the root of elevo-core-flow folder (e.g. elevo-core-flow/core-flow.html)
-            // and login.html is at elevo-core-flow/legacy/login.html
-            // then the path from core-flow.html to legacy/login.html is '../legacy/login.html'
             window.location.href = `../legacy/login.html?redirectTo=${encodeURIComponent(currentPath)}`;
             return; 
         }
@@ -97,26 +93,39 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     
     function startCallTimer() {
-        console.log("Starting call timer.");
+        console.log("%cDEBUG: startCallTimer() CALLED", "color: blue; font-weight: bold;");
         if (callTimerDiv) {
+            console.log("DEBUG: callTimerDiv IS FOUND. Initial display before change:", window.getComputedStyle(callTimerDiv).display);
             callTimerDiv.style.display = 'block'; 
+            const newDisplay = window.getComputedStyle(callTimerDiv).display;
+            console.log(`DEBUG: callTimerDiv.style.display explicitly SET TO 'block'. Computed display NOW: ${newDisplay}`);
+            if (newDisplay !== 'block') {
+                console.error("DEBUG: CRITICAL! Timer display did not change to 'block' immediately after setting it!");
+            }
             callTimerDiv.textContent = '00:00'; 
+        } else {
+            console.error("DEBUG: CRITICAL! callTimerDiv IS NULL or NOT FOUND when trying to start timer!");
+            return; 
         }
+
         callStartTime = Date.now();
-        if (callTimerInterval) clearInterval(callTimerInterval); // Clear existing interval if any
+        if (callTimerInterval) clearInterval(callTimerInterval);
         callTimerInterval = setInterval(() => {
             const elapsedTime = Math.floor((Date.now() - callStartTime) / 1000);
             const minutes = String(Math.floor(elapsedTime / 60)).padStart(2, '0');
             const seconds = String(elapsedTime % 60).padStart(2, '0');
             if (callTimerDiv) callTimerDiv.textContent = `${minutes}:${seconds}`;
+            // Check if timer is visible while counting (for debugging)
+            // if (callTimerDiv && window.getComputedStyle(callTimerDiv).display === 'none') {
+            //    console.warn("DEBUG: Timer is counting but its display is 'none'!");
+            // }
         }, 1000);
     }
 
     function stopCallTimer() {
-        console.log("Stopping call timer interval.");
+        console.log("%cDEBUG: stopCallTimer() CALLED", "color: orange; font-weight: bold;");
         clearInterval(callTimerInterval);
         callTimerInterval = null;
-        // Timer display is handled by endCallBtn logic now
     }
 
     function renderProgressTracker() {
@@ -204,7 +213,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // --- 2. "RECEIVE CALL" BUTTON FUNCTIONALITY ---
     if (receiveCallBtn) {
         receiveCallBtn.addEventListener('click', async () => {
-            console.log("Receive Call button clicked");
+            console.log("%cDEBUG: Receive Call button clicked", "color: green; font-weight: bold;");
             if (initialViewDiv) initialViewDiv.style.display = 'none';
             if (callFlowViewDiv) callFlowViewDiv.style.display = 'block';
             
@@ -224,20 +233,26 @@ document.addEventListener('DOMContentLoaded', async () => {
                     .limit(1)              
                     .single();             
 
-                if (error) {
-                    if (error.code === 'PGRST116') {
-                         showAssistantMessage("⚠️ No active scenario found. Please contact admin.", true, 7000);
-                         if (stepsContainer) stepsContainer.innerHTML = '<p style="color:orange;">No active call scenario available.</p>';
-                         if (scenarioTitleElement) scenarioTitleElement.textContent = 'No Scenario';
-                         updateSystemStatus("🔴 No Scenario", "status-waiting");
-                    } else { throw error; }
-                    // If no scenario, make sure timer is hidden if it was somehow shown
-                    if (callTimerDiv) callTimerDiv.style.display = 'none';
+                if (error || !scenario || !scenario.steps || scenario.steps.length === 0) {
+                    let errorMessage = "DEBUG: Scenario fetch error or invalid scenario. Timer will NOT be started/shown by this path.";
+                    if (error && error.code === 'PGRST116') {
+                        errorMessage = "DEBUG: No active scenario found (PGRST116).";
+                        showAssistantMessage("⚠️ No active scenario found. Please contact admin.", true, 7000);
+                        if (stepsContainer) stepsContainer.innerHTML = '<p style="color:orange;">No active call scenario available.</p>';
+                        if (scenarioTitleElement) scenarioTitleElement.textContent = 'No Scenario';
+                        updateSystemStatus("🔴 No Scenario", "status-waiting");
+                    } else if (error) {
+                        errorMessage = `DEBUG: Supabase error: ${error.message}`;
+                    } else {
+                         errorMessage = "DEBUG: Scenario data is invalid or steps are empty.";
+                    }
+                    console.error(errorMessage);
+
+                    if (callTimerDiv) {
+                       console.log("DEBUG: Hiding timer due to scenario error (in receiveCallBtn).");
+                       callTimerDiv.style.display = 'none';
+                    }
                     return;
-                }
-                if (!scenario || !scenario.steps || scenario.steps.length === 0) {
-                    if (callTimerDiv) callTimerDiv.style.display = 'none'; // Hide timer if scenario is invalid
-                    throw new Error("Loaded scenario is invalid or has no steps.");
                 }
 
                 currentScenarioName = scenario.name;
@@ -247,19 +262,23 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (scenarioTitleElement) scenarioTitleElement.textContent = currentScenarioName;
                 updateSystemStatus("🟢 In Call", "status-in-call");
                 
-                startCallTimer(); // ✅ Start and SHOW the timer
+                console.log("DEBUG: Scenario loaded successfully. CALLING startCallTimer().");
+                startCallTimer(); 
                 
                 renderProgressTracker();
                 renderStep(); 
                 showAssistantMessage(`🚀 Scenario "${currentScenarioName}" started!`, true, 0);
 
             } catch (err) {
-                console.error("Failed to fetch or process scenario:", err);
+                console.error("DEBUG: CATCH Block in Receive Call. Error:", err);
                 if (stepsContainer) stepsContainer.innerHTML = `<p style="color:red;">Error loading scenario: ${err.message}.</p>`;
                 if (scenarioTitleElement) scenarioTitleElement.textContent = 'Error Loading Scenario';
                 updateSystemStatus("🔴 Error", "status-waiting");
                 showAssistantMessage(`❗ Error: ${err.message}`, true, 7000);
-                if (callTimerDiv) callTimerDiv.style.display = 'none'; // Hide timer on error
+                if (callTimerDiv) { 
+                     console.log("DEBUG: Hiding timer due to CATCH block error (in receiveCallBtn).");
+                     callTimerDiv.style.display = 'none';
+                }
             }
         });
     }
@@ -305,7 +324,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (nextStepBtn) nextStepBtn.style.display = 'none';
                 if (prevStepBtn) prevStepBtn.style.display = (currentSteps.length > 0) ? 'inline-flex' : 'none';
                 updateSystemStatus("✅ Call Completed", "status-completed");
-                stopCallTimer(); // Stop the timer interval, but don't hide the display yet
+                stopCallTimer(); 
                 showAssistantMessage("🎉 Scenario Complete! Well done.", true, 7000);
                 currentStepIndex++; 
                 renderProgressTracker(); 
@@ -328,7 +347,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // --- 5. END CALL BUTTON ---
     if (endCallBtn) {
         endCallBtn.addEventListener('click', () => {
-            console.log("End Call button clicked by user.");
+            console.log("%cDEBUG: End Call button clicked", "color: red; font-weight: bold;");
             currentScenarioName = null;
             currentSteps = [];
             currentStepIndex = 0;
@@ -339,8 +358,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             
             stopCallTimer(); 
             if (callTimerDiv) {
+                console.log("DEBUG: End Call. Setting timer display to 'none'.");
                 callTimerDiv.textContent = '00:00'; 
-                callTimerDiv.style.display = 'none'; // ✅ Hide the timer display
+                callTimerDiv.style.display = 'none'; 
             }
             
             updateSystemStatus("🔴 Waiting for Call");
@@ -360,5 +380,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             });
         });
     }
-    console.log("CoreFlow.js script fully loaded - Timer always visible during call.");
+
+    // Initial check for callTimerDiv's computed style
+    if (callTimerDiv) {
+        console.log("DEBUG: Initial computed display style for callTimerDiv on DOMContentLoaded:", window.getComputedStyle(callTimerDiv).display);
+    } else {
+        console.warn("DEBUG: callTimerDiv was NOT FOUND on DOMContentLoaded initial check!");
+    }
+
+    console.log("CoreFlow.js script fully loaded - INTENSE Debugging timer visibility.");
 });
