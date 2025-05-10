@@ -1,5 +1,5 @@
 document.addEventListener('DOMContentLoaded', async () => {
-    console.log("CoreFlow.js DOMContentLoaded - V2");
+    console.log("CoreFlow.js DOMContentLoaded - Dynamic Scenarios from Supabase");
 
     const supabaseUrl = 'https://lgcutmuspcaralydycmg.supabase.co';
     const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxnY3V0bXVzcGNhcmFseWR5Y21nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU0NDY3MDEsImV4cCI6MjA2MTAyMjcwMX0.3u5Y7pkH2NNnnoGLMWVfAa5b8fq88o1itRYnG1K38tE';
@@ -47,10 +47,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (!session) {
             console.log("User not authenticated. Redirecting to login.");
             const currentPath = window.location.pathname.replace('/elevo-core-flow', '') + window.location.search + window.location.hash;
-            // Ensure the path is correct when deployed on GitHub Pages (if repo name is part of path)
-            // Example: if deployed at mohamedelmenisy.github.io/elevo-core-flow/
-            // login.html would be at mohamedelmenisy.github.io/elevo-core-flow/legacy/login.html
-            // So from core-flow/core-flow.html, path to legacy/login.html is `../legacy/login.html`
             window.location.href = `../legacy/login.html?redirectTo=${encodeURIComponent(currentPath)}`;
             return; 
         }
@@ -84,90 +80,122 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // --- 2. "RECEIVE CALL" BUTTON FUNCTIONALITY ---
     if (receiveCallBtn) {
-        receiveCallBtn.addEventListener('click', () => {
+        receiveCallBtn.addEventListener('click', async () => {
             console.log("Receive Call button clicked");
             if (initialViewDiv) initialViewDiv.style.display = 'none';
             if (callFlowViewDiv) callFlowViewDiv.style.display = 'block';
-            if (endCallBtn) endCallBtn.style.display = 'block';
-            loadScenarioAndDisplay('order_delay'); 
+            
+            // Show loading state for steps
+            if (stepsContainer) stepsContainer.innerHTML = '<p class="placeholder-text">Loading scenario...</p>';
+            if (scenarioTitleElement) scenarioTitleElement.textContent = 'Loading Scenario...';
+            if (nextStepBtn) nextStepBtn.style.display = 'none';
+            if (prevStepBtn) prevStepBtn.style.display = 'none';
+            if (endCallBtn) endCallBtn.style.display = 'inline-flex'; // Show end call button immediately
+
+            try {
+                const { data: scenario, error } = await supabase
+                    .from('call_scenarios') // Make sure this table name is correct
+                    .select('name, steps')   // Select the name and steps columns
+                    .eq('is_active', true) // Filter for active scenarios
+                    .limit(1)              // Get only one active scenario (you might want more sophisticated logic later)
+                    .single();             // Expect a single row or null
+
+                if (error) {
+                    if (error.code === 'PGRST116') { // PGRST116: 'Not a single row was found'
+                         console.warn("No active scenario found in Supabase.");
+                         if (stepsContainer) stepsContainer.innerHTML = '<p style="color:orange;">No active call scenario available at the moment.</p>';
+                         if (scenarioTitleElement) scenarioTitleElement.textContent = 'No Scenario';
+                    } else {
+                        throw error; // Re-throw other errors
+                    }
+                    // Hide next/prev if no scenario
+                    if (nextStepBtn) nextStepBtn.style.display = 'none';
+                    if (prevStepBtn) prevStepBtn.style.display = 'none';
+                    return;
+                }
+
+                if (!scenario || !scenario.steps || scenario.steps.length === 0) {
+                    console.error("Fetched scenario is invalid or has no steps:", scenario);
+                    if (stepsContainer) stepsContainer.innerHTML = '<p style="color:red;">Loaded scenario is empty or invalid.</p>';
+                    if (scenarioTitleElement) scenarioTitleElement.textContent = 'Invalid Scenario';
+                    if (nextStepBtn) nextStepBtn.style.display = 'none';
+                    if (prevStepBtn) prevStepBtn.style.display = 'none';
+                    return;
+                }
+
+                currentScenarioName = scenario.name;
+                currentSteps = scenario.steps; // Assuming 'steps' is an array of strings
+                currentStepIndex = 0;
+                
+                if (scenarioTitleElement) scenarioTitleElement.textContent = currentScenarioName;
+                renderStep(); // Render the first step
+
+            } catch (err) {
+                console.error("Failed to fetch or process scenario from Supabase:", err);
+                if (stepsContainer) stepsContainer.innerHTML = `<p style="color:red;">Error loading scenario: ${err.message}. Please check console.</p>`;
+                if (scenarioTitleElement) scenarioTitleElement.textContent = 'Error';
+                if (nextStepBtn) nextStepBtn.style.display = 'none';
+                if (prevStepBtn) prevStepBtn.style.display = 'none';
+            }
         });
     } else {
         console.error("Receive Call Button not found!");
     }
 
 
-    // --- 3. SCENARIO HANDLING FUNCTIONS ---
-    async function loadScenarioAndDisplay(scenarioName) {
-        currentScenarioName = scenarioName; 
-        if(scenarioTitleElement) scenarioTitleElement.textContent = `Scenario: ${scenarioName.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}`;
-        
-        if (stepsContainer) stepsContainer.innerHTML = '<p class="placeholder-text">Loading call steps...</p>';
-        try {
-            const response = await fetch('../knowledge-base/kb.json'); 
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            const kb = await response.json();
-            const scenario = kb[scenarioName];
+    // --- 3. RENDER STEP FUNCTION ---
+    function renderStep() {
+        if (!stepsContainer) return;
 
-            if (scenario && scenario.steps && scenario.steps.length > 0) {
-                currentSteps = scenario.steps;
-                currentStepIndex = 0;
-                displayStep(currentStepIndex);
-            } else {
-                console.error('Scenario not found, has no steps, or steps array is empty:', scenarioName);
-                if (stepsContainer) stepsContainer.innerHTML = `<p style="color:red;">Error: Scenario '${scenarioName}' not found or is empty.</p>`;
-                if (nextStepBtn) nextStepBtn.style.display = 'none';
-                if (prevStepBtn) prevStepBtn.style.display = 'none';
-            }
-        } catch (error) {
-            console.error('Failed to load or parse kb.json:', error);
-            if (stepsContainer) stepsContainer.innerHTML = `<p style="color:red;">Error loading scenario: ${error.message}. Please check console.</p>`;
+        if (currentSteps.length === 0) {
+            stepsContainer.innerHTML = '<p class="placeholder-text">No steps available for this scenario.</p>';
             if (nextStepBtn) nextStepBtn.style.display = 'none';
             if (prevStepBtn) prevStepBtn.style.display = 'none';
-        }
-    }
-
-    function displayStep(index) {
-        if (!stepsContainer) return;
-        if (index >= 0 && index < currentSteps.length) {
-            stepsContainer.innerHTML = `<p>${currentSteps[index]}</p>`;
-        } else if (index >= currentSteps.length && currentSteps.length > 0) {
-            stepsContainer.innerHTML = `<p><strong>End of scenario: ${currentScenarioName.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</strong></p><p>You have completed all steps.</p>`;
-        }
-        updateNavigationButtons();
-    }
-    
-    function updateNavigationButtons() {
-        if (!prevStepBtn || !nextStepBtn || currentSteps.length === 0) {
-            if(prevStepBtn) prevStepBtn.style.display = 'none';
-            if(nextStepBtn) nextStepBtn.style.display = 'none';
             return;
         }
 
-        prevStepBtn.style.display = (currentStepIndex > 0) ? 'inline-flex' : 'none';
+        if (currentStepIndex >= 0 && currentStepIndex < currentSteps.length) {
+            const stepContent = currentSteps[currentStepIndex];
+            // Using the class 'step-box' as in your example for styling individual steps
+            stepsContainer.innerHTML = `<p>${stepContent}</p>`; // Assuming your CSS for p inside steps-area is sufficient
+        } else {
+            // This case should ideally be handled by button logic (Next button becoming "Finish")
+            stepsContainer.innerHTML = `<p><strong>End of scenario: ${currentScenarioName}</strong></p>`;
+        }
 
-        if (currentStepIndex < currentSteps.length - 1) {
-            nextStepBtn.innerHTML = `<span>Next Step</span><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>`;
-            nextStepBtn.style.display = 'inline-flex';
-        } else if (currentStepIndex === currentSteps.length - 1) {
-            nextStepBtn.innerHTML = `<span>Finish Scenario</span>`; // Icon removed for finish
-            nextStepBtn.style.display = 'inline-flex';
-        } else { 
-            nextStepBtn.style.display = 'none';
-            prevStepBtn.style.display = (currentSteps.length > 0) ? 'inline-flex' : 'none';
+        // Manage buttons visibility and text
+        if (prevStepBtn) {
+            prevStepBtn.style.display = currentStepIndex > 0 ? 'inline-flex' : 'none';
+        }
+        if (nextStepBtn) {
+            if (currentStepIndex < currentSteps.length - 1) {
+                nextStepBtn.innerHTML = `<span>Next Step</span><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>`;
+                nextStepBtn.style.display = 'inline-flex';
+            } else if (currentStepIndex === currentSteps.length - 1) { // Last step
+                nextStepBtn.innerHTML = `<span>Finish Scenario</span>`; 
+                nextStepBtn.style.display = 'inline-flex';
+            } else { // Beyond last step (scenario finished)
+                nextStepBtn.style.display = 'none';
+            }
         }
     }
 
+    // --- 4. NAVIGATION BUTTONS ---
     if (nextStepBtn) {
         nextStepBtn.addEventListener('click', () => {
-            if (currentStepIndex < currentSteps.length -1) {
+            if (currentStepIndex < currentSteps.length - 1) {
                 currentStepIndex++;
-                displayStep(currentStepIndex);
-            } else if (currentStepIndex === currentSteps.length -1) {
-                currentStepIndex++; 
-                displayStep(currentStepIndex); 
-                console.log(`Scenario ${currentScenarioName} finished.`);
+                renderStep();
+            } else if (currentStepIndex === currentSteps.length - 1) {
+                // "Finish Scenario" was clicked
+                console.log(`Scenario ${currentScenarioName} finished by user.`);
+                // You might want to do something here, like log completion,
+                // then call endCallBtn's logic or similar.
+                // For now, let's simulate ending the call flow view.
+                if (stepsContainer) stepsContainer.innerHTML = `<p><strong>Scenario ${currentScenarioName} Completed!</strong></p>`;
+                if (nextStepBtn) nextStepBtn.style.display = 'none';
+                if (prevStepBtn) prevStepBtn.style.display = (currentSteps.length > 0) ? 'inline-flex' : 'none'; // Allow going back to last step
+                // Do not automatically go to initialViewDiv, let user click End Call
             }
         });
     }
@@ -176,28 +204,35 @@ document.addEventListener('DOMContentLoaded', async () => {
         prevStepBtn.addEventListener('click', () => { 
             if (currentStepIndex > 0) {
                 currentStepIndex--;
-                displayStep(currentStepIndex);
+                renderStep();
             }
         });
     }
     
+    // --- 5. END CALL BUTTON ---
     if (endCallBtn) {
         endCallBtn.addEventListener('click', () => {
-            console.log("End Call button clicked.");
-            if (callFlowViewDiv) callFlowViewDiv.style.display = 'none';
-            if (initialViewDiv) initialViewDiv.style.display = 'block';
-            if (endCallBtn) endCallBtn.style.display = 'none';
-            if (prevStepBtn) prevStepBtn.style.display = 'none';
-            if (nextStepBtn) {
-                nextStepBtn.style.display = 'inline-flex'; 
-                nextStepBtn.innerHTML = `<span>Next Step</span><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>`;
-            }
-            if (stepsContainer) stepsContainer.innerHTML = '<p class="placeholder-text">Loading call steps...</p>';
+            console.log("End Call button clicked by user.");
+            currentScenarioName = null;
             currentSteps = [];
             currentStepIndex = 0;
-            currentScenarioName = null;
-            if(scenarioTitleElement) scenarioTitleElement.textContent = "Call Scenario";
+
+            if (callFlowViewDiv) callFlowViewDiv.style.display = 'none';
+            if (initialViewDiv) initialViewDiv.style.display = 'block';
+            
+            // Reset button states that might have been changed
+            if (nextStepBtn) {
+                 nextStepBtn.innerHTML = `<span>Next Step</span><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>`;
+                 // Next button will be hidden by default when callFlowView is hidden.
+                 // It will be shown again by receiveCallBtn if a new scenario is loaded.
+            }
+            if (prevStepBtn) prevStepBtn.style.display = 'none';
+            if (endCallBtn) endCallBtn.style.display = 'none'; // Hide itself
+            
+            if (scenarioTitleElement) scenarioTitleElement.textContent = "Call Scenario"; // Reset title
+            if (stepsContainer) stepsContainer.innerHTML = '<p class="placeholder-text">Ready for a new call.</p>'; // Reset steps area
         });
     }
-    console.log("CoreFlow.js script fully loaded and event listeners attached. - V2");
+
+    console.log("CoreFlow.js script fully loaded and event listeners attached - Dynamic Scenarios.");
 });
