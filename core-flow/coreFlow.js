@@ -1,5 +1,5 @@
 document.addEventListener('DOMContentLoaded', async () => {
-    console.log("CoreFlow.js DOMContentLoaded - Advanced Features");
+    console.log("CoreFlow.js DOMContentLoaded - Fixed Dark Mode & Assistant Logic");
 
     const supabaseUrl = 'https://lgcutmuspcaralydycmg.supabase.co';
     const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxnY3V0bXVzcGNhcmFseWR5Y21nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU0NDY3MDEsImV4cCI6MjA2MTAyMjcwMX0.3u5Y7pkH2NNnnoGLMWVfAa5b8fq88o1itRYnG1K38tE';
@@ -28,13 +28,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     const userInfoDiv = document.getElementById('userInfo');
     const userNameSpan = document.getElementById('userName');
     const logoutButton = document.getElementById('logoutButton');
-    const darkModeToggle = document.getElementById('darkModeToggle');
-    const darkModeIcon = document.getElementById('darkModeIcon');
+    // Dark Mode Elements Removed
     const systemStatusDiv = document.getElementById('systemStatus');
     const callTimerDiv = document.getElementById('callTimer');
     const progressTrackerContainer = document.getElementById('progressTracker');
     const assistantBox = document.getElementById('assistantBox');
-    const assistantMessage = document.getElementById('assistantMessage');
+    const assistantMessageElement = document.getElementById('assistantMessage'); // Changed ID for clarity
 
     // State Variables
     let currentScenarioName = null;
@@ -42,36 +41,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     let currentStepIndex = 0;
     let callTimerInterval = null;
     let callStartTime = 0;
+    let assistantTimeout = null;
 
-    // --- 0. DARK MODE FUNCTIONALITY ---
-    const sunIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>`;
-    const moonIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>`;
-
-    const applyDarkModePreference = () => {
-        const isDarkMode = localStorage.getItem('darkMode') === 'true';
-        if (isDarkMode) {
-            document.documentElement.classList.add('dark');
-            if(darkModeIcon) darkModeIcon.innerHTML = sunIcon;
-        } else {
-            document.documentElement.classList.remove('dark');
-            if(darkModeIcon) darkModeIcon.innerHTML = moonIcon;
-        }
-    };
-
-    if (darkModeToggle) {
-        darkModeToggle.addEventListener('click', () => {
-            const isDarkMode = document.documentElement.classList.toggle('dark');
-            localStorage.setItem('darkMode', isDarkMode);
-            if(darkModeIcon) darkModeIcon.innerHTML = isDarkMode ? sunIcon : moonIcon;
-        });
-    }
-    applyDarkModePreference(); // Apply on initial load
 
     // --- 1. CHECK AUTHENTICATION & USER INFO ---
-    // ... (الكود الخاص بالتحقق من المصادقة وتسجيل الخروج كما هو من الرد السابق) ...
-    // For brevity, I'll assume the auth check code from the previous response is here.
-    // Make sure it correctly hides authLoadingDiv and shows initialViewDiv on success.
-    // And it handles redirection if not authenticated.
     try {
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
         if (sessionError) throw sessionError;
@@ -87,7 +60,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             userInfoDiv.style.display = 'flex';
         }
         if(logoutButton) {
-            logoutButton.addEventListener('click', async () => { /* ... logout logic ... */ 
+            logoutButton.addEventListener('click', async () => { 
                 const { error } = await supabase.auth.signOut();
                 if (error) console.error("Logout error:", error);
                 else window.location.href = '../legacy/login.html'; 
@@ -96,7 +69,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (authLoadingDiv) authLoadingDiv.style.display = 'none';
         if (initialViewDiv) initialViewDiv.style.display = 'block';
         updateSystemStatus("🔴 Waiting for Call");
-        showAssistantMessage("💡 Click 'Receive Call' when you're ready!", true);
+        showAssistantMessage("💡 Click 'Receive Call' when you're ready!", true, 7000); // Show for 7 seconds
 
     } catch (error) {
         console.error("Auth error:", error);
@@ -127,8 +100,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     function stopCallTimer() {
         clearInterval(callTimerInterval);
         callTimerInterval = null;
-        // Optional: Keep timer visible or hide it
-        // if (callTimerDiv) callTimerDiv.style.display = 'none';
     }
 
     function renderProgressTracker() {
@@ -136,7 +107,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             if(progressTrackerContainer) progressTrackerContainer.style.display = 'none';
             return;
         }
-        progressTrackerContainer.innerHTML = ''; // Clear previous tracker
+        progressTrackerContainer.innerHTML = ''; 
         const stepperUl = document.createElement('ul');
         stepperUl.className = 'stepper';
 
@@ -148,9 +119,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             } else if (index === currentStepIndex) {
                 stepLi.classList.add('active');
             }
-            // Truncate long step names for display in tracker
             const stepName = step.length > 20 ? step.substring(0, 17) + "..." : step;
-            stepLi.textContent = `Step ${index + 1}`; // Or use short names for steps if available
+            stepLi.textContent = `Step ${index + 1}`; 
             stepperUl.appendChild(stepLi);
 
             if (index < currentSteps.length - 1) {
@@ -164,14 +134,31 @@ document.addEventListener('DOMContentLoaded', async () => {
         progressTrackerContainer.style.display = 'block';
     }
 
-    function showAssistantMessage(message, autoShow = false, duration = 5000) {
-        if (assistantMessage && assistantBox) {
-            assistantMessage.textContent = message;
-            if (autoShow || assistantBox.classList.contains('show')) {
+    function showAssistantMessage(message, showImmediately = false, duration = 5000) {
+        if (assistantMessageElement && assistantBox) {
+            assistantMessageElement.textContent = message;
+            
+            clearTimeout(assistantTimeout); // Clear any existing timeout
+
+            if (showImmediately) {
                 assistantBox.classList.add('show');
-                assistantBox.style.display = 'flex'; // Make sure it's flex for icon alignment
-                // Optionally hide after a duration if not sticky
-                // setTimeout(() => assistantBox.classList.remove('show'), duration);
+                assistantBox.style.display = 'flex'; 
+            } else {
+                // If not showing immediately, it implies it was already shown and we are just updating text
+                // Or it will be shown by another logic path
+                if (!assistantBox.classList.contains('show')) { // If hidden, show it
+                     assistantBox.classList.add('show');
+                     assistantBox.style.display = 'flex'; 
+                }
+            }
+            
+            // Hide after duration, unless duration is 0 or null (sticky)
+            if (duration && duration > 0) {
+                assistantTimeout = setTimeout(() => {
+                    assistantBox.classList.remove('show');
+                    // Optional: set display to none after transition
+                    // setTimeout(() => { if (!assistantBox.classList.contains('show')) assistantBox.style.display = 'none'; }, 300); 
+                }, duration);
             }
         }
     }
@@ -202,7 +189,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                 if (error) {
                     if (error.code === 'PGRST116') {
-                         showAssistantMessage("⚠️ No active scenario found. Please contact admin.", true);
+                         showAssistantMessage("⚠️ No active scenario found. Please contact admin.", true, 7000);
                          if (stepsContainer) stepsContainer.innerHTML = '<p style="color:orange;">No active call scenario available.</p>';
                          if (scenarioTitleElement) scenarioTitleElement.textContent = 'No Scenario';
                          updateSystemStatus("🔴 No Scenario", "status-waiting");
@@ -222,32 +209,35 @@ document.addEventListener('DOMContentLoaded', async () => {
                 startCallTimer();
                 renderProgressTracker();
                 renderStep(); 
-                showAssistantMessage(`🚀 Scenario "${currentScenarioName}" started! Follow the steps.`, true);
+                showAssistantMessage(`🚀 Scenario "${currentScenarioName}" started! Follow the steps.`, true, 6000);
 
             } catch (err) {
                 console.error("Failed to fetch or process scenario:", err);
                 if (stepsContainer) stepsContainer.innerHTML = `<p style="color:red;">Error loading scenario: ${err.message}.</p>`;
                 if (scenarioTitleElement) scenarioTitleElement.textContent = 'Error Loading Scenario';
                 updateSystemStatus("🔴 Error", "status-waiting");
-                showAssistantMessage(`❗ Error: ${err.message}`, true);
+                showAssistantMessage(`❗ Error: ${err.message}`, true, 7000);
             }
         });
     }
 
     // --- 3. RENDER STEP FUNCTION ---
     function renderStep() {
-        // ... (renderStep logic from previous response, with renderProgressTracker() call) ...
         if (!stepsContainer) return;
-        if (currentSteps.length === 0) { /* ... */ return; }
+        if (currentSteps.length === 0) { 
+            stepsContainer.innerHTML = '<p class="placeholder-text">No steps available.</p>';
+            if (nextStepBtn) nextStepBtn.style.display = 'none';
+            if (prevStepBtn) prevStepBtn.style.display = 'none';
+            return;
+        }
         if (currentStepIndex >= 0 && currentStepIndex < currentSteps.length) {
             const stepContent = currentSteps[currentStepIndex];
             stepsContainer.innerHTML = `<p>${stepContent}</p>`;
-            showAssistantMessage(`📌 Current Step: ${stepContent.substring(0,50)}...`, false); // Show current step in assistant
+            showAssistantMessage(`📌 Current Step: ${stepContent.length > 40 ? stepContent.substring(0, 37) + "..." : stepContent}`, true, 5000);
         } else {
-            stepsContainer.innerHTML = `<p><strong>End of scenario: ${currentScenarioName}</strong></p>`;
+            // This case is handled by nextStepBtn logic when finishing scenario
         }
-        renderProgressTracker(); // Update tracker on each step
-        // Manage buttons visibility (from previous response, slightly adapted)
+        renderProgressTracker(); 
         if (prevStepBtn) prevStepBtn.style.display = currentStepIndex > 0 ? 'inline-flex' : 'none';
         if (nextStepBtn) {
             if (currentStepIndex < currentSteps.length - 1) {
@@ -263,7 +253,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     // --- 4. NAVIGATION BUTTONS ---
-    // ... (nextStepBtn and prevStepBtn logic from previous response) ...
     if (nextStepBtn) {
         nextStepBtn.addEventListener('click', () => {
             if (currentStepIndex < currentSteps.length - 1) {
@@ -276,15 +265,21 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (prevStepBtn) prevStepBtn.style.display = (currentSteps.length > 0) ? 'inline-flex' : 'none';
                 updateSystemStatus("✅ Call Completed", "status-completed");
                 stopCallTimer();
-                showAssistantMessage("🎉 Scenario Complete! Well done.", true);
-                renderProgressTracker(); // Show all steps as completed
+                showAssistantMessage("🎉 Scenario Complete! Well done.", true, 7000);
+                currentStepIndex++; // To mark all steps as completed in tracker
+                renderProgressTracker(); 
             }
         });
     }
     if (prevStepBtn) {
         prevStepBtn.addEventListener('click', () => { 
             if (currentStepIndex > 0) {
-                currentStepIndex--;
+                // If currentStepIndex was past the end (showing "Completed"), reset it to last step
+                if (currentStepIndex >= currentSteps.length) {
+                    currentStepIndex = currentSteps.length -1;
+                } else {
+                    currentStepIndex--;
+                }
                 renderStep();
             }
         });
@@ -293,7 +288,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     // --- 5. END CALL BUTTON ---
     if (endCallBtn) {
         endCallBtn.addEventListener('click', () => {
-            // ... (endCallBtn logic from previous response, with stopCallTimer() and status update) ...
             console.log("End Call button clicked by user.");
             currentScenarioName = null;
             currentSteps = [];
@@ -302,15 +296,19 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (initialViewDiv) initialViewDiv.style.display = 'block';
             if (progressTrackerContainer) progressTrackerContainer.style.display = 'none';
             stopCallTimer();
-            if (callTimerDiv) callTimerDiv.textContent = '00:00'; // Reset timer display
+            if (callTimerDiv) callTimerDiv.textContent = '00:00'; 
             updateSystemStatus("🔴 Waiting for Call");
-            if (nextStepBtn) nextStepBtn.innerHTML = `<span>Next Step</span><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>`;
+            if (nextStepBtn) {
+                nextStepBtn.innerHTML = `<span>Next Step</span><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>`;
+                nextStepBtn.style.display = 'none'; // Hide it initially, receiveCall will show it
+            }
             if (prevStepBtn) prevStepBtn.style.display = 'none';
-            if (endCallBtn) endCallBtn.style.display = 'none';
+            if (endCallBtn) endCallBtn.style.display = 'none'; 
+            
             if (scenarioTitleElement) scenarioTitleElement.textContent = "Call Scenario"; 
             if (stepsContainer) stepsContainer.innerHTML = '<p class="placeholder-text">Ready for a new call.</p>';
-            showAssistantMessage("💡 Ready for the next call!", true);
+            showAssistantMessage("💡 Ready for the next call!", true, 7000);
         });
     }
-    console.log("CoreFlow.js script fully loaded - Advanced Features.");
+    console.log("CoreFlow.js script fully loaded - Fixed Dark Mode & Assistant Logic.");
 });
