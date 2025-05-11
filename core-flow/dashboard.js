@@ -1,5 +1,5 @@
 document.addEventListener('DOMContentLoaded', async () => {
-    console.log("Dashboard.js DOMContentLoaded - Enhanced Version (Avatar Fix Applied to YOUR EXACT CODE)"); // Log to confirm this version
+    console.log("Dashboard.js DOMContentLoaded - Final Fixes on Your Provided Code");
 
     const supabaseUrl = 'https://lgcutmuspcaralydycmg.supabase.co'; 
     const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxnY3V0bXVzcGNhcmFseWR5Y21nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU0NDY3MDEsImV4cCI6MjA2MTAyMjcwMX0.3u5Y7pkH2NNnnoGLMWVfAa5b8fq88o1itRYnG1K38tE'; 
@@ -15,11 +15,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         return;
     }
 
-    // DOM Elements (as per your provided HTML structure)
+    // DOM Elements
     const userNameDisplayHeader = document.getElementById('userNameDisplay'); 
     const dashboardUserGreeting = document.getElementById('dashboardUserGreeting');
     const dashboardUserSubtext = document.getElementById('dashboardUserSubtext');
-    const userAvatarEl = document.getElementById('userAvatar'); // This is the <img> tag from your HTML
+    // ✅ MODIFIED: Get the div for character avatar instead of img
+    const userAvatarCharEl = document.getElementById('userAvatarCharacter'); 
+    // const userAvatarEl = document.getElementById('userAvatar'); // This line was for <img>, now commented/removed
     const logoutButton = document.getElementById('logoutButton');
     const userInfoDivHeader = document.getElementById('userInfo'); 
 
@@ -56,24 +58,17 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         const userEmailPrefix = user.email ? user.email.split('@')[0] : 'Agent';
         const capitalizedUserName = userEmailPrefix.charAt(0).toUpperCase() + userEmailPrefix.slice(1);
+        const initialLetter = capitalizedUserName.charAt(0).toUpperCase();
+
 
         if (userNameDisplayHeader) userNameDisplayHeader.textContent = capitalizedUserName;
         if (dashboardUserGreeting) dashboardUserGreeting.textContent = `Welcome back, ${capitalizedUserName}!`;
         if (dashboardUserSubtext) dashboardUserSubtext.textContent = "Here's your performance overview.";
         if (userInfoDivHeader) userInfoDivHeader.style.display = 'flex';
         
-        // ✅ MODIFICATION FOR AVATAR:
-        if (userAvatarEl) {
-            userAvatarEl.alt = ''; // Set alt to empty string BEFORE setting src
-            userAvatarEl.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(capitalizedUserName)}&background=0D8ABC&color=fff&size=64&font-size=0.5&bold=true`;
-            userAvatarEl.onload = () => {
-                userAvatarEl.alt = `${capitalizedUserName}'s Avatar`; // Restore alt text AFTER image loads
-            };
-            userAvatarEl.onerror = () => { 
-                userAvatarEl.src = 'placeholder-avatar.png'; 
-                userAvatarEl.alt = "User Avatar Placeholder";
-                console.warn("Failed to load avatar from ui-avatars.com, attempting local placeholder. Ensure placeholder-avatar.png exists if used.");
-            };
+        // ✅ MODIFIED: Set character in the div, no img src or alt handling needed
+        if (userAvatarCharEl) {
+            userAvatarCharEl.textContent = initialLetter;
         }
 
 
@@ -114,7 +109,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                 avgCallDurationEl.textContent = `${minutes}m ${seconds}s`;
             }
             
-            // This was commented out in your original code, I'm keeping it commented.
             // if (lastCallDateEl && callSessions[0].start_time) {
             //    lastCallDateEl.textContent = new Date(callSessions[0].start_time).toLocaleDateString();
             // }
@@ -181,7 +175,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         } else { 
             if (totalCallsEl) totalCallsEl.textContent = '0';
             if (avgCallDurationEl) avgCallDurationEl.textContent = '0m 0s';
-            if (completionRateEl) completionRateEl.textContent = '0%'; // Corrected from '0' to '0%'
+            if (completionRateEl) completionRateEl.textContent = '0%'; 
             if (gaugeGoodEl) gaugeGoodEl.style.width = `0%`;
             if (gaugeNormalEl) gaugeNormalEl.style.width = `0%`;
             if (gaugeBadEl) gaugeBadEl.style.width = `0%`;
@@ -200,15 +194,31 @@ document.addEventListener('DOMContentLoaded', async () => {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) { alert("Please log in to export data."); return; }
 
+            console.log("Export button clicked. Fetching all sessions for user:", user.id);
+
+            // ✅ MODIFIED: Select from call_sessions and only join call_scenarios. 
+            // We will get user.email from the auth.getUser() call directly.
             const { data: allSessions, error } = await supabase
                 .from('call_sessions')
-                .select('id, user_id, scenario_id, start_time, end_time, total_duration_seconds, completed_all_steps, call_quality, quality_reason, created_at, call_scenarios(name), users(email)') 
+                .select(`
+                    id, 
+                    user_id, 
+                    scenario_id, 
+                    start_time, 
+                    end_time, 
+                    total_duration_seconds, 
+                    completed_all_steps, 
+                    call_quality, 
+                    quality_reason, 
+                    created_at,
+                    call_scenarios ( name )
+                `) 
                 .eq('user_id', user.id)
                 .order('start_time', { ascending: false });
 
             if (error) { 
                 console.error("Error fetching data for export:", error); 
-                alert(`Could not fetch data. Error: ${error.message}`); // Show Supabase error
+                alert(`Could not fetch data. Error: ${error.message}`); 
                 return; 
             }
             if (!allSessions || allSessions.length === 0) { 
@@ -225,12 +235,12 @@ document.addEventListener('DOMContentLoaded', async () => {
             const csvRows = [headers.join(',')]; 
 
             allSessions.forEach(session => {
-                const userEmail = session.users ? `"${session.users.email}"` : '""';
+                const userEmail = user.email ? `"${user.email}"` : '""'; // ✅ Get email from the authenticated user object
                 const scenarioName = session.call_scenarios ? `"${(session.call_scenarios.name || '').replace(/"/g, '""')}"` : '""';
                 
                 const values = [
                     session.id,
-                    userEmail, // Using the potentially joined user email
+                    userEmail, 
                     scenarioName,
                     session.start_time ? `"${new Date(session.start_time).toLocaleString()}"` : '""',
                     session.end_time ? `"${new Date(session.end_time).toLocaleString()}"` : '""',
@@ -249,7 +259,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (link.download !== undefined) {
                 const url = URL.createObjectURL(blob);
                 link.setAttribute("href", url);
-                link.setAttribute("download", `elevo_call_data_${user.email.split('@')[0]}_${new Date().toISOString().slice(0,10)}.csv`);
+                link.setAttribute("download", `elevo_call_data_${userEmailPrefix}_${new Date().toISOString().slice(0,10)}.csv`); // Use userEmailPrefix for filename
                 link.style.visibility = 'hidden';
                 document.body.appendChild(link);
                 link.click();
