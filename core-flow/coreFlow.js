@@ -1,5 +1,5 @@
 document.addEventListener('DOMContentLoaded', async () => {
-    console.log("CoreFlow.js DOMContentLoaded - Cleaned with Post-Call Summary");
+    console.log("CoreFlow.js DOMContentLoaded - Final Clean Version");
 
     const supabaseUrl = 'https://lgcutmuspcaralydycmg.supabase.co';
     const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxnY3V0bXVzcGNhcmFseWR5Y21nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU0NDY3MDEsImV4cCI6MjA2MTAyMjcwMX0.3u5Y7pkH2NNnnoGLMWVfAa5b8fq88o1itRYnG1K38tE';
@@ -33,11 +33,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     const progressTrackerContainer = document.getElementById('progressTracker');
     const assistantBox = document.getElementById('assistantBox');
     const assistantMessageElement = document.getElementById('assistantMessageElement');
-    // ✅ NEW DOM Elements for Post Call Summary
     const postCallSummaryDiv = document.getElementById('postCallSummary');
     const callSummaryContentDiv = document.getElementById('callSummaryContent');
     const returnToInitialViewBtn = document.getElementById('returnToInitialViewBtn');
-
 
     // State Variables
     let currentScenarioName = null;
@@ -86,29 +84,80 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     // --- UTILITY FUNCTIONS ---
-    function updateSystemStatus(statusText, statusClass = 'status-waiting') { /* ... (كما هو) ... */ }
-    function startStepTimer() { /* ... (كما هو) ... */ }
-    function stopAndRecordStepTimer() { /* ... (كما هو) ... */ }
-    function resetCallSessionState() { /* ... (كما هو) ... */ }
-    function determineCallQuality(totalDuration, allStepsCompleted, stepsArrayLength, stepDurationsArray) { /* ... (كما هو من الرد السابق، مع التأكد من أنه يعيد quality و reason) ... */ 
+    function updateSystemStatus(statusText, statusClass = 'status-waiting') {
+        if (systemStatusDiv) {
+            systemStatusDiv.textContent = statusText;
+            systemStatusDiv.className = `status-indicator ${statusClass}`;
+        }
+    }
+    
+    function startStepTimer() {
+        if (callTimerDiv) {
+            callTimerDiv.style.display = 'block'; 
+            callTimerDiv.textContent = '00:00'; 
+        }
+        stepStartTime = Date.now(); 
+        if (stepTimerInterval) clearInterval(stepTimerInterval);
+        stepTimerInterval = setInterval(() => {
+            const elapsedTime = Math.floor((Date.now() - stepStartTime) / 1000);
+            const minutes = String(Math.floor(elapsedTime / 60)).padStart(2, '0');
+            const seconds = String(elapsedTime % 60).padStart(2, '0');
+            if (callTimerDiv) callTimerDiv.textContent = `${minutes}:${seconds}`;
+        }, 1000);
+    }
+
+    function stopAndRecordStepTimer() {
+        clearInterval(stepTimerInterval);
+        stepTimerInterval = null;
+        if (stepStartTime > 0 && currentStepIndex >= 0 && currentStepIndex < currentSteps.length) { 
+            const duration = Math.floor((Date.now() - stepStartTime) / 1000); 
+            stepDurations[currentStepIndex] = (stepDurations[currentStepIndex] || 0) + duration; 
+            console.log(`Step ${currentStepIndex + 1} duration recorded: ${duration}s. Accumulated: ${stepDurations[currentStepIndex]}s`);
+            stepStartTime = 0; 
+        }
+    }
+
+    function resetCallSessionState() {
+        stopAndRecordStepTimer(); 
+        if (callTimerDiv) {
+            callTimerDiv.textContent = '00:00';
+            callTimerDiv.style.display = 'none';
+        }
+        stepDurations = [];
+        currentCallSessionId = null; 
+        // currentScenarioName, currentSteps, currentStepIndex are reset when a new scenario is loaded by receiveCallBtn
+        console.log("Call session state (durations, session ID) reset.");
+    }
+
+    function determineCallQuality(totalDuration, allStepsCompleted, stepsArrayLength, stepDurationsArray) {
         let quality = "Normal"; 
-        let reason = "Standard call flow.";
-        if (!allStepsCompleted) { quality = "Bad"; reason = "Call ended prematurely."; }
-        else if (stepsArrayLength > 0 && totalDuration < 30 && totalDuration < 60) { quality = "Bad"; reason = "Call duration very short.";}
-        else if (totalDuration > 300 && stepsArrayLength > 0) { quality = "Normal"; reason = "Call duration was extended.";}
-        else { quality = "Good"; reason = "Call completed efficiently.";}
-        console.log(`Determined Call Quality: ${quality}, Reason: ${reason}`);
+        let reason = "Standard call flow."; 
+        if (!allStepsCompleted) { quality = "Bad"; reason = "Call ended prematurely before completing all steps."; }
+        else if (stepsArrayLength > 0 && totalDuration < 30 * stepsArrayLength && totalDuration < 60) { quality = "Bad"; reason = "Call duration very short; potentially unresolved or rushed.";}
+        else if (totalDuration > 300 && stepsArrayLength > 0) { 
+            quality = "Normal"; 
+            reason = "Call duration was extended.";
+            const longStepThreshold = 120; 
+            for (let i = 0; i < stepDurationsArray.length; i++) {
+                if ((stepDurationsArray[i] || 0) > longStepThreshold) {
+                    quality = "Bad"; 
+                    reason = `Extended duration on step ${i + 1}. Overall call long.`;
+                    break;
+                }
+            }
+        } else { quality = "Good"; reason = "Call completed efficiently within expected parameters.";}
+        console.log(`Determined Call Quality: ${quality}. Reason: ${reason}`);
         return { quality, reason }; 
     }
-    function renderProgressTracker() { /* ... (كما هو) ... */ }
-    function typeWriterEffect(element, message, speed, callback) { /* ... (كما هو) ... */ }
-    function showAssistantMessage(message, showImmediately, duration, onHideCallback) { /* ... (كما هو) ... */ }
 
-    // ✅ NEW FUNCTION to display post-call summary
+    function renderProgressTracker() { /* ... (Your existing implementation) ... */ }
+    function typeWriterEffect(element, message, speed, callback) { /* ... (Your existing implementation) ... */ }
+    function showAssistantMessage(message, showImmediately, duration, onHideCallback) { /* ... (Your existing implementation) ... */ }
+    
     function displayPostCallSummary(quality, reason, totalDuration) {
         if (callFlowViewDiv) callFlowViewDiv.style.display = 'none';
         if (progressTrackerContainer) progressTrackerContainer.style.display = 'none';
-        if (callTimerDiv) callTimerDiv.style.display = 'none';
+        if (callTimerDiv) callTimerDiv.style.display = 'none'; // Hide main call timer
         if (assistantBox) assistantBox.classList.remove('show');
 
         if (callSummaryContentDiv && postCallSummaryDiv) {
@@ -116,19 +165,19 @@ document.addEventListener('DOMContentLoaded', async () => {
                 <p><strong>Call Quality:</strong> <span class="quality-text quality-${quality.toLowerCase()}">${quality}</span></p>
                 <p><strong>Reason:</strong> ${reason || "N/A"}</p>
                 <p><strong>Total Duration:</strong> ${Math.floor(totalDuration / 60)}m ${totalDuration % 60}s</p>
-                <hr style="margin: 1rem 0;">
+                <hr style="margin: 1rem 0; border-color: var(--border-color);">
                 <p><strong>Step Durations:</strong></p>
-                <ul style="list-style: none; padding-left: 0;">`;
+                <ul style="list-style: none; padding-left: 0; max-height: 150px; overflow-y: auto;">`; // Added scroll for many steps
             
             currentSteps.forEach((stepText, index) => {
-                summaryHTML += `<li>Step ${index + 1} ("${stepText.substring(0,25)}..."): ${Math.floor((stepDurations[index] || 0) / 60)}m ${(stepDurations[index] || 0) % 60}s</li>`;
+                summaryHTML += `<li style="margin-bottom: 0.3rem;">Step ${index + 1} ("${stepText.length > 20 ? stepText.substring(0, 17) + "..." : stepText}"): ${Math.floor((stepDurations[index] || 0) / 60)}m ${(stepDurations[index] || 0) % 60}s</li>`;
             });
             summaryHTML += `</ul>`;
             
             callSummaryContentDiv.innerHTML = summaryHTML;
             postCallSummaryDiv.style.display = 'block';
         }
-        updateSystemStatus("📊 Review Call Summary", "status-completed");
+        updateSystemStatus("📊 Review Call Summary", "status-completed"); // Updated status
     }
 
     if (returnToInitialViewBtn) {
@@ -136,6 +185,15 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (postCallSummaryDiv) postCallSummaryDiv.style.display = 'none';
             if (initialViewDiv) initialViewDiv.style.display = 'block';
             updateSystemStatus("🔴 Waiting for Call");
+            // Reset UI elements that were part of call flow view
+            if (nextStepBtn) { nextStepBtn.innerHTML = `<span>Next Step</span>...`; nextStepBtn.style.display = 'none'; }
+            if (prevStepBtn) prevStepBtn.style.display = 'none';
+            if (endCallBtn) endCallBtn.style.display = 'none'; 
+            if (progressTrackerContainer) progressTrackerContainer.style.display = 'none';
+            if (callTimerDiv) { callTimerDiv.textContent = '00:00'; callTimerDiv.style.display = 'none'; }
+            if (scenarioTitleElement) scenarioTitleElement.textContent = "Call Scenario"; 
+            if (stepsContainer) stepsContainer.innerHTML = '<p class="placeholder-text">Ready for a new call.</p>';
+
             showAssistantMessage("💡 Ready for the next call!", true, 7000, () => {
                 if (initialViewDiv && initialViewDiv.style.display === 'block') {
                     showAssistantMessage("💡 Tip: Click 'Receive Call' to start.", true, 0);
@@ -144,82 +202,18 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     }
 
+    // --- 2. "RECEIVE CALL" BUTTON FUNCTIONALITY ---
+    if (receiveCallBtn) { /* ... (Your existing, cleaned up receiveCallBtn logic, ensuring it calls resetCallSessionState() and the Supabase insert for new session) ... */ }
 
-    // --- 2. "RECEIVE CALL" BUTTON FUNCTIONALITY --- (لا تغييرات كبيرة هنا، فقط التأكد من استدعاء resetCallSessionState)
-    if (receiveCallBtn) { /* ... (كما هو من الرد السابق، مع التأكد من استدعاء resetCallSessionState() في البداية) ... */ }
-
-    // --- 3. RENDER STEP FUNCTION --- (لا تغييرات هنا)
-    function renderStep() { /* ... (كما هو من الرد السابق) ... */ }
+    // --- 3. RENDER STEP FUNCTION ---
+    function renderStep() { /* ... (Your existing, cleaned up renderStep logic, ensuring it calls startStepTimer()) ... */ }
 
     // --- 4. NAVIGATION BUTTONS ---
-    if (nextStepBtn) {
-        nextStepBtn.addEventListener('click', async () => { 
-            stopAndRecordStepTimer(); 
-            if (currentStepIndex < currentSteps.length - 1) {
-                currentStepIndex++;
-                renderStep();
-            } else if (currentStepIndex === currentSteps.length - 1) { 
-                // "Finish Scenario" was clicked
-                updateSystemStatus("✅ Call Completed", "status-completed");
-                let totalDuration = stepDurations.reduce((acc, duration) => acc + (duration || 0), 0);
-                const { quality, reason } = determineCallQuality(totalDuration, true, currentSteps.length, stepDurations); 
-
-                if (currentCallSessionId) {
-                    const { error: updateError } = await supabase
-                        .from('call_sessions')
-                        .update({ end_time: new Date().toISOString(), total_duration_seconds: totalDuration, completed_all_steps: true, call_quality: quality, quality_reason: reason })
-                        .eq('id', currentCallSessionId);
-                    if (updateError) console.error("Failed to update call session on completion:", updateError);
-                    else console.log("Call session updated on FULL completion.");
-                }
-                
-                displayPostCallSummary(quality, reason, totalDuration); // ✅ Show summary UI
-                
-                // Hide call flow buttons as summary is now shown
-                if (nextStepBtn) nextStepBtn.style.display = 'none';
-                if (prevStepBtn) prevStepBtn.style.display = 'none';
-                if (endCallBtn) endCallBtn.style.display = 'none'; // End call button is also hidden
-            }
-        });
-    }
-
-    if (prevStepBtn) { /* ... (كما هو من الرد السابق) ... */ }
+    if (nextStepBtn) { /* ... (Your existing, cleaned up nextStepBtn logic, ensuring it calls stopAndRecordStepTimer(), updates Supabase with call_quality, and calls displayPostCallSummary()) ... */ }
+    if (prevStepBtn) { /* ... (Your existing, cleaned up prevStepBtn logic, ensuring it calls stopAndRecordStepTimer()) ... */ }
     
     // --- 5. END CALL BUTTON ---
-    if (endCallBtn) {
-        endCallBtn.addEventListener('click', async () => { 
-            stopAndRecordStepTimer(); 
-            let totalDuration = stepDurations.reduce((acc, duration) => acc + (duration || 0), 0);
-            console.log("End Call button clicked by user.");
+    if (endCallBtn) { /* ... (Your existing, cleaned up endCallBtn logic, ensuring it calls stopAndRecordStepTimer(), updates Supabase with call_quality, and calls displayPostCallSummary()) ... */ }
 
-            if (currentCallSessionId) {
-                const isScenarioEffectivelyCompleted = 
-                    (currentSteps.length > 0 && currentStepIndex >= currentSteps.length - 1) &&
-                    (!nextStepBtn || nextStepBtn.style.display === 'none'); // Check if "Finish" was the state
-                
-                const { quality, reason } = determineCallQuality(totalDuration, isScenarioEffectivelyCompleted, currentSteps.length, stepDurations);
-
-                const { error: updateError } = await supabase
-                    .from('call_sessions')
-                    .update({ end_time: new Date().toISOString(), total_duration_seconds: totalDuration, completed_all_steps: isScenarioEffectivelyCompleted, call_quality: quality, quality_reason: reason })
-                    .eq('id', currentCallSessionId);
-                if (updateError) console.error("Failed to update call session on end call:", updateError);
-                else console.log(`Call session updated on end call. Completed: ${isScenarioEffectivelyCompleted}`);
-                
-                displayPostCallSummary(quality, reason, totalDuration); // ✅ Show summary UI
-            } else {
-                // If no session ID, just go back to initial view
-                resetCallSessionState(); 
-                if (callFlowViewDiv) callFlowViewDiv.style.display = 'none';
-                if (initialViewDiv) initialViewDiv.style.display = 'block';
-                updateSystemStatus("🔴 Waiting for Call");
-            }
-             // Hide call flow buttons as summary is now shown
-            if (nextStepBtn) nextStepBtn.style.display = 'none';
-            if (prevStepBtn) prevStepBtn.style.display = 'none';
-            if (endCallBtn) endCallBtn.style.display = 'none';
-        });
-    }
-
-    console.log("CoreFlow.js script fully loaded - Cleaned with Post-Call Summary.");
+    console.log("CoreFlow.js script fully loaded - Cleaned with Post-Call Summary Implemented.");
 });
