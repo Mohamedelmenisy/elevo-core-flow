@@ -1,5 +1,5 @@
 document.addEventListener('DOMContentLoaded', async () => {
-    console.log("CoreFlow.js DOMContentLoaded - Clean Version");
+    console.log("CoreFlow.js DOMContentLoaded - Clean Version for Final Review");
 
     const supabaseUrl = 'https://lgcutmuspcaralydycmg.supabase.co';
     const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxnY3V0bXVzcGNhcmFseWR5Y21nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU0NDY3MDEsImV4cCI6MjA2MTAyMjcwMX0.3u5Y7pkH2NNnnoGLMWVfAa5b8fq88o1itRYnG1K38tE';
@@ -88,7 +88,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     function startCallTimer() {
         if (callTimerDiv) {
-            callTimerDiv.style.display = 'block'; 
+            callTimerDiv.style.display = 'block'; // Ensure timer is visible
             callTimerDiv.textContent = '00:00'; 
         }
         callStartTime = Date.now();
@@ -224,7 +224,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                         userMessage = "⚠️ Loaded scenario is empty or invalid.";
                     }
                     showAssistantMessage(userMessage, true, 7000);
-                    if (stepsContainer) stepsContainer.innerHTML = `<p style="color:orange;">${userMessage.substring(3)}</p>`; // Remove warning icon for main display
+                    if (stepsContainer) stepsContainer.innerHTML = `<p style="color:orange;">${userMessage.substring(3)}</p>`;
                     return;
                 }
 
@@ -301,8 +301,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (prevStepBtn) {
         prevStepBtn.addEventListener('click', () => { 
             if (currentStepIndex > 0) {
-                if (currentStepIndex >= currentSteps.length) { // If past the end (completed state)
-                    currentStepIndex = currentSteps.length -1; // Go to last actual step
+                if (currentStepIndex >= currentSteps.length) { 
+                    currentStepIndex = currentSteps.length -1; 
                 } else {
                     currentStepIndex--;
                 }
