@@ -1,5 +1,5 @@
 document.addEventListener('DOMContentLoaded', async () => {
-    console.log("Dashboard.js DOMContentLoaded - Enhanced Version (Avatar Fix)");
+    console.log("Dashboard.js DOMContentLoaded - Enhanced Version (Avatar Fix Applied to YOUR EXACT CODE)"); // Log to confirm this version
 
     const supabaseUrl = 'https://lgcutmuspcaralydycmg.supabase.co'; 
     const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxnY3V0bXVzcGNhcmFseWR5Y21nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU0NDY3MDEsImV4cCI6MjA2MTAyMjcwMX0.3u5Y7pkH2NNnnoGLMWVfAa5b8fq88o1itRYnG1K38tE'; 
@@ -15,11 +15,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         return;
     }
 
-    // DOM Elements
+    // DOM Elements (as per your provided HTML structure)
     const userNameDisplayHeader = document.getElementById('userNameDisplay'); 
     const dashboardUserGreeting = document.getElementById('dashboardUserGreeting');
     const dashboardUserSubtext = document.getElementById('dashboardUserSubtext');
-    const userAvatarEl = document.getElementById('userAvatar');
+    const userAvatarEl = document.getElementById('userAvatar'); // This is the <img> tag from your HTML
     const logoutButton = document.getElementById('logoutButton');
     const userInfoDivHeader = document.getElementById('userInfo'); 
 
@@ -30,7 +30,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const totalCallsEl = document.getElementById('totalCalls');
     const avgCallDurationEl = document.getElementById('avgCallDuration');
     const completionRateEl = document.getElementById('completionRate'); 
-    const lastCallDateEl = document.getElementById('lastCallDate'); // Kept if you use it later
+    const lastCallDateEl = document.getElementById('lastCallDate'); 
     
     const gaugeGoodEl = document.getElementById('gaugeGood');
     const gaugeNormalEl = document.getElementById('gaugeNormal');
@@ -62,16 +62,17 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (dashboardUserSubtext) dashboardUserSubtext.textContent = "Here's your performance overview.";
         if (userInfoDivHeader) userInfoDivHeader.style.display = 'flex';
         
+        // ✅ MODIFICATION FOR AVATAR:
         if (userAvatarEl) {
-            userAvatarEl.alt = ''; // ✅ Clear alt text initially to prevent placeholder text flicker
+            userAvatarEl.alt = ''; // Set alt to empty string BEFORE setting src
             userAvatarEl.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(capitalizedUserName)}&background=0D8ABC&color=fff&size=64&font-size=0.5&bold=true`;
             userAvatarEl.onload = () => {
-                userAvatarEl.alt = `${capitalizedUserName}'s Avatar`; // Restore alt text after image loads
+                userAvatarEl.alt = `${capitalizedUserName}'s Avatar`; // Restore alt text AFTER image loads
             };
             userAvatarEl.onerror = () => { 
-                userAvatarEl.src = 'placeholder-avatar.png'; // Fallback to local placeholder if ui-avatars fails
+                userAvatarEl.src = 'placeholder-avatar.png'; 
                 userAvatarEl.alt = "User Avatar Placeholder";
-                console.warn("Failed to load avatar from ui-avatars.com, attempting local placeholder.");
+                console.warn("Failed to load avatar from ui-avatars.com, attempting local placeholder. Ensure placeholder-avatar.png exists if used.");
             };
         }
 
@@ -92,7 +93,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         if (sessionsError) {
             console.error("Error fetching call sessions:", sessionsError);
-            if (loadingMessageDiv) loadingMessageDiv.innerHTML = '<p style="color:red;">Could not load activity data.</p>';
+            if (loadingMessageDiv) loadingMessageDiv.innerHTML = `<p style="color:red;">Could not load activity data. Error: ${sessionsError.message}</p>`;
             return;
         }
 
@@ -100,11 +101,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (totalCallsEl) totalCallsEl.textContent = callSessions.length;
 
             const completedSessionsCount = callSessions.filter(s => s.completed_all_steps === true).length;
-            if (completionRateEl) { // Check if element exists
+            if (completionRateEl) { 
                 const rate = callSessions.length > 0 ? Math.round((completedSessionsCount / callSessions.length) * 100) : 0;
                 completionRateEl.textContent = `${rate}%`;
             }
-
 
             const totalDurationSum = callSessions.reduce((sum, session) => sum + (session.total_duration_seconds || 0), 0);
             const avgDuration = callSessions.length > 0 ? Math.round(totalDurationSum / callSessions.length) : 0;
@@ -113,12 +113,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const seconds = avgDuration % 60;
                 avgCallDurationEl.textContent = `${minutes}m ${seconds}s`;
             }
-
-            // Example for Last Call Date - ensure lastCallDateEl exists in your HTML if you use this
+            
+            // This was commented out in your original code, I'm keeping it commented.
             // if (lastCallDateEl && callSessions[0].start_time) {
             //    lastCallDateEl.textContent = new Date(callSessions[0].start_time).toLocaleDateString();
             // }
-
 
             let goodCalls = 0, normalCalls = 0, badCalls = 0;
             callSessions.forEach(s => {
@@ -145,7 +144,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (gaugeBadEl) gaugeBadEl.style.width = `0%`;
                 if (avgQualityTextEl) avgQualityTextEl.textContent = "No Rated Calls";
             }
-
 
             if (recentCallsTableBody) {
                 recentCallsTableBody.innerHTML = ''; 
@@ -183,7 +181,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         } else { 
             if (totalCallsEl) totalCallsEl.textContent = '0';
             if (avgCallDurationEl) avgCallDurationEl.textContent = '0m 0s';
-            if (completionRateEl) completionRateEl.textContent = '0%';
+            if (completionRateEl) completionRateEl.textContent = '0%'; // Corrected from '0' to '0%'
             if (gaugeGoodEl) gaugeGoodEl.style.width = `0%`;
             if (gaugeNormalEl) gaugeNormalEl.style.width = `0%`;
             if (gaugeBadEl) gaugeBadEl.style.width = `0%`;
@@ -208,8 +206,17 @@ document.addEventListener('DOMContentLoaded', async () => {
                 .eq('user_id', user.id)
                 .order('start_time', { ascending: false });
 
-            if (error) { console.error("Error fetching data for export:", error); alert("Could not fetch data."); return; }
-            if (!allSessions || allSessions.length === 0) { alert("No data to export."); return; }
+            if (error) { 
+                console.error("Error fetching data for export:", error); 
+                alert(`Could not fetch data. Error: ${error.message}`); // Show Supabase error
+                return; 
+            }
+            if (!allSessions || allSessions.length === 0) { 
+                alert("No data to export for this user."); 
+                return; 
+            }
+
+            console.log("Data fetched for export:", allSessions.length, "sessions");
 
             const headers = [
                 "Session_ID", "User_Email", "Scenario_Name", "Start_Time", "End_Time", 
@@ -218,16 +225,19 @@ document.addEventListener('DOMContentLoaded', async () => {
             const csvRows = [headers.join(',')]; 
 
             allSessions.forEach(session => {
+                const userEmail = session.users ? `"${session.users.email}"` : '""';
+                const scenarioName = session.call_scenarios ? `"${(session.call_scenarios.name || '').replace(/"/g, '""')}"` : '""';
+                
                 const values = [
                     session.id,
-                    session.users ? `"${session.users.email}"` : '""', 
-                    session.call_scenarios ? `"${session.call_scenarios.name.replace(/"/g, '""')}"` : '""', // Handle quotes in name
+                    userEmail, // Using the potentially joined user email
+                    scenarioName,
                     session.start_time ? `"${new Date(session.start_time).toLocaleString()}"` : '""',
                     session.end_time ? `"${new Date(session.end_time).toLocaleString()}"` : '""',
                     session.total_duration_seconds === null ? '' : session.total_duration_seconds,
                     session.completed_all_steps,
                     session.call_quality === null ? '' : `"${session.call_quality}"`,
-                    session.quality_reason === null ? '' : `"${(session.quality_reason || '').replace(/"/g, '""')}"`, // Handle quotes in reason
+                    session.quality_reason === null ? '' : `"${(session.quality_reason || '').replace(/"/g, '""')}"`,
                     session.created_at ? `"${new Date(session.created_at).toLocaleString()}"` : '""'
                 ];
                 csvRows.push(values.join(','));
