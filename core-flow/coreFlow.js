@@ -1,5 +1,5 @@
 document.addEventListener('DOMContentLoaded', async () => {
-    console.log("CoreFlow.js DOMContentLoaded - Per-Step Timer & Session Logging on Provided Base");
+    console.log("CoreFlow.js DOMContentLoaded - Per-Step Timer & Session Logging (Corrected Base)");
 
     const supabaseUrl = 'https://lgcutmuspcaralydycmg.supabase.co';
     const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxnY3V0bXVzcGNhcmFseWR5Y21nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU0NDY3MDEsImV4cCI6MjA2MTAyMjcwMX0.3u5Y7pkH2NNnnoGLMWVfAa5b8fq88o1itRYnG1K38tE';
@@ -15,7 +15,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         return;
     }
 
-    // DOM Elements (as provided by you)
+    // DOM Elements (as per your provided HTML structure)
     const authLoadingDiv = document.getElementById('auth-loading');
     const initialViewDiv = document.getElementById('initial-view');
     const callFlowViewDiv = document.getElementById('call-flow-view');
@@ -38,17 +38,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     let currentScenarioName = null;
     let currentSteps = [];
     let currentStepIndex = 0;
-    // ✅ MODIFIED/NEW VARIABLES FOR PER-STEP TIMER & SESSION
+    
+    // Variables for per-step timing and session logging
     let stepTimerInterval = null; 
     let stepStartTime = 0;       
     let stepDurations = [];      
     let currentCallSessionId = null; 
-    // Removed callTimerInterval and callStartTime as they are replaced by step-specific ones
 
     let assistantTimeout = null;
     let typingInterval = null; 
 
-    // --- 1. CHECK AUTHENTICATION & USER INFO --- (Keeping your existing auth logic)
+    // --- 1. CHECK AUTHENTICATION & USER INFO --- (Using your provided structure)
     try {
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
         if (sessionError) throw sessionError;
@@ -91,7 +91,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
     
-    // ✅ RENAMED and MODIFIED: This now starts/restarts the timer for the CURRENT step
     function startStepTimer() {
         if (callTimerDiv) {
             callTimerDiv.style.display = 'block'; 
@@ -107,7 +106,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         }, 1000);
     }
 
-    // ✅ NEW: Stops the current step's timer and records its duration
     function stopAndRecordStepTimer() {
         clearInterval(stepTimerInterval);
         stepTimerInterval = null;
@@ -119,7 +117,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
 
-    // ✅ NEW: Resets all timer, duration, and session ID states
     function resetCallSessionState() {
         stopAndRecordStepTimer(); 
         if (callTimerDiv) {
@@ -127,33 +124,109 @@ document.addEventListener('DOMContentLoaded', async () => {
             callTimerDiv.style.display = 'none';
         }
         stepDurations = [];
-        currentCallSessionId = null; // Reset current session ID
-        // Note: currentScenarioName, currentSteps, currentStepIndex are reset when a new scenario is loaded
+        currentCallSessionId = null; 
+        // currentScenarioName, currentSteps, currentStepIndex will be reset when a new scenario is loaded
         console.log("Call session state (durations, session ID) reset.");
     }
 
+    function renderProgressTracker() { /* (Your existing implementation from previous 'clean' version) */ 
+        if (!progressTrackerContainer || currentSteps.length === 0) {
+            if(progressTrackerContainer) progressTrackerContainer.style.display = 'none';
+            return;
+        }
+        progressTrackerContainer.innerHTML = ''; 
+        const stepperUl = document.createElement('ul');
+        stepperUl.className = 'stepper';
 
-    function renderProgressTracker() { /* (Your existing implementation) */ }
-    function typeWriterEffect(element, message, speed = 30, callback) { /* (Your existing implementation) */ }
-    function showAssistantMessage(message, showImmediately = false, duration = 5000, onHideCallback) { /* (Your existing implementation) */ }
+        currentSteps.forEach((step, index) => {
+            const stepLi = document.createElement('li');
+            stepLi.className = 'step';
+            if (index < currentStepIndex) {
+                stepLi.classList.add('completed');
+            } else if (index === currentStepIndex) {
+                stepLi.classList.add('active');
+            }
+            stepLi.textContent = `Step ${index + 1}`; 
+            stepperUl.appendChild(stepLi);
+
+            if (index < currentSteps.length - 1) {
+                const separator = document.createElement('li');
+                separator.className = 'step-separator';
+                separator.innerHTML = '→'; 
+                stepperUl.appendChild(separator);
+            }
+        });
+        progressTrackerContainer.appendChild(stepperUl);
+        progressTrackerContainer.style.display = 'block'; 
+    }
+
+    function typeWriterEffect(element, message, speed = 30, callback) { /* (Your existing implementation) */ 
+        if (typingInterval) clearInterval(typingInterval); 
+        element.textContent = ''; 
+        let i = 0;
+        typingInterval = setInterval(() => {
+            if (i < message.length) {
+                element.textContent += message.charAt(i);
+                i++;
+            } else {
+                clearInterval(typingInterval);
+                typingInterval = null;
+                if (callback) callback(); 
+            }
+        }, speed);
+    }
+
+    function showAssistantMessage(message, showImmediately = false, duration = 5000, onHideCallback) { /* (Your existing implementation) */ 
+        if (assistantMessageElement && assistantBox) {
+            clearTimeout(assistantTimeout);
+            if (typingInterval) clearInterval(typingInterval); 
+
+            const showBox = () => {
+                assistantBox.style.display = 'flex'; 
+                requestAnimationFrame(() => { 
+                    assistantBox.classList.add('show');
+                });
+                typeWriterEffect(assistantMessageElement, message, 30, () => { 
+                    if (duration && duration > 0) {
+                        assistantTimeout = setTimeout(() => {
+                            assistantBox.classList.remove('show');
+                            if (onHideCallback) onHideCallback();
+                        }, duration);
+                    }
+                });
+            };
+            
+            if (showImmediately || !assistantBox.classList.contains('show')) {
+                showBox();
+            } else if (assistantBox.classList.contains('show')) { 
+                 typeWriterEffect(assistantMessageElement, message, 30, () => {
+                    if (duration && duration > 0) {
+                       assistantTimeout = setTimeout(() => {
+                            assistantBox.classList.remove('show');
+                            if (onHideCallback) onHideCallback();
+                        }, duration);
+                    }
+                });
+            }
+        }
+    }
 
     // --- 2. "RECEIVE CALL" BUTTON FUNCTIONALITY ---
     if (receiveCallBtn) {
         receiveCallBtn.addEventListener('click', async () => {
             console.log("Receive Call button clicked");
-            resetCallSessionState(); // ✅ Reset state for a new call
+            resetCallSessionState(); 
 
-            // ... (UI updates for loading as in your code)
             if (initialViewDiv) initialViewDiv.style.display = 'none';
             if (callFlowViewDiv) callFlowViewDiv.style.display = 'block';
             if (endCallBtn) endCallBtn.style.display = 'inline-flex';
+            
             updateSystemStatus("🟡 Loading Scenario...", "status-waiting");
             if (stepsContainer) stepsContainer.innerHTML = '<p class="placeholder-text">Loading scenario...</p>';
             if (scenarioTitleElement) scenarioTitleElement.textContent = 'Loading Scenario...';
             if (progressTrackerContainer) progressTrackerContainer.style.display = 'none';
             if (nextStepBtn) nextStepBtn.style.display = 'none';
             if (prevStepBtn) prevStepBtn.style.display = 'none';
-
 
             try {
                 const { data: { user } } = await supabase.auth.getUser(); 
@@ -165,16 +238,20 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                 const { data: scenario, error: scenarioError } = await supabase
                     .from('call_scenarios') 
-                    .select('id, name, steps') // ✅ Make sure your table has an 'id' column
+                    .select('id, name, steps') 
                     .eq('is_active', true) 
                     .limit(1)              
                     .single();             
 
                 if (scenarioError || !scenario || !scenario.steps || scenario.steps.length === 0) {
-                    // ... (Your existing error handling for scenario load)
                     if (callTimerDiv) callTimerDiv.style.display = 'none';
                     let userMessage = "⚠️ An error occurred loading the scenario.";
-                    if (scenarioError && scenarioError.code === 'PGRST116') { /* ... */ } else if (scenarioError) { /* ... */ } else { /* ... */ }
+                    if (scenarioError && scenarioError.code === 'PGRST116') {
+                        userMessage = "⚠️ No active scenario found. Please contact admin.";
+                        if (scenarioTitleElement) scenarioTitleElement.textContent = 'No Scenario';
+                        updateSystemStatus("🔴 No Scenario", "status-waiting");
+                    } else if (scenarioError) { userMessage = `⚠️ Error: ${scenarioError.message}`; } 
+                    else { userMessage = "⚠️ Loaded scenario is empty or invalid."; }
                     showAssistantMessage(userMessage, true, 7000);
                     if (stepsContainer) stepsContainer.innerHTML = `<p style="color:orange;">${userMessage.substring(3)}</p>`;
                     return;
@@ -183,17 +260,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                 currentScenarioName = scenario.name;
                 currentSteps = scenario.steps; 
                 currentStepIndex = 0;
-                stepDurations = new Array(currentSteps.length).fill(0); // ✅ Initialize durations array
+                stepDurations = new Array(currentSteps.length).fill(0); 
 
-                // ✅ Create a new record in call_sessions
                 const { data: newSession, error: sessionInsertError } = await supabase
                     .from('call_sessions')
-                    .insert({ 
-                        user_id: user.id, 
-                        scenario_id: scenario.id, // Ensure 'scenario.id' is selected and correct type
-                        start_time: new Date().toISOString(), 
-                        completed_all_steps: false 
-                    })
+                    .insert({ user_id: user.id, scenario_id: scenario.id, start_time: new Date().toISOString(), completed_all_steps: false })
                     .select('id') 
                     .single();
 
@@ -214,29 +285,47 @@ document.addEventListener('DOMContentLoaded', async () => {
             } catch (err) {
                 console.error("Failed to process scenario or create session:", err);
                 if (callTimerDiv) callTimerDiv.style.display = 'none';
-                // ... (Your existing catch block error handling)
+                if (stepsContainer) stepsContainer.innerHTML = `<p style="color:red;">Error: ${err.message}.</p>`;
+                if (scenarioTitleElement) scenarioTitleElement.textContent = 'Error Loading Scenario';
+                updateSystemStatus("🔴 Error", "status-waiting");
+                showAssistantMessage(`❗ Error: ${err.message}`, true, 7000);
             }
         });
     }
 
     // --- 3. RENDER STEP FUNCTION ---
     function renderStep() {
-        // ... (Your existing logic to display step content) ...
         if (!stepsContainer) return;
-        if (currentSteps.length === 0) { /* ... */ return; }
+        if (currentSteps.length === 0) { 
+            stepsContainer.innerHTML = '<p class="placeholder-text">No steps available.</p>';
+            if (nextStepBtn) nextStepBtn.style.display = 'none';
+            if (prevStepBtn) prevStepBtn.style.display = 'none';
+            return;
+        }
         if (currentStepIndex >= 0 && currentStepIndex < currentSteps.length) {
             const stepContent = currentSteps[currentStepIndex];
             stepsContainer.innerHTML = `<p>${stepContent}</p>`;
             showAssistantMessage(`📌 ${stepContent.length > 45 ? stepContent.substring(0, 42) + "..." : stepContent}`, true, 0); 
-            startStepTimer(); // ✅ Start/Restart timer for the current step
+            startStepTimer(); 
         }
         renderProgressTracker(); 
-        // ... (Your existing logic for next/prev button visibility) ...
+        if (prevStepBtn) prevStepBtn.style.display = currentStepIndex > 0 ? 'inline-flex' : 'none';
+        if (nextStepBtn) {
+            if (currentStepIndex < currentSteps.length - 1) {
+                nextStepBtn.innerHTML = `<span>Next Step</span><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>`;
+                nextStepBtn.style.display = 'inline-flex';
+            } else if (currentStepIndex === currentSteps.length - 1) {
+                nextStepBtn.innerHTML = `<span>Finish Scenario</span>`; 
+                nextStepBtn.style.display = 'inline-flex';
+            } else { 
+                nextStepBtn.style.display = 'none';
+            }
+        }
     }
 
     // --- 4. NAVIGATION BUTTONS ---
     if (nextStepBtn) {
-        nextStepBtn.addEventListener('click', async () => { // ✅ Made async
+        nextStepBtn.addEventListener('click', async () => { 
             stopAndRecordStepTimer(); 
             if (currentStepIndex < currentSteps.length - 1) {
                 currentStepIndex++;
@@ -247,21 +336,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                 
                 let totalDuration = stepDurations.reduce((acc, duration) => acc + (duration || 0), 0);
                 
-                // ✅ Update call_sessions record
                 if (currentCallSessionId) {
                     const { error: updateError } = await supabase
                         .from('call_sessions')
-                        .update({
-                            end_time: new Date().toISOString(),
-                            total_duration_seconds: totalDuration,
-                            completed_all_steps: true
-                        })
+                        .update({ end_time: new Date().toISOString(), total_duration_seconds: totalDuration, completed_all_steps: true })
                         .eq('id', currentCallSessionId);
-                    if (updateError) {
-                        console.error("Failed to update call session on completion:", updateError);
-                    } else {
-                        console.log("Call session updated on completion. ID:", currentCallSessionId);
-                    }
+                    if (updateError) console.error("Failed to update call session on completion:", updateError);
+                    else console.log("Call session updated on completion. ID:", currentCallSessionId);
                 }
                 
                 let summary = `Scenario "${currentScenarioName}" Completed!\nTotal Duration: ${Math.floor(totalDuration / 60)}m ${totalDuration % 60}s\n\nStep Durations:\n`;
@@ -295,7 +376,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     // --- 5. END CALL BUTTON ---
     if (endCallBtn) {
-        endCallBtn.addEventListener('click', async () => { // ✅ Made async
+        endCallBtn.addEventListener('click', async () => { 
             stopAndRecordStepTimer(); 
             
             let totalDuration = stepDurations.reduce((acc, duration) => acc + (duration || 0), 0);
@@ -304,32 +385,25 @@ document.addEventListener('DOMContentLoaded', async () => {
             console.log("Final Step Durations:", stepDurations); 
             console.log("Final Total Call Duration:", totalDuration);
 
-            // ✅ Update call_sessions record if call ended prematurely
-            if (currentCallSessionId && (currentSteps.length === 0 || currentStepIndex < currentSteps.length -1 || !nextStepBtn || nextStepBtn.style.display !== 'none' ) ) { 
-                // Condition to check if scenario wasn't "finished" via nextStep on the last step
+            if (currentCallSessionId && (currentSteps.length === 0 || currentStepIndex < currentSteps.length -1 || (nextStepBtn && nextStepBtn.style.display !== 'none') ) ) { 
                 const { error: updateError } = await supabase
                     .from('call_sessions')
-                    .update({
-                        end_time: new Date().toISOString(),
-                        total_duration_seconds: totalDuration,
-                        completed_all_steps: false 
-                    })
+                    .update({ end_time: new Date().toISOString(), total_duration_seconds: totalDuration, completed_all_steps: false })
                     .eq('id', currentCallSessionId);
-                if (updateError) {
-                    console.error("Failed to update call session on early end:", updateError);
-                } else {
-                    console.log("Call session updated on early end. ID:", currentCallSessionId);
-                }
+                if (updateError) console.error("Failed to update call session on early end:", updateError);
+                else console.log("Call session updated on early end. ID:", currentCallSessionId);
             }
             
             resetCallSessionState(); 
             
-            // ... (Your existing UI reset logic)
             if (callFlowViewDiv) callFlowViewDiv.style.display = 'none';
             if (initialViewDiv) initialViewDiv.style.display = 'block';
             if (progressTrackerContainer) progressTrackerContainer.style.display = 'none';
             updateSystemStatus("🔴 Waiting for Call");
-            if (nextStepBtn) { /* Reset nextStepBtn as per your original code */ }
+            if (nextStepBtn) {
+                nextStepBtn.innerHTML = `<span>Next Step</span><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>`;
+                nextStepBtn.style.display = 'none'; 
+            }
             if (prevStepBtn) prevStepBtn.style.display = 'none';
             if (endCallBtn) endCallBtn.style.display = 'none'; 
             if (scenarioTitleElement) scenarioTitleElement.textContent = "Call Scenario"; 
@@ -342,5 +416,5 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     }
 
-    console.log("CoreFlow.js script fully loaded - Per-Step Timer & Session Logging.");
+    console.log("CoreFlow.js script fully loaded - Per-Step Timer & Session Logging applied to provided base.");
 });
