@@ -58,7 +58,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         console.log("Fetching call sessions for user:", user.id);
         const { data: callSessions, error: sessionsError } = await supabase
             .from('call_sessions')
-            // ✅ THIS IS THE CORRECTED SELECT STATEMENT
+            // ✅✅✅ THIS IS THE CORRECTED/MODIFIED SELECT STATEMENT ✅✅✅
             .select('id, start_time, end_time, total_duration_seconds, completed_all_steps, scenario_id, call_scenarios!inner!scenario_id(id, name)') 
             .eq('user_id', user.id)
             .order('start_time', { ascending: false }); 
@@ -70,12 +70,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (recentActivitySectionDiv) recentActivitySectionDiv.style.display = 'none';
             return;
         }
-        console.log("Fetched call sessions:", callSessions);
-
+        console.log("Fetched call sessions:", callSessions); // Check the structure of callSessions here
 
         if (callSessions && callSessions.length > 0) {
             if (totalCallsEl) totalCallsEl.textContent = callSessions.length;
-            // ... (rest of your stats calculation and table population logic - should be correct now)
             const completedSessions = callSessions.filter(s => s.completed_all_steps);
             if (scenariosCompletedEl) scenariosCompletedEl.textContent = completedSessions.length;
 
@@ -101,7 +99,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                 } else {
                     recentToDisplay.forEach(session => {
                         const row = recentCallsTableBody.insertRow();
-                        // Accessing scenario name through the explicit join: session.call_scenarios.name
+                        // ✅ Accessing scenario name through the explicit join: session.call_scenarios.name
+                        // Ensure 'call_scenarios' is the correct property name based on the select statement.
+                        // If you used an alias like `scenario:call_scenarios...`, then it would be `session.scenario.name`.
+                        // With `call_scenarios!inner!scenario_id(name)`, it should be `session.call_scenarios.name`.
                         const scenarioName = session.call_scenarios ? session.call_scenarios.name : (session.scenario_id || 'Unknown Scenario');
                         const startTime = session.start_time ? new Date(session.start_time).toLocaleString() : '-';
                         const durationSec = session.total_duration_seconds || 0;
@@ -120,25 +121,70 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         } else { 
             console.log("No call sessions found for this user.");
-            // ... (rest of your logic for no sessions)
+            if (totalCallsEl) totalCallsEl.textContent = '0';
+            if (avgCallDurationEl) avgCallDurationEl.textContent = '0m 0s';
+            if (scenariosCompletedEl) scenariosCompletedEl.textContent = '0';
+            if (lastCallDateEl) lastCallDateEl.textContent = '-';
+            if (recentCallsTableBody) recentCallsTableBody.innerHTML = '<tr><td colspan="4" class="placeholder-text">No call activity yet.</td></tr>';
+            if (statsGridDiv) statsGridDiv.style.display = 'grid'; 
+            if (recentActivitySectionDiv) recentActivitySectionDiv.style.display = 'block'; 
         }
         if (loadingMessageDiv) loadingMessageDiv.style.display = 'none';
     }
     
     if (exportDataBtn) {
         exportDataBtn.addEventListener('click', async () => { 
-            const { data: { user } } = await supabase.auth.getUser(); // Ensure user is fetched here too
+            const { data: { user } } = await supabase.auth.getUser(); 
             if (!user) { alert("Please log in to export data."); return; }
 
             const { data: allSessions, error } = await supabase
                 .from('call_sessions')
-                .select('*, call_scenarios!inner!scenario_id(name)') // ✅ Use explicit join here too
+                // ✅ Use explicit join here too
+                .select('id, user_id, scenario_id, start_time, end_time, total_duration_seconds, completed_all_steps, created_at, call_scenarios!inner!scenario_id(name)') 
                 .eq('user_id', user.id)
                 .order('start_time', { ascending: false });
-            // ... (rest of export logic as provided before)
-            if (error) { /* ... */ return; }
-            if (!allSessions || allSessions.length === 0) { /* ... */ return; }
-            // CSV conversion and download logic
+            
+            if (error) {
+                console.error("Error fetching data for export:", error);
+                alert("Could not fetch data for export. " + error.message);
+                return;
+            }
+            if (!allSessions || allSessions.length === 0) {
+                alert("No data to export.");
+                return;
+            }
+            
+            // CSV conversion and download logic (kept as before)
+            const headers = Object.keys(allSessions[0]).filter(key => key !== 'call_scenarios'); 
+            headers.push('scenario_name'); 
+            const csvRows = [headers.join(',')]; 
+            allSessions.forEach(session => {
+                const values = headers.map(header => {
+                    if (header === 'scenario_name') {
+                        return session.call_scenarios ? `"${(session.call_scenarios.name || '').replace(/"/g, '""')}"` : '""'; 
+                    }
+                    const value = session[header];
+                    if (typeof value === 'string') {
+                        return `"${value.replace(/"/g, '""')}"`; 
+                    }
+                    return value === null || value === undefined ? '' : value;
+                });
+                csvRows.push(values.join(','));
+            });
+            const csvString = csvRows.join('\n');
+            const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            if (link.download !== undefined) {
+                const url = URL.createObjectURL(blob);
+                link.setAttribute("href", url);
+                link.setAttribute("download", `elevo_call_data_${user.email.split('@')[0]}_${new Date().toISOString().slice(0,10)}.csv`);
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            } else {
+                alert("CSV export not supported by your browser.");
+            }
         });
     }
     loadDashboardData();
