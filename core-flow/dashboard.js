@@ -1,9 +1,8 @@
-
 document.addEventListener('DOMContentLoaded', async () => {
-    console.log("Dashboard.js DOMContentLoaded - Explicit Join Fix Applied");
+    console.log("Dashboard.js DOMContentLoaded - Enhanced Version");
 
-    const supabaseUrl = 'https://lgcutmuspcaralydycmg.supabase.co';
-    const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxnY3V0bXVzcGNhcmFseWR5Y21nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU0NDY3MDEsImV4cCI6MjA2MTAyMjcwMX0.3u5Y7pkH2NNnnoGLMWVfAa5b8fq88o1itRYnG1K38tE';
+    const supabaseUrl = 'https://lgcutmuspcaralydycmg.supabase.co'; 
+    const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxnY3V0bXVzcGNhcmFseWR5Y21nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU0NDY3MDEsImV4cCI6MjA2MTAyMjcwMX0.3u5Y7pkH2NNnnoGLMWVfAa5b8fq88o1itRYnG1K38tE'; 
     
     let supabase;
     try {
@@ -17,19 +16,30 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     // DOM Elements
-    const userNameDisplay = document.getElementById('userNameDisplay'); 
-    const dashboardUserName = document.getElementById('dashboardUserName'); 
+    const userNameDisplayHeader = document.getElementById('userNameDisplay'); // For header
+    const dashboardUserGreeting = document.getElementById('dashboardUserGreeting');
+    const dashboardUserSubtext = document.getElementById('dashboardUserSubtext');
+    const userAvatarEl = document.getElementById('userAvatar');
     const logoutButton = document.getElementById('logoutButton');
-    const userInfoDiv = document.getElementById('userInfo');
+    const userInfoDivHeader = document.getElementById('userInfo'); // In header
+
     const loadingMessageDiv = document.getElementById('loadingMessage');
     const statsGridDiv = document.getElementById('statsGrid');
     const recentActivitySectionDiv = document.getElementById('recentActivitySection');
+    
     const totalCallsEl = document.getElementById('totalCalls');
     const avgCallDurationEl = document.getElementById('avgCallDuration');
-    const scenariosCompletedEl = document.getElementById('scenariosCompleted');
-    const lastCallDateEl = document.getElementById('lastCallDate');
+    const completionRateEl = document.getElementById('completionRate'); // Assuming ID for completion rate <p>
+    const lastCallDateEl = document.getElementById('lastCallDate'); // Not used in current HTML, but kept if needed
+    
+    const gaugeGoodEl = document.getElementById('gaugeGood');
+    const gaugeNormalEl = document.getElementById('gaugeNormal');
+    const gaugeBadEl = document.getElementById('gaugeBad');
+    const avgQualityTextEl = document.getElementById('avgQualityText');
+
     const recentCallsTableBody = document.querySelector('#recentCallsTable tbody');
     const exportDataBtn = document.getElementById('exportDataBtn');
+
 
     async function loadDashboardData() {
         if (loadingMessageDiv) loadingMessageDiv.style.display = 'flex';
@@ -44,10 +54,18 @@ document.addEventListener('DOMContentLoaded', async () => {
             return;
         }
 
-        if (userNameDisplay && user.email) userNameDisplay.textContent = user.email.split('@')[0];
-        if (dashboardUserName && user.email) dashboardUserName.textContent = user.email.split('@')[0];
-        if (userInfoDiv) userInfoDiv.style.display = 'flex';
+        const userEmailPrefix = user.email ? user.email.split('@')[0] : 'Agent';
+        const capitalizedUserName = userEmailPrefix.charAt(0).toUpperCase() + userEmailPrefix.slice(1);
+
+        if (userNameDisplayHeader) userNameDisplayHeader.textContent = capitalizedUserName;
+        if (dashboardUserGreeting) dashboardUserGreeting.textContent = `Welcome back, ${capitalizedUserName}!`;
+        if (dashboardUserSubtext) dashboardUserSubtext.textContent = "Here's your performance overview.";
+        if (userInfoDivHeader) userInfoDivHeader.style.display = 'flex';
         
+        // Placeholder for avatar - replace with actual logic if needed
+        if (userAvatarEl) userAvatarEl.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(capitalizedUserName)}&background=0D8ABC&color=fff&size=64`;
+
+
         if(logoutButton) {
             logoutButton.addEventListener('click', async () => { 
                 const { error } = await supabase.auth.signOut();
@@ -56,37 +74,26 @@ document.addEventListener('DOMContentLoaded', async () => {
             });
         }
 
-        console.log("Fetching call sessions for user:", user.id);
         const { data: callSessions, error: sessionsError } = await supabase
             .from('call_sessions')
-            // ✅ THIS IS THE CORRECTED SELECT STATEMENT TO RESOLVE PGRST201
-            // It explicitly tells Supabase to use the 'scenario_id' column from 'call_sessions'
-            // to join with the 'call_scenarios' table.
-            .select(`
-                id, 
-                start_time, 
-                end_time, 
-                total_duration_seconds, 
-                completed_all_steps, 
-                scenario_id, 
-                call_scenarios!scenario_id(id, name)
-            `) 
+            .select('start_time, total_duration_seconds, completed_all_steps, scenario_id, call_quality, quality_reason, call_scenarios(name)') 
             .eq('user_id', user.id)
             .order('start_time', { ascending: false }); 
 
         if (sessionsError) {
-            console.error("Error fetching call sessions:", sessionsError); 
-            if (loadingMessageDiv) loadingMessageDiv.innerHTML = `<p style="color:red;">Could not load activity data. Error: ${sessionsError.message}</p>`;
-            if (statsGridDiv) statsGridDiv.style.display = 'none'; 
-            if (recentActivitySectionDiv) recentActivitySectionDiv.style.display = 'none';
+            console.error("Error fetching call sessions:", sessionsError);
+            if (loadingMessageDiv) loadingMessageDiv.innerHTML = '<p style="color:red;">Could not load activity data.</p>';
             return;
         }
-        console.log("Fetched call sessions:", callSessions); 
 
         if (callSessions && callSessions.length > 0) {
             if (totalCallsEl) totalCallsEl.textContent = callSessions.length;
-            const completedSessions = callSessions.filter(s => s.completed_all_steps === true);
-            if (scenariosCompletedEl) scenariosCompletedEl.textContent = completedSessions.length;
+
+            const completedSessionsCount = callSessions.filter(s => s.completed_all_steps === true).length;
+            if (completionRateEl) {
+                const rate = callSessions.length > 0 ? Math.round((completedSessionsCount / callSessions.length) * 100) : 0;
+                completionRateEl.textContent = `${rate}%`;
+            }
 
             const totalDurationSum = callSessions.reduce((sum, session) => sum + (session.total_duration_seconds || 0), 0);
             const avgDuration = callSessions.length > 0 ? Math.round(totalDurationSum / callSessions.length) : 0;
@@ -96,88 +103,129 @@ document.addEventListener('DOMContentLoaded', async () => {
                 avgCallDurationEl.textContent = `${minutes}m ${seconds}s`;
             }
 
-            if (lastCallDateEl && callSessions[0].start_time) {
-                const lastCall = new Date(callSessions[0].start_time);
-                lastCallDateEl.textContent = lastCall.toLocaleDateString();
+            // Last call date (already in your HTML, but not used for display in provided example)
+            // if (lastCallDateEl && callSessions[0].start_time) {
+            //     lastCallDateEl.textContent = new Date(callSessions[0].start_time).toLocaleDateString();
+            // }
+
+
+            // Calculate Call Quality Stats
+            let goodCalls = 0, normalCalls = 0, badCalls = 0;
+            callSessions.forEach(s => {
+                if (s.call_quality === 'Good') goodCalls++;
+                else if (s.call_quality === 'Normal') normalCalls++;
+                else if (s.call_quality === 'Bad') badCalls++;
+            });
+
+            const totalRatedCalls = goodCalls + normalCalls + badCalls;
+            if (totalRatedCalls > 0) {
+                if (gaugeGoodEl) gaugeGoodEl.style.width = `${(goodCalls / totalRatedCalls) * 100}%`;
+                if (gaugeNormalEl) gaugeNormalEl.style.width = `${(normalCalls / totalRatedCalls) * 100}%`;
+                if (gaugeBadEl) gaugeBadEl.style.width = `${(badCalls / totalRatedCalls) * 100}%`;
+                
+                if (avgQualityTextEl) { // Simple text based on dominant quality
+                    if (goodCalls >= normalCalls && goodCalls >= badCalls && goodCalls > 0) avgQualityTextEl.textContent = "Mostly Good";
+                    else if (normalCalls > goodCalls && normalCalls >= badCalls) avgQualityTextEl.textContent = "Mostly Normal";
+                    else if (badCalls > goodCalls && badCalls > normalCalls) avgQualityTextEl.textContent = "Needs Improvement";
+                    else avgQualityTextEl.textContent = "Mixed / N/A";
+                }
+            } else {
+                if (gaugeGoodEl) gaugeGoodEl.style.width = `0%`;
+                if (gaugeNormalEl) gaugeNormalEl.style.width = `0%`; // Show no bar if no rated calls
+                if (gaugeBadEl) gaugeBadEl.style.width = `0%`;
+                if (avgQualityTextEl) avgQualityTextEl.textContent = "No Rated Calls";
             }
 
+
+            // Populate Recent Calls Table
             if (recentCallsTableBody) {
                 recentCallsTableBody.innerHTML = ''; 
                 const recentToDisplay = callSessions.slice(0, 5); 
 
                 if (recentToDisplay.length === 0) {
-                    recentCallsTableBody.innerHTML = '<tr><td colspan="4" class="placeholder-text">No call activity yet.</td></tr>';
+                    recentCallsTableBody.innerHTML = '<tr><td colspan="6" class="placeholder-text">No call activity yet.</td></tr>';
                 } else {
                     recentToDisplay.forEach(session => {
                         const row = recentCallsTableBody.insertRow();
-                        // ✅ Accessing scenario name correctly (Supabase default property name for joined table)
-                        const scenarioName = session.call_scenarios ? session.call_scenarios.name : (session.scenario_id || 'Unknown Scenario');
-                        const startTime = session.start_time ? new Date(session.start_time).toLocaleString() : '-';
+                        const scenarioName = session.call_scenarios ? session.call_scenarios.name : (session.scenario_id || 'N/A');
+                        const startTime = session.start_time ? new Date(session.start_time).toLocaleString() : 'N/A';
                         const durationSec = session.total_duration_seconds || 0;
                         const durationFormatted = `${Math.floor(durationSec / 60)}m ${durationSec % 60}s`;
                         const completedText = session.completed_all_steps ? 'Yes' : 'No';
+                        const qualityText = session.call_quality || 'N/A';
+                        const reasonText = session.quality_reason || '-';
 
                         row.insertCell().textContent = scenarioName;
                         row.insertCell().textContent = startTime;
                         row.insertCell().textContent = durationFormatted;
                         row.insertCell().textContent = completedText;
+                        
+                        const qualityCell = row.insertCell();
+                        qualityCell.textContent = qualityText;
+                        if(session.call_quality) qualityCell.classList.add(`quality-${session.call_quality.toLowerCase()}`);
+                        
+                        row.insertCell().textContent = reasonText;
                     });
                 }
             }
             if (statsGridDiv) statsGridDiv.style.display = 'grid';
             if (recentActivitySectionDiv) recentActivitySectionDiv.style.display = 'block';
 
-        } else { 
-            console.log("No call sessions found for this user.");
+        } else { // No call sessions found
             if (totalCallsEl) totalCallsEl.textContent = '0';
             if (avgCallDurationEl) avgCallDurationEl.textContent = '0m 0s';
-            if (scenariosCompletedEl) scenariosCompletedEl.textContent = '0';
-            if (lastCallDateEl) lastCallDateEl.textContent = '-';
-            if (recentCallsTableBody) recentCallsTableBody.innerHTML = '<tr><td colspan="4" class="placeholder-text">No call activity yet.</td></tr>';
+            if (completionRateEl) completionRateEl.textContent = '0%';
+            // if (lastCallDateEl) lastCallDateEl.textContent = '-';
+            if (gaugeGoodEl) gaugeGoodEl.style.width = `0%`;
+            if (gaugeNormalEl) gaugeNormalEl.style.width = `0%`;
+            if (gaugeBadEl) gaugeBadEl.style.width = `0%`;
+            if (avgQualityTextEl) avgQualityTextEl.textContent = "No Calls Yet";
+            if (recentCallsTableBody) recentCallsTableBody.innerHTML = '<tr><td colspan="6" class="placeholder-text">No call activity yet.</td></tr>';
+            
             if (statsGridDiv) statsGridDiv.style.display = 'grid'; 
             if (recentActivitySectionDiv) recentActivitySectionDiv.style.display = 'block'; 
         }
+
         if (loadingMessageDiv) loadingMessageDiv.style.display = 'none';
     }
     
     if (exportDataBtn) {
-        exportDataBtn.addEventListener('click', async () => { 
-            const { data: { user } } = await supabase.auth.getUser(); 
+        exportDataBtn.addEventListener('click', async () => {
+            const { data: { user } } = await supabase.auth.getUser();
             if (!user) { alert("Please log in to export data."); return; }
 
             const { data: allSessions, error } = await supabase
                 .from('call_sessions')
-                // ✅ Apply the same explicit join for export
-                .select('*, call_scenarios!scenario_id(name)') 
+                .select('*, call_scenarios(name), users(email)') // Fetch user email too
                 .eq('user_id', user.id)
                 .order('start_time', { ascending: false });
-            
-            if (error) {
-                console.error("Error fetching data for export:", error);
-                alert("Could not fetch data for export. " + error.message);
-                return;
-            }
-            if (!allSessions || allSessions.length === 0) {
-                alert("No data to export.");
-                return;
-            }
-            
-            const headers = Object.keys(allSessions[0]).filter(key => key !== 'call_scenarios'); 
-            headers.push('scenario_name'); 
+
+            if (error) { console.error("Error fetching data for export:", error); alert("Could not fetch data."); return; }
+            if (!allSessions || allSessions.length === 0) { alert("No data to export."); return; }
+
+            // Prepare CSV
+            const headers = [
+                "Session ID", "User Email", "Scenario Name", "Start Time", "End Time", 
+                "Total Duration (s)", "Completed All Steps", "Call Quality", "Quality Reason", "Created At"
+            ];
             const csvRows = [headers.join(',')]; 
+
             allSessions.forEach(session => {
-                const values = headers.map(header => {
-                    if (header === 'scenario_name') {
-                        return session.call_scenarios ? `"${(session.call_scenarios.name || '').replace(/"/g, '""')}"` : '""'; 
-                    }
-                    const value = session[header];
-                    if (typeof value === 'string') {
-                        return `"${value.replace(/"/g, '""')}"`; 
-                    }
-                    return value === null || value === undefined ? '' : value;
-                });
+                const values = [
+                    session.id,
+                    session.users ? `"${session.users.email}"` : '""', // Assuming you have RLS to read users.email or it's public
+                    session.call_scenarios ? `"${session.call_scenarios.name}"` : '""',
+                    session.start_time ? `"${new Date(session.start_time).toLocaleString()}"` : '""',
+                    session.end_time ? `"${new Date(session.end_time).toLocaleString()}"` : '""',
+                    session.total_duration_seconds === null ? '' : session.total_duration_seconds,
+                    session.completed_all_steps,
+                    session.call_quality === null ? '' : `"${session.call_quality}"`,
+                    session.quality_reason === null ? '' : `"${session.quality_reason}"`,
+                    session.created_at ? `"${new Date(session.created_at).toLocaleString()}"` : '""'
+                ];
                 csvRows.push(values.join(','));
             });
+
             const csvString = csvRows.join('\n');
             const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
             const link = document.createElement("a");
@@ -194,5 +242,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
         });
     }
+
     loadDashboardData();
 });
