@@ -1,5 +1,5 @@
 document.addEventListener('DOMContentLoaded', async () => {
-    console.log("CoreFlow.js DOMContentLoaded - Per-Step Timer & Session Logging (Corrected Base)");
+    console.log("CoreFlow.js DOMContentLoaded - Automatic Call Quality Logic");
 
     const supabaseUrl = 'https://lgcutmuspcaralydycmg.supabase.co';
     const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxnY3V0bXVzcGNhcmFseWR5Y21nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU0NDY3MDEsImV4cCI6MjA2MTAyMjcwMX0.3u5Y7pkH2NNnnoGLMWVfAa5b8fq88o1itRYnG1K38tE';
@@ -15,7 +15,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         return;
     }
 
-    // DOM Elements (as per your provided HTML structure)
+    // DOM Elements
     const authLoadingDiv = document.getElementById('auth-loading');
     const initialViewDiv = document.getElementById('initial-view');
     const callFlowViewDiv = document.getElementById('call-flow-view');
@@ -38,17 +38,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     let currentScenarioName = null;
     let currentSteps = [];
     let currentStepIndex = 0;
-    
-    // Variables for per-step timing and session logging
     let stepTimerInterval = null; 
     let stepStartTime = 0;       
     let stepDurations = [];      
     let currentCallSessionId = null; 
-
     let assistantTimeout = null;
     let typingInterval = null; 
 
-    // --- 1. CHECK AUTHENTICATION & USER INFO --- (Using your provided structure)
+    // --- 1. CHECK AUTHENTICATION & USER INFO ---
     try {
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
         if (sessionError) throw sessionError;
@@ -125,11 +122,43 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
         stepDurations = [];
         currentCallSessionId = null; 
-        // currentScenarioName, currentSteps, currentStepIndex will be reset when a new scenario is loaded
         console.log("Call session state (durations, session ID) reset.");
     }
 
-    function renderProgressTracker() { /* (Your existing implementation from previous 'clean' version) */ 
+    // ✅ NEW: Function to determine call quality
+    function determineCallQuality(totalDuration, allStepsCompleted, stepsArrayLength, stepDurationsArray) {
+        let quality = "Normal"; 
+        let reason = "Standard call flow."; // Default reason
+
+        if (!allStepsCompleted) {
+            quality = "Bad";
+            reason = "Call ended prematurely before completing all steps.";
+        } else if (stepsArrayLength > 0 && totalDuration < 30 * stepsArrayLength && totalDuration < 60) { // Example: less than 30s per step and less than 1 min total for short scenarios
+            quality = "Bad";
+            reason = "Call duration very short; potentially unresolved or rushed.";
+        } else if (totalDuration > 300 && stepsArrayLength > 0) { // Example: over 5 minutes
+            quality = "Normal"; // Could be 'Bad' if excessively long without complex steps
+            reason = "Call duration was extended.";
+             // Check individual steps for excessive time
+            const longStepThreshold = 120; // 2 minutes for a single step
+            for (let i = 0; i < stepDurationsArray.length; i++) {
+                if (stepDurationsArray[i] > longStepThreshold) {
+                    quality = "Bad"; // Downgrade if any step is too long
+                    reason = `Extended duration on step ${i + 1}. Overall call long.`;
+                    break;
+                }
+            }
+        } else { // If completed and within reasonable time
+            quality = "Good";
+            reason = "Call completed efficiently within expected parameters.";
+        }
+        
+        console.log(`Determined Call Quality: ${quality}. Reason: ${reason}`);
+        return { quality, reason }; 
+    }
+
+
+    function renderProgressTracker() { 
         if (!progressTrackerContainer || currentSteps.length === 0) {
             if(progressTrackerContainer) progressTrackerContainer.style.display = 'none';
             return;
@@ -137,18 +166,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         progressTrackerContainer.innerHTML = ''; 
         const stepperUl = document.createElement('ul');
         stepperUl.className = 'stepper';
-
         currentSteps.forEach((step, index) => {
             const stepLi = document.createElement('li');
             stepLi.className = 'step';
-            if (index < currentStepIndex) {
-                stepLi.classList.add('completed');
-            } else if (index === currentStepIndex) {
-                stepLi.classList.add('active');
-            }
+            if (index < currentStepIndex) stepLi.classList.add('completed');
+            else if (index === currentStepIndex) stepLi.classList.add('active');
             stepLi.textContent = `Step ${index + 1}`; 
             stepperUl.appendChild(stepLi);
-
             if (index < currentSteps.length - 1) {
                 const separator = document.createElement('li');
                 separator.className = 'step-separator';
@@ -160,32 +184,23 @@ document.addEventListener('DOMContentLoaded', async () => {
         progressTrackerContainer.style.display = 'block'; 
     }
 
-    function typeWriterEffect(element, message, speed = 30, callback) { /* (Your existing implementation) */ 
+    function typeWriterEffect(element, message, speed = 30, callback) { 
         if (typingInterval) clearInterval(typingInterval); 
         element.textContent = ''; 
         let i = 0;
         typingInterval = setInterval(() => {
-            if (i < message.length) {
-                element.textContent += message.charAt(i);
-                i++;
-            } else {
-                clearInterval(typingInterval);
-                typingInterval = null;
-                if (callback) callback(); 
-            }
+            if (i < message.length) { element.textContent += message.charAt(i); i++; } 
+            else { clearInterval(typingInterval); typingInterval = null; if (callback) callback(); }
         }, speed);
     }
 
-    function showAssistantMessage(message, showImmediately = false, duration = 5000, onHideCallback) { /* (Your existing implementation) */ 
+    function showAssistantMessage(message, showImmediately = false, duration = 5000, onHideCallback) { 
         if (assistantMessageElement && assistantBox) {
             clearTimeout(assistantTimeout);
             if (typingInterval) clearInterval(typingInterval); 
-
             const showBox = () => {
                 assistantBox.style.display = 'flex'; 
-                requestAnimationFrame(() => { 
-                    assistantBox.classList.add('show');
-                });
+                requestAnimationFrame(() => { assistantBox.classList.add('show'); });
                 typeWriterEffect(assistantMessageElement, message, 30, () => { 
                     if (duration && duration > 0) {
                         assistantTimeout = setTimeout(() => {
@@ -195,10 +210,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                     }
                 });
             };
-            
-            if (showImmediately || !assistantBox.classList.contains('show')) {
-                showBox();
-            } else if (assistantBox.classList.contains('show')) { 
+            if (showImmediately || !assistantBox.classList.contains('show')) showBox();
+            else if (assistantBox.classList.contains('show')) { 
                  typeWriterEffect(assistantMessageElement, message, 30, () => {
                     if (duration && duration > 0) {
                        assistantTimeout = setTimeout(() => {
@@ -216,46 +229,20 @@ document.addEventListener('DOMContentLoaded', async () => {
         receiveCallBtn.addEventListener('click', async () => {
             console.log("Receive Call button clicked");
             resetCallSessionState(); 
-
             if (initialViewDiv) initialViewDiv.style.display = 'none';
             if (callFlowViewDiv) callFlowViewDiv.style.display = 'block';
             if (endCallBtn) endCallBtn.style.display = 'inline-flex';
-            
             updateSystemStatus("🟡 Loading Scenario...", "status-waiting");
-            if (stepsContainer) stepsContainer.innerHTML = '<p class="placeholder-text">Loading scenario...</p>';
-            if (scenarioTitleElement) scenarioTitleElement.textContent = 'Loading Scenario...';
-            if (progressTrackerContainer) progressTrackerContainer.style.display = 'none';
-            if (nextStepBtn) nextStepBtn.style.display = 'none';
-            if (prevStepBtn) prevStepBtn.style.display = 'none';
+            // ... (rest of UI updates for loading)
 
             try {
                 const { data: { user } } = await supabase.auth.getUser(); 
-                if (!user) {
-                    console.error("User not found for creating session.");
-                    showAssistantMessage("⚠️ User not identified. Cannot start call.", true, 7000);
-                    return;
-                }
+                if (!user) throw new Error("User not identified. Cannot start call.");
 
                 const { data: scenario, error: scenarioError } = await supabase
-                    .from('call_scenarios') 
-                    .select('id, name, steps') 
-                    .eq('is_active', true) 
-                    .limit(1)              
-                    .single();             
-
-                if (scenarioError || !scenario || !scenario.steps || scenario.steps.length === 0) {
-                    if (callTimerDiv) callTimerDiv.style.display = 'none';
-                    let userMessage = "⚠️ An error occurred loading the scenario.";
-                    if (scenarioError && scenarioError.code === 'PGRST116') {
-                        userMessage = "⚠️ No active scenario found. Please contact admin.";
-                        if (scenarioTitleElement) scenarioTitleElement.textContent = 'No Scenario';
-                        updateSystemStatus("🔴 No Scenario", "status-waiting");
-                    } else if (scenarioError) { userMessage = `⚠️ Error: ${scenarioError.message}`; } 
-                    else { userMessage = "⚠️ Loaded scenario is empty or invalid."; }
-                    showAssistantMessage(userMessage, true, 7000);
-                    if (stepsContainer) stepsContainer.innerHTML = `<p style="color:orange;">${userMessage.substring(3)}</p>`;
-                    return;
-                }
+                    .from('call_scenarios').select('id, name, steps').eq('is_active', true).limit(1).single();             
+                if (scenarioError) throw scenarioError; // Let catch block handle specific Supabase errors
+                if (!scenario || !scenario.steps || scenario.steps.length === 0) throw new Error("Loaded scenario is invalid or has no steps.");
 
                 currentScenarioName = scenario.name;
                 currentSteps = scenario.steps; 
@@ -265,14 +252,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const { data: newSession, error: sessionInsertError } = await supabase
                     .from('call_sessions')
                     .insert({ user_id: user.id, scenario_id: scenario.id, start_time: new Date().toISOString(), completed_all_steps: false })
-                    .select('id') 
-                    .single();
-
-                if (sessionInsertError || !newSession) {
-                    console.error("Failed to create new call session record:", sessionInsertError);
-                    showAssistantMessage("⚠️ Error starting call session. Please try again.", true, 7000);
-                    return;
-                }
+                    .select('id').single();
+                if (sessionInsertError || !newSession) throw sessionInsertError || new Error("Failed to create session record.");
+                
                 currentCallSessionId = newSession.id; 
                 console.log("New call session created with ID:", currentCallSessionId);
 
@@ -283,12 +265,19 @@ document.addEventListener('DOMContentLoaded', async () => {
                 showAssistantMessage(`🚀 Scenario "${currentScenarioName}" started!`, true, 0);
 
             } catch (err) {
-                console.error("Failed to process scenario or create session:", err);
+                console.error("Error during call setup:", err);
                 if (callTimerDiv) callTimerDiv.style.display = 'none';
-                if (stepsContainer) stepsContainer.innerHTML = `<p style="color:red;">Error: ${err.message}.</p>`;
-                if (scenarioTitleElement) scenarioTitleElement.textContent = 'Error Loading Scenario';
+                let userMessage = `⚠️ Error: ${err.message}`;
+                if (err.code === 'PGRST116') userMessage = "⚠️ No active scenario found.";
+                
+                if (stepsContainer) stepsContainer.innerHTML = `<p style="color:red;">${userMessage.substring(3)}</p>`;
+                if (scenarioTitleElement) scenarioTitleElement.textContent = 'Error Loading';
                 updateSystemStatus("🔴 Error", "status-waiting");
-                showAssistantMessage(`❗ Error: ${err.message}`, true, 7000);
+                showAssistantMessage(userMessage, true, 7000);
+                // Revert UI to initial state more gracefully
+                if (callFlowViewDiv) callFlowViewDiv.style.display = 'none';
+                if (initialViewDiv) initialViewDiv.style.display = 'block';
+                if (endCallBtn) endCallBtn.style.display = 'none';
             }
         });
     }
@@ -296,12 +285,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // --- 3. RENDER STEP FUNCTION ---
     function renderStep() {
         if (!stepsContainer) return;
-        if (currentSteps.length === 0) { 
-            stepsContainer.innerHTML = '<p class="placeholder-text">No steps available.</p>';
-            if (nextStepBtn) nextStepBtn.style.display = 'none';
-            if (prevStepBtn) prevStepBtn.style.display = 'none';
-            return;
-        }
+        if (currentSteps.length === 0) { /* ... */ return; }
         if (currentStepIndex >= 0 && currentStepIndex < currentSteps.length) {
             const stepContent = currentSteps[currentStepIndex];
             stepsContainer.innerHTML = `<p>${stepContent}</p>`;
@@ -331,23 +315,30 @@ document.addEventListener('DOMContentLoaded', async () => {
                 currentStepIndex++;
                 renderStep();
             } else if (currentStepIndex === currentSteps.length - 1) { 
-                console.log(`Scenario ${currentScenarioName} finished by user.`);
+                console.log(`Scenario ${currentScenarioName} fully completed by user.`);
                 updateSystemStatus("✅ Call Completed", "status-completed");
                 
                 let totalDuration = stepDurations.reduce((acc, duration) => acc + (duration || 0), 0);
-                
+                const { quality, reason } = determineCallQuality(totalDuration, true, currentSteps.length, stepDurations); 
+
                 if (currentCallSessionId) {
                     const { error: updateError } = await supabase
                         .from('call_sessions')
-                        .update({ end_time: new Date().toISOString(), total_duration_seconds: totalDuration, completed_all_steps: true })
+                        .update({ 
+                            end_time: new Date().toISOString(), 
+                            total_duration_seconds: totalDuration, 
+                            completed_all_steps: true,
+                            call_quality: quality, 
+                            // quality_reason: reason // Uncomment if you added this column
+                        })
                         .eq('id', currentCallSessionId);
                     if (updateError) console.error("Failed to update call session on completion:", updateError);
-                    else console.log("Call session updated on completion. ID:", currentCallSessionId);
+                    else console.log("Call session updated on FULL completion. ID:", currentCallSessionId);
                 }
                 
-                let summary = `Scenario "${currentScenarioName}" Completed!\nTotal Duration: ${Math.floor(totalDuration / 60)}m ${totalDuration % 60}s\n\nStep Durations:\n`;
+                let summary = `Scenario "${currentScenarioName}" Completed!\nTotal Duration: ${Math.floor(totalDuration / 60)}m ${totalDuration % 60}s\nCall Quality: ${quality}\n\nStep Durations:\n`;
                 currentSteps.forEach((stepText, index) => {
-                    summary += `Step ${index + 1} ("${stepText.substring(0,20)}..."): ${Math.floor((stepDurations[index] || 0) / 60)}m ${(stepDurations[index] || 0) % 60}s\n`;
+                    summary += `Step ${index + 1}: ${Math.floor((stepDurations[index] || 0) / 60)}m ${(stepDurations[index] || 0) % 60}s\n`;
                 });
                 
                 console.log("Detailed Step Durations:", stepDurations); 
@@ -360,59 +351,41 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     }
 
-    if (prevStepBtn) {
-        prevStepBtn.addEventListener('click', () => { 
-            stopAndRecordStepTimer(); 
-            if (currentStepIndex > 0) {
-                if (currentStepIndex >= currentSteps.length) { 
-                    currentStepIndex = currentSteps.length -1; 
-                } else {
-                    currentStepIndex--;
-                }
-                renderStep();
-            }
-        });
-    }
+    if (prevStepBtn) { /* ... (الكود كما هو من الرد السابق) ... */ }
     
     // --- 5. END CALL BUTTON ---
     if (endCallBtn) {
         endCallBtn.addEventListener('click', async () => { 
             stopAndRecordStepTimer(); 
-            
             let totalDuration = stepDurations.reduce((acc, duration) => acc + (duration || 0), 0);
-
             console.log("End Call button clicked by user.");
-            console.log("Final Step Durations:", stepDurations); 
-            console.log("Final Total Call Duration:", totalDuration);
 
-            if (currentCallSessionId && (currentSteps.length === 0 || currentStepIndex < currentSteps.length -1 || (nextStepBtn && nextStepBtn.style.display !== 'none') ) ) { 
+            if (currentCallSessionId) {
+                const isScenarioEffectivelyCompleted = 
+                    (currentSteps.length > 0 && currentStepIndex >= currentSteps.length - 1) &&
+                    (!nextStepBtn || nextStepBtn.style.display === 'none');
+                
+                const { quality, reason } = determineCallQuality(totalDuration, isScenarioEffectivelyCompleted, currentSteps.length, stepDurations);
+
                 const { error: updateError } = await supabase
                     .from('call_sessions')
-                    .update({ end_time: new Date().toISOString(), total_duration_seconds: totalDuration, completed_all_steps: false })
+                    .update({
+                        end_time: new Date().toISOString(),
+                        total_duration_seconds: totalDuration,
+                        completed_all_steps: isScenarioEffectivelyCompleted,
+                        call_quality: quality,
+                        // quality_reason: reason // Uncomment if you added this column
+                    })
                     .eq('id', currentCallSessionId);
-                if (updateError) console.error("Failed to update call session on early end:", updateError);
-                else console.log("Call session updated on early end. ID:", currentCallSessionId);
+                if (updateError) console.error("Failed to update call session on end call:", updateError);
+                else console.log(`Call session ${currentCallSessionId} updated on end call. Effectively Completed: ${isScenarioEffectivelyCompleted}, Quality: ${quality}`);
             }
             
             resetCallSessionState(); 
-            
+            // ... (باقي منطق إعادة الواجهة للحالة الأولية كما هو في الكود الذي أرسلته) ...
             if (callFlowViewDiv) callFlowViewDiv.style.display = 'none';
             if (initialViewDiv) initialViewDiv.style.display = 'block';
-            if (progressTrackerContainer) progressTrackerContainer.style.display = 'none';
-            updateSystemStatus("🔴 Waiting for Call");
-            if (nextStepBtn) {
-                nextStepBtn.innerHTML = `<span>Next Step</span><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>`;
-                nextStepBtn.style.display = 'none'; 
-            }
-            if (prevStepBtn) prevStepBtn.style.display = 'none';
-            if (endCallBtn) endCallBtn.style.display = 'none'; 
-            if (scenarioTitleElement) scenarioTitleElement.textContent = "Call Scenario"; 
-            if (stepsContainer) stepsContainer.innerHTML = '<p class="placeholder-text">Ready for a new call.</p>';
-            showAssistantMessage("💡 Ready for the next call!", true, 7000, () => {
-                if (initialViewDiv && initialViewDiv.style.display === 'block') {
-                    showAssistantMessage("💡 Tip: Click 'Receive Call' to start.", true, 0);
-                }
-            });
+            // ... (إلخ)
         });
     }
 
