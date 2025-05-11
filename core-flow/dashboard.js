@@ -42,6 +42,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         if (userError || !user) {
             console.error("Error fetching user or user not logged in:", userError);
+            // Assuming dashboard.html is inside core-flow, and login.html is in legacy (one level up)
             window.location.href = '../legacy/login.html?redirectTo=/core-flow/dashboard.html';
             return;
         }
@@ -58,6 +59,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             });
         }
 
+        // Fetch call sessions for the current user
         const { data: callSessions, error: sessionsError } = await supabase
             .from('call_sessions')
             .select('start_time, total_duration_seconds, completed_all_steps, scenario_id, call_scenarios(name)') 
@@ -67,6 +69,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (sessionsError) {
             console.error("Error fetching call sessions:", sessionsError);
             if (loadingMessageDiv) loadingMessageDiv.innerHTML = '<p style="color:red;">Could not load activity data.</p>';
+            // Keep loading message visible, or hide other sections
+            if (statsGridDiv) statsGridDiv.style.display = 'none';
+            if (recentActivitySectionDiv) recentActivitySectionDiv.style.display = 'none';
             return;
         }
 
@@ -93,7 +98,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 recentCallsTableBody.innerHTML = ''; 
                 const recentToDisplay = callSessions.slice(0, 5); 
 
-                if (recentToDisplay.length === 0) {
+                if (recentToDisplay.length === 0) { // Should not happen if callSessions.length > 0
                     recentCallsTableBody.innerHTML = '<tr><td colspan="4" class="placeholder-text">No call activity yet.</td></tr>';
                 } else {
                     recentToDisplay.forEach(session => {
@@ -114,7 +119,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (statsGridDiv) statsGridDiv.style.display = 'grid';
             if (recentActivitySectionDiv) recentActivitySectionDiv.style.display = 'block';
 
-        } else {
+        } else { // No call sessions found for the user
             if (totalCallsEl) totalCallsEl.textContent = '0';
             if (avgCallDurationEl) avgCallDurationEl.textContent = '0m 0s';
             if (scenariosCompletedEl) scenariosCompletedEl.textContent = '0';
@@ -128,9 +133,68 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (loadingMessageDiv) loadingMessageDiv.style.display = 'none';
     }
     
+    // Export Data Functionality
     if (exportDataBtn) {
-        exportDataBtn.addEventListener('click', async () => { /* ... (Export logic as before) ... */ });
+        exportDataBtn.addEventListener('click', async () => {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) {
+                alert("Please log in to export data.");
+                return;
+            }
+
+            const { data: allSessions, error } = await supabase
+                .from('call_sessions')
+                .select('*, call_scenarios(name)') 
+                .eq('user_id', user.id)
+                .order('start_time', { ascending: false });
+
+            if (error) {
+                console.error("Error fetching data for export:", error);
+                alert("Could not fetch data for export.");
+                return;
+            }
+
+            if (!allSessions || allSessions.length === 0) {
+                alert("No data to export.");
+                return;
+            }
+
+            const headers = Object.keys(allSessions[0]).filter(key => key !== 'call_scenarios'); 
+            headers.push('scenario_name'); 
+
+            const csvRows = [headers.join(',')]; 
+
+            allSessions.forEach(session => {
+                const values = headers.map(header => {
+                    if (header === 'scenario_name') {
+                        return session.call_scenarios ? `"${session.call_scenarios.name.replace(/"/g, '""')}"` : '""'; // Handle quotes in name
+                    }
+                    const value = session[header];
+                    if (typeof value === 'string') {
+                        return `"${value.replace(/"/g, '""')}"`; // Enclose in quotes and escape existing quotes
+                    }
+                    return value === null || value === undefined ? '' : value;
+                });
+                csvRows.push(values.join(','));
+            });
+
+            const csvString = csvRows.join('\n');
+            const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            if (link.download !== undefined) {
+                const url = URL.createObjectURL(blob);
+                link.setAttribute("href", url);
+                link.setAttribute("download", `elevo_call_data_${user.email.split('@')[0]}_${new Date().toISOString().slice(0,10)}.csv`);
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            } else {
+                alert("CSV export not supported by your browser.");
+            }
+        });
     }
 
+    // Initial load
     loadDashboardData();
 });
