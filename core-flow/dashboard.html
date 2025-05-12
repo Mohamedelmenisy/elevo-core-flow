@@ -23,9 +23,12 @@
 
         /* Ensure date picker is clickable, if any specific z-index issues arise */
         .filter-grid input[type="date"] {
-            position: relative; /* Or z-index: 1; if something is overlapping */
+            position: relative; /* Keep relative positioning */
+            z-index: 1; /* Added z-index just in case of stacking issues */
             /* Native date pickers are generally hard to style extensively beyond color-scheme */
         }
+
+        /* Logout button text is handled by the span, not comments */
 
     </style>
 </head>
@@ -61,7 +64,7 @@
                     <span id="userNameDisplay" class="user-name-display"></span>
                     <button id="logoutButton" class="logout-btn">
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
-                        <span>Logout</span>
+                        <span>Logout</span> <!-- Text is inside the span -->
                     </button>
                 </div>
             </div>
@@ -107,6 +110,7 @@
 
             <!-- Recent Activity Table -->
             <div class="recent-activity-section card" id="recentActivitySection" style="display: none;">
+                <!-- Quality and Reason columns will now reflect data from the DB, populated by coreFlow.js's update -->
                 <h2 id="recentCallsTitle">Recent Call Sessions</h2>
                 <div class="table-responsive">
                     <table id="recentCallsTable">
@@ -130,17 +134,19 @@
     </div>
 
     <script>
+    // --- START OF EMBEDDED dashboard.js ---
     document.addEventListener('DOMContentLoaded', async () => {
-        console.log("Admin Dashboard.js DOMContentLoaded - v2.1 (UI Fixes Applied)");
+        console.log("Admin Dashboard.js DOMContentLoaded - v2.2 (Fixes Applied)"); // Version increment
 
-        const SUPER_ADMIN_EMAIL = "m.elsayed@thechefz.co";
+        // --- SUPER_ADMIN_EMAIL constant is not used in the current logic, can be ignored or removed if not needed elsewhere ---
+        // const SUPER_ADMIN_EMAIL = "m.elsayed@thechefz.co";
 
         const supabaseUrl = 'https://lgcutmuspcaralydycmg.supabase.co';
         const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxnY3V0bXVzcGNhcmFseWR5Y21nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU0NDY3MDEsImV4cCI6MjA2MTAyMjcwMX0.3u5Y7pkH2NNnnoGLMWVfAa5b8fq88o1itRYnG1K38tE';
         let supabase;
         try {
             supabase = window.supabase.createClient(supabaseUrl, supabaseAnonKey);
-            console.log("Supabase client initialized in admin dashboard.js v2.1");
+            console.log("Supabase client initialized in admin dashboard.js v2.2");
         } catch (error) {
             console.error("Supabase client initialization failed:", error);
             alert("Error connecting to services. Please try again later.");
@@ -152,6 +158,7 @@
         const accessDeniedModal = document.getElementById('accessDeniedModal');
         const returnToAppBtn = document.getElementById('returnToAppBtn');
 
+        // --- Variable declarations remain the same ---
         let userNameDisplayHeader, dashboardUserGreeting, dashboardUserSubtext, userAvatarCharEl, logoutButton, userInfoDivHeader;
         let statsGridDiv, recentActivitySectionDiv, filterControlsCard;
         let totalCallsEl, avgCallDurationEl, completionRateEl;
@@ -167,6 +174,7 @@
 
         const FILTER_STORAGE_KEY = 'elevoCoreAdminFilters';
 
+        // --- initializeDashboardDOMElements remains the same ---
         function initializeDashboardDOMElements() {
             userNameDisplayHeader = document.getElementById('userNameDisplay');
             dashboardUserGreeting = document.getElementById('dashboardUserGreeting');
@@ -204,6 +212,7 @@
             recentCallsTitleEl = document.getElementById('recentCallsTitle');
         }
 
+        // --- showAccessDenied remains the same ---
         function showAccessDenied(message = "You do not have permission to view this page. This section is restricted to administrators.") {
             if(loadingMessageDiv && loadingMessageDiv.style.display !== 'none') loadingMessageDiv.style.display = 'none';
             if(appContainerContent) appContainerContent.style.display = 'none';
@@ -216,11 +225,14 @@
             };
         }
 
+        // --- checkUserRoleAndLoadDashboard remains the same (using Edge Function) ---
         async function checkUserRoleAndLoadDashboard() {
             const { data: { session }, error: sessionError } = await supabase.auth.getSession();
             if (sessionError || !session) {
                 console.error("No active session or error fetching session:", sessionError);
-                window.location.href = `../legacy/login.html?redirectTo=${encodeURIComponent('/core-flow/dashboard.html')}`;
+                // Redirect to login, preserving the intended dashboard path
+                const currentPath = '/core-flow/dashboard.html'; // Specific path for dashboard
+                window.location.href = `../legacy/login.html?redirectTo=${encodeURIComponent(currentPath)}`;
                 return;
             }
             currentAuthUser = session.user;
@@ -244,9 +256,10 @@
                  if (adminStatus && adminStatus.isAdmin) {
                      console.log("User IS Admin. Loading admin dashboard.");
                      if(loadingMessageDiv) loadingMessageDiv.style.display = 'flex';
-                     if(appContainerContent) appContainerContent.style.display = 'flex'; // Changed from 'flex' to 'block' or 'grid' as appropriate later
+                     // Ensure app container uses appropriate display (flex used here)
+                     if(appContainerContent) appContainerContent.style.display = 'flex';
                      initializeDashboardDOMElements();
-                     loadPersistedFilters();
+                     loadPersistedFilters(); // Load filters before fetching data
                      await loadAdminDashboardData();
                      setupFilterEventListeners();
                  } else {
@@ -259,6 +272,7 @@
              }
         }
 
+        // --- fetchAllAgents remains the same ---
         async function fetchAllAgents() {
             const { data: agents, error } = await supabase
                 .from('users')
@@ -272,9 +286,10 @@
             return allAgentsList;
         }
 
+        // --- populateUserFilterDropdown remains the same ---
         function populateUserFilterDropdown() {
             if (!userFilterDropdown || !allAgentsList) return;
-            const currentVal = userFilterDropdown.value;
+            const currentVal = userFilterDropdown.value; // Preserve selection
             userFilterDropdown.innerHTML = '<option value="">All Agents</option>';
             allAgentsList.forEach(agent => {
                 const option = document.createElement('option');
@@ -287,6 +302,8 @@
             });
         }
 
+        // --- renderRecentCallsTable remains the same (will display quality/reason fetched) ---
+        // NOTE: The Quality and Reason display relies on the data populated by coreFlow.js
          function renderRecentCallsTable(sessionsToRender) {
             if (!recentCallsTableBody) return;
             recentCallsTableBody.innerHTML = '';
@@ -311,8 +328,9 @@
                     const durationSec = session.total_duration_seconds ?? 0;
                     const durationFormatted = `${Math.floor(durationSec / 60)}m ${durationSec % 60}s`;
                     const completedText = session.completed_all_steps ? 'Yes' : 'No';
+                    // Use the actual fetched quality and reason
                     const qualityText = session.call_quality || 'N/A';
-                    const reasonText = session.quality_reason || '-';
+                    const reasonText = session.quality_reason || '-'; // Use '-' if null/empty
 
                     row.insertCell().textContent = agentName;
                     row.insertCell().textContent = agentEmail;
@@ -321,6 +339,7 @@
                     row.insertCell().textContent = durationFormatted;
                     row.insertCell().textContent = completedText;
 
+                    // Quality cell rendering logic remains the same, uses fetched qualityText
                     const qualityCell = row.insertCell();
                     qualityCell.classList.add('quality-cell');
 
@@ -342,19 +361,22 @@
                              iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>`;
                              qualityClass = 'bad';
                              break;
-                        default:
+                        default: // Handles 'N/A' or null/undefined
                              iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="8" y1="12" x2="16" y2="12"></line></svg>`;
                              qualityClass = 'na';
                     }
                     iconSpan.innerHTML = iconSvg;
                     iconSpan.classList.add(qualityClass);
                     qualityCell.appendChild(iconSpan);
-                    qualityCell.appendChild(document.createTextNode(` ${qualityText}`));
+                    qualityCell.appendChild(document.createTextNode(` ${qualityText}`)); // Display text beside icon
+
+                    // Reason cell uses fetched reasonText
                     row.insertCell().textContent = reasonText;
                 });
             }
         }
 
+        // --- updateDashboardStats remains the same ---
         function updateDashboardStats(sessionsForStats) {
              if (!totalCallsEl || !avgCallDurationEl || !completionRateEl || !gaugeGoodEl || !gaugeNormalEl || !gaugeBadEl || !avgQualityTextEl) return;
 
@@ -374,18 +396,22 @@
 
                 let goodCalls = 0, normalCalls = 0, badCalls = 0;
                 sessionsForStats.forEach(s => {
-                    if (s.call_quality === 'Good') goodCalls++;
-                    else if (s.call_quality === 'Normal') normalCalls++;
-                    else if (s.call_quality === 'Bad') badCalls++;
+                    // Ensure case-insensitive comparison for quality
+                    const qualityLower = s.call_quality?.toLowerCase();
+                    if (qualityLower === 'good') goodCalls++;
+                    else if (qualityLower === 'normal') normalCalls++;
+                    else if (qualityLower === 'bad') badCalls++;
                 });
                 const totalRatedCalls = goodCalls + normalCalls + badCalls;
                 if (totalRatedCalls > 0) {
                     gaugeGoodEl.style.width = `${(goodCalls / totalRatedCalls) * 100}%`;
                     gaugeNormalEl.style.width = `${(normalCalls / totalRatedCalls) * 100}%`;
                     gaugeBadEl.style.width = `${(badCalls / totalRatedCalls) * 100}%`;
+                    // Simplified logic for gauge text based on proportions
                     if (badCalls / totalRatedCalls > 0.3) avgQualityTextEl.textContent = "Improvement Needed";
-                    else if (goodCalls / totalRatedCalls >= 0.5) avgQualityTextEl.textContent = "Mostly Good";
-                    else if (normalCalls >= goodCalls && normalCalls >= badCalls) avgQualityTextEl.textContent = "Mostly Normal";
+                    else if (goodCalls / totalRatedCalls >= 0.6) avgQualityTextEl.textContent = "Mostly Good";
+                     else if (goodCalls / totalRatedCalls >= 0.4) avgQualityTextEl.textContent = "Good";
+                    else if (normalCalls / totalRatedCalls >= 0.5) avgQualityTextEl.textContent = "Mostly Normal";
                     else avgQualityTextEl.textContent = "Mixed Quality";
                 } else {
                     gaugeGoodEl.style.width = `0%`;
@@ -394,6 +420,7 @@
                     avgQualityTextEl.textContent = "No Rated Calls";
                 }
             } else {
+                // Reset stats if no sessions match filters
                 avgCallDurationEl.textContent = '0m 0s';
                 completionRateEl.textContent = '0%';
                 if(gaugeGoodEl) gaugeGoodEl.style.width = `0%`;
@@ -403,7 +430,8 @@
             }
         }
 
-         function saveFiltersToLocalStorage() {
+        // --- saveFiltersToLocalStorage remains the same ---
+        function saveFiltersToLocalStorage() {
              if (!searchInput || !qualityFilter || !startDateFilter || !endDateFilter || !userFilterDropdown) return;
              const filters = {
                  searchTerm: searchInput.value,
@@ -415,6 +443,7 @@
              localStorage.setItem(FILTER_STORAGE_KEY, JSON.stringify(filters));
          }
 
+        // --- loadPersistedFilters remains the same ---
          function loadPersistedFilters() {
             const savedFilters = localStorage.getItem(FILTER_STORAGE_KEY);
              if (savedFilters && searchInput && qualityFilter && startDateFilter && endDateFilter && userFilterDropdown) {
@@ -424,16 +453,19 @@
                      qualityFilter.value = filters.quality || '';
                      startDateFilter.value = filters.startDate || '';
                      endDateFilter.value = filters.endDate || '';
+                     // Ensure the dropdown value is set correctly, even if the option isn't loaded yet
+                     // It will be selected if the value matches when populateUserFilterDropdown runs
                      userFilterDropdown.value = filters.agentId || '';
                  } catch (e) {
                      console.error("Error parsing saved filters:", e);
-                     localStorage.removeItem(FILTER_STORAGE_KEY);
+                     localStorage.removeItem(FILTER_STORAGE_KEY); // Clear invalid data
                  }
              }
          }
 
+        // --- applyCurrentFilters remains the same ---
         function applyCurrentFilters() {
-             saveFiltersToLocalStorage();
+             saveFiltersToLocalStorage(); // Save filters whenever applied
 
              let filteredSessions = [...allUserCallSessions];
              const searchTerm = (searchInput?.value || '').toLowerCase().trim();
@@ -445,29 +477,35 @@
             let statsLabel = "All Agents";
             let tableTitle = "All Recent Call Sessions";
 
+            // Filter by Agent ID
             if (selectedAgentId) {
                 filteredSessions = filteredSessions.filter(session => session.user_id === selectedAgentId);
                  const selectedAgent = allAgentsList.find(a => a.id === selectedAgentId);
                  if (selectedAgent) {
-                     statsLabel = selectedAgent.name || selectedAgent.email;
+                     statsLabel = selectedAgent.name || selectedAgent.email; // Use name if available
                      tableTitle = `Call Sessions for ${statsLabel}`;
                  } else {
-                     statsLabel = "Unknown Agent";
-                     tableTitle = `Call Sessions for Unknown Agent`;
+                     // Handle case where agent might not be in list (e.g., deleted user)
+                     statsLabel = "Selected Agent";
+                     tableTitle = `Call Sessions for Selected Agent (${selectedAgentId})`;
                  }
             }
+             // Update labels based on agent filter
              if(statsPeriodEl) statsPeriodEl.textContent = statsLabel;
              if(statsPeriodDurationEl) statsPeriodDurationEl.textContent = statsLabel;
              if(statsPeriodCompletionEl) statsPeriodCompletionEl.textContent = statsLabel;
              if(recentCallsTitleEl) recentCallsTitleEl.textContent = tableTitle;
 
+             // Filter by Search Term
             if (searchTerm) {
                 filteredSessions = filteredSessions.filter(session => {
                      const scenarioName = (session.call_scenarios?.name || '').toLowerCase();
                      const reason = (session.quality_reason || '').toLowerCase();
+                     // Find agent details for search (handle missing agent)
                      const agent = allAgentsList.find(a => a.id === session.user_id);
                      const agentNameSearch = agent ? (agent.name || '').toLowerCase() : '';
                      const agentEmailSearch = agent ? (agent.email || '').toLowerCase() : '';
+                     // Check against multiple fields
                      return scenarioName.includes(searchTerm) ||
                             reason.includes(searchTerm) ||
                             agentNameSearch.includes(searchTerm) ||
@@ -475,45 +513,58 @@
                 });
             }
 
+            // Filter by Quality
             if (selectedQuality) {
                 if (selectedQuality === "N/A") {
+                    // Handle 'N/A' explicitly (null, undefined, or the string 'N/A')
                     filteredSessions = filteredSessions.filter(session => !session.call_quality || session.call_quality === 'N/A');
                 } else {
-                    filteredSessions = filteredSessions.filter(session => session.call_quality === selectedQuality);
+                    // Case-insensitive comparison for other quality values
+                    filteredSessions = filteredSessions.filter(session => session.call_quality?.toLowerCase() === selectedQuality.toLowerCase());
                 }
             }
 
+            // Filter by Date Range
              if (startDate) {
-                 const startDateTime = new Date(startDate);
-                 startDateTime.setHours(0, 0, 0, 0);
-                 filteredSessions = filteredSessions.filter(session => {
-                     return session.start_time && new Date(session.start_time) >= startDateTime;
-                 });
+                 try {
+                    const startDateTime = new Date(startDate);
+                    startDateTime.setHours(0, 0, 0, 0); // Start of the day
+                    filteredSessions = filteredSessions.filter(session => {
+                        return session.start_time && new Date(session.start_time) >= startDateTime;
+                    });
+                 } catch (e) { console.error("Invalid start date:", startDate, e); }
              }
              if (endDate) {
-                 const endDateTime = new Date(endDate);
-                 endDateTime.setHours(23, 59, 59, 999);
-                 filteredSessions = filteredSessions.filter(session => {
-                     return session.start_time && new Date(session.start_time) <= endDateTime;
-                 });
+                 try {
+                    const endDateTime = new Date(endDate);
+                    endDateTime.setHours(23, 59, 59, 999); // End of the day
+                    filteredSessions = filteredSessions.filter(session => {
+                        return session.start_time && new Date(session.start_time) <= endDateTime;
+                    });
+                 } catch (e) { console.error("Invalid end date:", endDate, e); }
              }
 
+            // Render table and update stats with the final filtered list
             renderRecentCallsTable(filteredSessions);
             updateDashboardStats(filteredSessions);
         }
 
+        // --- setupFilterEventListeners remains the same (no 'p' issue logic needed here) ---
         function setupFilterEventListeners() {
+            // Debounce filter application for text input
             const applyDebouncedFilter = () => {
                  clearTimeout(filterTimeout);
-                 filterTimeout = setTimeout(applyCurrentFilters, 400);
+                 filterTimeout = setTimeout(applyCurrentFilters, 400); // Wait 400ms after typing stops
             };
 
              if (searchInput) searchInput.addEventListener('input', applyDebouncedFilter);
+             // Apply filters immediately for dropdowns and date pickers
              if (qualityFilter) qualityFilter.addEventListener('change', applyCurrentFilters);
              if (startDateFilter) startDateFilter.addEventListener('change', applyCurrentFilters);
              if (endDateFilter) endDateFilter.addEventListener('change', applyCurrentFilters);
              if (userFilterDropdown) userFilterDropdown.addEventListener('change', applyCurrentFilters);
 
+            // Reset button functionality
             if (resetFiltersBtn) {
                 resetFiltersBtn.addEventListener('click', () => {
                      if(searchInput) searchInput.value = '';
@@ -521,55 +572,64 @@
                      if(startDateFilter) startDateFilter.value = '';
                      if(endDateFilter) endDateFilter.value = '';
                      if(userFilterDropdown) userFilterDropdown.value = '';
-                     localStorage.removeItem(FILTER_STORAGE_KEY);
-                     applyCurrentFilters();
+                     localStorage.removeItem(FILTER_STORAGE_KEY); // Clear saved filters
+                     applyCurrentFilters(); // Apply the reset filters
                 });
             }
-             // Ensure search input does not retain unexpected values on focus/blur
-             if (searchInput) {
-                searchInput.addEventListener('focus', () => {
-                    // Optional: clear if it contains only the placeholder or specific unwanted char
-                    // if (searchInput.value === 'p') searchInput.value = '';
-                });
-             }
+             // No special handling for 'p' needed - placeholder and reset cover it.
+             // if (searchInput) {
+             //    searchInput.addEventListener('focus', () => {
+             //        // Optional: clear if it contains only the placeholder or specific unwanted char
+             //        // if (searchInput.value === 'p') searchInput.value = '';
+             //    });
+             // }
         }
 
+        // --- loadAdminDashboardData remains the same ---
         async function loadAdminDashboardData() {
              if (!currentAuthUser) {
                  showAccessDenied("Authentication details missing.");
                  return;
              }
 
+             // Show loading state
              if (loadingMessageDiv) loadingMessageDiv.style.display = 'flex';
              if (statsGridDiv) statsGridDiv.style.display = 'none';
              if (recentActivitySectionDiv) recentActivitySectionDiv.style.display = 'none';
              if (filterControlsCard) filterControlsCard.style.display = 'none';
              if (appContainerContent) appContainerContent.style.display = 'flex'; // Show main container
 
+             // Fetch user details (name) in parallel with sessions if possible
+             await fetchAllAgents(); // Ensure allAgentsList is populated first for name lookup
+
              const userEmailPrefix = currentAuthUser.email ? currentAuthUser.email.split('@')[0] : 'Admin';
              const capitalizedUserName = userEmailPrefix.charAt(0).toUpperCase() + userEmailPrefix.slice(1);
-              // Fetch all agents first to get current user's name if available
-              await fetchAllAgents(); // Ensure allAgentsList is populated
-              const currentUserDetails = allAgentsList.find(a => a.id === currentAuthUser.id);
-              const displayUserName = currentUserDetails?.name || capitalizedUserName;
-              const initialLetter = displayUserName.charAt(0).toUpperCase();
+             const currentUserDetails = allAgentsList.find(a => a.id === currentAuthUser.id);
+             const displayUserName = currentUserDetails?.name || capitalizedUserName; // Use fetched name if available
+             const initialLetter = displayUserName ? displayUserName.charAt(0).toUpperCase() : '?'; // Fallback initial
 
+             // Update UI with user info
               if (userNameDisplayHeader) userNameDisplayHeader.textContent = displayUserName;
               if (dashboardUserGreeting) dashboardUserGreeting.textContent = `Welcome, ${displayUserName}!`;
               if (dashboardUserSubtext) dashboardUserSubtext.textContent = "Oversee all agent activities and performance.";
               if (userInfoDivHeader) userInfoDivHeader.style.display = 'flex';
               if (userAvatarCharEl) userAvatarCharEl.textContent = initialLetter;
 
+             // Setup logout button
              if(logoutButton) {
                  logoutButton.addEventListener('click', async () => {
                      const { error } = await supabase.auth.signOut();
                      if (error) console.error("Logout error:", error);
-                     else window.location.href = '../legacy/login.html';
+                     else window.location.href = '../legacy/login.html'; // Redirect to login after logout
                  });
              }
 
+             // Populate the agent filter dropdown
              populateUserFilterDropdown();
+             // Re-apply persisted agent filter value *after* populating dropdown
+             loadPersistedFilters(); // Call again to ensure value is set if options are now available
 
+             // Fetch call sessions data
              const { data: callSessions, error: sessionsError } = await supabase
                  .from('call_sessions')
                  .select(`
@@ -578,28 +638,34 @@
                      call_quality, quality_reason,
                      call_scenarios ( name )
                   `)
-                 .order('start_time', { ascending: false });
+                 .order('start_time', { ascending: false }); // Fetch most recent first
 
              if (sessionsError) {
                  console.error("Error fetching all call sessions for admin:", sessionsError);
                  if (loadingMessageDiv) loadingMessageDiv.innerHTML = `<p style="color:red;">Could not load activity data. Error: ${sessionsError.message}</p>`;
-                 allUserCallSessions = [];
+                 allUserCallSessions = []; // Ensure it's an empty array on error
              } else {
-                 allUserCallSessions = callSessions || [];
+                 allUserCallSessions = callSessions || []; // Store fetched data
              }
 
+             // Apply any loaded/default filters and render data
              applyCurrentFilters();
 
+             // Hide loading message and show content sections with fade-in
              if (statsGridDiv) { statsGridDiv.style.display = 'grid'; statsGridDiv.classList.add('loaded-fade-in'); }
              if (recentActivitySectionDiv) { recentActivitySectionDiv.style.display = 'block'; recentActivitySectionDiv.classList.add('loaded-fade-in'); }
              if (filterControlsCard) { filterControlsCard.style.display = 'block'; filterControlsCard.classList.add('loaded-fade-in'); }
              if (loadingMessageDiv) loadingMessageDiv.style.display = 'none';
         }
 
+        // --- Export functionality remains the same ---
+        // NOTE: Assumes the filtering logic within this function is correct.
          if (exportDataBtn) {
              exportDataBtn.addEventListener('click', () => {
                  console.log("Export button clicked. Attempting to generate CSV for filtered data...");
 
+                 // --- Re-apply filters logic specifically for export ---
+                 // (This duplicates filtering logic from applyCurrentFilters - consider refactoring later)
                  let sessionsToExport = [...allUserCallSessions];
                  const searchTerm = (searchInput?.value || '').toLowerCase().trim();
                  const selectedQuality = qualityFilter?.value || '';
@@ -620,49 +686,68 @@
                  }
                  if (selectedQuality) {
                      if (selectedQuality === "N/A") sessionsToExport = sessionsToExport.filter(s => !s.call_quality || s.call_quality === 'N/A');
-                     else sessionsToExport = sessionsToExport.filter(s => s.call_quality === selectedQuality);
+                     else sessionsToExport = sessionsToExport.filter(s => s.call_quality?.toLowerCase() === selectedQuality.toLowerCase());
                  }
                  if (startDate) {
-                     const startD = new Date(startDate); startD.setHours(0, 0, 0, 0);
-                     sessionsToExport = sessionsToExport.filter(s => s.start_time && new Date(s.start_time) >= startD);
+                     try {
+                         const startD = new Date(startDate); startD.setHours(0, 0, 0, 0);
+                         sessionsToExport = sessionsToExport.filter(s => s.start_time && new Date(s.start_time) >= startD);
+                     } catch (e) { console.error("Invalid start date for export:", e); }
                  }
                  if (endDate) {
-                     const endD = new Date(endDate); endD.setHours(23, 59, 59, 999);
-                     sessionsToExport = sessionsToExport.filter(s => s.start_time && new Date(s.start_time) <= endD);
+                    try {
+                         const endD = new Date(endDate); endD.setHours(23, 59, 59, 999);
+                         sessionsToExport = sessionsToExport.filter(s => s.start_time && new Date(s.start_time) <= endD);
+                    } catch (e) { console.error("Invalid end date for export:", e); }
                  }
+                 // --- End re-applied filters ---
 
                  if (sessionsToExport.length === 0) {
                      alert("No data matches the current filters to export.");
                      console.log("Export aborted: No data to export after filtering.");
-                     return;
+                     return; // Stop if no data
                  }
                  console.log(`Exporting ${sessionsToExport.length} sessions.`);
 
-                 exportDataBtn.disabled = true;
+                 exportDataBtn.disabled = true; // Disable button during export
                  exportDataBtn.textContent = "Exporting...";
 
+                 // Define CSV Headers
                  const headers = ["Session_ID", "Agent_Name", "Agent_Email", "Scenario_Name", "Start_Time", "End_Time", "Duration_Seconds", "Completed_Steps", "Call_Quality", "Quality_Reason", "Agent_ID"];
-                 const csvRows = [headers.join(',')];
+                 const csvRows = [headers.join(',')]; // Add header row
 
+                 // Process each session for CSV
                  sessionsToExport.forEach(session => {
                      const agent = allAgentsList.find(a => a.id === session.user_id);
-                     const escapeCSV = (text) => text === null || text === undefined ? '' : `"${String(text).replace(/"/g, '""')}"`;
+                     // Helper function to escape CSV data (handles quotes and commas)
+                     const escapeCSV = (text) => {
+                        if (text === null || text === undefined) return '';
+                        const str = String(text);
+                        // If the string contains a comma, double quote, or newline, enclose in double quotes
+                        if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+                            // Escape existing double quotes by doubling them
+                            return `"${str.replace(/"/g, '""')}"`;
+                        }
+                        return str; // Return as is if no special characters
+                     };
+                     // Map session data to CSV values
                      const values = [
                          session.id,
-                         escapeCSV(agent?.name || 'Unknown'),
-                         escapeCSV(agent?.email || 'N/A'),
+                         escapeCSV(agent?.name || 'Unknown'), // Use agent name
+                         escapeCSV(agent?.email || 'N/A'),     // Use agent email
                          escapeCSV(session.call_scenarios?.name || 'N/A'),
                          escapeCSV(session.start_time ? new Date(session.start_time).toLocaleString() : 'N/A'),
                          escapeCSV(session.end_time ? new Date(session.end_time).toLocaleString() : 'N/A'),
-                         session.total_duration_seconds ?? '',
+                         session.total_duration_seconds ?? '', // Use ?? for nullish coalescing
                          session.completed_all_steps ? 'Yes' : 'No',
                          escapeCSV(session.call_quality || 'N/A'),
-                         escapeCSV(session.quality_reason || ''),
+                         escapeCSV(session.quality_reason || ''), // Use empty string if null/undefined
                          escapeCSV(session.user_id || '')
                      ];
-                     csvRows.push(values.join(','));
+                     csvRows.push(values.join(',')); // Add row to CSV array
                  });
 
+                 // Create CSV string and trigger download
                  const csvString = csvRows.join('\n');
                  const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
                  const link = document.createElement("a");
@@ -673,20 +758,23 @@
                  link.setAttribute("download", fileName);
                  link.style.visibility = 'hidden';
                  document.body.appendChild(link);
-                 link.click();
-                 document.body.removeChild(link);
-                 URL.revokeObjectURL(url);
+                 link.click(); // Simulate click to trigger download
+                 document.body.removeChild(link); // Clean up link element
+                 URL.revokeObjectURL(url); // Release object URL
                  console.log("CSV download initiated successfully.");
 
+                 // Re-enable button after export
                  exportDataBtn.disabled = false;
                  exportDataBtn.textContent = "Export Filtered Data (CSV)";
              });
          }
 
+        // --- Initial load ---
         checkUserRoleAndLoadDashboard();
 
-        console.log("Admin Dashboard.js v2.1 script fully loaded.");
+        console.log("Admin Dashboard.js v2.2 script fully loaded.");
     });
+    // --- END OF EMBEDDED dashboard.js ---
     </script>
 </body>
 </html>
