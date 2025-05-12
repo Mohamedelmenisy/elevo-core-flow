@@ -126,7 +126,7 @@
 
     <script>
     document.addEventListener('DOMContentLoaded', async () => {
-        console.log("CoreFlow.js DOMContentLoaded - v2.1 (Edge Func Fix)"); // Version updated
+        console.log("CoreFlow.js DOMContentLoaded - v2.2 (Edge Func Body Fix)"); // Version updated
 
         // --- Supabase Client Initialization ---
         const supabaseUrl = 'https://lgcutmuspcaralydycmg.supabase.co';
@@ -134,7 +134,7 @@
         let supabase;
         try {
             supabase = window.supabase.createClient(supabaseUrl, supabaseAnonKey);
-            console.log("Supabase client initialized in coreFlow.js v2.1");
+            console.log("Supabase client initialized in coreFlow.js v2.2");
         } catch (error) {
             console.error("Supabase client initialization failed:", error);
             document.getElementById('auth-loading').innerHTML = '<p style="color:red;">Error: Could not connect to services.</p>';
@@ -145,7 +145,7 @@
         const authLoadingDiv = document.getElementById('auth-loading');
         const initialViewDiv = document.getElementById('initial-view');
         const callFlowViewDiv = document.getElementById('call-flow-view');
-        const scenarioDropdown = document.getElementById('scenarioDropdown'); // New
+        const scenarioDropdown = document.getElementById('scenarioDropdown');
         const receiveCallBtn = document.getElementById('receive-call-btn');
         const stepsContainer = document.getElementById('steps-container');
         const nextStepBtn = document.getElementById('next-step-btn');
@@ -163,26 +163,25 @@
         const postCallSummaryDiv = document.getElementById('postCallSummary');
         const callSummaryContentDiv = document.getElementById('callSummaryContent');
         const returnToInitialViewBtn = document.getElementById('returnToInitialViewBtn');
-        const callStartSound = document.getElementById('callStartSound'); // New
+        const callStartSound = document.getElementById('callStartSound');
 
         // --- State Variables ---
-        let currentScenarioId = null; // Changed from name to ID
+        let currentScenarioId = null;
         let currentScenarioName = null;
         let currentSteps = [];
         let currentStepIndex = 0;
         let stepTimerInterval = null;
         let stepStartTime = 0;
         let stepDurations = [];
-        let currentCallSessionId = null;
+        let currentCallSessionId = null; // <-- This should hold the ID after insertion
         let assistantTimeout = null;
         let typingInterval = null;
-        let availableScenarios = []; // To store fetched scenarios
+        let availableScenarios = [];
 
         // --- Animation Helper ---
         function animateElement(element, animationClass = 'fade-in') {
              if (element) {
-                element.classList.remove(animationClass); // Reset if already present
-                // Trigger reflow to restart animation if needed
+                element.classList.remove(animationClass);
                 void element.offsetWidth;
                 element.classList.add(animationClass);
             }
@@ -193,10 +192,7 @@
             const { data: { session }, error: sessionError } = await supabase.auth.getSession();
             if (sessionError) throw sessionError;
             if (!session) {
-                // Redirect to login, preserving intended destination
                 const currentPath = window.location.pathname.replace('/elevo-core-flow', '') + window.location.search + window.location.hash;
-                 // Adjust path relative to core-flow.html
-                 // Assume core-flow.html is in 'core-flow/' and login.html is in 'legacy/' sibling folder
                 window.location.href = `../legacy/login.html?redirectTo=${encodeURIComponent(currentPath || '/core-flow/core-flow.html')}`;
                 return;
             }
@@ -211,17 +207,16 @@
                 logoutButton.addEventListener('click', async () => {
                     const { error } = await supabase.auth.signOut();
                     if (error) console.error("Logout error:", error);
-                    // Assume login.html is in 'legacy/' sibling folder
                     else window.location.href = '../legacy/login.html';
                 });
             }
 
-            await loadActiveScenarios(); // Load scenarios after auth confirmed
+            await loadActiveScenarios();
 
             if (authLoadingDiv) authLoadingDiv.style.display = 'none';
             if (initialViewDiv) {
                 initialViewDiv.style.display = 'block';
-                animateElement(initialViewDiv); // Add animation
+                animateElement(initialViewDiv);
             }
             updateSystemStatus("🔴 Waiting for Call");
             showAssistantMessage("Welcome! Select a scenario to begin.", true, 6000, () => {
@@ -233,7 +228,7 @@
         } catch (error) {
             console.error("Auth or Initial Load error:", error);
             if (authLoadingDiv) authLoadingDiv.innerHTML = `<p style="color:red;">Error: ${error.message}</p>`;
-            updateSystemStatus("🔴 Error", "status-error"); // New status class
+            updateSystemStatus("🔴 Error", "status-error");
         }
 
         // --- 2. LOAD ACTIVE SCENARIOS ---
@@ -255,7 +250,7 @@
                 availableScenarios = scenarios || [];
 
                 if (availableScenarios.length > 0) {
-                    scenarioDropdown.innerHTML = '<option value="">-- Select a Scenario --</option>'; // Prompt
+                    scenarioDropdown.innerHTML = '<option value="">-- Select a Scenario --</option>';
                     availableScenarios.forEach(scenario => {
                         const option = document.createElement('option');
                         option.value = scenario.id;
@@ -263,7 +258,6 @@
                         scenarioDropdown.appendChild(option);
                     });
                     scenarioDropdown.disabled = false;
-                    // Enable receive button only when a valid scenario is selected
                     scenarioDropdown.addEventListener('change', () => {
                          receiveCallBtn.disabled = !scenarioDropdown.value;
                     });
@@ -278,11 +272,10 @@
             }
         }
 
-        // --- UTILITY FUNCTIONS (updateSystemStatus, Timers, Reset, etc. - mostly unchanged) ---
+        // --- UTILITY FUNCTIONS (updateSystemStatus, Timers, Reset, etc.) ---
         function updateSystemStatus(statusText, statusClass = 'status-waiting') {
             if (systemStatusDiv) {
                 systemStatusDiv.textContent = statusText;
-                // Ensure base class is always present, replace specific status class
                 systemStatusDiv.className = `status-indicator ${statusClass}`;
             }
         }
@@ -307,7 +300,6 @@
             stepTimerInterval = null;
             if (stepStartTime > 0 && currentStepIndex >= 0 && currentStepIndex < currentSteps.length) {
                 const duration = Math.floor((Date.now() - stepStartTime) / 1000);
-                // Ensure stepDurations array exists and has the right index
                 if (!stepDurations) stepDurations = new Array(currentSteps.length).fill(0);
                  if (currentStepIndex < stepDurations.length) {
                     stepDurations[currentStepIndex] = (stepDurations[currentStepIndex] || 0) + duration;
@@ -326,7 +318,7 @@
                 callTimerDiv.style.display = 'none';
             }
             stepDurations = [];
-            currentCallSessionId = null;
+            currentCallSessionId = null; // Reset Session ID
             currentScenarioId = null;
             currentScenarioName = null;
             currentSteps = [];
@@ -334,70 +326,46 @@
             console.log("Call session state reset.");
         }
 
-        // REMOVED: determineCallQuality function (moved to Edge Function)
-
         // --- 3. RENDER STEP & PROGRESS TRACKER ---
          function renderProgressTracker() {
             if (!progressTrackerContainer || currentSteps.length === 0) {
                 if(progressTrackerContainer) progressTrackerContainer.style.display = 'none';
                 return;
             }
-            // Use the new wrapper div
              const stepperWrapper = progressTrackerContainer.querySelector('.stepper-wrapper');
              if (!stepperWrapper) {
                  console.error("Stepper wrapper not found!");
                  return;
              }
-             stepperWrapper.innerHTML = ''; // Clear previous steps
+             stepperWrapper.innerHTML = '';
 
             const stepperUl = document.createElement('ul');
-            stepperUl.className = 'stepper'; // Use the new class from style.css
+            stepperUl.className = 'stepper';
 
             currentSteps.forEach((step, index) => {
                 const stepLi = document.createElement('li');
                 stepLi.className = 'step';
 
-                // Add step number/icon inside
                 const stepNumber = document.createElement('span');
                 stepNumber.className = 'step-number';
                 stepNumber.textContent = index + 1;
 
-                // Add title (optional, could be short version of step text)
                 const stepTitle = document.createElement('span');
                 stepTitle.className = 'step-title';
-                // Basic title, customize as needed
                 stepTitle.textContent = `Action ${index + 1}`;
-                 // Alternative: stepTitle.textContent = step.substring(0, 15) + (step.length > 15 ? '...' : '');
-
 
                 stepLi.appendChild(stepNumber);
-                // stepLi.appendChild(stepTitle); // Uncomment to show titles
+                // stepLi.appendChild(stepTitle);
 
                 if (index < currentStepIndex) {
                     stepLi.classList.add('completed');
-                    stepNumber.innerHTML = '✓'; // Checkmark for completed
+                    stepNumber.innerHTML = '✓';
                 } else if (index === currentStepIndex) {
                     stepLi.classList.add('active');
                 }
 
-                 // Add click listener to potentially jump to steps (optional, requires careful state management)
-                 /*
-                 stepLi.onclick = () => {
-                     if (index < currentStepIndex) { // Allow going back?
-                         console.log(`Jumping back to step ${index + 1}`);
-                         stopAndRecordStepTimer();
-                         currentStepIndex = index;
-                         renderStep();
-                     } else {
-                         console.log(`Cannot jump forward using stepper.`);
-                     }
-                 };
-                 stepLi.style.cursor = index < currentStepIndex ? 'pointer' : 'default';
-                 */
-
                 stepperUl.appendChild(stepLi);
 
-                // Add separator line (if not the last step)
                 if (index < currentSteps.length - 1) {
                     const separator = document.createElement('li');
                     separator.className = 'step-separator';
@@ -407,7 +375,7 @@
 
             stepperWrapper.appendChild(stepperUl);
             progressTrackerContainer.style.display = 'block';
-             animateElement(progressTrackerContainer); // Animate its appearance
+             animateElement(progressTrackerContainer);
         }
 
         function renderStep() {
@@ -420,14 +388,12 @@
             }
             if (currentStepIndex >= 0 && currentStepIndex < currentSteps.length) {
                 const stepContent = currentSteps[currentStepIndex];
-                // Animate step content change
                  stepsContainer.classList.remove('fade-in');
-                 void stepsContainer.offsetWidth; // Trigger reflow
+                 void stepsContainer.offsetWidth;
 
                 stepsContainer.innerHTML = `<p>${stepContent}</p>`;
                  stepsContainer.classList.add('fade-in');
 
-                // Use Assistant Box for step hints
                 showAssistantMessage(`📌 Step ${currentStepIndex + 1}: ${stepContent.length > 45 ? stepContent.substring(0, 42) + "..." : stepContent}`, true, 0);
                 startStepTimer();
             } else {
@@ -442,14 +408,13 @@
                     nextStepBtn.innerHTML = `<span>Next Step</span><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>`;
                     nextStepBtn.style.display = 'inline-flex';
                 } else if (currentStepIndex === currentSteps.length - 1) {
-                    nextStepBtn.innerHTML = `<span>Finish Scenario</span>`; // Changed text
+                    nextStepBtn.innerHTML = `<span>Finish Scenario</span>`;
                     nextStepBtn.style.display = 'inline-flex';
                 } else {
                     nextStepBtn.style.display = 'none';
                 }
             }
         }
-
 
         // --- 4. "RECEIVE CALL" BUTTON FUNCTIONALITY ---
         if (receiveCallBtn) {
@@ -460,22 +425,20 @@
                     return;
                 }
                 console.log(`Receive Call button clicked for scenario ID: ${selectedScenarioId}`);
-
-                 // Play sound effect
                  if(callStartSound) {
                     callStartSound.play().catch(e => console.warn("Audio play failed:", e));
                  }
 
-                resetCallSessionState();
-                currentScenarioId = parseInt(selectedScenarioId, 10); // Store selected ID
+                resetCallSessionState(); // Reset state *before* starting new session
+                currentScenarioId = parseInt(selectedScenarioId, 10);
 
                 if (initialViewDiv) initialViewDiv.style.display = 'none';
                 if (callFlowViewDiv) {
                     callFlowViewDiv.style.display = 'block';
-                     animateElement(callFlowViewDiv); // Animate view change
+                     animateElement(callFlowViewDiv);
                 }
                 if (endCallBtn) endCallBtn.style.display = 'inline-flex';
-                updateSystemStatus("🟡 Loading Scenario...", "status-loading"); // New status class
+                updateSystemStatus("🟡 Loading Scenario...", "status-loading");
                 if (stepsContainer) stepsContainer.innerHTML = '<p class="placeholder-text">Loading scenario...</p>';
                 if (scenarioTitleElement) scenarioTitleElement.textContent = 'Loading Scenario...';
                 if (progressTrackerContainer) progressTrackerContainer.style.display = 'none';
@@ -486,12 +449,11 @@
                     const { data: { user } } = await supabase.auth.getUser();
                     if (!user) throw new Error("User not identified. Cannot start call.");
 
-                    // Fetch the *specific* selected scenario's details
                     const { data: scenario, error: scenarioError } = await supabase
                         .from('call_scenarios')
-                        .select('name, steps') // Fetch name and steps
+                        .select('name, steps')
                         .eq('id', currentScenarioId)
-                        .eq('is_active', true) // Double check it's still active
+                        .eq('is_active', true)
                         .single();
 
                     if (scenarioError) throw scenarioError;
@@ -504,37 +466,38 @@
                     currentStepIndex = 0;
                     stepDurations = new Array(currentSteps.length).fill(0);
 
-                    // Create the call session record in Supabase
+                    // *** Create session and STORE the ID ***
                     const { data: newSession, error: sessionInsertError } = await supabase
                         .from('call_sessions')
                         .insert({
                             user_id: user.id,
-                            scenario_id: currentScenarioId, // Use the selected ID
+                            scenario_id: currentScenarioId,
                             start_time: new Date().toISOString(),
-                            completed_all_steps: false // Default to false
-                            // call_quality and reason are added on completion/end
+                            completed_all_steps: false,
+                            // Set initial quality/reason to pending or null in DB if desired
+                            // call_quality: 'Pending',
+                            // quality_reason: 'Evaluation pending'
                         })
-                        .select('id') // Select the ID of the newly created session
+                        .select('id') // IMPORTANT: Select the ID
                         .single();
 
                     if (sessionInsertError || !newSession) {
                         throw sessionInsertError || new Error("Failed to create session record.");
                     }
 
-                    currentCallSessionId = newSession.id; // <-- STORE THE ID
-                    console.log("New call session created with ID:", currentCallSessionId);
+                    currentCallSessionId = newSession.id; // <-- STORE THE ID HERE
+                    console.log("✅ New call session created. ID:", currentCallSessionId); // Log captured ID
 
                     if (scenarioTitleElement) scenarioTitleElement.textContent = currentScenarioName;
                     updateSystemStatus("🟢 In Call", "status-in-call");
-                    renderProgressTracker(); // Render the improved tracker
-                    renderStep(); // Render the first step
+                    renderProgressTracker();
+                    renderStep();
                     showAssistantMessage(`🚀 Scenario "${currentScenarioName}" started!`, true, 0);
 
                 } catch (err) {
                     console.error("Error during call setup:", err);
                     if (callTimerDiv) callTimerDiv.style.display = 'none';
                     let userMessage = `⚠️ Error starting call: ${err.message}`;
-                    // Check for specific errors if needed (e.g., PGRST116 if scenario not found after selection)
                     if (err.code === 'PGRST116') userMessage = `⚠️ Error: Could not find details for selected scenario (ID: ${currentScenarioId}). It might have been deactivated.`;
 
                     if (stepsContainer) stepsContainer.innerHTML = `<p class="placeholder-text" style="color:red;">${userMessage.substring(3)}</p>`;
@@ -542,15 +505,13 @@
                     updateSystemStatus("🔴 Error", "status-error");
                     showAssistantMessage(userMessage, true, 7000);
 
-                    // Reset view back to initial state on error
                     if (callFlowViewDiv) callFlowViewDiv.style.display = 'none';
                     if (initialViewDiv) {
                          initialViewDiv.style.display = 'block';
                          animateElement(initialViewDiv);
                     }
                     if (endCallBtn) endCallBtn.style.display = 'none';
-                    resetCallSessionState();
-                    // Reload scenarios in case one was deactivated
+                    resetCallSessionState(); // Ensure reset on error
                      await loadActiveScenarios();
                 }
             });
@@ -571,64 +532,53 @@
                     const totalDuration = stepDurations.reduce((acc, duration) => acc + (duration || 0), 0);
                     const completedAllSteps = true;
 
-                    // Call Edge Function to determine quality AND UPDATE THE SESSION
-                    let quality = 'N/A'; // Default value
-                    let reason = 'Could not determine quality.'; // Default value
+                    // --- START: MODIFICATION for Finish Call (Body Change) ---
+                    // Define quality and reason *before* sending.
+                    // Placeholder logic: Assume 'Good' for full completion for now.
+                    // Replace with actual calculation logic if needed here.
+                    let quality = 'Good'; // Example: Assign based on completion
+                    let reason = 'All steps completed.'; // Example reason
 
-                    // --- START: MODIFICATION for Finish ---
                     if (!currentCallSessionId) {
-                        console.error("Cannot evaluate session, currentCallSessionId is missing!");
+                        console.error("❌ Cannot evaluate session, currentCallSessionId is missing!");
                         reason = "Internal Error: Missing Session ID for evaluation.";
+                        quality = 'N/A'; // Set quality to N/A if ID is missing
                     } else {
+                        console.log(`🚀 Invoking evaluate-call-session (Finish) for session: ${currentCallSessionId}`);
+                        console.log(`   Sending Body: { sessionId: ${currentCallSessionId}, quality: ${quality}, reason: "${reason}" }`);
                         try {
-                            console.log(`Invoking evaluate-call-session Edge Function (Finish) for session: ${currentCallSessionId}`);
                             const { data, error: functionError } = await supabase.functions.invoke('evaluate-call-session', {
+                                // *** SEND ONLY sessionId, quality, reason ***
                                 body: {
-                                    sessionId: currentCallSessionId, // <-- ADDED sessionId
-                                    stepDurations: stepDurations,
-                                    totalDuration: totalDuration,
-                                    allStepsCompleted: completedAllSteps,
-                                    stepsArrayLength: currentSteps.length
+                                    sessionId: currentCallSessionId,
+                                    quality: quality,
+                                    reason: reason
                                 }
                             });
 
                             if (functionError) throw functionError; // Let catch block handle non-2xx
 
-                            // The Edge function now updates the DB, so we just get the result back
-                            if (data && data.quality) {
-                                quality = data.quality;
-                                reason = data.reason || 'Reason not provided by function.';
-                                console.log("Quality evaluation complete. Quality:", quality, "Reason:", reason);
-                            } else {
-                                console.warn("Edge function returned unexpected data:", data);
-                                reason = "Evaluation function returned unexpected data."; // Update reason
-                            }
+                            // Function presumably only updated the DB, response might be minimal
+                            console.log("✅ Edge function invoked successfully (Finish). Response:", data);
+                            // Optionally update local quality/reason if function returns them, otherwise keep frontend-determined values
+                             if (data && data.updatedQuality) quality = data.updatedQuality;
+                             if (data && data.updatedReason) reason = data.updatedReason;
 
                         } catch (err) {
-                            console.error("Error calling evaluate-call-session function:", err);
-                            // Update reason based on error type
+                            console.error("❌ Error calling evaluate-call-session function (Finish):", err);
                             if (err.context?.response?.status && err.context?.response?.status !== 200) {
-                                reason = `Quality check failed: Edge Function returned status ${err.context.response.status}. ${err.message}`;
+                                reason = `Evaluation failed: Edge Function returned status ${err.context.response.status}. ${err.message || ''}`;
                             } else {
-                                reason = `Quality check failed: ${err.message}`;
+                                reason = `Evaluation failed: ${err.message || 'Unknown error'}`;
                             }
-                             // Keep default N/A quality
+                             quality = 'N/A'; // Set to N/A on error
                         }
                     }
-                     // --- END: MODIFICATION for Finish ---
+                     // --- END: MODIFICATION for Finish Call ---
 
-                    // Update Supabase session (REMOVED as function handles it now)
-                    /*
-                    if (currentCallSessionId) {
-                        // ... DB update logic removed ...
-                    }
-                    */
-                    console.log("Edge Function should have updated the session. ID:", currentCallSessionId);
-
-
+                    console.log(`Final Outcome (Finish) - Quality: ${quality}, Reason: ${reason}`);
                     displayPostCallSummary(quality, reason, totalDuration);
 
-                    // Hide call controls
                     if (nextStepBtn) nextStepBtn.style.display = 'none';
                     if (prevStepBtn) prevStepBtn.style.display = 'none';
                     if (endCallBtn) endCallBtn.style.display = 'none';
@@ -638,10 +588,12 @@
 
         if (prevStepBtn) {
             prevStepBtn.addEventListener('click', () => {
-                stopAndRecordStepTimer();
+                stopAndRecordStepTimer(); // Record time of the step we are leaving
                 if (currentStepIndex > 0) {
+                    // Maybe reset duration for the step we are going back to? Optional.
+                    // stepDurations[currentStepIndex - 1] = 0;
                     currentStepIndex--;
-                    renderStep();
+                    renderStep(); // Renders the previous step, timer will restart on render
                 }
             });
         }
@@ -649,73 +601,57 @@
         // --- 6. END CALL BUTTON ---
         if (endCallBtn) {
             endCallBtn.addEventListener('click', async () => {
-                stopAndRecordStepTimer();
+                stopAndRecordStepTimer(); // Record time for the current step before ending
                 const totalDuration = stepDurations.reduce((acc, duration) => acc + (duration || 0), 0);
-                console.log("End Call button clicked by user.");
-                updateSystemStatus("⚪ Call Ended", "status-ended"); // New status
+                console.log("🟡 End Call button clicked by user.");
+                updateSystemStatus("⚪ Call Ended", "status-ended");
 
-                // Note: completed_all_steps should ONLY be true if "Finish Scenario" was clicked.
-                const completedAllSteps = false; // Explicitly false when "End Call" is used
+                const completedAllSteps = false; // Explicitly false
 
-                // Call Edge Function to determine quality AND UPDATE THE SESSION
-                let quality = 'N/A'; // Default value
-                let reason = 'Call ended prematurely.'; // Default reason for manual end
+                 // --- START: MODIFICATION for End Call (Body Change) ---
+                 // Define quality and reason *before* sending.
+                 // Placeholder logic: Assume 'Bad' for premature ending.
+                 let quality = 'Bad'; // Example: Assign based on premature end
+                 let reason = 'Call ended prematurely by user.'; // Example reason
 
-                // --- START: MODIFICATION for End Call ---
-                if (!currentCallSessionId) {
-                    console.error("Cannot evaluate session, currentCallSessionId is missing!");
+                 if (!currentCallSessionId) {
+                    console.error("❌ Cannot evaluate session, currentCallSessionId is missing!");
                     reason = "Internal Error: Missing Session ID for evaluation.";
+                    quality = 'N/A';
                 } else {
+                     console.log(`🚀 Invoking evaluate-call-session (End Call) for session: ${currentCallSessionId}`);
+                     console.log(`   Sending Body: { sessionId: ${currentCallSessionId}, quality: ${quality}, reason: "${reason}" }`);
                     try {
-                        console.log(`Invoking evaluate-call-session Edge Function (End Call) for session: ${currentCallSessionId}`);
-                        const { data, error: functionError } = await supabase.functions.invoke('evaluate-call-session', {
-                            body: {
-                                sessionId: currentCallSessionId, // <-- ADDED sessionId
-                                stepDurations: stepDurations,
-                                totalDuration: totalDuration,
-                                allStepsCompleted: completedAllSteps, // Pass false
-                                stepsArrayLength: currentSteps.length
+                         const { data, error: functionError } = await supabase.functions.invoke('evaluate-call-session', {
+                             // *** SEND ONLY sessionId, quality, reason ***
+                             body: {
+                                sessionId: currentCallSessionId,
+                                quality: quality,
+                                reason: reason
                             }
                         });
+                        if (functionError) throw functionError;
 
-                        if (functionError) throw functionError; // Let catch block handle non-2xx
-
-                        // The Edge function now updates the DB, so we just get the result back
-                        if (data && data.quality) {
-                            quality = data.quality;
-                            reason = data.reason || 'Reason not provided by function.';
-                             console.log("Quality evaluation complete. Quality:", quality, "Reason:", reason);
-                        } else {
-                            console.warn("Edge function returned unexpected data:", data);
-                            reason = "Evaluation function returned unexpected data. Call ended prematurely."; // Append original intention
-                        }
+                        console.log("✅ Edge function invoked successfully (End Call). Response:", data);
+                         // Optionally update local quality/reason if function returns them
+                         if (data && data.updatedQuality) quality = data.updatedQuality;
+                         if (data && data.updatedReason) reason = data.updatedReason;
 
                     } catch (err) {
-                        console.error("Error calling evaluate-call-session function:", err);
-                        // Update reason based on error type
+                        console.error("❌ Error calling evaluate-call-session function (End Call):", err);
                          if (err.context?.response?.status && err.context?.response?.status !== 200) {
-                            reason = `Quality check failed: Edge Function returned status ${err.context.response.status}. ${err.message}. Call ended prematurely.`;
+                            reason = `Evaluation failed: Edge Function returned status ${err.context.response.status}. ${err.message || ''}. Call ended prematurely.`;
                          } else {
-                             reason = `Quality check failed: ${err.message}. Call ended prematurely.`;
+                             reason = `Evaluation failed: ${err.message || 'Unknown error'}. Call ended prematurely.`;
                          }
-                         // Keep default N/A quality
+                         quality = 'N/A'; // Set to N/A on error
                     }
                 }
                 // --- END: MODIFICATION for End Call ---
 
-                // Update Supabase session (REMOVED as function handles it now)
-                /*
-                if (currentCallSessionId) {
-                    // ... DB update logic removed ...
-                } else {
-                    // ... Defensive handling ...
-                }
-                */
-                 console.log("Edge Function should have updated the session. ID:", currentCallSessionId);
-
+                console.log(`Final Outcome (End Call) - Quality: ${quality}, Reason: ${reason}`);
                 displayPostCallSummary(quality, reason, totalDuration);
 
-                // Hide call controls
                 if (nextStepBtn) nextStepBtn.style.display = 'none';
                 if (prevStepBtn) prevStepBtn.style.display = 'none';
                 if (endCallBtn) endCallBtn.style.display = 'none';
@@ -731,19 +667,43 @@
 
             if (callSummaryContentDiv && postCallSummaryDiv) {
                 let summaryHTML = `
-                    <p><strong>Call Quality:</strong> <span class="quality-text quality-${quality?.toLowerCase() || 'na'}">${quality || 'N/A'}</span></p>
+                    <p><strong>Call Quality:</strong> <span class="quality-text quality-${quality?.toLowerCase().replace(/\s+/g, '-') || 'na'}">${quality || 'N/A'}</span></p> <!-- Improved class handling -->
                     <p><strong>Reason:</strong> ${reason || "N/A"}</p>
                     <p><strong>Total Duration:</strong> ${Math.floor(totalDuration / 60)}m ${totalDuration % 60}s</p>
                     <hr style="margin: 1rem 0; border-color: var(--border-color);">
-                    <p><strong>Step Durations:</strong></p>
+                    <p><strong>Step Durations (approx):</strong></p> <!-- Added 'approx' -->
                     <ul style="list-style: none; padding-left: 0; max-height: 150px; overflow-y: auto;">`;
 
-                 if (currentSteps && currentSteps.length > 0 && stepDurations && stepDurations.length >= currentSteps.length) {
+                 if (currentSteps && currentSteps.length > 0 && stepDurations && stepDurations.length > 0) { // Adjusted check
+                     // Display durations for steps that were actually reached or completed
+                     const maxIndexReached = stepDurations.findIndex(d => d === 0); // Find first unrecorded step
+                     const stepsToDisplay = (maxIndexReached === -1) ? currentSteps.length : maxIndexReached;
+
+                     for (let index = 0; index < currentSteps.length; index++) {
+                          const duration = stepDurations[index] || 0;
+                          const stepText = currentSteps[index] || `Step ${index + 1}`;
+                          const stepShortText = stepText.length > 25 ? stepText.substring(0, 22) + "..." : stepText;
+                          const timeStr = `${Math.floor(duration / 60)}m ${duration % 60}s`;
+                          const status = (index < currentStepIndex || (quality === 'Good' && index === currentSteps.length -1)) ? 'Completed' : (index === currentStepIndex && quality !== 'Good' ? 'Ended At' : 'Not Reached'); // Indicate status
+
+                          // Only display steps that have duration or were the end point
+                          if(duration > 0 || (index === currentStepIndex && quality !=='Good')) {
+                            summaryHTML += `<li style="margin-bottom: 0.3rem;">${index + 1}. "${stepShortText}" (${status}): ${timeStr}</li>`;
+                          } else if (index > currentStepIndex && stepDurations[index-1] > 0) {
+                             // Optionally show steps not reached if previous one was completed
+                             // summaryHTML += `<li style="margin-bottom: 0.3rem; opacity: 0.6;">${index + 1}. "${stepShortText}" (Not Reached)</li>`;
+                          }
+                     }
+                     // Original loop logic (simpler):
+                     /*
                      currentSteps.forEach((stepText, index) => {
                         const duration = stepDurations[index] || 0;
-                        const stepShortText = stepText.length > 25 ? stepText.substring(0, 22) + "..." : stepText;
-                        summaryHTML += `<li style="margin-bottom: 0.3rem;">Step ${index + 1} ("${stepShortText}"): ${Math.floor(duration / 60)}m ${duration % 60}s</li>`;
+                        if (duration > 0 || index <= currentStepIndex) { // Only show steps with duration or reached
+                            const stepShortText = stepText.length > 25 ? stepText.substring(0, 22) + "..." : stepText;
+                            summaryHTML += `<li style="margin-bottom: 0.3rem;">Step ${index + 1} ("${stepShortText}"): ${Math.floor(duration / 60)}m ${duration % 60}s</li>`;
+                        }
                     });
+                    */
                  } else {
                      summaryHTML += `<li>No step duration data available.</li>`;
                  }
@@ -751,10 +711,9 @@
 
                 callSummaryContentDiv.innerHTML = summaryHTML;
                 postCallSummaryDiv.style.display = 'block';
-                 animateElement(postCallSummaryDiv); // Animate summary view
+                 animateElement(postCallSummaryDiv);
             }
-             // Use a specific status class if desired
-            updateSystemStatus("📊 Review Call Summary", "status-summary"); // New status
+            updateSystemStatus("📊 Review Call Summary", "status-summary");
         }
 
          // Function to reset the UI to the initial state
@@ -765,41 +724,33 @@
              if (callFlowViewDiv) callFlowViewDiv.style.display = 'none';
              if (initialViewDiv) {
                  initialViewDiv.style.display = 'block';
-                  animateElement(initialViewDiv); // Animate back to initial view
+                  animateElement(initialViewDiv);
              }
              updateSystemStatus("🔴 Waiting for Call", "status-waiting");
 
-             // Reset buttons visibility and text
              if (nextStepBtn) {
                  nextStepBtn.innerHTML = `<span>Next Step</span><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>`;
-                 nextStepBtn.style.display = 'none';
+                 nextStepBtn.style.display = 'none'; // Ensure hidden
              }
              if (prevStepBtn) prevStepBtn.style.display = 'none';
              if (endCallBtn) endCallBtn.style.display = 'none';
-
-             // Reset other UI elements
              if (progressTrackerContainer) progressTrackerContainer.style.display = 'none';
              if (callTimerDiv) { callTimerDiv.textContent = '00:00'; callTimerDiv.style.display = 'none'; }
              if (scenarioTitleElement) scenarioTitleElement.textContent = "Call Scenario";
-             if (stepsContainer) stepsContainer.innerHTML = '<p class="placeholder-text">Select a scenario to begin.</p>'; // Updated placeholder
+             if (stepsContainer) stepsContainer.innerHTML = '<p class="placeholder-text">Select a scenario to begin.</p>';
 
-             // Reload scenarios and reset dropdown state
-              await loadActiveScenarios();
-              if (scenarioDropdown) scenarioDropdown.value = ""; // Reset selection
-              if (receiveCallBtn) receiveCallBtn.disabled = true; // Disable button until selection
+              await loadActiveScenarios(); // Reload scenarios
+              if (scenarioDropdown) scenarioDropdown.value = "";
+              if (receiveCallBtn) receiveCallBtn.disabled = true;
 
-             // Show assistant message for readiness
              showAssistantMessage("💡 Ready for the next call! Select a scenario.", true, 7000);
          }
-
 
         if (returnToInitialViewBtn) {
              returnToInitialViewBtn.addEventListener('click', resetToInitialView);
         }
 
         // --- 8. ASSISTANT BOX (Typewriter, etc.) ---
-         // Utility functions (typeWriterEffect, showAssistantMessage) largely unchanged,
-         // but ensure they handle clearing intervals/timeouts correctly.
         function typeWriterEffect(element, message, speed = 30, callback) {
             if (typingInterval) clearInterval(typingInterval);
             element.textContent = '';
@@ -813,46 +764,45 @@
         function showAssistantMessage(message, showImmediately = false, duration = 5000, onHideCallback) {
             if (assistantMessageElement && assistantBox) {
                 clearTimeout(assistantTimeout);
-                if (typingInterval) clearInterval(typingInterval);
+                if (typingInterval) clearInterval(typingInterval); // Stop existing typing
 
                  const displayMessage = () => {
                      assistantBox.style.display = 'flex';
-                     // Use the slide-in animation class
-                     assistantBox.classList.remove('slide-in-right', 'show'); // Reset classes
-                     void assistantBox.offsetWidth; // Reflow
-                     assistantBox.classList.add('slide-in-right', 'show'); // Apply animation
+                     assistantBox.classList.remove('slide-in-right', 'show');
+                     void assistantBox.offsetWidth;
+                     assistantBox.classList.add('slide-in-right', 'show');
 
                      typeWriterEffect(assistantMessageElement, message, 30, () => {
                          if (duration && duration > 0) {
                              assistantTimeout = setTimeout(() => {
-                                 assistantBox.classList.remove('show');
-                                 // Use transition end or a timeout matching transition duration to hide
-                                 setTimeout(() => {
-                                     if (!assistantBox.classList.contains('show')) { // Check if not shown again quickly
-                                         assistantBox.style.display = 'none';
-                                     }
-                                     if (typeof onHideCallback === 'function') onHideCallback();
-                                 }, 400); // Match transition duration in CSS
+                                 hideAssistant();
+                                 if (typeof onHideCallback === 'function') onHideCallback();
                              }, duration);
                          }
                      });
                  };
 
-                 // If box is hidden or forced, display immediately.
-                 // If box is already visible, just update the text.
+                 const hideAssistant = () => {
+                    assistantBox.classList.remove('show');
+                    setTimeout(() => {
+                         if (!assistantBox.classList.contains('show')) {
+                             assistantBox.style.display = 'none';
+                         }
+                    }, 400); // Match transition duration
+                 }
+
+                 // Always clear previous timeout when showing new message
+                 clearTimeout(assistantTimeout);
+
                  if (showImmediately || !assistantBox.classList.contains('show')) {
                     displayMessage();
                  } else {
+                      // If already shown, just update text quickly
                       typeWriterEffect(assistantMessageElement, message, 30, () => {
                          if (duration && duration > 0) {
                            assistantTimeout = setTimeout(() => {
-                                assistantBox.classList.remove('show');
-                                 setTimeout(() => {
-                                     if (!assistantBox.classList.contains('show')) {
-                                         assistantBox.style.display = 'none';
-                                     }
-                                    if (typeof onHideCallback === 'function') onHideCallback();
-                                }, 400);
+                                hideAssistant();
+                                if (typeof onHideCallback === 'function') onHideCallback();
                             }, duration);
                         }
                     });
@@ -861,7 +811,7 @@
         }
 
 
-        console.log("CoreFlow.js v2.1 script fully loaded and initialized."); // Version updated
+        console.log("CoreFlow.js v2.2 script fully loaded and initialized."); // Version updated
     });
     </script>
     <!-- Removed the redundant script block -->
