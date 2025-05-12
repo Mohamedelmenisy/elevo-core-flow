@@ -512,6 +512,7 @@
                             scenario_id: currentScenarioId, // Use the selected ID
                             start_time: new Date().toISOString(),
                             completed_all_steps: false // Default to false
+                            // call_quality and reason are added on completion/end
                         })
                         .select('id') // Select the ID of the newly created session
                         .single();
@@ -571,10 +572,10 @@
                     const completedAllSteps = true;
 
                     // Call Edge Function to determine quality
-                    let quality = 'N/A';
-                    let reason = 'Could not determine quality.';
+                    let quality = 'N/A'; // Default value
+                    let reason = 'Could not determine quality.'; // Default value
                     try {
-                        console.log("Invoking determine-call-quality Edge Function (Finish)");
+                        console.log("Invoking evaluate-call-session Edge Function (Finish)");
                          const { data, error: functionError } = await supabase.functions.invoke('evaluate-call-session', {
                             body: {
                                 stepDurations: stepDurations,
@@ -587,32 +588,40 @@
                         if (functionError) throw functionError;
 
                         if (data && data.quality) {
+                            // ✅ Assign Edge Function response to local variables
                             quality = data.quality;
                             reason = data.reason || 'Reason not provided by function.';
                             console.log("Quality from Edge Function:", quality, reason);
                         } else {
                              console.warn("Edge function returned unexpected data:", data);
+                             // Keep default N/A values
                         }
 
                     } catch (err) {
-                        console.error("Error calling determine-call-quality function:", err);
+                        console.error("Error calling evaluate-call-session function:", err);
                         // Keep default quality/reason, maybe add error note?
                          reason = `Quality check failed: ${err.message}`;
                     }
 
                     // Update Supabase session
                     if (currentCallSessionId) {
+                        console.log(`Updating session ${currentCallSessionId} with: Quality=${quality}, Reason=${reason}`);
                         const { error: updateError } = await supabase
                             .from('call_sessions')
                             .update({
                                 end_time: new Date().toISOString(),
                                 total_duration_seconds: totalDuration,
                                 completed_all_steps: completedAllSteps,
+                                // ✅ Use correct DB column names, assign values from local variables
                                 call_quality: quality,
                                 quality_reason: reason
                             })
                             .eq('id', currentCallSessionId);
-                        if (updateError) console.error("Failed to update call session on completion:", updateError);
+                        if (updateError) {
+                             console.error("Failed to update call session on completion:", updateError);
+                             // Update reason if update fails, so summary reflects the issue
+                             reason = `Failed to save results: ${updateError.message}`;
+                        }
                         else console.log("Call session updated on FULL completion via Edge Function. ID:", currentCallSessionId);
                     }
 
@@ -644,15 +653,14 @@
                 console.log("End Call button clicked by user.");
                 updateSystemStatus("⚪ Call Ended", "status-ended"); // New status
 
-                 // Determine if the scenario was *effectively* completed (on the last step when ended)
                  // Note: completed_all_steps should ONLY be true if "Finish Scenario" was clicked.
                 const completedAllSteps = false; // Explicitly false when "End Call" is used
 
                 // Call Edge Function to determine quality
-                let quality = 'N/A';
+                let quality = 'N/A'; // Default value
                 let reason = 'Call ended prematurely.'; // Default reason for manual end
                  try {
-                    console.log("Invoking determine-call-quality Edge Function (End Call)");
+                    console.log("Invoking evaluate-call-session Edge Function (End Call)");
                      const { data, error: functionError } = await supabase.functions.invoke('evaluate-call-session', {
                         body: {
                             stepDurations: stepDurations,
@@ -663,30 +671,38 @@
                     });
                     if (functionError) throw functionError;
                     if (data && data.quality) {
+                        // ✅ Assign Edge Function response to local variables
                         quality = data.quality;
                         reason = data.reason || 'Reason not provided by function.';
                          console.log("Quality from Edge Function:", quality, reason);
                     } else {
                          console.warn("Edge function returned unexpected data:", data);
+                         // Keep default N/A and 'ended prematurely' reason if function fails partially
                     }
                  } catch (err) {
-                     console.error("Error calling determine-call-quality function:", err);
-                      reason = `Quality check failed: ${err.message}. Call ended prematurely.`;
+                     console.error("Error calling evaluate-call-session function:", err);
+                      reason = `Quality check failed: ${err.message}. Call ended prematurely.`; // Append original intention
                  }
 
 
                 if (currentCallSessionId) {
+                    console.log(`Updating session ${currentCallSessionId} with: Quality=${quality}, Reason=${reason}`);
                     const { error: updateError } = await supabase
                         .from('call_sessions')
                         .update({
                             end_time: new Date().toISOString(),
                             total_duration_seconds: totalDuration,
                             completed_all_steps: completedAllSteps, // Always false here
+                            // ✅ Use correct DB column names, assign values from local variables
                             call_quality: quality,
                             quality_reason: reason
                         })
                         .eq('id', currentCallSessionId);
-                    if (updateError) console.error("Failed to update call session on end call:", updateError);
+                    if (updateError) {
+                         console.error("Failed to update call session on end call:", updateError);
+                         // Update reason if update fails, so summary reflects the issue
+                         reason = `Failed to save results: ${updateError.message}`;
+                    }
                     else console.log(`Call session ${currentCallSessionId} updated on END CALL via Edge Func. Completed: ${completedAllSteps}, Quality: ${quality}`);
 
                     displayPostCallSummary(quality, reason, totalDuration);
@@ -845,63 +861,6 @@
         console.log("CoreFlow.js v2 script fully loaded and initialized.");
     });
     </script>
+    <!-- Removed the redundant script block -->
 </body>
 </html>
-
-<!-- ✅ تعديل: تايمر في النص + تقييم المكالمة + حفظ التقدم -->
-<script>
-let steps = [
-  "Ask the customer for their name.",
-  "Ask when the order was supposed to arrive.",
-  "Check system to confirm order status.",
-  "Apologize and offer options.",
-  "End the call and confirm satisfaction."
-];
-let currentStep = 0;
-let completedSteps = 0;
-
-function displayStep() {
-  document.getElementById("callStep").innerText = steps[currentStep];
-  localStorage.setItem("currentStep", currentStep);
-}
-
-function nextStep() {
-  if (currentStep < steps.length - 1) {
-    completedSteps++;
-    currentStep++;
-    displayStep();
-  } else {
-    endCall();
-  }
-}
-
-function endCall() {
-  const quality = completedSteps === steps.length ? "Good"
-                 : completedSteps >= steps.length / 2 ? "Normal"
-                 : "Bad";
-  const reason = completedSteps === steps.length ? "-" : "Missed some steps";
-  alert("Call Quality: " + quality + "\nReason: " + reason);
-  localStorage.removeItem("currentStep");
-}
-
-function restoreStep() {
-  const saved = parseInt(localStorage.getItem("currentStep") || "0");
-  if (!isNaN(saved)) currentStep = saved;
-  displayStep();
-}
-
-function startTimer() {
-  let sec = 0;
-  setInterval(() => {
-    sec++;
-    const m = String(Math.floor(sec / 60)).padStart(2, '0');
-    const s = String(sec % 60).padStart(2, '0');
-    document.getElementById("timer").innerText = `${m}:${s}`;
-  }, 1000);
-}
-
-window.onload = () => {
-  restoreStep();
-  startTimer();
-};
-</script>
