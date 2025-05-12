@@ -139,7 +139,7 @@
                  <line x1="12" y1="16" x2="12.01" y2="16"></line>
              </svg>
              <h3>Access Denied</h3>
-             <p>You do not have permission to view this page. This section is restricted to administrators.</p>
+             <p id="accessDeniedMessage">You do not have permission to view this page. This section is restricted to administrators.</p> <!-- Added ID here -->
              <button id="returnToAppBtn" class="action-button primary-button">Return to Agent App</button>
          </div>
     </div>
@@ -148,14 +148,22 @@
     <div class="app-container" id="appContainerContent" style="display: none;">
         <header class="app-header">
             <div class="logo-container">
-                <svg class="company-logo" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">/* SVG path */</svg>
+                 <!-- Assume SVG path is correct -->
+                 <svg class="company-logo" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M6 17L10 17M6 12L12 12M6 7L14 7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    <path d="M15 6L19 10L15 14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <rect x="3" y="3" width="18" height="18" rx="3" stroke="currentColor" stroke-width="1.5" fill="transparent" opacity="0.6"/>
+                </svg>
                 <span class="app-title">Admin Dashboard - Elevo Core</span>
             </div>
             <div class="header-controls">
                  <a href="core-flow.html" class="nav-link">Core Flow</a>
                 <div class="user-info" id="userInfo" style="display: none;">
                     <span id="userNameDisplay" class="user-name-display"></span>
-                    <button id="logoutButton" class="logout-btn">/* SVG icon */<span>Logout</span></button>
+                    <button id="logoutButton" class="logout-btn">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+                        <span>Logout</span>
+                    </button>
                 </div>
             </div>
         </header>
@@ -248,6 +256,7 @@
         const loadingMessageDiv = document.getElementById('loadingMessage');
         const accessDeniedModal = document.getElementById('accessDeniedModal');
         const returnToAppBtn = document.getElementById('returnToAppBtn');
+        const accessDeniedMessageEl = document.getElementById('accessDeniedMessage'); // Get the message element
 
         // Dashboard specific elements (initialized later)
         let userNameDisplayHeader, dashboardUserGreeting, dashboardUserSubtext, userAvatarCharEl, logoutButton, userInfoDivHeader;
@@ -310,11 +319,12 @@
             if(loadingMessageDiv && loadingMessageDiv.style.display !== 'none') loadingMessageDiv.style.display = 'none';
             if(appContainerContent) appContainerContent.style.display = 'none';
             if(accessDeniedModal) {
-                accessDeniedModal.querySelector('p').textContent = message; // Update message if needed
+                if(accessDeniedMessageEl) accessDeniedMessageEl.textContent = message; // Update specific message element
                 accessDeniedModal.style.display = 'flex';
              }
             if(returnToAppBtn) returnToAppBtn.onclick = () => {
-                 window.location.href = 'core-flow.html'; // Path to agent app
+                 // Assume core-flow.html is in the parent directory relative to dashboard.html
+                 window.location.href = 'core-flow.html';
             };
         }
 
@@ -323,7 +333,8 @@
             const { data: { session }, error: sessionError } = await supabase.auth.getSession();
             if (sessionError || !session) {
                 console.error("No active session or error fetching session:", sessionError);
-                // Redirect relative to dashboard.html
+                 // Redirect relative to dashboard.html
+                 // Assume login.html is in 'legacy/' folder, and dashboard.html is in 'core-flow/'
                 window.location.href = '../legacy/login.html?redirectTo=/core-flow/dashboard.html';
                 return;
             }
@@ -331,37 +342,50 @@
 
              try {
                  console.log("Invoking check-admin-access Edge Function...");
-                 const { data: adminStatus, error: functionError } = await supabase.functions.invoke('check-admin-access');
+                 // Set the Authorization header explicitly for the function call
+                 const { data: adminStatus, error: functionError } = await supabase.functions.invoke('check-admin-access', {
+                     headers: {
+                         'Authorization': `Bearer ${session.access_token}`
+                     }
+                 });
 
                  if (functionError) {
                      // Handle specific function errors (like 401 Unauthorized, 404 Profile not found, 500 Server Error)
                      console.error("Error calling check-admin-access function:", functionError);
-                      if (functionError.context?.status === 401) {
-                         showAccessDenied("Authentication failed. Please log in again.");
+                      // Check if it's a CORS preflight error message (common in browsers)
+                      if (functionError.message.includes('Failed to fetch') || functionError.message.includes('CORS') || functionError.message.includes('preflight')) {
+                          showAccessDenied(`CORS Error: Cannot connect to the access check service. Please ensure the Edge Function CORS settings allow requests from ${window.location.origin}.`);
+                      } else if (functionError.context?.status === 401) {
+                         showAccessDenied("Authentication failed or session expired. Please log in again.");
+                      } else if (functionError.context?.status === 403) { // 403 Forbidden is a more typical 'not admin' status
+                          showAccessDenied("Access Denied: You do not have administrator privileges.");
                       } else if (functionError.context?.status === 404) {
-                          showAccessDenied("Your user profile could not be found.");
+                          showAccessDenied("Your user profile could not be found or is not configured correctly.");
                       } else {
                           showAccessDenied(`An error occurred while verifying access: ${functionError.message || 'Unknown error'}`);
                       }
                      return; // Stop execution
                  }
 
-                 if (adminStatus && adminStatus.isAdmin) {
+                 // Check the actual response data
+                 if (adminStatus && adminStatus.isAdmin === true) {
                      console.log("User IS Admin. Loading admin dashboard.");
                      if(loadingMessageDiv) loadingMessageDiv.style.display = 'flex';
-                     appContainerContent.style.display = 'flex';
+                     if(appContainerContent) appContainerContent.style.display = 'flex'; // Show the main container
                      initializeDashboardDOMElements();
+                     await fetchAllAgents(); // Fetch agents first to get names
                      loadPersistedFilters(); // Load filters before fetching data
                      await loadAdminDashboardData(); // Load data and apply filters
                      setupFilterEventListeners(); // Setup listeners for auto-apply
                  } else {
-                     console.log("User is NOT Admin. Access denied.");
-                     showAccessDenied(); // Show standard access denied message
+                     console.log("User is NOT Admin according to function response. Access denied.");
+                     // Handle cases where function runs but returns isAdmin: false or undefined
+                     showAccessDenied("Access Denied: You do not have administrator privileges.");
                  }
              } catch (invokeError) {
-                 // Catch errors during the .invoke() call itself (e.g., network issues)
+                 // Catch errors during the .invoke() call itself (e.g., network issues before CORS check)
                  console.error("Failed to invoke Edge Function:", invokeError);
-                 showAccessDenied(`Could not verify your access level due to a network or server issue.`);
+                  showAccessDenied(`Could not verify your access level due to a network or server issue. Error: ${invokeError.message}`);
              }
         }
 
@@ -369,17 +393,18 @@
         // --- Data Fetching and Rendering ---
         async function fetchAllAgents() {
             // No changes needed here, assuming 'users' table has name, email, id
+            console.log("Fetching all agents...");
             const { data: agents, error } = await supabase
-                .from('users')
+                .from('users') // Make sure 'users' is the correct table name containing user profiles/details
                 .select('id, email, name') // Fetch necessary fields
                 .order('name', { ascending: true });
             if (error) {
                 console.error("Error fetching agents list:", error);
-                return [];
+                 showAccessDenied(`Error fetching user list: ${error.message}. Dashboard cannot be fully loaded.`); // Show error in modal
+                return []; // Return empty on error
             }
-             // Filter out super admin maybe? Or keep for selection? Let's keep all for now.
-            // allAgentsList = agents.filter(agent => agent.email !== SUPER_ADMIN_EMAIL);
             allAgentsList = agents || [];
+            console.log(`Fetched ${allAgentsList.length} agents.`);
             return allAgentsList; // Return the fetched list
         }
 
@@ -390,7 +415,7 @@
             userFilterDropdown.innerHTML = '<option value="">All Agents</option>';
             allAgentsList.forEach(agent => {
                 const option = document.createElement('option');
-                option.value = agent.id;
+                option.value = agent.id; // Use user ID (UUID) as value
                 option.textContent = `${agent.name || 'N/A'} (${agent.email})`;
                  if (agent.id === currentVal) {
                      option.selected = true; // Reselect if value was preserved
@@ -416,9 +441,10 @@
                      </tr>`;
             } else {
                 sessionsToRender.forEach(session => {
+                     // Find agent based on user_id (which should be the UUID)
                      const agent = allAgentsList.find(a => a.id === session.user_id);
-                     const agentName = agent?.name || 'Unknown';
-                     const agentEmail = agent?.email || 'N/A';
+                     const agentName = agent?.name || 'Unknown User'; // Use name from fetched agents
+                     const agentEmail = agent?.email || 'N/A'; // Use email from fetched agents
 
                     const row = recentCallsTableBody.insertRow();
                     const scenarioName = session.call_scenarios?.name || 'N/A';
@@ -447,22 +473,18 @@
 
                     switch (qualityText?.toLowerCase()) {
                         case 'good':
-                             // Checkmark icon
                              iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>`;
                              qualityClass = 'good';
                              break;
                         case 'normal':
-                             // Alert triangle icon
                              iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>`;
                              qualityClass = 'normal';
                              break;
                         case 'bad':
-                             // X circle icon
                              iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>`;
                              qualityClass = 'bad';
                              break;
                         default: // N/A or other
-                             // Help circle or minus icon
                              iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="8" y1="12" x2="16" y2="12"></line></svg>`;
                              qualityClass = 'na';
                     }
@@ -539,7 +561,7 @@
                  quality: qualityFilter.value,
                  startDate: startDateFilter.value,
                  endDate: endDateFilter.value,
-                 agentId: userFilterDropdown.value
+                 agentId: userFilterDropdown.value // Save agent ID (UUID)
              };
              localStorage.setItem(FILTER_STORAGE_KEY, JSON.stringify(filters));
              console.log("Filters saved to localStorage:", filters);
@@ -555,7 +577,7 @@
                      qualityFilter.value = filters.quality || '';
                      startDateFilter.value = filters.startDate || '';
                      endDateFilter.value = filters.endDate || '';
-                     userFilterDropdown.value = filters.agentId || '';
+                     userFilterDropdown.value = filters.agentId || ''; // Load agent ID (UUID)
                  } catch (e) {
                      console.error("Error parsing saved filters:", e);
                      localStorage.removeItem(FILTER_STORAGE_KEY); // Clear invalid data
@@ -574,21 +596,22 @@
              const selectedQuality = qualityFilter?.value || '';
              const startDate = startDateFilter?.value || '';
              const endDate = endDateFilter?.value || '';
-             const selectedAgentId = userFilterDropdown?.value || '';
+             const selectedAgentId = userFilterDropdown?.value || ''; // This is the agent's user ID (UUID)
 
             let statsLabel = "All Agents";
             let tableTitle = "All Recent Call Sessions";
 
-            // Filter by selected agent
+            // Filter by selected agent ID
             if (selectedAgentId) {
                 filteredSessions = filteredSessions.filter(session => session.user_id === selectedAgentId);
+                 // Find agent details from the pre-fetched list
                  const selectedAgent = allAgentsList.find(a => a.id === selectedAgentId);
                  if (selectedAgent) {
-                     statsLabel = selectedAgent.name || selectedAgent.email;
+                     statsLabel = selectedAgent.name || selectedAgent.email; // Use name if available
                      tableTitle = `Call Sessions for ${statsLabel}`;
                  } else {
-                     statsLabel = "Unknown Agent";
-                     tableTitle = `Call Sessions for Unknown Agent`;
+                     statsLabel = "Unknown Agent ID"; // Fallback if ID not in list
+                     tableTitle = `Call Sessions for Agent ID ${selectedAgentId}`;
                  }
             }
              // Update labels immediately
@@ -597,24 +620,26 @@
              if(statsPeriodCompletionEl) statsPeriodCompletionEl.textContent = statsLabel;
              if(recentCallsTitleEl) recentCallsTitleEl.textContent = tableTitle;
 
-            // Search term filter
+            // Search term filter (includes searching agent name/email now)
             if (searchTerm) {
                 filteredSessions = filteredSessions.filter(session => {
                      const scenarioName = (session.call_scenarios?.name || '').toLowerCase();
                      const reason = (session.quality_reason || '').toLowerCase();
+                     // Find agent details for searching
                      const agent = allAgentsList.find(a => a.id === session.user_id);
                      const agentNameSearch = agent ? (agent.name || '').toLowerCase() : '';
                      const agentEmailSearch = agent ? (agent.email || '').toLowerCase() : '';
                      return scenarioName.includes(searchTerm) ||
                             reason.includes(searchTerm) ||
-                            agentNameSearch.includes(searchTerm) ||
-                            agentEmailSearch.includes(searchTerm);
+                            agentNameSearch.includes(searchTerm) || // Search by name
+                            agentEmailSearch.includes(searchTerm); // Search by email
                 });
             }
 
             // Quality filter
             if (selectedQuality) {
                 if (selectedQuality === "N/A") {
+                    // Handle both null and the string "N/A" just in case
                     filteredSessions = filteredSessions.filter(session => !session.call_quality || session.call_quality === 'N/A');
                 } else {
                     filteredSessions = filteredSessions.filter(session => session.call_quality === selectedQuality);
@@ -672,9 +697,12 @@
         // --- Main Data Loading Function ---
         async function loadAdminDashboardData() {
              // Assumes checkUserRoleAndLoadDashboard confirmed admin access
-             if (!currentAuthUser) {
-                 console.error("Cannot load admin data without authenticated user.");
-                 showAccessDenied("Authentication details missing.");
+             if (!currentAuthUser || !allAgentsList) { // Ensure agents are loaded too
+                 console.error("Cannot load admin data without authenticated user or agent list.");
+                 // showAccessDenied might have already been called if agent fetch failed
+                 if (!accessDeniedModal || accessDeniedModal.style.display === 'none') {
+                    showAccessDenied("Required user or agent data is missing.");
+                 }
                  return;
              }
 
@@ -683,12 +711,12 @@
              if (recentActivitySectionDiv) recentActivitySectionDiv.style.display = 'none';
              if (filterControlsCard) filterControlsCard.style.display = 'none';
 
-             // Display User Info (using stored currentAuthUser)
+             // Display User Info (using stored currentAuthUser and fetched agent list)
              const userEmailPrefix = currentAuthUser.email ? currentAuthUser.email.split('@')[0] : 'Admin';
              const capitalizedUserName = userEmailPrefix.charAt(0).toUpperCase() + userEmailPrefix.slice(1);
-              // Fetch user's name from agents list if available, otherwise use email prefix
+              // Find the current admin user's details from the fetched list
               const currentUserDetails = allAgentsList.find(a => a.id === currentAuthUser.id);
-              const displayUserName = currentUserDetails?.name || capitalizedUserName;
+              const displayUserName = currentUserDetails?.name || capitalizedUserName; // Use fetched name or fallback
               const initialLetter = displayUserName.charAt(0).toUpperCase();
 
               if (userNameDisplayHeader) userNameDisplayHeader.textContent = displayUserName;
@@ -698,24 +726,18 @@
               if (userAvatarCharEl) userAvatarCharEl.textContent = initialLetter;
 
              if(logoutButton) {
-                 logoutButton.addEventListener('click', async () => {
-                     const { error } = await supabase.auth.signOut();
-                     if (error) console.error("Logout error:", error);
-                     else window.location.href = '../legacy/login.html';
-                 });
+                 logoutButton.removeEventListener('click', handleLogout); // Remove previous listener if any
+                 logoutButton.addEventListener('click', handleLogout); // Add fresh listener
              }
 
-             // Fetch Agents (if not already fetched or need refresh)
-             if (allAgentsList.length === 0) {
-                await fetchAllAgents();
-             }
-             populateUserFilterDropdown(); // Populate dropdown (idempotent)
+             // Populate dropdown now that we are sure agents are fetched
+             populateUserFilterDropdown();
+             loadPersistedFilters(); // Load filters *after* dropdown is populated
 
              // Fetch ALL call sessions (Admin privilege assumed via Edge Function check)
-             // RLS policies should still be in place for data security as a fallback/defense-in-depth
+             console.log("Fetching all call sessions...");
              const { data: callSessions, error: sessionsError } = await supabase
                  .from('call_sessions')
-                  // Select necessary fields + related scenario name
                  .select(`
                      id, user_id, scenario_id, start_time, end_time,
                      total_duration_seconds, completed_all_steps, created_at,
@@ -730,7 +752,7 @@
                  allUserCallSessions = [];
              } else {
                  allUserCallSessions = callSessions || [];
-                  console.log(`Fetched ${allUserCallSessions.length} total call sessions.`);
+                 console.log(`Fetched ${allUserCallSessions.length} total call sessions.`);
              }
 
              applyCurrentFilters(); // Apply filters (including persisted ones) to the fetched data
@@ -742,12 +764,19 @@
              if (loadingMessageDiv) loadingMessageDiv.style.display = 'none';
         }
 
+         // Separate logout handler function
+         async function handleLogout() {
+             console.log("Logging out...");
+             const { error } = await supabase.auth.signOut();
+             if (error) console.error("Logout error:", error);
+             // Assume login.html is in 'legacy/' sibling folder
+             else window.location.href = '../legacy/login.html';
+         }
+
+
         // --- Export Data ---
          if (exportDataBtn) {
              exportDataBtn.addEventListener('click', () => {
-                 // Logic for exporting *currently filtered* data
-                 // Re-apply filters conceptually to get the correct dataset for export
-                 // (This is similar to applyCurrentFilters but outputs to CSV)
                  console.log("Export button clicked. Generating CSV for filtered data...");
 
                  let sessionsToExport = [...allUserCallSessions]; // Start with all
@@ -755,7 +784,7 @@
                  const selectedQuality = qualityFilter?.value || '';
                  const startDate = startDateFilter?.value || '';
                  const endDate = endDateFilter?.value || '';
-                 const selectedAgentId = userFilterDropdown?.value || '';
+                 const selectedAgentId = userFilterDropdown?.value || ''; // Agent UUID
 
                  // Apply filters again (same logic as applyCurrentFilters)
                  if (selectedAgentId) sessionsToExport = sessionsToExport.filter(s => s.user_id === selectedAgentId);
@@ -770,7 +799,7 @@
                      });
                  }
                  if (selectedQuality) {
-                     if (selectedQuality === "N/A") sessionsToExport = sessionsToExport.filter(s => !s.call_quality);
+                     if (selectedQuality === "N/A") sessionsToExport = sessionsToExport.filter(s => !s.call_quality || s.call_quality === 'N/A');
                      else sessionsToExport = sessionsToExport.filter(s => s.call_quality === selectedQuality);
                  }
                  if (startDate) {
@@ -804,20 +833,20 @@
                          escapeCSV(agent?.name || 'Unknown'),
                          escapeCSV(agent?.email || 'N/A'),
                          escapeCSV(session.call_scenarios?.name || 'N/A'),
-                         escapeCSV(session.start_time ? new Date(session.start_time).toLocaleString() : 'N/A'),
-                         escapeCSV(session.end_time ? new Date(session.end_time).toLocaleString() : 'N/A'),
+                         escapeCSV(session.start_time ? new Date(session.start_time).toISOString() : 'N/A'), // Use ISOString for consistency
+                         escapeCSV(session.end_time ? new Date(session.end_time).toISOString() : 'N/A'), // Use ISOString
                          session.total_duration_seconds ?? '',
                          session.completed_all_steps ? 'Yes' : 'No',
                          escapeCSV(session.call_quality || 'N/A'),
                          escapeCSV(session.quality_reason || ''),
-                         escapeCSV(session.user_id || '') // Include Agent ID
+                         escapeCSV(session.user_id || '') // Include Agent ID (UUID)
                      ];
                      csvRows.push(values.join(','));
                  });
 
                  // Download CSV
                  const csvString = csvRows.join('\n');
-                 const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+                 const blob = new Blob([`\uFEFF${csvString}`], { type: 'text/csv;charset=utf-8;' }); // Add BOM for Excel UTF-8 compatibility
                  const link = document.createElement("a");
                  const url = URL.createObjectURL(blob);
                  const fileName = `elevo_filtered_calls_${new Date().toISOString().slice(0,10)}.csv`;
