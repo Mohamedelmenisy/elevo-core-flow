@@ -119,21 +119,20 @@
     <script>
     // --- START OF EMBEDDED coreFlow.js ---
     document.addEventListener('DOMContentLoaded', async () => {
-        console.log("CoreFlow.js DOMContentLoaded - v2.2 (Evaluation Logic Note)"); // Version increment
+        console.log("CoreFlow.js DOMContentLoaded - v2.3 (State Persistence & Quality Display)"); // Version increment
 
         const supabaseUrl = 'https://lgcutmuspcaralydycmg.supabase.co';
         const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxnY3V0bXVzcGNhcmFseWR5Y21nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU0NDY3MDEsImV4cCI6MjA2MTAyMjcwMX0.3u5Y7pkH2NNnnoGLMWVfAa5b8fq88o1itRYnG1K38tE';
         let supabase;
         try {
             supabase = window.supabase.createClient(supabaseUrl, supabaseAnonKey);
-            console.log("Supabase client initialized in coreFlow.js v2.2");
+            console.log("Supabase client initialized in coreFlow.js v2.3");
         } catch (error) {
             console.error("Supabase client initialization failed:", error);
             document.getElementById('auth-loading').innerHTML = '<p style="color:red;">Error: Could not connect to services.</p>';
             return;
         }
 
-        // --- DOM Element references remain the same ---
         const authLoadingDiv = document.getElementById('auth-loading');
         const initialViewDiv = document.getElementById('initial-view');
         const callFlowViewDiv = document.getElementById('call-flow-view');
@@ -148,7 +147,7 @@
         const userNameSpan = document.getElementById('userName');
         const logoutButton = document.getElementById('logoutButton');
         const systemStatusDiv = document.getElementById('systemStatus');
-        const callTimerDiv = document.getElementById('callTimer'); // Correct reference
+        const callTimerDiv = document.getElementById('callTimer');
         const progressTrackerContainer = document.getElementById('progressTracker');
         const assistantBox = document.getElementById('assistantBox');
         const assistantMessageElement = document.getElementById('assistantMessageElement');
@@ -157,43 +156,118 @@
         const returnToInitialViewBtn = document.getElementById('returnToInitialViewBtn');
         const callStartSound = document.getElementById('callStartSound');
 
-        // --- State variables remain the same ---
         let currentScenarioId = null;
         let currentScenarioName = null;
         let currentSteps = [];
         let currentStepIndex = 0;
         let stepTimerInterval = null;
-        let stepStartTime = 0;
-        let stepDurations = []; // Array to store duration for each step
+        let stepStartTime = 0; // Epoch when current step timer segment started
+        let stepDurations = []; 
         let currentCallSessionId = null;
         let assistantTimeout = null;
         let typingInterval = null;
         let availableScenarios = [];
 
-        // --- animateElement remains the same ---
+        const CALL_STATE_KEY = 'elevoCoreCallState_v2'; // For localStorage state
+
         function animateElement(element, animationClass = 'fade-in') {
              if (element) {
                 element.classList.remove(animationClass);
-                void element.offsetWidth; // Trigger reflow
+                void element.offsetWidth; 
                 element.classList.add(animationClass);
             }
         }
 
-        // --- Authentication and Initial Load Logic remains the same ---
+        // --- State Persistence Functions ---
+        function saveCallState() {
+            if (!currentScenarioId || !currentCallSessionId || callFlowViewDiv.style.display !== 'block') {
+                // If call is not genuinely active, remove any stale state
+                localStorage.removeItem(CALL_STATE_KEY);
+                // console.log("No active call or call view not visible, state not saved/cleared.");
+                return;
+            }
+            const state = {
+                scenarioId: currentScenarioId,
+                scenarioName: currentScenarioName,
+                steps: currentSteps,
+                stepIndex: currentStepIndex,
+                callSessionId: currentCallSessionId,
+                stepDurations: stepDurations,
+                callTimerText: callTimerDiv ? callTimerDiv.textContent : '00:00',
+                // stepStartTimeEpoch: stepStartTime, // stepStartTime is for current segment, not total step time
+                callInProgress: true 
+            };
+            localStorage.setItem(CALL_STATE_KEY, JSON.stringify(state));
+            console.log("Call state saved:", state);
+        }
+
+        async function loadCallState() {
+            const savedStateString = localStorage.getItem(CALL_STATE_KEY);
+            if (!savedStateString) return false;
+
+            try {
+                const savedState = JSON.parse(savedStateString);
+                console.log("Found saved call state:", savedState);
+
+                if (!savedState.callInProgress || !savedState.scenarioId || !savedState.callSessionId || typeof savedState.stepIndex === 'undefined' || !savedState.steps || savedState.steps.length === 0) {
+                    console.warn("Incomplete or invalid saved state, ignoring and clearing.");
+                    localStorage.removeItem(CALL_STATE_KEY);
+                    return false;
+                }
+
+                // Restore state variables
+                currentScenarioId = savedState.scenarioId;
+                currentScenarioName = savedState.scenarioName;
+                currentSteps = savedState.steps;
+                currentStepIndex = savedState.stepIndex;
+                currentCallSessionId = savedState.callSessionId;
+                // Ensure stepDurations is an array of the correct length
+                if (Array.isArray(savedState.stepDurations) && savedState.stepDurations.length === currentSteps.length) {
+                    stepDurations = savedState.stepDurations;
+                } else {
+                    stepDurations = new Array(currentSteps.length).fill(0);
+                    console.warn("Step durations mismatch or invalid, re-initialized.");
+                }
+                // stepStartTime will be reset by startStepTimer for the current segment
+
+                // Update UI
+                if (initialViewDiv) initialViewDiv.style.display = 'none';
+                if (callFlowViewDiv) callFlowViewDiv.style.display = 'block'; // No animation on restore
+                if (endCallBtn) endCallBtn.style.display = 'inline-flex';
+                if (scenarioTitleElement) scenarioTitleElement.textContent = currentScenarioName;
+                
+                if (callTimerDiv) {
+                    callTimerDiv.textContent = savedState.callTimerText || '00:00';
+                    callTimerDiv.style.display = 'block';
+                }
+                
+                updateSystemStatus("🟢 In Call (Restored)", "status-in-call");
+                // renderProgressTracker() will be called by renderStep()
+                renderStep(); // This will render the step and call startStepTimer
+
+                showAssistantMessage(`🚀 Call restored to "${currentScenarioName}", step ${currentStepIndex + 1}.`, true, 7000);
+                return true;
+            } catch (e) {
+                console.error("Error loading call state:", e);
+                localStorage.removeItem(CALL_STATE_KEY);
+                return false;
+            }
+        }
+        // --- End State Persistence Functions ---
+
+
         try {
             const { data: { session }, error: sessionError } = await supabase.auth.getSession();
             if (sessionError) throw sessionError;
             if (!session) {
-                // Redirect to login, preserving the intended core-flow path
                 const currentPath = window.location.pathname.replace('/elevo-core-flow', '') + window.location.search + window.location.hash;
-                const redirectTo = currentPath || '/core-flow/core-flow.html'; // Default fallback
+                const redirectTo = currentPath || '/core-flow/core-flow.html';
                 window.location.href = `../legacy/login.html?redirectTo=${encodeURIComponent(redirectTo)}`;
                 return;
             }
 
             console.log('User is authenticated.');
             if (session.user.email && userNameSpan && userInfoDiv) {
-                // Fetch user name from 'users' table for better display
                 try {
                     const { data: userData, error: userError } = await supabase
                         .from('users')
@@ -212,25 +286,36 @@
             }
             if(logoutButton) {
                 logoutButton.addEventListener('click', async () => {
+                    localStorage.removeItem(CALL_STATE_KEY); // Clear call state on logout
+                    console.log("Call state cleared on logout.");
                     const { error } = await supabase.auth.signOut();
                     if (error) console.error("Logout error:", error);
                     else window.location.href = '../legacy/login.html';
                 });
             }
 
-            await loadActiveScenarios(); // Load scenarios after auth check
+            // Attempt to load and restore call state
+            const callWasRestored = await loadCallState(); 
 
-            if (authLoadingDiv) authLoadingDiv.style.display = 'none';
-            if (initialViewDiv) {
-                initialViewDiv.style.display = 'block';
-                animateElement(initialViewDiv);
-            }
-            updateSystemStatus("🔴 Waiting for Call");
-            showAssistantMessage("Welcome! Select a scenario to begin.", true, 6000, () => {
-                if (initialViewDiv && initialViewDiv.style.display === 'block') {
-                    showAssistantMessage("💡 Tip: Choose a scenario and click 'Receive Call'.", true, 0); // Persistent tip
+            if (!callWasRestored) {
+                // Standard initial load if no call state was restored
+                await loadActiveScenarios();
+                if (authLoadingDiv) authLoadingDiv.style.display = 'none';
+                if (initialViewDiv) {
+                    initialViewDiv.style.display = 'block';
+                    animateElement(initialViewDiv);
                 }
-            });
+                updateSystemStatus("🔴 Waiting for Call");
+                showAssistantMessage("Welcome! Select a scenario to begin.", true, 6000, () => {
+                    if (initialViewDiv && initialViewDiv.style.display === 'block') {
+                        showAssistantMessage("💡 Tip: Choose a scenario and click 'Receive Call'.", true, 0);
+                    }
+                });
+            } else {
+                 // Call was restored, main loading message can be hidden
+                 if (authLoadingDiv) authLoadingDiv.style.display = 'none';
+                 // User info (name, logout) is already set up above.
+            }
 
         } catch (error) {
             console.error("Auth or Initial Load error:", error);
@@ -238,7 +323,6 @@
             updateSystemStatus("🔴 Error", "status-error");
         }
 
-        // --- loadActiveScenarios remains the same ---
         async function loadActiveScenarios() {
             if (!scenarioDropdown || !receiveCallBtn) return;
             scenarioDropdown.disabled = true;
@@ -264,7 +348,6 @@
                         scenarioDropdown.appendChild(option);
                     });
                     scenarioDropdown.disabled = false;
-                    // Enable button only when a valid scenario is selected
                     scenarioDropdown.addEventListener('change', () => {
                          receiveCallBtn.disabled = !scenarioDropdown.value;
                     });
@@ -279,7 +362,6 @@
             }
         }
 
-        // --- updateSystemStatus remains the same ---
         function updateSystemStatus(statusText, statusClass = 'status-waiting') {
             if (systemStatusDiv) {
                 systemStatusDiv.textContent = statusText;
@@ -287,14 +369,15 @@
             }
         }
 
-        // --- Timer functions remain the same (controlling the moved timer) ---
         function startStepTimer() {
             if (callTimerDiv) {
-                callTimerDiv.style.display = 'block'; // Make it visible
-                callTimerDiv.textContent = '00:00'; // Reset display
+                callTimerDiv.style.display = 'block'; 
+                // Don't reset textContent to '00:00' here if we want to resume, 
+                // but current logic has callTimerText saved in localStorage for full restoration.
+                // For a *new* step, it should be 00:00. This is handled because stepStartTime is new.
             }
-            stepStartTime = Date.now();
-            if (stepTimerInterval) clearInterval(stepTimerInterval); // Clear previous interval if any
+            stepStartTime = Date.now(); // Records when this *segment* of the step timer begins
+            if (stepTimerInterval) clearInterval(stepTimerInterval); 
             stepTimerInterval = setInterval(() => {
                 const elapsedTime = Math.floor((Date.now() - stepStartTime) / 1000);
                 const minutes = String(Math.floor(elapsedTime / 60)).padStart(2, '0');
@@ -308,24 +391,21 @@
             stepTimerInterval = null;
             if (stepStartTime > 0 && currentStepIndex >= 0 && currentStepIndex < currentSteps.length) {
                 const duration = Math.floor((Date.now() - stepStartTime) / 1000);
-                // Ensure stepDurations array is initialized and has the correct length
                 if (!stepDurations || stepDurations.length !== currentSteps.length) {
-                   console.warn("Re-initializing stepDurations array.");
+                   console.warn("Re-initializing stepDurations array for recording.");
                    stepDurations = new Array(currentSteps.length).fill(0);
                 }
-                 // Add duration to the correct step index
                  stepDurations[currentStepIndex] = (stepDurations[currentStepIndex] || 0) + duration;
-                 console.log(`Step ${currentStepIndex + 1} duration recorded: ${duration}s. Total for step: ${stepDurations[currentStepIndex]}s`);
-                stepStartTime = 0; // Reset start time for the next step or pause
+                 console.log(`Step ${currentStepIndex + 1} segment duration recorded: ${duration}s. Total for step: ${stepDurations[currentStepIndex]}s`);
+                stepStartTime = 0; 
             }
         }
 
-        // --- resetCallSessionState remains the same ---
         function resetCallSessionState() {
-            stopAndRecordStepTimer(); // Ensure timer stops and last duration is recorded
+            stopAndRecordStepTimer(); 
             if (callTimerDiv) {
                 callTimerDiv.textContent = '00:00';
-                callTimerDiv.style.display = 'none'; // Hide timer on reset
+                callTimerDiv.style.display = 'none'; 
             }
             stepDurations = [];
             currentCallSessionId = null;
@@ -333,9 +413,10 @@
             currentScenarioName = null;
             currentSteps = [];
             currentStepIndex = 0;
+            localStorage.removeItem(CALL_STATE_KEY); // Clear saved state
+            console.log("Call session state reset and localStorage cleared.");
         }
 
-         // --- renderProgressTracker remains the same ---
          function renderProgressTracker() {
             if (!progressTrackerContainer || currentSteps.length === 0) {
                 if(progressTrackerContainer) progressTrackerContainer.style.display = 'none';
@@ -343,7 +424,7 @@
             }
              const stepperWrapper = progressTrackerContainer.querySelector('.stepper-wrapper');
              if (!stepperWrapper) return;
-             stepperWrapper.innerHTML = ''; // Clear previous tracker
+             stepperWrapper.innerHTML = ''; 
 
             const stepperUl = document.createElement('ul');
             stepperUl.className = 'stepper';
@@ -353,19 +434,17 @@
                 stepLi.className = 'step';
                 const stepNumber = document.createElement('span');
                 stepNumber.className = 'step-number';
-                stepNumber.textContent = index + 1; // Display step number
+                stepNumber.textContent = index + 1; 
                 stepLi.appendChild(stepNumber);
 
-                // Apply classes based on step status
                 if (index < currentStepIndex) {
                     stepLi.classList.add('completed');
-                    stepNumber.innerHTML = '✓'; // Checkmark for completed
+                    stepNumber.innerHTML = '✓'; 
                 } else if (index === currentStepIndex) {
                     stepLi.classList.add('active');
-                } // Future steps remain default
+                } 
 
                 stepperUl.appendChild(stepLi);
-                // Add separator if not the last step
                 if (index < currentSteps.length - 1) {
                     const separator = document.createElement('li');
                     separator.className = 'step-separator';
@@ -373,62 +452,55 @@
                 }
             });
             stepperWrapper.appendChild(stepperUl);
-            progressTrackerContainer.style.display = 'block'; // Show the tracker
-            animateElement(progressTrackerContainer); // Apply fade-in animation
+            progressTrackerContainer.style.display = 'block'; 
+            animateElement(progressTrackerContainer); 
         }
 
-        // --- renderStep remains the same ---
         function renderStep() {
             if (!stepsContainer) return;
 
-            // Handle empty steps case
-            if (currentSteps.length === 0) {
+            if (currentSteps.length === 0 && currentScenarioId) { // Ensure it's not just initial state
                 stepsContainer.innerHTML = '<p class="placeholder-text">No steps defined for this scenario.</p>';
                 if (nextStepBtn) nextStepBtn.style.display = 'none';
                 if (prevStepBtn) prevStepBtn.style.display = 'none';
+                saveCallState(); // Save even if no steps, to persist this state
                 return;
             }
+            
+            // Reset call timer display for the new step (will show 00:00 and count up)
+            if(callTimerDiv) callTimerDiv.textContent = '00:00';
+            startStepTimer(); // Start/restart timer for this new step
 
-            // Render the current step content
             if (currentStepIndex >= 0 && currentStepIndex < currentSteps.length) {
                 const stepContent = currentSteps[currentStepIndex];
-                 // Re-apply animation for step change
                  stepsContainer.classList.remove('fade-in');
-                 void stepsContainer.offsetWidth; // Trigger reflow
+                 void stepsContainer.offsetWidth; 
                 stepsContainer.innerHTML = `<p>${stepContent}</p>`;
                  stepsContainer.classList.add('fade-in');
 
-                // Show assistant message with current step (truncated if long)
                 const assistantMsg = `📌 Step ${currentStepIndex + 1}: ${stepContent.length > 45 ? stepContent.substring(0, 42) + "..." : stepContent}`;
-                showAssistantMessage(assistantMsg, true, 0); // Show persistently
-
-                startStepTimer(); // Start/restart timer for this step
+                showAssistantMessage(assistantMsg, true, 0); 
             } else {
-                 // Handle invalid step index (should not happen in normal flow)
                  stepsContainer.innerHTML = '<p class="placeholder-text" style="color: var(--danger-color);">Error: Invalid step index.</p>';
-                 stopAndRecordStepTimer(); // Stop timer if state is invalid
+                 stopAndRecordStepTimer(); 
             }
 
-            // Update progress tracker and navigation buttons
             renderProgressTracker();
-            if (prevStepBtn) prevStepBtn.style.display = currentStepIndex > 0 ? 'inline-flex' : 'none'; // Show prev if not first step
+            if (prevStepBtn) prevStepBtn.style.display = currentStepIndex > 0 ? 'inline-flex' : 'none'; 
             if (nextStepBtn) {
                 if (currentStepIndex < currentSteps.length - 1) {
-                    // Default 'Next Step' state
                     nextStepBtn.innerHTML = `<span>Next Step</span><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>`;
                     nextStepBtn.style.display = 'inline-flex';
                 } else if (currentStepIndex === currentSteps.length - 1) {
-                    // Change text for the last step
-                    nextStepBtn.innerHTML = `<span>Finish Scenario</span>`; // Indicate completion
+                    nextStepBtn.innerHTML = `<span>Finish Scenario</span>`; 
                     nextStepBtn.style.display = 'inline-flex';
                 } else {
-                    // Hide if index is out of bounds (error state)
                     nextStepBtn.style.display = 'none';
                 }
             }
+            saveCallState(); // Save state after rendering the step
         }
 
-        // --- receiveCallBtn listener remains the same ---
         if (receiveCallBtn) {
             receiveCallBtn.addEventListener('click', async () => {
                 const selectedScenarioId = scenarioDropdown.value;
@@ -436,131 +508,112 @@
                     showAssistantMessage("⚠️ Please select a scenario first.", true, 5000);
                     return;
                 }
-                 // Play start sound (optional)
                  if(callStartSound) {
                     callStartSound.play().catch(e => console.warn("Audio play failed:", e));
                  }
 
-                resetCallSessionState(); // Reset state before starting
+                resetCallSessionState(); // Clears previous state AND localStorage
                 currentScenarioId = parseInt(selectedScenarioId, 10);
 
-                // Transition UI views
                 if (initialViewDiv) initialViewDiv.style.display = 'none';
                 if (callFlowViewDiv) {
                     callFlowViewDiv.style.display = 'block';
                     animateElement(callFlowViewDiv);
                 }
-                if (endCallBtn) endCallBtn.style.display = 'inline-flex'; // Show End Call button
+                if (endCallBtn) endCallBtn.style.display = 'inline-flex'; 
 
-                // Set loading state
                 updateSystemStatus("🟡 Loading Scenario...", "status-loading");
                 if (stepsContainer) stepsContainer.innerHTML = '<p class="placeholder-text">Loading scenario details...</p>';
                 if (scenarioTitleElement) scenarioTitleElement.textContent = 'Loading Scenario...';
                 if (progressTrackerContainer) progressTrackerContainer.style.display = 'none';
                 if (nextStepBtn) nextStepBtn.style.display = 'none';
                 if (prevStepBtn) prevStepBtn.style.display = 'none';
-                // Timer display is handled by startStepTimer called within renderStep
+                if (callTimerDiv) callTimerDiv.textContent = '00:00'; // Explicitly reset visual timer
 
                 try {
-                    // Ensure user is still authenticated
                     const { data: { user }, error: userError } = await supabase.auth.getUser();
                     if (userError || !user) throw new Error("User authentication failed. Cannot start call.");
 
-                    // Fetch scenario details (name and steps)
                     const { data: scenario, error: scenarioError } = await supabase
                         .from('call_scenarios')
                         .select('name, steps')
                         .eq('id', currentScenarioId)
-                        .eq('is_active', true) // Ensure scenario is active
+                        .eq('is_active', true)
                         .single();
 
                     if (scenarioError) throw scenarioError;
-                    // Validate fetched scenario data
                     if (!scenario || !scenario.steps || !Array.isArray(scenario.steps) || scenario.steps.length === 0) {
                          throw new Error("Selected scenario is invalid, inactive, or has no defined steps.");
                     }
 
-                    // Update state with fetched scenario details
                     currentScenarioName = scenario.name;
                     currentSteps = scenario.steps;
-                    currentStepIndex = 0; // Start from the first step
-                    stepDurations = new Array(currentSteps.length).fill(0); // Initialize durations array
+                    currentStepIndex = 0; 
+                    stepDurations = new Array(currentSteps.length).fill(0); 
 
-                    // Create a new call session record in Supabase
                     const { data: newSession, error: sessionInsertError } = await supabase
                         .from('call_sessions')
                         .insert({
                             user_id: user.id,
                             scenario_id: currentScenarioId,
                             start_time: new Date().toISOString(),
-                            completed_all_steps: false // Default to false
-                            // Quality and reason will be updated on completion/end
+                            completed_all_steps: false 
                         })
-                        .select('id') // Select the ID of the newly created session
+                        .select('id') 
                         .single();
 
                     if (sessionInsertError || !newSession) {
                         throw sessionInsertError || new Error("Failed to create call session record in database.");
                     }
-                    currentCallSessionId = newSession.id; // Store the session ID
+                    currentCallSessionId = newSession.id; 
                     console.log("Call session started with ID:", currentCallSessionId);
 
-                    // Update UI with scenario title and render the first step
                     if (scenarioTitleElement) scenarioTitleElement.textContent = currentScenarioName;
                     updateSystemStatus("🟢 In Call", "status-in-call");
-                    renderProgressTracker(); // Render the initial state of the progress tracker
-                    renderStep(); // Render the first step (this also starts the timer)
-                    showAssistantMessage(`🚀 Scenario "${currentScenarioName}" started! Follow the steps.`, true, 0); // Persistent message
+                    // renderProgressTracker(); // Will be called by renderStep
+                    renderStep(); // This will also save state
+                    showAssistantMessage(`🚀 Scenario "${currentScenarioName}" started! Follow the steps.`, true, 0);
 
                 } catch (err) {
                     console.error("Error during call setup:", err);
-                    // Handle errors gracefully
                     let userMessage = `⚠️ Error starting call: ${err.message}`;
-                    // Provide more specific feedback for common errors if possible
-                    if (err.code === 'PGRST116') { // Supabase error code for 'Not found'
+                    if (err.code === 'PGRST116') { 
                         userMessage = `⚠️ Error: Could not find the selected scenario (ID: ${currentScenarioId}). It might have been deactivated or deleted. Please select another.`;
                     }
 
-                    // Update UI to reflect error state
-                    if (stepsContainer) stepsContainer.innerHTML = `<p class="placeholder-text" style="color:red;">${userMessage.substring(3)}</p>`; // Remove emoji prefix
+                    if (stepsContainer) stepsContainer.innerHTML = `<p class="placeholder-text" style="color:red;">${userMessage.substring(3)}</p>`;
                     if (scenarioTitleElement) scenarioTitleElement.textContent = 'Error Loading Scenario';
                     updateSystemStatus("🔴 Error", "status-error");
-                    showAssistantMessage(userMessage, true, 8000); // Show error message
+                    showAssistantMessage(userMessage, true, 8000); 
 
-                    // Reset UI back to initial view
                     if (callFlowViewDiv) callFlowViewDiv.style.display = 'none';
                     if (initialViewDiv) {
                          initialViewDiv.style.display = 'block';
                          animateElement(initialViewDiv);
                     }
                     if (endCallBtn) endCallBtn.style.display = 'none';
-                    resetCallSessionState(); // Clean up state variables and timer
-                    await loadActiveScenarios(); // Reload scenarios in case list changed
+                    resetCallSessionState(); // Clears state AND localStorage
+                    await loadActiveScenarios(); 
                 }
             });
         }
 
-        // --- nextStepBtn listener (Handles Finish Scenario) remains the same ---
-        // NOTE: Evaluation logic relies on the 'determine-call-quality' Edge Function
         if (nextStepBtn) {
             nextStepBtn.addEventListener('click', async () => {
-                stopAndRecordStepTimer(); // Stop timer for the current step and record duration
+                stopAndRecordStepTimer(); 
 
                 if (currentStepIndex < currentSteps.length - 1) {
-                    // Move to the next step
                     currentStepIndex++;
-                    renderStep(); // Render the next step and restart timer
+                    renderStep(); // This also calls saveCallState()
                 } else if (currentStepIndex === currentSteps.length - 1) {
-                    // This was the last step - Finish Scenario
                     updateSystemStatus("✅ Call Completed", "status-completed");
-                    if (callTimerDiv) callTimerDiv.style.display = 'none'; // Hide timer on completion
+                    if (callTimerDiv) callTimerDiv.style.display = 'none'; 
 
                     const totalDuration = stepDurations.reduce((acc, duration) => acc + (duration || 0), 0);
-                    const completedAllSteps = true; // Scenario finished normally
-                    let quality = 'N/A'; // Default quality
-                    let reason = 'Evaluation did not run or returned no reason.'; // Default reason
+                    const completedAllSteps = true; 
+                    let quality = 'N/A'; 
+                    let reason = 'Evaluation did not run or returned no reason.'; 
 
-                    // Call the Supabase Edge Function for evaluation
                     try {
                          console.log("Calling determine-call-quality function with:", { stepDurations, totalDuration, allStepsCompleted: completedAllSteps, stepsArrayLength: currentSteps.length });
                          const { data, error: functionError } = await supabase.functions.invoke('determine-call-quality', {
@@ -568,11 +621,11 @@
                         });
                         if (functionError) {
                              console.error("Error invoking determine-call-quality function:", functionError);
-                             throw functionError; // Throw to be caught below
+                             throw functionError; 
                         }
                         if (data) {
-                            quality = data.quality || 'N/A'; // Use function result or default
-                            reason = data.reason || '-'; // Use function reason or '-'
+                            quality = data.quality || 'N/A'; 
+                            reason = data.reason || '-'; 
                             console.log("Evaluation Result:", { quality, reason });
                         } else {
                              console.warn("Determine-call-quality function returned no data.");
@@ -581,17 +634,15 @@
                     } catch (err) {
                          console.error("Error calling or processing determine-call-quality function:", err);
                          reason = `Quality check failed: ${err.message || 'Unknown error'}`;
-                         // Keep quality as N/A or consider setting to 'Bad' on error? Defaulting to N/A.
                     }
 
-                    // Update the call session record in Supabase with results
                     if (currentCallSessionId) {
                         const { error: updateError } = await supabase.from('call_sessions').update({
                             end_time: new Date().toISOString(),
                             total_duration_seconds: totalDuration,
                             completed_all_steps: completedAllSteps,
-                            call_quality: quality, // Store determined quality
-                            quality_reason: reason  // Store determined reason
+                            call_quality: quality, 
+                            quality_reason: reason  
                         }).eq('id', currentCallSessionId);
                         if (updateError) {
                             console.error("Failed to update call session on completion:", updateError);
@@ -603,11 +654,11 @@
                          console.warn("No currentCallSessionId found. Cannot update session record.");
                          showAssistantMessage("⚠️ Session ID missing, results not saved.", true, 5000);
                     }
-
-                    // Display the post-call summary view
+                    
+                    localStorage.removeItem(CALL_STATE_KEY); // Clear state after successful completion and DB update
+                    console.log("Call state cleared after completion.");
                     displayPostCallSummary(quality, reason, totalDuration);
 
-                    // Hide navigation buttons after completion
                     if (nextStepBtn) nextStepBtn.style.display = 'none';
                     if (prevStepBtn) prevStepBtn.style.display = 'none';
                     if (endCallBtn) endCallBtn.style.display = 'none';
@@ -615,34 +666,29 @@
             });
         }
 
-        // --- prevStepBtn listener remains the same ---
         if (prevStepBtn) {
             prevStepBtn.addEventListener('click', () => {
-                stopAndRecordStepTimer(); // Stop timer for the current step (duration is likely being re-done)
+                stopAndRecordStepTimer(); 
                 if (currentStepIndex > 0) {
                     currentStepIndex--;
-                    // NOTE: Durations for revisited steps might accumulate if not reset.
-                    // Consider if stepDurations[currentStepIndex] should be reset here if needed.
-                    // Current implementation accumulates time spent on a step.
-                    renderStep(); // Render the previous step
+                    if(callTimerDiv) callTimerDiv.textContent = '00:00'; // Reset visual timer for the step being revisited
+                    // Durations are accumulated. If a step is revisited, its timer restarts from 0 for that segment.
+                    renderStep(); // This also calls saveCallState()
                 }
             });
         }
 
-        // --- endCallBtn listener remains the same ---
-        // NOTE: Evaluation logic relies on the 'determine-call-quality' Edge Function
         if (endCallBtn) {
             endCallBtn.addEventListener('click', async () => {
-                stopAndRecordStepTimer(); // Stop timer and record duration for the current step
+                stopAndRecordStepTimer(); 
                 const totalDuration = stepDurations.reduce((acc, duration) => acc + (duration || 0), 0);
-                updateSystemStatus("⚪ Call Ended Early", "status-ended"); // More specific status
-                if (callTimerDiv) callTimerDiv.style.display = 'none'; // Hide timer
+                updateSystemStatus("⚪ Call Ended Early", "status-ended"); 
+                if (callTimerDiv) callTimerDiv.style.display = 'none';
 
-                const completedAllSteps = false; // Call ended prematurely
-                let quality = 'Bad'; // Default quality for early end
-                let reason = 'Call ended before finishing all steps.'; // Default reason
+                const completedAllSteps = false; 
+                let quality = 'Bad'; 
+                let reason = 'Call ended before finishing all steps.'; 
 
-                // Call the Supabase Edge Function for evaluation (even on early end)
                 try {
                      console.log("Calling determine-call-quality function (early end):", { stepDurations, totalDuration, allStepsCompleted: completedAllSteps, stepsArrayLength: currentSteps.length });
                      const { data, error: functionError } = await supabase.functions.invoke('determine-call-quality', {
@@ -650,26 +696,22 @@
                     });
                     if (functionError) throw functionError;
                     if (data) {
-                        // Use function's assessment if available, but prioritize 'Bad' if ended early
-                        quality = data.quality || 'Bad'; // Default to Bad if function fails or returns N/A
-                        reason = data.reason || reason; // Use function reason if provided, else default early end reason
+                        quality = data.quality || 'Bad'; 
+                        reason = data.reason || reason; 
                         console.log("Evaluation Result (early end):", { quality, reason });
                     } else {
                          console.warn("Determine-call-quality function returned no data on early end.");
-                         // Keep default Bad quality and reason
                     }
                  } catch (err) {
                      console.error("Error calling determine-call-quality function on early end:", err);
-                     reason = `Quality check failed: ${err.message}. ${reason}`; // Append original reason
-                     // Keep quality as 'Bad'
+                     reason = `Quality check failed: ${err.message}. ${reason}`; 
                  }
 
-                // Update the call session record in Supabase
                 if (currentCallSessionId) {
                     const { error: updateError } = await supabase.from('call_sessions').update({
                         end_time: new Date().toISOString(),
                         total_duration_seconds: totalDuration,
-                        completed_all_steps: completedAllSteps, // Marked as false
+                        completed_all_steps: completedAllSteps, 
                         call_quality: quality,
                         quality_reason: reason
                     }).eq('id', currentCallSessionId);
@@ -679,51 +721,54 @@
                     } else {
                         console.log("Call session updated successfully (early end).");
                     }
-                    // Display summary even if update fails locally
+                    localStorage.removeItem(CALL_STATE_KEY); // Clear state after ending call and DB update
+                    console.log("Call state cleared after ending call early.");
                     displayPostCallSummary(quality, reason, totalDuration);
                 } else {
-                    // If session ID was lost somehow, just reset
                     console.warn("No currentCallSessionId found on end call. Resetting view.");
                     showAssistantMessage("⚠️ Session ID missing, results not saved.", true, 5000);
-                    resetToInitialView(); // Reset directly if no session to summarize
+                    resetToInitialView(); // This will also clear localStorage
                 }
 
-                // Hide navigation buttons
                 if (nextStepBtn) nextStepBtn.style.display = 'none';
                 if (prevStepBtn) prevStepBtn.style.display = 'none';
                 if (endCallBtn) endCallBtn.style.display = 'none';
             });
         }
 
-        // --- displayPostCallSummary remains the same ---
         function displayPostCallSummary(quality, reason, totalDuration) {
-            // Hide active call elements
             if (callFlowViewDiv) callFlowViewDiv.style.display = 'none';
             if (progressTrackerContainer) progressTrackerContainer.style.display = 'none';
-            // Timer is already hidden by finish/end logic
-            if (assistantBox) assistantBox.classList.remove('show'); // Hide assistant
+            if (assistantBox) assistantBox.classList.remove('show'); 
 
             if (callSummaryContentDiv && postCallSummaryDiv) {
-                // Determine quality class for styling
-                let qualityClass = 'na'; // Default
+                let displayQualityText = quality || 'N/A';
+                let qualityClass = 'na'; 
                 if (quality) {
-                    qualityClass = quality.toLowerCase(); // good, normal, bad
+                    qualityClass = quality.toLowerCase(); 
                 }
 
-                // Build summary HTML
+                if ((!quality || quality === 'N/A') &&
+                    (reason && (reason.toLowerCase().includes('failed') ||
+                               reason.toLowerCase().includes('error') ||
+                               reason.toLowerCase().includes('empty response') ||
+                               reason.toLowerCase().includes('did not run')))) {
+                    displayQualityText = 'N/A (Evaluation Failed)';
+                    // qualityClass = 'bad'; // Optional: visually style as bad if evaluation failed
+                }
+                
                 let summaryHTML = `
-                    <p><strong>Call Quality:</strong> <span class="quality-text quality-${qualityClass}">${quality || 'N/A'}</span></p>
+                    <p><strong>Call Quality:</strong> <span class="quality-text quality-${qualityClass}">${displayQualityText}</span></p>
                     <p><strong>Reason:</strong> ${reason || "N/A"}</p>
                     <p><strong>Total Duration:</strong> ${Math.floor(totalDuration / 60)}m ${totalDuration % 60}s</p>
                     <hr style="margin: 1rem 0; border-color: var(--border-color);">
                     <p><strong>Step Durations:</strong></p>
-                    <ul style="list-style: none; padding-left: 0; max-height: 150px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: var(--border-radius-sm); padding: 0.5rem;">`; // Added basic styling for list
+                    <ul style="list-style: none; padding-left: 0; max-height: 150px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: var(--border-radius-sm); padding: 0.5rem;">`;
 
-                 // Display step durations if available
                  if (currentSteps && currentSteps.length > 0 && stepDurations && stepDurations.length === currentSteps.length) {
                      currentSteps.forEach((stepText, index) => {
-                        const duration = stepDurations[index] || 0; // Use 0 if duration is missing/falsy
-                        const stepShortText = stepText.length > 30 ? stepText.substring(0, 27) + "..." : stepText; // Slightly shorter truncation
+                        const duration = stepDurations[index] || 0; 
+                        const stepShortText = stepText.length > 30 ? stepText.substring(0, 27) + "..." : stepText; 
                         summaryHTML += `<li style="margin-bottom: 0.3rem; font-size: 0.9em; color: var(--text-color-light);">Step ${index + 1} ("${stepShortText}"): <strong style="color: var(--text-color);">${Math.floor(duration / 60)}m ${duration % 60}s</strong></li>`;
                     });
                  } else {
@@ -731,106 +776,90 @@
                  }
                 summaryHTML += `</ul>`;
 
-                callSummaryContentDiv.innerHTML = summaryHTML; // Inject content
-                postCallSummaryDiv.style.display = 'block'; // Show summary card
-                animateElement(postCallSummaryDiv); // Apply animation
+                callSummaryContentDiv.innerHTML = summaryHTML; 
+                postCallSummaryDiv.style.display = 'block'; 
+                animateElement(postCallSummaryDiv); 
             }
-            updateSystemStatus("📊 Review Call Summary", "status-summary"); // Update status bar
+            updateSystemStatus("📊 Review Call Summary", "status-summary"); 
         }
 
-         // --- resetToInitialView remains the same ---
          async function resetToInitialView() {
-             resetCallSessionState(); // Clear state, stop/hide timer
-             // Hide summary and call flow views
+             resetCallSessionState(); // Clears state, timer, AND localStorage
+
              if (postCallSummaryDiv) postCallSummaryDiv.style.display = 'none';
              if (callFlowViewDiv) callFlowViewDiv.style.display = 'none';
-             // Show initial view
              if (initialViewDiv) {
                  initialViewDiv.style.display = 'block';
                  animateElement(initialViewDiv);
              }
-             // Reset status bar
              updateSystemStatus("🔴 Waiting for Call", "status-waiting");
 
-             // Reset button states and UI elements
              if (nextStepBtn) {
-                 // Reset text and hide
                  nextStepBtn.innerHTML = `<span>Next Step</span><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>`;
                  nextStepBtn.style.display = 'none';
              }
              if (prevStepBtn) prevStepBtn.style.display = 'none';
              if (endCallBtn) endCallBtn.style.display = 'none';
              if (progressTrackerContainer) progressTrackerContainer.style.display = 'none';
-             if (scenarioTitleElement) scenarioTitleElement.textContent = "Call Scenario"; // Reset title
-             if (stepsContainer) stepsContainer.innerHTML = '<p class="placeholder-text">Select a scenario to begin.</p>'; // Reset steps area
+             if (scenarioTitleElement) scenarioTitleElement.textContent = "Call Scenario"; 
+             if (stepsContainer) stepsContainer.innerHTML = '<p class="placeholder-text">Select a scenario to begin.</p>'; 
 
-             // Reload scenarios and reset dropdown
-              await loadActiveScenarios(); // Refresh list in case it changed
-              if (scenarioDropdown) scenarioDropdown.value = ""; // Reset selection
-              if (receiveCallBtn) receiveCallBtn.disabled = true; // Disable button until selection
+              await loadActiveScenarios(); 
+              if (scenarioDropdown) scenarioDropdown.value = ""; 
+              if (receiveCallBtn) receiveCallBtn.disabled = true; 
 
-             // Show assistant message
              showAssistantMessage("💡 Ready for the next call! Select a scenario.", true, 7000);
          }
 
-        // --- returnToInitialViewBtn listener remains the same ---
         if (returnToInitialViewBtn) {
              returnToInitialViewBtn.addEventListener('click', resetToInitialView);
         }
 
-        // --- typeWriterEffect remains the same ---
         function typeWriterEffect(element, message, speed = 30, callback) {
-            if (typingInterval) clearInterval(typingInterval); // Clear existing interval
-            element.textContent = ''; // Clear element content
+            if (typingInterval) clearInterval(typingInterval); 
+            element.textContent = ''; 
             let i = 0;
             typingInterval = setInterval(() => {
                 if (i < message.length) {
                     element.textContent += message.charAt(i);
                     i++;
                 } else {
-                    clearInterval(typingInterval); // Stop interval when message is complete
+                    clearInterval(typingInterval); 
                     typingInterval = null;
-                    if (callback) callback(); // Execute callback if provided
+                    if (callback) callback(); 
                 }
             }, speed);
         }
 
-        // --- showAssistantMessage remains the same ---
         function showAssistantMessage(message, showImmediately = false, duration = 5000, onHideCallback) {
             if (assistantMessageElement && assistantBox) {
-                clearTimeout(assistantTimeout); // Clear any existing hide timeout
-                if (typingInterval) clearInterval(typingInterval); // Stop any ongoing typing
+                clearTimeout(assistantTimeout); 
+                if (typingInterval) clearInterval(typingInterval); 
 
                  const displayMessage = () => {
-                     assistantBox.style.display = 'flex'; // Ensure box is visible
-                     // Force animation restart
+                     assistantBox.style.display = 'flex'; 
                      assistantBox.classList.remove('slide-in-right', 'show');
                      void assistantBox.offsetWidth;
-                     assistantBox.classList.add('slide-in-right', 'show'); // Add classes to trigger animation
+                     assistantBox.classList.add('slide-in-right', 'show'); 
 
-                     // Start typing effect
                      typeWriterEffect(assistantMessageElement, message, 30, () => {
-                         // Set hide timeout if duration is positive
                          if (duration && duration > 0) {
                              assistantTimeout = setTimeout(() => {
-                                 assistantBox.classList.remove('show'); // Start hide animation
-                                 // Wait for animation to complete before setting display:none
+                                 assistantBox.classList.remove('show'); 
                                  setTimeout(() => {
-                                     if (!assistantBox.classList.contains('show')) { // Check if still hidden
+                                     if (!assistantBox.classList.contains('show')) { 
                                          assistantBox.style.display = 'none';
                                      }
-                                     if (typeof onHideCallback === 'function') onHideCallback(); // Call hide callback
-                                 }, 400); // Match transition duration
+                                     if (typeof onHideCallback === 'function') onHideCallback(); 
+                                 }, 400); 
                              }, duration);
                          }
                      });
                  };
 
-                 // Decide whether to display immediately or after current message fades
                  if (showImmediately || !assistantBox.classList.contains('show')) {
                     displayMessage();
                  } else {
-                      // If already showing, just update the text
                       typeWriterEffect(assistantMessageElement, message, 30, () => {
                          if (duration && duration > 0) {
                            assistantTimeout = setTimeout(() => {
@@ -840,7 +869,7 @@
                                          assistantBox.style.display = 'none';
                                      }
                                     if (typeof onHideCallback === 'function') onHideCallback();
-                                }, 400); // Match transition duration
+                                }, 400); 
                             }, duration);
                         }
                     });
@@ -848,7 +877,7 @@
             }
         }
 
-        console.log("CoreFlow.js v2.2 script fully loaded and initialized.");
+        console.log("CoreFlow.js v2.3 script fully loaded and initialized.");
     });
     // --- END OF EMBEDDED coreFlow.js ---
     </script>
