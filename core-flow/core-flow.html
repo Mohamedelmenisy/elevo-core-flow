@@ -1,1 +1,681 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Elevo Core Assistant</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2317a2b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M3 12h18M3 6h12M3 18h15'/><path d='M17 9l4 3l-4 3'/></svg>">
 
+    <link rel="stylesheet" href="style.css"> <!-- Ensure style.css path is correct -->
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+    <audio id="callStartSound" src="sounds/call_start.mp3" preload="auto"></audio>
+
+    <div class="app-container">
+        <header class="app-header">
+            <div class="logo-container">
+                <svg class="company-logo" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M6 17L10 17M6 12L12 12M6 7L14 7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    <path d="M15 6L19 10L15 14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <rect x="3" y="3" width="18" height="18" rx="3" stroke="currentColor" stroke-width="1.5" fill="transparent" opacity="0.6"/>
+                </svg>
+                <span class="app-title">Elevo Core</span>
+            </div>
+            <div class="header-controls">
+                 <a href="dashboard.html" class="nav-link">Dashboard</a>
+                <div class="user-info" id="userInfo" style="display: none;">
+                    <span id="userName" class="user-name-display"></span>
+                    <button id="logoutButton" class="logout-btn">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+                        <span>Logout</span>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <div class="status-bar">
+            <div id="systemStatus" class="status-indicator status-waiting">🔴 Waiting for Call</div>
+            <!-- Call Timer is MOVED to call-flow-view -->
+        </div>
+
+        <div id="progressTracker" class="progress-tracker-container" style="display: none;">
+             <div class="stepper-wrapper">
+                 <!-- Stepper will be dynamically generated here by JavaScript -->
+            </div>
+        </div>
+
+        <main class="app-main">
+            <div id="auth-loading" class="loading-container">
+                <div class="spinner"></div>
+                <p>Initializing Assistant...</p>
+            </div>
+
+            <div id="initial-view" class="card initial-card fade-in" style="display: none;">
+                <div class="card-icon">
+                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="48" height="48"><path d="M12 2C6.486 2 2 6.486 2 12C2 17.514 6.486 22 12 22C17.514 22 22 17.514 22 12C22 6.486 17.514 2 12 2ZM12 20C7.589 20 4 16.411 4 12C4 7.589 7.589 4 12 4C16.411 4 20 7.589 20 12C20 16.411 16.411 20 12 20Z"/><path d="M12 11C10.897 11 10 10.103 10 9C10 7.897 10.897 7 12 7C13.103 7 14 7.897 14 9C14 10.103 13.103 11 12 11ZM12 9C11.514 9 11.121 9.229 11.038 9.583L12.962 10.417C12.879 10.771 12.486 11 12 11C11.448 11 11 10.552 11 10C11 9.448 11.448 9 12 9Z"/><path d="M16.002 16.246C15.483 15.219 14.544 14.5 13.333 14.5H10.667C9.456 14.5 8.517 15.219 7.998 16.246C7.933 16.386 7.996 16.553 8.114 16.641C8.657 17.053 9.737 17.5 12 17.5C14.263 17.5 15.343 17.053 15.886 16.641C16.004 16.553 16.067 16.386 16.002 16.246Z"/></svg>
+                </div>
+                <h2 class="card-title">Core Flow Assistant</h2>
+                <p class="card-subtitle">Select a scenario and receive the call.</p>
+
+                <div class="scenario-selector-container">
+                    <label for="scenarioDropdown">Select Scenario:</label>
+                    <select id="scenarioDropdown" class="scenario-dropdown">
+                        <option value="">Loading scenarios...</option>
+                    </select>
+                </div>
+
+                <button id="receive-call-btn" class="action-button primary-button" disabled>
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M6.05828 11.0452L4.00001 9.00002C4.00001 9.00002 3.58101 8.99902 3.51201 9.00002C2.04801 9.02602 1.00001 10.318 1.00001 11.785V12.214C1.00001 13.682 2.04801 14.973 3.51201 15H4.00001L6.05828 12.9548C6.12828 12.8848 6.16728 12.7948 6.16728 12C6.16728 11.2052 6.12828 11.1152 6.05828 11.0452ZM20.488 15H21C22.464 14.974 23.512 13.682 23.512 12.215V11.785C23.512 10.318 22.464 9.02602 21 9.00002C20.998 8.99902 20 9.00002 20 9.00002L17.9417 11.0452C17.8717 11.1152 17.8327 11.2052 17.8327 12C17.8327 12.7948 17.8717 12.8848 17.9417 12.9548L20.488 15Z"/><path d="M19.6623 5.08431C19.8803 5.08431 20.0943 5.17031 20.2503 5.32631L21.6743 6.74931C21.9863 7.06231 21.9863 7.56731 21.6743 7.87931C19.4003 10.1523 19.4003 13.8473 21.6743 16.1203C21.9863 16.4323 21.9863 16.9373 21.6743 17.2503L20.2503 18.6733C20.0943 18.8293 19.8803 18.9153 19.6623 18.9153C19.4443 18.9153 19.2303 18.8293 19.0743 18.6733C16.2573 15.8563 16.2573 8.14331 19.0743 5.32631C19.2303 5.17031 19.4443 5.08431 19.6623 5.08431ZM4.92575 5.32631C5.52575 4.72631 6.45075 4.72631 7.05075 5.32631C9.86775 8.14331 9.86775 15.8563 7.05075 18.6733C6.89475 18.8293 6.68075 18.9153 6.46275 18.9153C6.24475 18.9153 6.03075 18.8293 5.87475 18.6733L4.45075 17.2503C4.13875 16.9373 4.13875 16.4323 4.45075 16.1203C6.72375 13.8473 6.72375 10.1523 4.45075 7.87931C4.13875 7.56731 4.13875 7.06231 4.45075 6.74931L5.87475 5.32631C5.71875 5.17031 4.76975 5.17031 4.92575 5.32631Z"/></svg>
+                    <span>Receive Call</span>
+                </button>
+            </div>
+
+            <div id="call-flow-view" class="card call-flow-card fade-in" style="display: none;">
+                <h3 id="scenario-title" class="card-title scenario-title-dynamic">Call Scenario</h3>
+                <!-- Moved Call Timer HERE -->
+                <div id="callTimer" class="call-timer" style="display: none;">00:00</div>
+
+                <div id="steps-container" class="steps-area">
+                    <p class="placeholder-text">Loading call steps...</p>
+                </div>
+                <div class="navigation-buttons">
+                    <button id="prev-step-btn" class="nav-button secondary-button" style="display: none;">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                        <span>Previous</span>
+                    </button>
+                    <button id="next-step-btn" class="nav-button primary-button">
+                        <span>Next Step</span>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                    </button>
+                </div>
+                 <button id="end-call-btn" class="nav-button danger-button" style="display: none;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                    <span>End Call</span>
+                </button>
+            </div>
+
+            <div id="postCallSummary" class="card post-call-summary-card fade-in" style="display: none;">
+                <h3 class="card-title">Call Summary</h3>
+                <div id="callSummaryContent">
+                    <!-- Content will be injected by JS -->
+                </div>
+                <button id="returnToInitialViewBtn" class="action-button primary-button" style="margin-top: 1.5rem;">New Call</button>
+            </div>
+
+            <div id="assistantBox" class="assistant-box slide-in-right" style="display: none;">
+                <span class="assistant-icon">💡</span>
+                <p id="assistantMessageElement">Welcome to Elevo Core!</p>
+            </div>
+
+        </main>
+
+        <footer class="app-footer">
+            <p>© 2025 Mohamed Elmenisy - Elevo Core. All rights reserved.</p>
+        </footer>
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', async () => {
+        console.log("CoreFlow.js DOMContentLoaded - v2.1 (Timer Position Update)");
+
+        const supabaseUrl = 'https://lgcutmuspcaralydycmg.supabase.co';
+        const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxnY3V0bXVzcGNhcmFseWR5Y21nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU0NDY3MDEsImV4cCI6MjA2MTAyMjcwMX0.3u5Y7pkH2NNnnoGLMWVfAa5b8fq88o1itRYnG1K38tE';
+        let supabase;
+        try {
+            supabase = window.supabase.createClient(supabaseUrl, supabaseAnonKey);
+            console.log("Supabase client initialized in coreFlow.js v2.1");
+        } catch (error) {
+            console.error("Supabase client initialization failed:", error);
+            document.getElementById('auth-loading').innerHTML = '<p style="color:red;">Error: Could not connect to services.</p>';
+            return;
+        }
+
+        const authLoadingDiv = document.getElementById('auth-loading');
+        const initialViewDiv = document.getElementById('initial-view');
+        const callFlowViewDiv = document.getElementById('call-flow-view');
+        const scenarioDropdown = document.getElementById('scenarioDropdown');
+        const receiveCallBtn = document.getElementById('receive-call-btn');
+        const stepsContainer = document.getElementById('steps-container');
+        const nextStepBtn = document.getElementById('next-step-btn');
+        const prevStepBtn = document.getElementById('prev-step-btn');
+        const endCallBtn = document.getElementById('end-call-btn');
+        const scenarioTitleElement = document.getElementById('scenario-title');
+        const userInfoDiv = document.getElementById('userInfo');
+        const userNameSpan = document.getElementById('userName');
+        const logoutButton = document.getElementById('logoutButton');
+        const systemStatusDiv = document.getElementById('systemStatus');
+        const callTimerDiv = document.getElementById('callTimer'); // This is now inside call-flow-view
+        const progressTrackerContainer = document.getElementById('progressTracker');
+        const assistantBox = document.getElementById('assistantBox');
+        const assistantMessageElement = document.getElementById('assistantMessageElement');
+        const postCallSummaryDiv = document.getElementById('postCallSummary');
+        const callSummaryContentDiv = document.getElementById('callSummaryContent');
+        const returnToInitialViewBtn = document.getElementById('returnToInitialViewBtn');
+        const callStartSound = document.getElementById('callStartSound');
+
+        let currentScenarioId = null;
+        let currentScenarioName = null;
+        let currentSteps = [];
+        let currentStepIndex = 0;
+        let stepTimerInterval = null;
+        let stepStartTime = 0;
+        let stepDurations = [];
+        let currentCallSessionId = null;
+        let assistantTimeout = null;
+        let typingInterval = null;
+        let availableScenarios = [];
+
+        function animateElement(element, animationClass = 'fade-in') {
+             if (element) {
+                element.classList.remove(animationClass);
+                void element.offsetWidth;
+                element.classList.add(animationClass);
+            }
+        }
+
+        try {
+            const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+            if (sessionError) throw sessionError;
+            if (!session) {
+                const currentPath = window.location.pathname.replace('/elevo-core-flow', '') + window.location.search + window.location.hash;
+                window.location.href = `../legacy/login.html?redirectTo=${encodeURIComponent(currentPath || '/core-flow/core-flow.html')}`;
+                return;
+            }
+
+            console.log('User is authenticated.');
+            if (session.user.email && userNameSpan && userInfoDiv) {
+                const emailPrefix = session.user.email.split('@')[0];
+                userNameSpan.textContent = emailPrefix.charAt(0).toUpperCase() + emailPrefix.slice(1);
+                userInfoDiv.style.display = 'flex';
+            }
+            if(logoutButton) {
+                logoutButton.addEventListener('click', async () => {
+                    const { error } = await supabase.auth.signOut();
+                    if (error) console.error("Logout error:", error);
+                    else window.location.href = '../legacy/login.html';
+                });
+            }
+
+            await loadActiveScenarios();
+
+            if (authLoadingDiv) authLoadingDiv.style.display = 'none';
+            if (initialViewDiv) {
+                initialViewDiv.style.display = 'block';
+                animateElement(initialViewDiv);
+            }
+            updateSystemStatus("🔴 Waiting for Call");
+            showAssistantMessage("Welcome! Select a scenario to begin.", true, 6000, () => {
+                if (initialViewDiv && initialViewDiv.style.display === 'block') {
+                    showAssistantMessage("💡 Tip: Choose a scenario and click 'Receive Call'.", true, 0);
+                }
+            });
+
+        } catch (error) {
+            console.error("Auth or Initial Load error:", error);
+            if (authLoadingDiv) authLoadingDiv.innerHTML = `<p style="color:red;">Error: ${error.message}</p>`;
+            updateSystemStatus("🔴 Error", "status-error");
+        }
+
+        async function loadActiveScenarios() {
+            if (!scenarioDropdown || !receiveCallBtn) return;
+            scenarioDropdown.disabled = true;
+            receiveCallBtn.disabled = true;
+            scenarioDropdown.innerHTML = '<option value="">Loading scenarios...</option>';
+
+            try {
+                const { data: scenarios, error } = await supabase
+                    .from('call_scenarios')
+                    .select('id, name')
+                    .eq('is_active', true)
+                    .order('name', { ascending: true });
+
+                if (error) throw error;
+                availableScenarios = scenarios || [];
+
+                if (availableScenarios.length > 0) {
+                    scenarioDropdown.innerHTML = '<option value="">-- Select a Scenario --</option>';
+                    availableScenarios.forEach(scenario => {
+                        const option = document.createElement('option');
+                        option.value = scenario.id;
+                        option.textContent = scenario.name;
+                        scenarioDropdown.appendChild(option);
+                    });
+                    scenarioDropdown.disabled = false;
+                    scenarioDropdown.addEventListener('change', () => {
+                         receiveCallBtn.disabled = !scenarioDropdown.value;
+                    });
+                } else {
+                    scenarioDropdown.innerHTML = '<option value="">No active scenarios found</option>';
+                    showAssistantMessage("⚠️ No active call scenarios available.", true, 0);
+                }
+            } catch (err) {
+                console.error("Error loading scenarios:", err);
+                scenarioDropdown.innerHTML = '<option value="">Error loading scenarios</option>';
+                showAssistantMessage(`⚠️ Error loading scenarios: ${err.message}`, true, 8000);
+            }
+        }
+
+        function updateSystemStatus(statusText, statusClass = 'status-waiting') {
+            if (systemStatusDiv) {
+                systemStatusDiv.textContent = statusText;
+                systemStatusDiv.className = `status-indicator ${statusClass}`;
+            }
+        }
+
+        function startStepTimer() {
+            // Timer is now within call-flow-view, CSS handles its styling
+            if (callTimerDiv) {
+                callTimerDiv.style.display = 'block'; // Make it visible
+                callTimerDiv.textContent = '00:00';
+            }
+            stepStartTime = Date.now();
+            if (stepTimerInterval) clearInterval(stepTimerInterval);
+            stepTimerInterval = setInterval(() => {
+                const elapsedTime = Math.floor((Date.now() - stepStartTime) / 1000);
+                const minutes = String(Math.floor(elapsedTime / 60)).padStart(2, '0');
+                const seconds = String(elapsedTime % 60).padStart(2, '0');
+                if (callTimerDiv) callTimerDiv.textContent = `${minutes}:${seconds}`;
+            }, 1000);
+        }
+
+        function stopAndRecordStepTimer() {
+            clearInterval(stepTimerInterval);
+            stepTimerInterval = null;
+            if (stepStartTime > 0 && currentStepIndex >= 0 && currentStepIndex < currentSteps.length) {
+                const duration = Math.floor((Date.now() - stepStartTime) / 1000);
+                if (!stepDurations) stepDurations = new Array(currentSteps.length).fill(0);
+                 if (currentStepIndex < stepDurations.length) {
+                    stepDurations[currentStepIndex] = (stepDurations[currentStepIndex] || 0) + duration;
+                 } else {
+                    console.warn(`Attempted to record duration for invalid step index ${currentStepIndex}`);
+                 }
+                stepStartTime = 0;
+            }
+        }
+
+        function resetCallSessionState() {
+            stopAndRecordStepTimer();
+            // Timer is inside call-flow-view, its display handled there or by stop/start functions
+            if (callTimerDiv) {
+                callTimerDiv.textContent = '00:00';
+                callTimerDiv.style.display = 'none'; // Hide it when session resets
+            }
+            stepDurations = [];
+            currentCallSessionId = null;
+            currentScenarioId = null;
+            currentScenarioName = null;
+            currentSteps = [];
+            currentStepIndex = 0;
+        }
+
+         function renderProgressTracker() {
+            if (!progressTrackerContainer || currentSteps.length === 0) {
+                if(progressTrackerContainer) progressTrackerContainer.style.display = 'none';
+                return;
+            }
+             const stepperWrapper = progressTrackerContainer.querySelector('.stepper-wrapper');
+             if (!stepperWrapper) return;
+             stepperWrapper.innerHTML = '';
+
+            const stepperUl = document.createElement('ul');
+            stepperUl.className = 'stepper';
+
+            currentSteps.forEach((step, index) => {
+                const stepLi = document.createElement('li');
+                stepLi.className = 'step';
+                const stepNumber = document.createElement('span');
+                stepNumber.className = 'step-number';
+                stepNumber.textContent = index + 1;
+                // const stepTitle = document.createElement('span'); // Titles are hidden by default
+                // stepTitle.className = 'step-title';
+                // stepTitle.textContent = `Action ${index + 1}`;
+                stepLi.appendChild(stepNumber);
+                // stepLi.appendChild(stepTitle);
+
+                if (index < currentStepIndex) {
+                    stepLi.classList.add('completed');
+                    stepNumber.innerHTML = '✓';
+                } else if (index === currentStepIndex) {
+                    stepLi.classList.add('active');
+                }
+                stepperUl.appendChild(stepLi);
+                if (index < currentSteps.length - 1) {
+                    const separator = document.createElement('li');
+                    separator.className = 'step-separator';
+                    stepperUl.appendChild(separator);
+                }
+            });
+            stepperWrapper.appendChild(stepperUl);
+            progressTrackerContainer.style.display = 'block';
+            animateElement(progressTrackerContainer);
+        }
+
+        function renderStep() {
+            if (!stepsContainer) return;
+            if (currentSteps.length === 0) {
+                stepsContainer.innerHTML = '<p class="placeholder-text">No steps defined for this scenario.</p>';
+                if (nextStepBtn) nextStepBtn.style.display = 'none';
+                if (prevStepBtn) prevStepBtn.style.display = 'none';
+                return;
+            }
+            if (currentStepIndex >= 0 && currentStepIndex < currentSteps.length) {
+                const stepContent = currentSteps[currentStepIndex];
+                 stepsContainer.classList.remove('fade-in');
+                 void stepsContainer.offsetWidth;
+                stepsContainer.innerHTML = `<p>${stepContent}</p>`;
+                 stepsContainer.classList.add('fade-in');
+                showAssistantMessage(`📌 Step ${currentStepIndex + 1}: ${stepContent.length > 45 ? stepContent.substring(0, 42) + "..." : stepContent}`, true, 0);
+                startStepTimer(); // This will also make the timer visible and start it
+            } else {
+                 stepsContainer.innerHTML = '<p class="placeholder-text" style="color: var(--danger-color);">Error: Invalid step.</p>';
+            }
+
+            renderProgressTracker();
+            if (prevStepBtn) prevStepBtn.style.display = currentStepIndex > 0 ? 'inline-flex' : 'none';
+            if (nextStepBtn) {
+                if (currentStepIndex < currentSteps.length - 1) {
+                    nextStepBtn.innerHTML = `<span>Next Step</span><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>`;
+                    nextStepBtn.style.display = 'inline-flex';
+                } else if (currentStepIndex === currentSteps.length - 1) {
+                    nextStepBtn.innerHTML = `<span>Finish Scenario</span>`;
+                    nextStepBtn.style.display = 'inline-flex';
+                } else {
+                    nextStepBtn.style.display = 'none';
+                }
+            }
+        }
+
+        if (receiveCallBtn) {
+            receiveCallBtn.addEventListener('click', async () => {
+                const selectedScenarioId = scenarioDropdown.value;
+                if (!selectedScenarioId) {
+                    showAssistantMessage("⚠️ Please select a scenario first.", true, 5000);
+                    return;
+                }
+                 if(callStartSound) {
+                    callStartSound.play().catch(e => console.warn("Audio play failed:", e));
+                 }
+
+                resetCallSessionState(); // This will hide the timer
+                currentScenarioId = parseInt(selectedScenarioId, 10);
+
+                if (initialViewDiv) initialViewDiv.style.display = 'none';
+                if (callFlowViewDiv) {
+                    callFlowViewDiv.style.display = 'block';
+                    animateElement(callFlowViewDiv);
+                }
+                if (endCallBtn) endCallBtn.style.display = 'inline-flex';
+                updateSystemStatus("🟡 Loading Scenario...", "status-loading");
+                if (stepsContainer) stepsContainer.innerHTML = '<p class="placeholder-text">Loading scenario...</p>';
+                if (scenarioTitleElement) scenarioTitleElement.textContent = 'Loading Scenario...';
+                if (progressTrackerContainer) progressTrackerContainer.style.display = 'none';
+                if (nextStepBtn) nextStepBtn.style.display = 'none';
+                if (prevStepBtn) prevStepBtn.style.display = 'none';
+                // Timer will be shown by renderStep -> startStepTimer
+
+                try {
+                    const { data: { user } } = await supabase.auth.getUser();
+                    if (!user) throw new Error("User not identified. Cannot start call.");
+
+                    const { data: scenario, error: scenarioError } = await supabase
+                        .from('call_scenarios')
+                        .select('name, steps')
+                        .eq('id', currentScenarioId)
+                        .eq('is_active', true)
+                        .single();
+
+                    if (scenarioError) throw scenarioError;
+                    if (!scenario || !scenario.steps || !Array.isArray(scenario.steps) || scenario.steps.length === 0) {
+                         throw new Error("Selected scenario is invalid or has no steps.");
+                    }
+
+                    currentScenarioName = scenario.name;
+                    currentSteps = scenario.steps;
+                    currentStepIndex = 0;
+                    stepDurations = new Array(currentSteps.length).fill(0);
+
+                    const { data: newSession, error: sessionInsertError } = await supabase
+                        .from('call_sessions')
+                        .insert({
+                            user_id: user.id,
+                            scenario_id: currentScenarioId,
+                            start_time: new Date().toISOString(),
+                            completed_all_steps: false
+                        })
+                        .select('id')
+                        .single();
+
+                    if (sessionInsertError || !newSession) {
+                        throw sessionInsertError || new Error("Failed to create session record.");
+                    }
+                    currentCallSessionId = newSession.id;
+
+                    if (scenarioTitleElement) scenarioTitleElement.textContent = currentScenarioName;
+                    updateSystemStatus("🟢 In Call", "status-in-call");
+                    renderProgressTracker();
+                    renderStep(); // This will call startStepTimer and show the timer
+                    showAssistantMessage(`🚀 Scenario "${currentScenarioName}" started!`, true, 0);
+
+                } catch (err) {
+                    console.error("Error during call setup:", err);
+                    // if (callTimerDiv) callTimerDiv.style.display = 'none'; // Ensure timer hidden on error
+                    let userMessage = `⚠️ Error starting call: ${err.message}`;
+                    if (err.code === 'PGRST116') userMessage = `⚠️ Error: Could not find details for selected scenario (ID: ${currentScenarioId}). It might have been deactivated.`;
+
+                    if (stepsContainer) stepsContainer.innerHTML = `<p class="placeholder-text" style="color:red;">${userMessage.substring(3)}</p>`;
+                    if (scenarioTitleElement) scenarioTitleElement.textContent = 'Error Loading';
+                    updateSystemStatus("🔴 Error", "status-error");
+                    showAssistantMessage(userMessage, true, 7000);
+
+                    if (callFlowViewDiv) callFlowViewDiv.style.display = 'none';
+                    if (initialViewDiv) {
+                         initialViewDiv.style.display = 'block';
+                         animateElement(initialViewDiv);
+                    }
+                    if (endCallBtn) endCallBtn.style.display = 'none';
+                    resetCallSessionState(); // This will also hide timer
+                    await loadActiveScenarios();
+                }
+            });
+        }
+
+        if (nextStepBtn) {
+            nextStepBtn.addEventListener('click', async () => {
+                stopAndRecordStepTimer();
+                if (currentStepIndex < currentSteps.length - 1) {
+                    currentStepIndex++;
+                    renderStep();
+                } else if (currentStepIndex === currentSteps.length - 1) {
+                    updateSystemStatus("✅ Call Completed", "status-completed");
+                    if (callTimerDiv) callTimerDiv.style.display = 'none'; // Hide timer on completion
+
+                    const totalDuration = stepDurations.reduce((acc, duration) => acc + (duration || 0), 0);
+                    const completedAllSteps = true;
+                    let quality = 'N/A', reason = 'Could not determine quality.';
+
+                    try {
+                         const { data, error: functionError } = await supabase.functions.invoke('determine-call-quality', {
+                            body: { stepDurations, totalDuration, allStepsCompleted: completedAllSteps, stepsArrayLength: currentSteps.length }
+                        });
+                        if (functionError) throw functionError;
+                        if (data && data.quality) { quality = data.quality; reason = data.reason || 'Reason not provided.'; }
+                    } catch (err) { console.error("Error calling determine-call-quality function:", err); reason = `Quality check failed: ${err.message}`; }
+
+                    if (currentCallSessionId) {
+                        const { error: updateError } = await supabase.from('call_sessions').update({
+                            end_time: new Date().toISOString(), total_duration_seconds: totalDuration,
+                            completed_all_steps: completedAllSteps, call_quality: quality, quality_reason: reason
+                        }).eq('id', currentCallSessionId);
+                        if (updateError) console.error("Failed to update call session on completion:", updateError);
+                    }
+                    displayPostCallSummary(quality, reason, totalDuration);
+                    if (nextStepBtn) nextStepBtn.style.display = 'none';
+                    if (prevStepBtn) prevStepBtn.style.display = 'none';
+                    if (endCallBtn) endCallBtn.style.display = 'none';
+                }
+            });
+        }
+
+        if (prevStepBtn) {
+            prevStepBtn.addEventListener('click', () => {
+                stopAndRecordStepTimer();
+                if (currentStepIndex > 0) {
+                    currentStepIndex--;
+                    renderStep();
+                }
+            });
+        }
+
+        if (endCallBtn) {
+            endCallBtn.addEventListener('click', async () => {
+                stopAndRecordStepTimer();
+                const totalDuration = stepDurations.reduce((acc, duration) => acc + (duration || 0), 0);
+                updateSystemStatus("⚪ Call Ended", "status-ended");
+                if (callTimerDiv) callTimerDiv.style.display = 'none'; // Hide timer on end
+
+                const completedAllSteps = false;
+                let quality = 'N/A', reason = 'Call ended prematurely.';
+
+                 try {
+                     const { data, error: functionError } = await supabase.functions.invoke('determine-call-quality', {
+                        body: { stepDurations, totalDuration, allStepsCompleted: completedAllSteps, stepsArrayLength: currentSteps.length }
+                    });
+                    if (functionError) throw functionError;
+                    if (data && data.quality) { quality = data.quality; reason = data.reason || 'Reason not provided.';}
+                 } catch (err) { console.error("Error calling determine-call-quality function:", err); reason = `Quality check failed: ${err.message}. Call ended prematurely.`; }
+
+                if (currentCallSessionId) {
+                    const { error: updateError } = await supabase.from('call_sessions').update({
+                        end_time: new Date().toISOString(), total_duration_seconds: totalDuration,
+                        completed_all_steps: completedAllSteps, call_quality: quality, quality_reason: reason
+                    }).eq('id', currentCallSessionId);
+                    if (updateError) console.error("Failed to update call session on end call:", updateError);
+                    displayPostCallSummary(quality, reason, totalDuration);
+                } else {
+                    resetToInitialView();
+                }
+                if (nextStepBtn) nextStepBtn.style.display = 'none';
+                if (prevStepBtn) prevStepBtn.style.display = 'none';
+                if (endCallBtn) endCallBtn.style.display = 'none';
+            });
+        }
+
+        function displayPostCallSummary(quality, reason, totalDuration) {
+            if (callFlowViewDiv) callFlowViewDiv.style.display = 'none';
+            if (progressTrackerContainer) progressTrackerContainer.style.display = 'none';
+            // callTimerDiv is already hidden by finish/end logic
+            if (assistantBox) assistantBox.classList.remove('show');
+
+            if (callSummaryContentDiv && postCallSummaryDiv) {
+                let summaryHTML = `
+                    <p><strong>Call Quality:</strong> <span class="quality-text quality-${quality?.toLowerCase() || 'na'}">${quality || 'N/A'}</span></p>
+                    <p><strong>Reason:</strong> ${reason || "N/A"}</p>
+                    <p><strong>Total Duration:</strong> ${Math.floor(totalDuration / 60)}m ${totalDuration % 60}s</p>
+                    <hr style="margin: 1rem 0; border-color: var(--border-color);">
+                    <p><strong>Step Durations:</strong></p>
+                    <ul style="list-style: none; padding-left: 0; max-height: 150px; overflow-y: auto;">`;
+                 if (currentSteps && currentSteps.length > 0 && stepDurations && stepDurations.length >= currentSteps.length) {
+                     currentSteps.forEach((stepText, index) => {
+                        const duration = stepDurations[index] || 0;
+                        const stepShortText = stepText.length > 25 ? stepText.substring(0, 22) + "..." : stepText;
+                        summaryHTML += `<li style="margin-bottom: 0.3rem;">Step ${index + 1} ("${stepShortText}"): ${Math.floor(duration / 60)}m ${duration % 60}s</li>`;
+                    });
+                 } else {
+                     summaryHTML += `<li>No step duration data available.</li>`;
+                 }
+                summaryHTML += `</ul>`;
+                callSummaryContentDiv.innerHTML = summaryHTML;
+                postCallSummaryDiv.style.display = 'block';
+                animateElement(postCallSummaryDiv);
+            }
+            updateSystemStatus("📊 Review Call Summary", "status-summary");
+        }
+
+         async function resetToInitialView() {
+             resetCallSessionState(); // This hides timer
+             if (postCallSummaryDiv) postCallSummaryDiv.style.display = 'none';
+             if (callFlowViewDiv) callFlowViewDiv.style.display = 'none';
+             if (initialViewDiv) {
+                 initialViewDiv.style.display = 'block';
+                 animateElement(initialViewDiv);
+             }
+             updateSystemStatus("🔴 Waiting for Call", "status-waiting");
+             if (nextStepBtn) {
+                 nextStepBtn.innerHTML = `<span>Next Step</span><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>`;
+                 nextStepBtn.style.display = 'none';
+             }
+             if (prevStepBtn) prevStepBtn.style.display = 'none';
+             if (endCallBtn) endCallBtn.style.display = 'none';
+             if (progressTrackerContainer) progressTrackerContainer.style.display = 'none';
+             // callTimerDiv handled by resetCallSessionState
+             if (scenarioTitleElement) scenarioTitleElement.textContent = "Call Scenario";
+             if (stepsContainer) stepsContainer.innerHTML = '<p class="placeholder-text">Select a scenario to begin.</p>';
+              await loadActiveScenarios();
+              if (scenarioDropdown) scenarioDropdown.value = "";
+              if (receiveCallBtn) receiveCallBtn.disabled = true;
+             showAssistantMessage("💡 Ready for the next call! Select a scenario.", true, 7000);
+         }
+
+        if (returnToInitialViewBtn) {
+             returnToInitialViewBtn.addEventListener('click', resetToInitialView);
+        }
+
+        function typeWriterEffect(element, message, speed = 30, callback) {
+            if (typingInterval) clearInterval(typingInterval);
+            element.textContent = '';
+            let i = 0;
+            typingInterval = setInterval(() => {
+                if (i < message.length) { element.textContent += message.charAt(i); i++; }
+                else { clearInterval(typingInterval); typingInterval = null; if (callback) callback(); }
+            }, speed);
+        }
+
+        function showAssistantMessage(message, showImmediately = false, duration = 5000, onHideCallback) {
+            if (assistantMessageElement && assistantBox) {
+                clearTimeout(assistantTimeout);
+                if (typingInterval) clearInterval(typingInterval);
+                 const displayMessage = () => {
+                     assistantBox.style.display = 'flex';
+                     assistantBox.classList.remove('slide-in-right', 'show');
+                     void assistantBox.offsetWidth;
+                     assistantBox.classList.add('slide-in-right', 'show');
+                     typeWriterEffect(assistantMessageElement, message, 30, () => {
+                         if (duration && duration > 0) {
+                             assistantTimeout = setTimeout(() => {
+                                 assistantBox.classList.remove('show');
+                                 setTimeout(() => {
+                                     if (!assistantBox.classList.contains('show')) {
+                                         assistantBox.style.display = 'none';
+                                     }
+                                     if (typeof onHideCallback === 'function') onHideCallback();
+                                 }, 400);
+                             }, duration);
+                         }
+                     });
+                 };
+                 if (showImmediately || !assistantBox.classList.contains('show')) {
+                    displayMessage();
+                 } else {
+                      typeWriterEffect(assistantMessageElement, message, 30, () => {
+                         if (duration && duration > 0) {
+                           assistantTimeout = setTimeout(() => {
+                                assistantBox.classList.remove('show');
+                                 setTimeout(() => {
+                                     if (!assistantBox.classList.contains('show')) {
+                                         assistantBox.style.display = 'none';
+                                     }
+                                    if (typeof onHideCallback === 'function') onHideCallback();
+                                }, 400);
+                            }, duration);
+                        }
+                    });
+                 }
+            }
+        }
+        console.log("CoreFlow.js v2.1 script fully loaded and initialized.");
+    });
+    </script>
+</body>
+</html>
