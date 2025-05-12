@@ -42,7 +42,7 @@
 
         <div class="status-bar">
             <div id="systemStatus" class="status-indicator status-waiting">🔴 Waiting for Call</div>
-            <div id="callTimer" class="call-timer" style="display: none;">00:00</div>
+            <!-- Timer moved out of status bar -->
         </div>
 
         <!-- Enhanced Progress Tracker -->
@@ -51,6 +51,11 @@
                  <!-- Stepper will be dynamically generated here by JavaScript -->
             </div>
         </div>
+
+        <!-- Centered Timer Container (NEW) -->
+         <div id="timer-container">
+             <div id="callTimer" style="display: none;">00:00</div>
+         </div>
 
         <main class="app-main">
             <div id="auth-loading" class="loading-container">
@@ -72,6 +77,12 @@
                     <select id="scenarioDropdown" class="scenario-dropdown">
                         <option value="">Loading scenarios...</option>
                     </select>
+                </div>
+
+                 <!-- Assistant Box (Initial Position - Moved here) -->
+                <div id="assistantBox" class="assistant-box" style="display: none;"> <!-- Removed slide-in-right initially -->
+                    <span class="assistant-icon">💡</span>
+                    <p id="assistantMessageElement">Welcome to Elevo Core!</p>
                 </div>
 
                 <button id="receive-call-btn" class="action-button primary-button" disabled> <!-- Disabled initially -->
@@ -111,11 +122,9 @@
                 <button id="returnToInitialViewBtn" class="action-button primary-button" style="margin-top: 1.5rem;">New Call</button>
             </div>
 
-             <!-- Assistant Box (Dynamic Card Area) -->
-            <div id="assistantBox" class="assistant-box slide-in-right" style="display: none;">
-                <span class="assistant-icon">💡</span>
-                <p id="assistantMessageElement">Welcome to Elevo Core!</p>
-            </div>
+             <!-- Assistant Box (Fixed Position for Call - HTML remains outside card) -->
+             <!-- JS will toggle classes for positioning -->
+             <!-- <div id="assistantBox" ...> moved inside initial-view card for initial state -->
 
         </main>
 
@@ -126,7 +135,7 @@
 
     <script>
     document.addEventListener('DOMContentLoaded', async () => {
-        console.log("CoreFlow.js DOMContentLoaded - v2.2 (Edge Func Body Fix)"); // Version updated
+        console.log("CoreFlow.js DOMContentLoaded - v2.3 (State Persistence, Timer/Assistant Pos)"); // Version updated
 
         // --- Supabase Client Initialization ---
         const supabaseUrl = 'https://lgcutmuspcaralydycmg.supabase.co';
@@ -134,7 +143,7 @@
         let supabase;
         try {
             supabase = window.supabase.createClient(supabaseUrl, supabaseAnonKey);
-            console.log("Supabase client initialized in coreFlow.js v2.2");
+            console.log("Supabase client initialized in coreFlow.js v2.3");
         } catch (error) {
             console.error("Supabase client initialization failed:", error);
             document.getElementById('auth-loading').innerHTML = '<p style="color:red;">Error: Could not connect to services.</p>';
@@ -156,7 +165,7 @@
         const userNameSpan = document.getElementById('userName');
         const logoutButton = document.getElementById('logoutButton');
         const systemStatusDiv = document.getElementById('systemStatus');
-        const callTimerDiv = document.getElementById('callTimer');
+        const callTimerDiv = document.getElementById('callTimer'); // Reference to the moved timer
         const progressTrackerContainer = document.getElementById('progressTracker');
         const assistantBox = document.getElementById('assistantBox');
         const assistantMessageElement = document.getElementById('assistantMessageElement');
@@ -172,11 +181,13 @@
         let currentStepIndex = 0;
         let stepTimerInterval = null;
         let stepStartTime = 0;
-        let stepDurations = [];
-        let currentCallSessionId = null; // <-- This should hold the ID after insertion
+        let totalElapsedSecondsOnLoad = 0; // For restoring timer
+        let stepDurations = []; // Stores accumulated seconds per step index
+        let currentCallSessionId = null;
         let assistantTimeout = null;
         let typingInterval = null;
         let availableScenarios = [];
+        const SESSION_STATE_KEY = 'elevoCoreActiveCallState'; // Key for SessionStorage
 
         // --- Animation Helper ---
         function animateElement(element, animationClass = 'fade-in') {
@@ -187,48 +198,137 @@
             }
         }
 
-         // --- 1. CHECK AUTHENTICATION & USER INFO ---
-        try {
-            const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-            if (sessionError) throw sessionError;
-            if (!session) {
-                const currentPath = window.location.pathname.replace('/elevo-core-flow', '') + window.location.search + window.location.hash;
-                window.location.href = `../legacy/login.html?redirectTo=${encodeURIComponent(currentPath || '/core-flow/core-flow.html')}`;
-                return;
-            }
+         // --- Session State Persistence ---
+         function saveCallState() {
+            if (!currentCallSessionId) return; // Don't save if no active call
 
-            console.log('User is authenticated.');
-            if (session.user.email && userNameSpan && userInfoDiv) {
-                const emailPrefix = session.user.email.split('@')[0];
-                userNameSpan.textContent = emailPrefix.charAt(0).toUpperCase() + emailPrefix.slice(1);
-                userInfoDiv.style.display = 'flex';
+            const state = {
+                sessionId: currentCallSessionId,
+                scenarioId: currentScenarioId,
+                scenarioName: currentScenarioName,
+                steps: currentSteps,
+                stepIndex: currentStepIndex,
+                durations: stepDurations,
+                startTime: stepStartTime, // Save the *start* time of the current step
+                timestamp: Date.now() // To potentially check freshness later if needed
+            };
+            try {
+                sessionStorage.setItem(SESSION_STATE_KEY, JSON.stringify(state));
+                console.log("Call state saved:", state);
+            } catch (e) {
+                console.error("Error saving call state to SessionStorage:", e);
             }
-            if(logoutButton) {
-                logoutButton.addEventListener('click', async () => {
-                    const { error } = await supabase.auth.signOut();
-                    if (error) console.error("Logout error:", error);
-                    else window.location.href = '../legacy/login.html';
-                });
-            }
+        }
 
-            await loadActiveScenarios();
+        function loadCallState() {
+            try {
+                const savedState = sessionStorage.getItem(SESSION_STATE_KEY);
+                if (savedState) {
+                    const state = JSON.parse(savedState);
+                    console.log("Found saved call state:", state);
+                    // Optional: Add check for state freshness using state.timestamp if needed
 
-            if (authLoadingDiv) authLoadingDiv.style.display = 'none';
-            if (initialViewDiv) {
-                initialViewDiv.style.display = 'block';
-                animateElement(initialViewDiv);
-            }
-            updateSystemStatus("🔴 Waiting for Call");
-            showAssistantMessage("Welcome! Select a scenario to begin.", true, 6000, () => {
-                if (initialViewDiv && initialViewDiv.style.display === 'block') {
-                    showAssistantMessage("💡 Tip: Choose a scenario and click 'Receive Call'.", true, 0);
+                    // Restore state variables
+                    currentCallSessionId = state.sessionId;
+                    currentScenarioId = state.scenarioId;
+                    currentScenarioName = state.scenarioName;
+                    currentSteps = state.steps || [];
+                    currentStepIndex = state.stepIndex !== undefined ? state.stepIndex : 0;
+                    stepDurations = state.durations || new Array(currentSteps.length).fill(0);
+                    stepStartTime = state.startTime || 0; // Restore start time
+
+                    // Calculate how much time already passed in the current step when page loaded
+                    if (stepStartTime > 0) {
+                         totalElapsedSecondsOnLoad = Math.floor((Date.now() - stepStartTime) / 1000);
+                         console.log(`Restored step started at ${new Date(stepStartTime)}, ${totalElapsedSecondsOnLoad}s already elapsed.`);
+                    } else {
+                         totalElapsedSecondsOnLoad = 0;
+                    }
+
+                    return true; // Indicate state was loaded
                 }
-            });
+            } catch (e) {
+                console.error("Error loading call state from SessionStorage:", e);
+                clearCallState(); // Clear potentially corrupted state
+            }
+            return false; // Indicate no state loaded
+        }
+
+        function clearCallState() {
+            sessionStorage.removeItem(SESSION_STATE_KEY);
+            console.log("Call state cleared from SessionStorage.");
+        }
+
+         // --- 1. CHECK AUTHENTICATION & USER INFO (Handles state restore) ---
+        try {
+             const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+             if (sessionError) throw sessionError;
+             if (!session) {
+                 const currentPath = window.location.pathname.replace('/elevo-core-flow', '') + window.location.search + window.location.hash;
+                 window.location.href = `../legacy/login.html?redirectTo=${encodeURIComponent(currentPath || '/core-flow/core-flow.html')}`;
+                 return;
+             }
+
+             console.log('User is authenticated.');
+             if (session.user.email && userNameSpan && userInfoDiv) {
+                 const emailPrefix = session.user.email.split('@')[0];
+                 userNameSpan.textContent = emailPrefix.charAt(0).toUpperCase() + emailPrefix.slice(1);
+                 userInfoDiv.style.display = 'flex';
+             }
+             if(logoutButton) {
+                 logoutButton.addEventListener('click', async () => {
+                     clearCallState(); // Clear state on logout
+                     const { error } = await supabase.auth.signOut();
+                     if (error) console.error("Logout error:", error);
+                     else window.location.href = '../legacy/login.html';
+                 });
+             }
+
+             // --- Attempt to Load Saved Call State ---
+             const stateLoaded = loadCallState();
+
+             if (authLoadingDiv) authLoadingDiv.style.display = 'none';
+
+             if (stateLoaded && currentCallSessionId && currentSteps.length > 0) {
+                 console.log("Restoring active call session...");
+                 // Show call flow view directly
+                 if (initialViewDiv) initialViewDiv.style.display = 'none';
+                 if (callFlowViewDiv) {
+                     callFlowViewDiv.style.display = 'block';
+                     // No animation needed on restore? Or maybe a subtle one? Let's skip for now.
+                     // animateElement(callFlowViewDiv);
+                 }
+                 if (scenarioTitleElement) scenarioTitleElement.textContent = currentScenarioName || 'Restored Scenario';
+                 updateSystemStatus("🟢 In Call (Restored)", "status-in-call");
+                 if (endCallBtn) endCallBtn.style.display = 'inline-flex';
+
+                 renderProgressTracker(); // Render tracker based on restored index
+                 renderStep(); // Render current step (this will also restart the timer correctly)
+
+                 // No need to load scenarios again if restoring
+             } else {
+                 console.log("No active call state found or state invalid. Loading initial view.");
+                 // Proceed with normal initial view loading
+                 clearCallState(); // Ensure any invalid state is cleared
+                 await loadActiveScenarios();
+
+                 if (initialViewDiv) {
+                     initialViewDiv.style.display = 'block';
+                     animateElement(initialViewDiv);
+                 }
+                 updateSystemStatus("🔴 Waiting for Call");
+                  showAssistantMessage("Welcome! Select a scenario to begin.", true, 'initial', 6000, () => {
+                     if (initialViewDiv && initialViewDiv.style.display === 'block') {
+                          showAssistantMessage("💡 Tip: Choose a scenario and click 'Receive Call'.", true, 'initial', 0);
+                     }
+                 });
+             }
 
         } catch (error) {
-            console.error("Auth or Initial Load error:", error);
+            console.error("Auth or Initial Load/Restore error:", error);
             if (authLoadingDiv) authLoadingDiv.innerHTML = `<p style="color:red;">Error: ${error.message}</p>`;
             updateSystemStatus("🔴 Error", "status-error");
+            clearCallState(); // Clear state on error
         }
 
         // --- 2. LOAD ACTIVE SCENARIOS ---
@@ -263,12 +363,12 @@
                     });
                 } else {
                     scenarioDropdown.innerHTML = '<option value="">No active scenarios found</option>';
-                    showAssistantMessage("⚠️ No active call scenarios available.", true, 0);
+                    showAssistantMessage("⚠️ No active call scenarios available.", true, 'initial', 0);
                 }
             } catch (err) {
                 console.error("Error loading scenarios:", err);
                 scenarioDropdown.innerHTML = '<option value="">Error loading scenarios</option>';
-                showAssistantMessage(`⚠️ Error loading scenarios: ${err.message}`, true, 8000);
+                showAssistantMessage(`⚠️ Error loading scenarios: ${err.message}`, true, 'initial', 8000);
             }
         }
 
@@ -281,18 +381,33 @@
         }
 
         function startStepTimer() {
-            if (callTimerDiv) {
-                callTimerDiv.style.display = 'block';
-                callTimerDiv.textContent = '00:00';
-            }
-            stepStartTime = Date.now();
+            if (callTimerDiv) callTimerDiv.style.display = 'inline-block'; // Changed from block
             if (stepTimerInterval) clearInterval(stepTimerInterval);
-            stepTimerInterval = setInterval(() => {
-                const elapsedTime = Math.floor((Date.now() - stepStartTime) / 1000);
-                const minutes = String(Math.floor(elapsedTime / 60)).padStart(2, '0');
-                const seconds = String(elapsedTime % 60).padStart(2, '0');
+
+            let accumulatedSeconds = 0;
+            if (stepStartTime > 0) { // Check if restoring or returning to step
+                 accumulatedSeconds = totalElapsedSecondsOnLoad > 0 ? totalElapsedSecondsOnLoad : Math.floor((Date.now() - stepStartTime) / 1000);
+                 console.log(`Restarting timer. Start time: ${stepStartTime}, Accumulated: ${accumulatedSeconds}s`);
+                 totalElapsedSecondsOnLoad = 0; // Reset accumulator for load
+             } else { // Starting step fresh
+                 stepStartTime = Date.now();
+                 accumulatedSeconds = 0;
+                 console.log(`Starting timer fresh. Start time: ${stepStartTime}`);
+            }
+            // Save state immediately when timer starts/restarts
+            saveCallState();
+
+            const updateDisplay = () => {
+                const currentElapsedTime = Math.floor((Date.now() - stepStartTime) / 1000);
+                const totalSecondsForStep = currentElapsedTime; // Keep track of current step time
+                const minutes = String(Math.floor(totalSecondsForStep / 60)).padStart(2, '0');
+                const seconds = String(totalSecondsForStep % 60).padStart(2, '0');
                 if (callTimerDiv) callTimerDiv.textContent = `${minutes}:${seconds}`;
-            }, 1000);
+            };
+
+            updateDisplay(); // Initial display
+
+            stepTimerInterval = setInterval(updateDisplay, 1000);
         }
 
         function stopAndRecordStepTimer() {
@@ -300,30 +415,40 @@
             stepTimerInterval = null;
             if (stepStartTime > 0 && currentStepIndex >= 0 && currentStepIndex < currentSteps.length) {
                 const duration = Math.floor((Date.now() - stepStartTime) / 1000);
-                if (!stepDurations) stepDurations = new Array(currentSteps.length).fill(0);
+                 if (!stepDurations) stepDurations = new Array(currentSteps.length).fill(0); // Initialize if needed
+
                  if (currentStepIndex < stepDurations.length) {
+                     // Only add the *new* duration since the last start/resume
                     stepDurations[currentStepIndex] = (stepDurations[currentStepIndex] || 0) + duration;
                     console.log(`Step ${currentStepIndex + 1} duration recorded: ${duration}s. Accumulated: ${stepDurations[currentStepIndex]}s`);
                  } else {
                     console.warn(`Attempted to record duration for invalid step index ${currentStepIndex}`);
                  }
-                stepStartTime = 0;
+                 stepStartTime = 0; // Reset start time for the *next* step
+                 saveCallState(); // Save state after recording duration
+            } else {
+                 stepStartTime = 0; // Ensure start time is reset even if no duration recorded
             }
         }
 
+
         function resetCallSessionState() {
-            stopAndRecordStepTimer();
+            stopAndRecordStepTimer(); // Stop timer first
+            clearCallState(); // Clear from SessionStorage
+
             if (callTimerDiv) {
                 callTimerDiv.textContent = '00:00';
                 callTimerDiv.style.display = 'none';
             }
             stepDurations = [];
-            currentCallSessionId = null; // Reset Session ID
+            currentCallSessionId = null;
             currentScenarioId = null;
             currentScenarioName = null;
             currentSteps = [];
             currentStepIndex = 0;
-            console.log("Call session state reset.");
+            stepStartTime = 0; // Reset start time
+            totalElapsedSecondsOnLoad = 0;
+            console.log("Call session state reset completely.");
         }
 
         // --- 3. RENDER STEP & PROGRESS TRACKER ---
@@ -355,7 +480,7 @@
                 stepTitle.textContent = `Action ${index + 1}`;
 
                 stepLi.appendChild(stepNumber);
-                // stepLi.appendChild(stepTitle);
+                // stepLi.appendChild(stepTitle); // Titles still hidden by default css
 
                 if (index < currentStepIndex) {
                     stepLi.classList.add('completed');
@@ -375,11 +500,27 @@
 
             stepperWrapper.appendChild(stepperUl);
             progressTrackerContainer.style.display = 'block';
-             animateElement(progressTrackerContainer);
+             // Avoid redundant animation on simple re-render
+             // animateElement(progressTrackerContainer);
         }
 
         function renderStep() {
             if (!stepsContainer) return;
+
+            // Ensure stepStartTime is reset if moving to a step that hasn't been started yet
+            // Check if we're moving to a step whose duration is 0 (or undefined) and start time isn't already set
+            if ((!stepDurations[currentStepIndex] || stepDurations[currentStepIndex] === 0) && stepStartTime === 0 && totalElapsedSecondsOnLoad === 0) {
+                stepStartTime = Date.now(); // Set start time only if truly starting fresh
+                 console.log(`Setting new stepStartTime for step ${currentStepIndex + 1}: ${stepStartTime}`);
+            } else if (totalElapsedSecondsOnLoad > 0) {
+                 // If restoring from load, stepStartTime is already set by loadCallState
+                 console.log(`Restoring step ${currentStepIndex + 1}, using existing stepStartTime: ${stepStartTime}`);
+             } else if (stepStartTime === 0) {
+                // Navigating back to a step that *was* started before
+                stepStartTime = Date.now() - (stepDurations[currentStepIndex] * 1000 || 0); // Estimate original start based on recorded duration
+                console.log(`Returning to step ${currentStepIndex + 1}. Estimated start time: ${stepStartTime}`);
+             }
+
             if (currentSteps.length === 0) {
                 stepsContainer.innerHTML = '<p class="placeholder-text">No steps defined for this scenario.</p>';
                 if (nextStepBtn) nextStepBtn.style.display = 'none';
@@ -388,14 +529,15 @@
             }
             if (currentStepIndex >= 0 && currentStepIndex < currentSteps.length) {
                 const stepContent = currentSteps[currentStepIndex];
-                 stepsContainer.classList.remove('fade-in');
-                 void stepsContainer.offsetWidth;
+                 // Subtle content update without harsh flash
+                 stepsContainer.innerHTML = `<p>${stepContent}</p>`;
+                 // stepsContainer.classList.remove('fade-in');
+                 // void stepsContainer.offsetWidth;
+                 // stepsContainer.classList.add('fade-in');
 
-                stepsContainer.innerHTML = `<p>${stepContent}</p>`;
-                 stepsContainer.classList.add('fade-in');
-
-                showAssistantMessage(`📌 Step ${currentStepIndex + 1}: ${stepContent.length > 45 ? stepContent.substring(0, 42) + "..." : stepContent}`, true, 0);
-                startStepTimer();
+                showAssistantMessage(`📌 Step ${currentStepIndex + 1}: ${stepContent.length > 45 ? stepContent.substring(0, 42) + "..." : stepContent}`, true, 'call', 0);
+                startStepTimer(); // This now handles restoring elapsed time too
+                 saveCallState(); // Save state whenever a step is rendered
             } else {
                  console.error("Invalid currentStepIndex:", currentStepIndex);
                  stepsContainer.innerHTML = '<p class="placeholder-text" style="color: var(--danger-color);">Error: Invalid step.</p>';
@@ -421,7 +563,7 @@
             receiveCallBtn.addEventListener('click', async () => {
                 const selectedScenarioId = scenarioDropdown.value;
                 if (!selectedScenarioId) {
-                    showAssistantMessage("⚠️ Please select a scenario first.", true, 5000);
+                    showAssistantMessage("⚠️ Please select a scenario first.", true, 'initial', 5000);
                     return;
                 }
                 console.log(`Receive Call button clicked for scenario ID: ${selectedScenarioId}`);
@@ -464,7 +606,8 @@
                     currentScenarioName = scenario.name;
                     currentSteps = scenario.steps;
                     currentStepIndex = 0;
-                    stepDurations = new Array(currentSteps.length).fill(0);
+                    stepDurations = new Array(currentSteps.length).fill(0); // Reset durations for new call
+                    stepStartTime = 0; // Reset start time
 
                     // *** Create session and STORE the ID ***
                     const { data: newSession, error: sessionInsertError } = await supabase
@@ -486,16 +629,18 @@
                     }
 
                     currentCallSessionId = newSession.id; // <-- STORE THE ID HERE
-                    console.log("✅ New call session created. ID:", currentCallSessionId); // Log captured ID
+                    console.log("✅ New call session created. ID:", currentCallSessionId);
 
                     if (scenarioTitleElement) scenarioTitleElement.textContent = currentScenarioName;
                     updateSystemStatus("🟢 In Call", "status-in-call");
                     renderProgressTracker();
-                    renderStep();
-                    showAssistantMessage(`🚀 Scenario "${currentScenarioName}" started!`, true, 0);
+                    renderStep(); // This will start the timer and save initial state
+                    showAssistantMessage(`🚀 Scenario "${currentScenarioName}" started!`, true, 'call', 0);
+                    // Initial state saved within renderStep -> startStepTimer -> saveCallState
 
                 } catch (err) {
                     console.error("Error during call setup:", err);
+                    resetCallSessionState(); // Ensure reset on error (clears session storage too)
                     if (callTimerDiv) callTimerDiv.style.display = 'none';
                     let userMessage = `⚠️ Error starting call: ${err.message}`;
                     if (err.code === 'PGRST116') userMessage = `⚠️ Error: Could not find details for selected scenario (ID: ${currentScenarioId}). It might have been deactivated.`;
@@ -503,7 +648,7 @@
                     if (stepsContainer) stepsContainer.innerHTML = `<p class="placeholder-text" style="color:red;">${userMessage.substring(3)}</p>`;
                     if (scenarioTitleElement) scenarioTitleElement.textContent = 'Error Loading';
                     updateSystemStatus("🔴 Error", "status-error");
-                    showAssistantMessage(userMessage, true, 7000);
+                     showAssistantMessage(userMessage, true, 'initial', 7000); // Show error in initial context
 
                     if (callFlowViewDiv) callFlowViewDiv.style.display = 'none';
                     if (initialViewDiv) {
@@ -511,8 +656,7 @@
                          animateElement(initialViewDiv);
                     }
                     if (endCallBtn) endCallBtn.style.display = 'none';
-                    resetCallSessionState(); // Ensure reset on error
-                     await loadActiveScenarios();
+                     await loadActiveScenarios(); // Reload scenarios on error
                 }
             });
         }
@@ -520,22 +664,22 @@
         // --- 5. NAVIGATION BUTTONS (Next/Prev) ---
         if (nextStepBtn) {
             nextStepBtn.addEventListener('click', async () => {
-                stopAndRecordStepTimer();
+                stopAndRecordStepTimer(); // Records duration, resets stepStartTime, saves state
                 if (currentStepIndex < currentSteps.length - 1) {
                     currentStepIndex++;
-                    renderStep();
+                    stepStartTime = 0; // Explicitly reset for next step start
+                    totalElapsedSecondsOnLoad = 0; // Not restoring
+                    renderStep(); // Starts timer for new step, saves state
                 } else if (currentStepIndex === currentSteps.length - 1) {
                     // --- Call FINISHED ---
                     console.log(`Scenario ${currentScenarioName} fully completed by user.`);
                     updateSystemStatus("✅ Call Completed", "status-completed");
+                    clearCallState(); // Clear state on successful completion
 
                     const totalDuration = stepDurations.reduce((acc, duration) => acc + (duration || 0), 0);
                     const completedAllSteps = true;
 
                     // --- START: MODIFICATION for Finish Call (Body Change) ---
-                    // Define quality and reason *before* sending.
-                    // Placeholder logic: Assume 'Good' for full completion for now.
-                    // Replace with actual calculation logic if needed here.
                     let quality = 'Good'; // Example: Assign based on completion
                     let reason = 'All steps completed.'; // Example reason
 
@@ -548,7 +692,6 @@
                         console.log(`   Sending Body: { sessionId: ${currentCallSessionId}, quality: ${quality}, reason: "${reason}" }`);
                         try {
                             const { data, error: functionError } = await supabase.functions.invoke('evaluate-call-session', {
-                                // *** SEND ONLY sessionId, quality, reason ***
                                 body: {
                                     sessionId: currentCallSessionId,
                                     quality: quality,
@@ -557,12 +700,9 @@
                             });
 
                             if (functionError) throw functionError; // Let catch block handle non-2xx
-
-                            // Function presumably only updated the DB, response might be minimal
                             console.log("✅ Edge function invoked successfully (Finish). Response:", data);
-                            // Optionally update local quality/reason if function returns them, otherwise keep frontend-determined values
-                             if (data && data.updatedQuality) quality = data.updatedQuality;
-                             if (data && data.updatedReason) reason = data.updatedReason;
+                            if (data && data.updatedQuality) quality = data.updatedQuality;
+                            if (data && data.updatedReason) reason = data.updatedReason;
 
                         } catch (err) {
                             console.error("❌ Error calling evaluate-call-session function (Finish):", err);
@@ -577,23 +717,26 @@
                      // --- END: MODIFICATION for Finish Call ---
 
                     console.log(`Final Outcome (Finish) - Quality: ${quality}, Reason: ${reason}`);
-                    displayPostCallSummary(quality, reason, totalDuration);
+                    displayPostCallSummary(quality, reason, totalDuration); // Display summary
 
+                    // Hide call controls after summary is prepared
                     if (nextStepBtn) nextStepBtn.style.display = 'none';
                     if (prevStepBtn) prevStepBtn.style.display = 'none';
                     if (endCallBtn) endCallBtn.style.display = 'none';
+                     // Ensure state is cleared (already done above)
                 }
             });
         }
 
         if (prevStepBtn) {
             prevStepBtn.addEventListener('click', () => {
-                stopAndRecordStepTimer(); // Record time of the step we are leaving
+                stopAndRecordStepTimer(); // Record time of the step we are leaving, save state
                 if (currentStepIndex > 0) {
-                    // Maybe reset duration for the step we are going back to? Optional.
-                    // stepDurations[currentStepIndex - 1] = 0;
                     currentStepIndex--;
-                    renderStep(); // Renders the previous step, timer will restart on render
+                    // Timer restart logic is handled within renderStep
+                    stepStartTime = 0; // Explicitly reset, renderStep will handle re-estimating based on duration
+                    totalElapsedSecondsOnLoad = 0; // Not restoring
+                    renderStep(); // Renders the previous step, timer will restart, state will be saved
                 }
             });
         }
@@ -605,12 +748,11 @@
                 const totalDuration = stepDurations.reduce((acc, duration) => acc + (duration || 0), 0);
                 console.log("🟡 End Call button clicked by user.");
                 updateSystemStatus("⚪ Call Ended", "status-ended");
+                clearCallState(); // Clear state on manual end
 
                 const completedAllSteps = false; // Explicitly false
 
                  // --- START: MODIFICATION for End Call (Body Change) ---
-                 // Define quality and reason *before* sending.
-                 // Placeholder logic: Assume 'Bad' for premature ending.
                  let quality = 'Bad'; // Example: Assign based on premature end
                  let reason = 'Call ended prematurely by user.'; // Example reason
 
@@ -623,7 +765,6 @@
                      console.log(`   Sending Body: { sessionId: ${currentCallSessionId}, quality: ${quality}, reason: "${reason}" }`);
                     try {
                          const { data, error: functionError } = await supabase.functions.invoke('evaluate-call-session', {
-                             // *** SEND ONLY sessionId, quality, reason ***
                              body: {
                                 sessionId: currentCallSessionId,
                                 quality: quality,
@@ -633,7 +774,6 @@
                         if (functionError) throw functionError;
 
                         console.log("✅ Edge function invoked successfully (End Call). Response:", data);
-                         // Optionally update local quality/reason if function returns them
                          if (data && data.updatedQuality) quality = data.updatedQuality;
                          if (data && data.updatedReason) reason = data.updatedReason;
 
@@ -652,18 +792,26 @@
                 console.log(`Final Outcome (End Call) - Quality: ${quality}, Reason: ${reason}`);
                 displayPostCallSummary(quality, reason, totalDuration);
 
+                // Hide call controls
                 if (nextStepBtn) nextStepBtn.style.display = 'none';
                 if (prevStepBtn) prevStepBtn.style.display = 'none';
                 if (endCallBtn) endCallBtn.style.display = 'none';
+                // State already cleared
             });
         }
 
         // --- 7. POST CALL SUMMARY & RETURN ---
         function displayPostCallSummary(quality, reason, totalDuration) {
+             clearCallState(); // Ensure state is cleared when showing summary
+
             if (callFlowViewDiv) callFlowViewDiv.style.display = 'none';
             if (progressTrackerContainer) progressTrackerContainer.style.display = 'none';
-            if (callTimerDiv) callTimerDiv.style.display = 'none';
-            if (assistantBox) assistantBox.classList.remove('show');
+            if (callTimerDiv) callTimerDiv.style.display = 'none'; // Hide timer
+            if (assistantBox) {
+                 assistantBox.classList.remove('show', 'assistant-initial-position'); // Hide assistant
+                 assistantBox.style.display = 'none';
+            }
+
 
             if (callSummaryContentDiv && postCallSummaryDiv) {
                 let summaryHTML = `
@@ -675,35 +823,23 @@
                     <ul style="list-style: none; padding-left: 0; max-height: 150px; overflow-y: auto;">`;
 
                  if (currentSteps && currentSteps.length > 0 && stepDurations && stepDurations.length > 0) { // Adjusted check
-                     // Display durations for steps that were actually reached or completed
-                     const maxIndexReached = stepDurations.findIndex(d => d === 0); // Find first unrecorded step
-                     const stepsToDisplay = (maxIndexReached === -1) ? currentSteps.length : maxIndexReached;
-
-                     for (let index = 0; index < currentSteps.length; index++) {
+                     const maxValidIndex = Math.min(currentSteps.length, stepDurations.length);
+                     for (let index = 0; index < maxValidIndex; index++) {
                           const duration = stepDurations[index] || 0;
                           const stepText = currentSteps[index] || `Step ${index + 1}`;
                           const stepShortText = stepText.length > 25 ? stepText.substring(0, 22) + "..." : stepText;
                           const timeStr = `${Math.floor(duration / 60)}m ${duration % 60}s`;
-                          const status = (index < currentStepIndex || (quality === 'Good' && index === currentSteps.length -1)) ? 'Completed' : (index === currentStepIndex && quality !== 'Good' ? 'Ended At' : 'Not Reached'); // Indicate status
+                          // Determine status based on *final* outcome
+                          const wasCompleted = (quality === 'Good' && index === maxValidIndex - 1) || index < currentStepIndex;
+                          const status = duration > 0 ? (wasCompleted ? 'Completed' : 'Ended At') : 'Not Reached';
 
-                          // Only display steps that have duration or were the end point
-                          if(duration > 0 || (index === currentStepIndex && quality !=='Good')) {
+                          if(duration > 0 || (index === currentStepIndex && quality !=='Good' && quality !== 'N/A')) { // Show if duration exists OR it was the last active step in a non-good call
                             summaryHTML += `<li style="margin-bottom: 0.3rem;">${index + 1}. "${stepShortText}" (${status}): ${timeStr}</li>`;
-                          } else if (index > currentStepIndex && stepDurations[index-1] > 0) {
-                             // Optionally show steps not reached if previous one was completed
-                             // summaryHTML += `<li style="margin-bottom: 0.3rem; opacity: 0.6;">${index + 1}. "${stepShortText}" (Not Reached)</li>`;
+                          } else if (index > currentStepIndex && stepDurations[index-1] > 0 && quality !== 'Good') {
+                             // Optionally show next step as not reached if call ended early
+                              summaryHTML += `<li style="margin-bottom: 0.3rem; opacity: 0.6;">${index + 1}. "${stepShortText}" (Not Reached)</li>`;
                           }
                      }
-                     // Original loop logic (simpler):
-                     /*
-                     currentSteps.forEach((stepText, index) => {
-                        const duration = stepDurations[index] || 0;
-                        if (duration > 0 || index <= currentStepIndex) { // Only show steps with duration or reached
-                            const stepShortText = stepText.length > 25 ? stepText.substring(0, 22) + "..." : stepText;
-                            summaryHTML += `<li style="margin-bottom: 0.3rem;">Step ${index + 1} ("${stepShortText}"): ${Math.floor(duration / 60)}m ${duration % 60}s</li>`;
-                        }
-                    });
-                    */
                  } else {
                      summaryHTML += `<li>No step duration data available.</li>`;
                  }
@@ -718,7 +854,7 @@
 
          // Function to reset the UI to the initial state
          async function resetToInitialView() {
-             resetCallSessionState(); // Clear logical state first
+             resetCallSessionState(); // Clear logical state and SessionStorage
 
              if (postCallSummaryDiv) postCallSummaryDiv.style.display = 'none';
              if (callFlowViewDiv) callFlowViewDiv.style.display = 'none';
@@ -743,14 +879,14 @@
               if (scenarioDropdown) scenarioDropdown.value = "";
               if (receiveCallBtn) receiveCallBtn.disabled = true;
 
-             showAssistantMessage("💡 Ready for the next call! Select a scenario.", true, 7000);
+             showAssistantMessage("💡 Ready for the next call! Select a scenario.", true, 'initial', 7000);
          }
 
         if (returnToInitialViewBtn) {
              returnToInitialViewBtn.addEventListener('click', resetToInitialView);
         }
 
-        // --- 8. ASSISTANT BOX (Typewriter, etc.) ---
+        // --- 8. ASSISTANT BOX (Typewriter, etc. - Modified for position) ---
         function typeWriterEffect(element, message, speed = 30, callback) {
             if (typingInterval) clearInterval(typingInterval);
             element.textContent = '';
@@ -761,16 +897,24 @@
             }, speed);
         }
 
-        function showAssistantMessage(message, showImmediately = false, duration = 5000, onHideCallback) {
+        // Modified showAssistantMessage to handle position
+        function showAssistantMessage(message, showImmediately = false, position = 'call', duration = 5000, onHideCallback) {
             if (assistantMessageElement && assistantBox) {
                 clearTimeout(assistantTimeout);
                 if (typingInterval) clearInterval(typingInterval); // Stop existing typing
 
                  const displayMessage = () => {
-                     assistantBox.style.display = 'flex';
-                     assistantBox.classList.remove('slide-in-right', 'show');
-                     void assistantBox.offsetWidth;
-                     assistantBox.classList.add('slide-in-right', 'show');
+                     assistantBox.style.display = 'flex'; // Make visible first
+                     assistantBox.classList.remove('show', 'slide-in-right', 'assistant-initial-position'); // Clear previous states
+                      void assistantBox.offsetWidth; // Trigger reflow
+
+                     // Apply position-specific classes and animations
+                     if (position === 'initial') {
+                         assistantBox.classList.add('assistant-initial-position');
+                         // No slide-in needed for initial static position
+                     } else { // Default 'call' position (fixed, bottom-right)
+                         assistantBox.classList.add('slide-in-right', 'show');
+                     }
 
                      typeWriterEffect(assistantMessageElement, message, 30, () => {
                          if (duration && duration > 0) {
@@ -783,21 +927,33 @@
                  };
 
                  const hideAssistant = () => {
-                    assistantBox.classList.remove('show');
-                    setTimeout(() => {
-                         if (!assistantBox.classList.contains('show')) {
-                             assistantBox.style.display = 'none';
-                         }
-                    }, 400); // Match transition duration
+                     if (position === 'initial') {
+                         // For initial position, might just fade or hide directly
+                         assistantBox.style.display = 'none';
+                         assistantBox.classList.remove('assistant-initial-position');
+                     } else {
+                         assistantBox.classList.remove('show');
+                         // Hide after transition
+                         setTimeout(() => {
+                              if (!assistantBox.classList.contains('show')) {
+                                  assistantBox.style.display = 'none';
+                              }
+                         }, 400); // Match transition duration
+                     }
                  }
 
                  // Always clear previous timeout when showing new message
                  clearTimeout(assistantTimeout);
 
-                 if (showImmediately || !assistantBox.classList.contains('show')) {
-                    displayMessage();
+                 // Determine if we should show immediately or update in place
+                 const isCurrentlyVisible = assistantBox.style.display === 'flex' || assistantBox.classList.contains('show');
+                 const isCorrectPosition = (position === 'initial' && assistantBox.classList.contains('assistant-initial-position')) ||
+                                           (position === 'call' && !assistantBox.classList.contains('assistant-initial-position'));
+
+                 if (!isCurrentlyVisible || !isCorrectPosition || showImmediately) {
+                     displayMessage(); // Show from hidden or if forcing immediate display/position change
                  } else {
-                      // If already shown, just update text quickly
+                      // If already shown in the correct position, just update text
                       typeWriterEffect(assistantMessageElement, message, 30, () => {
                          if (duration && duration > 0) {
                            assistantTimeout = setTimeout(() => {
@@ -811,9 +967,8 @@
         }
 
 
-        console.log("CoreFlow.js v2.2 script fully loaded and initialized."); // Version updated
+        console.log("CoreFlow.js v2.3 script fully loaded and initialized."); // Version updated
     });
     </script>
-    <!-- Removed the redundant script block -->
 </body>
 </html>
