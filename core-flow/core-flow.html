@@ -126,7 +126,7 @@
 
     <script>
     document.addEventListener('DOMContentLoaded', async () => {
-        console.log("CoreFlow.js DOMContentLoaded - v2 (Edge Func, Scenario Select, UI Enhancements)");
+        console.log("CoreFlow.js DOMContentLoaded - v2.1 (Edge Func Fix)"); // Version updated
 
         // --- Supabase Client Initialization ---
         const supabaseUrl = 'https://lgcutmuspcaralydycmg.supabase.co';
@@ -134,7 +134,7 @@
         let supabase;
         try {
             supabase = window.supabase.createClient(supabaseUrl, supabaseAnonKey);
-            console.log("Supabase client initialized in coreFlow.js v2");
+            console.log("Supabase client initialized in coreFlow.js v2.1");
         } catch (error) {
             console.error("Supabase client initialization failed:", error);
             document.getElementById('auth-loading').innerHTML = '<p style="color:red;">Error: Could not connect to services.</p>';
@@ -521,7 +521,7 @@
                         throw sessionInsertError || new Error("Failed to create session record.");
                     }
 
-                    currentCallSessionId = newSession.id;
+                    currentCallSessionId = newSession.id; // <-- STORE THE ID
                     console.log("New call session created with ID:", currentCallSessionId);
 
                     if (scenarioTitleElement) scenarioTitleElement.textContent = currentScenarioName;
@@ -571,59 +571,60 @@
                     const totalDuration = stepDurations.reduce((acc, duration) => acc + (duration || 0), 0);
                     const completedAllSteps = true;
 
-                    // Call Edge Function to determine quality
+                    // Call Edge Function to determine quality AND UPDATE THE SESSION
                     let quality = 'N/A'; // Default value
                     let reason = 'Could not determine quality.'; // Default value
-                    try {
-                        console.log("Invoking evaluate-call-session Edge Function (Finish)");
-                         const { data, error: functionError } = await supabase.functions.invoke('evaluate-call-session', {
-                            body: {
-                                stepDurations: stepDurations,
-                                totalDuration: totalDuration,
-                                allStepsCompleted: completedAllSteps,
-                                stepsArrayLength: currentSteps.length
+
+                    // --- START: MODIFICATION for Finish ---
+                    if (!currentCallSessionId) {
+                        console.error("Cannot evaluate session, currentCallSessionId is missing!");
+                        reason = "Internal Error: Missing Session ID for evaluation.";
+                    } else {
+                        try {
+                            console.log(`Invoking evaluate-call-session Edge Function (Finish) for session: ${currentCallSessionId}`);
+                            const { data, error: functionError } = await supabase.functions.invoke('evaluate-call-session', {
+                                body: {
+                                    sessionId: currentCallSessionId, // <-- ADDED sessionId
+                                    stepDurations: stepDurations,
+                                    totalDuration: totalDuration,
+                                    allStepsCompleted: completedAllSteps,
+                                    stepsArrayLength: currentSteps.length
+                                }
+                            });
+
+                            if (functionError) throw functionError; // Let catch block handle non-2xx
+
+                            // The Edge function now updates the DB, so we just get the result back
+                            if (data && data.quality) {
+                                quality = data.quality;
+                                reason = data.reason || 'Reason not provided by function.';
+                                console.log("Quality evaluation complete. Quality:", quality, "Reason:", reason);
+                            } else {
+                                console.warn("Edge function returned unexpected data:", data);
+                                reason = "Evaluation function returned unexpected data."; // Update reason
                             }
-                        });
 
-                        if (functionError) throw functionError;
-
-                        if (data && data.quality) {
-                            // ✅ Assign Edge Function response to local variables
-                            quality = data.quality;
-                            reason = data.reason || 'Reason not provided by function.';
-                            console.log("Quality from Edge Function:", quality, reason);
-                        } else {
-                             console.warn("Edge function returned unexpected data:", data);
-                             // Keep default N/A values
+                        } catch (err) {
+                            console.error("Error calling evaluate-call-session function:", err);
+                            // Update reason based on error type
+                            if (err.context?.response?.status && err.context?.response?.status !== 200) {
+                                reason = `Quality check failed: Edge Function returned status ${err.context.response.status}. ${err.message}`;
+                            } else {
+                                reason = `Quality check failed: ${err.message}`;
+                            }
+                             // Keep default N/A quality
                         }
-
-                    } catch (err) {
-                        console.error("Error calling evaluate-call-session function:", err);
-                        // Keep default quality/reason, maybe add error note?
-                         reason = `Quality check failed: ${err.message}`;
                     }
+                     // --- END: MODIFICATION for Finish ---
 
-                    // Update Supabase session
+                    // Update Supabase session (REMOVED as function handles it now)
+                    /*
                     if (currentCallSessionId) {
-                        console.log(`Updating session ${currentCallSessionId} with: Quality=${quality}, Reason=${reason}`);
-                        const { error: updateError } = await supabase
-                            .from('call_sessions')
-                            .update({
-                                end_time: new Date().toISOString(),
-                                total_duration_seconds: totalDuration,
-                                completed_all_steps: completedAllSteps,
-                                // ✅ Use correct DB column names, assign values from local variables
-                                call_quality: quality,
-                                quality_reason: reason
-                            })
-                            .eq('id', currentCallSessionId);
-                        if (updateError) {
-                             console.error("Failed to update call session on completion:", updateError);
-                             // Update reason if update fails, so summary reflects the issue
-                             reason = `Failed to save results: ${updateError.message}`;
-                        }
-                        else console.log("Call session updated on FULL completion via Edge Function. ID:", currentCallSessionId);
+                        // ... DB update logic removed ...
                     }
+                    */
+                    console.log("Edge Function should have updated the session. ID:", currentCallSessionId);
+
 
                     displayPostCallSummary(quality, reason, totalDuration);
 
@@ -653,64 +654,66 @@
                 console.log("End Call button clicked by user.");
                 updateSystemStatus("⚪ Call Ended", "status-ended"); // New status
 
-                 // Note: completed_all_steps should ONLY be true if "Finish Scenario" was clicked.
+                // Note: completed_all_steps should ONLY be true if "Finish Scenario" was clicked.
                 const completedAllSteps = false; // Explicitly false when "End Call" is used
 
-                // Call Edge Function to determine quality
+                // Call Edge Function to determine quality AND UPDATE THE SESSION
                 let quality = 'N/A'; // Default value
                 let reason = 'Call ended prematurely.'; // Default reason for manual end
-                 try {
-                    console.log("Invoking evaluate-call-session Edge Function (End Call)");
-                     const { data, error: functionError } = await supabase.functions.invoke('evaluate-call-session', {
-                        body: {
-                            stepDurations: stepDurations,
-                            totalDuration: totalDuration,
-                            allStepsCompleted: completedAllSteps, // Pass false
-                             stepsArrayLength: currentSteps.length
-                        }
-                    });
-                    if (functionError) throw functionError;
-                    if (data && data.quality) {
-                        // ✅ Assign Edge Function response to local variables
-                        quality = data.quality;
-                        reason = data.reason || 'Reason not provided by function.';
-                         console.log("Quality from Edge Function:", quality, reason);
-                    } else {
-                         console.warn("Edge function returned unexpected data:", data);
-                         // Keep default N/A and 'ended prematurely' reason if function fails partially
-                    }
-                 } catch (err) {
-                     console.error("Error calling evaluate-call-session function:", err);
-                      reason = `Quality check failed: ${err.message}. Call ended prematurely.`; // Append original intention
-                 }
 
-
-                if (currentCallSessionId) {
-                    console.log(`Updating session ${currentCallSessionId} with: Quality=${quality}, Reason=${reason}`);
-                    const { error: updateError } = await supabase
-                        .from('call_sessions')
-                        .update({
-                            end_time: new Date().toISOString(),
-                            total_duration_seconds: totalDuration,
-                            completed_all_steps: completedAllSteps, // Always false here
-                            // ✅ Use correct DB column names, assign values from local variables
-                            call_quality: quality,
-                            quality_reason: reason
-                        })
-                        .eq('id', currentCallSessionId);
-                    if (updateError) {
-                         console.error("Failed to update call session on end call:", updateError);
-                         // Update reason if update fails, so summary reflects the issue
-                         reason = `Failed to save results: ${updateError.message}`;
-                    }
-                    else console.log(`Call session ${currentCallSessionId} updated on END CALL via Edge Func. Completed: ${completedAllSteps}, Quality: ${quality}`);
-
-                    displayPostCallSummary(quality, reason, totalDuration);
+                // --- START: MODIFICATION for End Call ---
+                if (!currentCallSessionId) {
+                    console.error("Cannot evaluate session, currentCallSessionId is missing!");
+                    reason = "Internal Error: Missing Session ID for evaluation.";
                 } else {
-                     // Should not happen if a call was started, but handle defensively
-                    console.warn("End Call clicked but no active call session ID found.");
-                    resetToInitialView(); // Go back to start
+                    try {
+                        console.log(`Invoking evaluate-call-session Edge Function (End Call) for session: ${currentCallSessionId}`);
+                        const { data, error: functionError } = await supabase.functions.invoke('evaluate-call-session', {
+                            body: {
+                                sessionId: currentCallSessionId, // <-- ADDED sessionId
+                                stepDurations: stepDurations,
+                                totalDuration: totalDuration,
+                                allStepsCompleted: completedAllSteps, // Pass false
+                                stepsArrayLength: currentSteps.length
+                            }
+                        });
+
+                        if (functionError) throw functionError; // Let catch block handle non-2xx
+
+                        // The Edge function now updates the DB, so we just get the result back
+                        if (data && data.quality) {
+                            quality = data.quality;
+                            reason = data.reason || 'Reason not provided by function.';
+                             console.log("Quality evaluation complete. Quality:", quality, "Reason:", reason);
+                        } else {
+                            console.warn("Edge function returned unexpected data:", data);
+                            reason = "Evaluation function returned unexpected data. Call ended prematurely."; // Append original intention
+                        }
+
+                    } catch (err) {
+                        console.error("Error calling evaluate-call-session function:", err);
+                        // Update reason based on error type
+                         if (err.context?.response?.status && err.context?.response?.status !== 200) {
+                            reason = `Quality check failed: Edge Function returned status ${err.context.response.status}. ${err.message}. Call ended prematurely.`;
+                         } else {
+                             reason = `Quality check failed: ${err.message}. Call ended prematurely.`;
+                         }
+                         // Keep default N/A quality
+                    }
                 }
+                // --- END: MODIFICATION for End Call ---
+
+                // Update Supabase session (REMOVED as function handles it now)
+                /*
+                if (currentCallSessionId) {
+                    // ... DB update logic removed ...
+                } else {
+                    // ... Defensive handling ...
+                }
+                */
+                 console.log("Edge Function should have updated the session. ID:", currentCallSessionId);
+
+                displayPostCallSummary(quality, reason, totalDuration);
 
                 // Hide call controls
                 if (nextStepBtn) nextStepBtn.style.display = 'none';
@@ -858,7 +861,7 @@
         }
 
 
-        console.log("CoreFlow.js v2 script fully loaded and initialized.");
+        console.log("CoreFlow.js v2.1 script fully loaded and initialized."); // Version updated
     });
     </script>
     <!-- Removed the redundant script block -->
