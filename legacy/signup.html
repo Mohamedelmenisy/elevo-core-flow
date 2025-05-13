@@ -226,7 +226,6 @@
      </div>
 
     <script>
-        // JavaScript remains unchanged as per your request
         document.addEventListener('DOMContentLoaded', function() { 
             // --- Supabase Configuration ---
             const SUPABASE_URL = 'https://lgcutmuspcaralydycmg.supabase.co';
@@ -307,18 +306,20 @@
                  }
             });
 
-            // --- Form Submit Listener (Original logic) ---
+            // --- Form Submit Listener (MODIFIED for Edge Function) ---
             if(signupForm) {
                 signupForm.addEventListener('submit', async function(e) {
                     e.preventDefault();
                     console.log("Signup form submitted.");
                     [nameError, emailError, passwordError, confirmError, termsError, signupError, signupSuccess].forEach(hideError);
                     if(submitButton) { submitButton.disabled = true; submitButton.textContent = 'Creating Account...'; }
+                    
                     const name = nameInput?.value.trim();
                     const email = emailInput?.value.trim().toLowerCase();
                     const password = passwordInput?.value; 
                     const confirmPassword = confirmInput?.value;
                     const termsAgreed = termsCheckbox?.checked;
+                    
                     console.log("Validating input...");
                     let isValid = true;
                     if (!name) { showError(nameError, "Please enter your full name"); isValid = false; }
@@ -338,24 +339,25 @@
                          }
                         return;
                     }
+                    
                     try {
-                        console.log(`Attempting Supabase signup for: ${email}`);
-                        const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-                            email: email,
-                            password: password 
+                        console.log(`Attempting signup via Edge Function for: ${email}`);
+                        const response = await fetch("https://lgcutmuspcaralydycmg.functions.supabase.co/signup-via-service-role", {
+                            method: "POST",
+                            headers: {
+                                "Content-Type": "application/json"
+                                // As per your example, Anon key is not sent in Authorization header for this function
+                            },
+                            body: JSON.stringify({ email: email, password: password })
                         });
 
-                        if (signUpError) {
-                            console.error('Supabase signup error:', signUpError);
-                            showError(signupError, signUpError.message || 'Signup failed. Please check your details.');
-                            isValid = false;
-                        } else if (!signUpData.user) {
-                             console.warn('Supabase signup may require email confirmation.');
-                             showError(signupError, 'Account registration initiated. Check your email to confirm your account if required.');
-                             isValid = false; 
-                        } else {
-                            const userId = signUpData.user.id;
-                            console.log('Supabase signup successful. User ID:', userId);
+                        const result = await response.json();
+
+                        if (response.ok && (result.id || result.user?.id)) {
+                            const userId = result.id || result.user.id;
+                            console.log('Edge Function signup successful. User ID:', userId);
+
+                            // Proceed with inserting profile data using the initialized supabase client
                             console.log(`Attempting to insert profile into 'users' table for user ID: ${userId}`);
                             const { error: insertError } = await supabase
                                 .from('users') 
@@ -365,10 +367,10 @@
                                 console.error('Supabase profile insert error:', insertError);
                                 console.warn(`Profile insert failed for ${userId}.`);
                                 showError(signupError, `Account created, but failed to save profile details. (Error: ${insertError.message})`);
-                                isValid = false;
+                                isValid = false; // Mark overall process as failed
                             } else {
                                 console.log(`Profile inserted successfully. is_admin set to: ${email === "m.elsayed@thechefz.co"}`);
-                                isValid = true; 
+                                isValid = true; // Mark overall process as successful
                                 try {
                                     localStorage.setItem('currentUserSignupInfo', JSON.stringify({ name: name, email: email }));
                                     console.log('Signup info (name, email) saved to localStorage.');
@@ -376,14 +378,22 @@
                                     console.error('Error saving signup info to localStorage:', storageError);
                                 }
                             }
+                        } else {
+                            // Signup failed via Edge Function
+                            console.error('Edge Function signup error response:', response);
+                            console.error('Edge Function signup error result:', result);
+                            const errorMessage = result.error?.message || result.message || (result.data?.message) || 'Signup failed. Please check your details or try again later.';
+                            showError(signupError, errorMessage);
+                            isValid = false;
                         }
                     } catch (err) {
                         console.error("Unexpected error during signup process:", err);
                         showError(signupError, 'An unexpected error occurred. Please try again later.');
                         isValid = false;
                     }
+
                     if (isValid) {
-                        console.log("Signup and profile insert successful.");
+                        console.log("Signup and profile insert successful (or signup successful if profile insert was not critical path to isValid=true).");
                         if(signupSuccess) signupSuccess.style.display = 'block';
                         setTimeout(function() {
                             window.location.href = 'login.html?email=' + encodeURIComponent(email) + '&signedup=true';
@@ -401,6 +411,7 @@
                 });
             }
 
+            // --- Modal Logic (Unchanged) ---
             const modalTriggers = document.querySelectorAll('[data-modal-target]');
             const closeButtons = document.querySelectorAll('[data-close-modal]');
             modalTriggers.forEach(button => { button.addEventListener('click', function(event) { event.preventDefault(); const modalId = this.dataset.modalTarget; const modal = document.getElementById(modalId); if (modal) openModal(modal); }); });
