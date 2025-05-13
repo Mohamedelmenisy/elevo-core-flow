@@ -588,57 +588,70 @@
                 if (prevStepBtn) prevStepBtn.style.display = 'none';
 
                 try {
-                    const { data: { user } } = await supabase.auth.getUser();
-                    if (!user) throw new Error("User not identified. Cannot start call.");
+                    // --- START OF MODIFICATION ---
+                    const { data: { user } , error: userError } = await supabase.auth.getUser();
 
-                    const { data: scenario, error: scenarioError } = await supabase
-                        .from('call_scenarios')
-                        .select('name, steps')
-                        .eq('id', currentScenarioId)
-                        .eq('is_active', true)
-                        .single();
+                    if (userError || !user) {
+                        console.error("Error fetching user:", userError?.message || "User not found.");
+                        if (userError) throw userError; // Propagate error to be handled by the main catch block
+                        if (!user) throw new Error("User not identified. Cannot start call."); // Propagate specific error
+                    } else {
+                        // User fetched successfully, proceed with scenario loading and session creation.
+                        const { data: scenario, error: scenarioError } = await supabase
+                            .from('call_scenarios')
+                            .select('name, steps')
+                            .eq('id', currentScenarioId)
+                            .eq('is_active', true)
+                            .single();
 
-                    if (scenarioError) throw scenarioError;
-                    if (!scenario || !scenario.steps || !Array.isArray(scenario.steps) || scenario.steps.length === 0) {
-                         throw new Error("Selected scenario is invalid or has no steps.");
+                        if (scenarioError) throw scenarioError;
+                        if (!scenario || !scenario.steps || !Array.isArray(scenario.steps) || scenario.steps.length === 0) {
+                             throw new Error("Selected scenario is invalid or has no steps.");
+                        }
+
+                        currentScenarioName = scenario.name;
+                        currentSteps = scenario.steps;
+                        currentStepIndex = 0;
+                        stepDurations = new Array(currentSteps.length).fill(0); // Reset durations for new call
+                        stepStartTime = 0; // Reset start time
+
+                        // *** Create session and STORE the ID (using new payload and error handling) ***
+                        const { data: newSession, error: sessionInsertError } = await supabase
+                            .from('call_sessions')
+                            .insert({
+                                user_id: user.id,
+                                scenario_id: currentScenarioId,
+                                start_time: new Date().toISOString(),
+                                completed_all_steps: false,
+                                agent_name: user.user_metadata?.full_name || user.name || '', // MODIFIED as per request
+                                agent_email: user.email || '' // As per request
+                                // Set initial quality/reason to pending or null in DB if desired
+                                // call_quality: 'Pending',
+                                // quality_reason: 'Evaluation pending'
+                            })
+                            .select('id') // IMPORTANT: Select the ID
+                            .single();
+
+                        if (sessionInsertError) {
+                            console.error("Error creating session:", sessionInsertError.message); // Log as requested
+                            throw sessionInsertError; // Propagate error to be handled by the main catch block
+                        }
+                        if (!newSession) { // Keep existing check for null newSession
+                             throw new Error("Failed to create session record (newSession is null).");
+                        }
+
+                        currentCallSessionId = newSession.id; // <-- STORE THE ID HERE
+                        console.log("✅ New call session created. ID:", currentCallSessionId);
+
+                        // UI updates and rendering that depend on successful session creation
+                        if (scenarioTitleElement) scenarioTitleElement.textContent = currentScenarioName;
+                        updateSystemStatus("🟢 In Call", "status-in-call");
+                        renderProgressTracker();
+                        renderStep(); // This will start the timer and save initial state
+                        showAssistantMessage(`🚀 Scenario "${currentScenarioName}" started!`, true, 'call', 0);
+                        // Initial state saved within renderStep -> startStepTimer -> saveCallState
                     }
-
-                    currentScenarioName = scenario.name;
-                    currentSteps = scenario.steps;
-                    currentStepIndex = 0;
-                    stepDurations = new Array(currentSteps.length).fill(0); // Reset durations for new call
-                    stepStartTime = 0; // Reset start time
-
-                    // *** Create session and STORE the ID ***
-                    const { data: newSession, error: sessionInsertError } = await supabase
-                        .from('call_sessions')
-                        .insert({
-                            user_id: user.id,
-                            scenario_id: currentScenarioId,
-                            start_time: new Date().toISOString(),
-                            completed_all_steps: false,
-                            agent_name: user.name || '',       // تأكد إن `user.name` موجود
-                            agent_email: user.email || '',     // تأكد إن `user.email` موجود
-                            // Set initial quality/reason to pending or null in DB if desired
-                            // call_quality: 'Pending',
-                            // quality_reason: 'Evaluation pending'
-                        })
-                        .select('id') // IMPORTANT: Select the ID
-                        .single();
-
-                    if (sessionInsertError || !newSession) {
-                        throw sessionInsertError || new Error("Failed to create session record.");
-                    }
-
-                    currentCallSessionId = newSession.id; // <-- STORE THE ID HERE
-                    console.log("✅ New call session created. ID:", currentCallSessionId);
-
-                    if (scenarioTitleElement) scenarioTitleElement.textContent = currentScenarioName;
-                    updateSystemStatus("🟢 In Call", "status-in-call");
-                    renderProgressTracker();
-                    renderStep(); // This will start the timer and save initial state
-                    showAssistantMessage(`🚀 Scenario "${currentScenarioName}" started!`, true, 'call', 0);
-                    // Initial state saved within renderStep -> startStepTimer -> saveCallState
+                    // --- END OF MODIFICATION ---
 
                 } catch (err) {
                     console.error("Error during call setup:", err);
