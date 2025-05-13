@@ -321,7 +321,7 @@
                  }
             });
 
-            // --- Form Submit Listener (MODIFIED to use Edge Function) ---
+            // --- Form Submit Listener (MODIFIED to use Edge Function with Authorization Header) ---
             if(signupForm) {
                 signupForm.addEventListener('submit', async function(e) {
                     e.preventDefault();
@@ -360,20 +360,17 @@
                     try {
                         console.log(`Attempting signup via Edge Function for: ${email}`);
                         const requestBody = {
+                            name: name, // Including name as per form field
                             email: email,
-                            password: password,
-                            name: name 
-                            // Your Edge Function 'signup-via-service-role' is assumed to handle:
-                            // 1. Creating the auth user in Supabase.
-                            // 2. Inserting/updating a 'users' or 'profiles' table with name, email,
-                            //    and potentially deriving 'is_admin' status based on the email.
+                            password: password
+                            // Your Edge Function 'signup-via-service-role' should be prepared to handle these.
                         };
 
                         const response = await fetch(SIGNUP_EDGE_FUNCTION_URL, {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
-                                'Authorization': `Bearer ${SERVICE_ROLE_KEY}` // Service Role Key as per your request
+                                'Authorization': `Bearer ${SERVICE_ROLE_KEY}` // This is the critical line for Authorization
                             },
                             body: JSON.stringify(requestBody)
                         });
@@ -393,7 +390,6 @@
                             // isValid remains false
                         } else if (responseData.user || responseData.id || (responseData.message && responseData.message.toLowerCase().includes('success'))) {
                             // SUCCESS: Edge Function call was successful and indicated user creation.
-                            // The exact structure of `responseData` for success depends on your Edge Function's implementation.
                             console.log('Edge Function signup successful. Response:', responseData);
                             isValid = true; 
                             try {
@@ -401,19 +397,14 @@
                                 console.log('Signup info (name, email) saved to localStorage.');
                             } catch (storageError) {
                                 console.error('Error saving signup info to localStorage:', storageError);
-                                // Non-critical error, signup itself was successful.
                             }
                         } else {
-                             // HTTP response was OK, but the responseData format is not a recognized success or error.
                             console.warn('Edge Function signup returned OK, but with unexpected data:', responseData);
                             showError(signupError, 'Signup response unclear. Please try logging in or contact support.');
-                            // isValid remains false, as success is not confirmed.
                         }
                     } catch (err) {
-                        // Catch network errors or client-side JS errors during fetch/JSON parsing
                         console.error("Network or client-side error during Edge Function signup:", err);
                         showError(signupError, 'A network error occurred. Please check your connection and try again.');
-                        // isValid remains false
                     }
 
                     // --- Post-operation UI update ---
@@ -426,7 +417,6 @@
                     } else {
                         console.log("Signup process via Edge Function failed or was inconclusive.");
                         if(submitButton) { submitButton.disabled = false; submitButton.textContent = 'Create Account'; }
-                        // Focus on the main signup error message if displayed, or the first field error
                         const generalErrorVisible = signupError && signupError.style.display === 'block';
                         if (!generalErrorVisible) {
                             const firstFieldErr = signupForm.querySelector('.error-message[style*="display: block"]');
