@@ -143,7 +143,9 @@
                     <div><label for="searchInput">Search (Scenario, Reason, Agent):</label><input type="text" id="searchInput" placeholder="Type and wait..."></div>
                     <div><label for="qualityFilter">Call Quality:</label><select id="qualityFilter"><option value="">All</option><option value="Good">Good</option><option value="Normal">Normal</option><option value="Bad">Bad</option><option value="N/A">N/A</option></select></div>
                     <div>
-                         <label for="startDateFilter">Date Range (Start Time):</label>
+                         <!-- === MODIFICATION START: Changed label text === -->
+                         <label for="startDateFilter">Date Range (Start - End Time):</label>
+                         <!-- === MODIFICATION END === -->
                          <div style="display: flex; gap: 0.5rem;">
                              <input type="date" id="startDateFilter" title="Start date">
                              <input type="date" id="endDateFilter" title="End date">
@@ -187,7 +189,7 @@
 
     <script>
     document.addEventListener('DOMContentLoaded', async () => {
-        console.log("Admin Dashboard.js DOMContentLoaded - v2.3 (Pagination, Export/Logout Fix)");
+        console.log("Admin Dashboard.js DOMContentLoaded - v2.4 (Date Label Update)"); // Version bump for clarity
 
         const SUPER_ADMIN_EMAIL = "m.elsayed@thechefz.co"; // Keep if needed for specific logic
 
@@ -197,7 +199,7 @@
         let supabase;
         try {
             supabase = window.supabase.createClient(supabaseUrl, supabaseAnonKey);
-            console.log("Supabase client initialized in admin dashboard.js v2.3");
+            console.log("Supabase client initialized in admin dashboard.js v2.4");
         } catch (error) {
             console.error("Supabase client initialization failed:", error);
             alert("Error connecting to services. Please try again later.");
@@ -635,7 +637,7 @@
              const searchTerm = (searchInput?.value || '').toLowerCase().trim();
              const selectedQuality = qualityFilter?.value || '';
              const startDate = startDateFilter?.value || '';
-             const endDate = endDateFilter?.value || '';
+             const endDate = endDateFilter?.value || ''; // Get the end date value
              const selectedAgentId = userFilterDropdown?.value || '';
 
             let statsLabel = "All Agents";
@@ -671,14 +673,28 @@
                  else filtered = filtered.filter(session => session.call_quality === selectedQuality);
             }
 
+             // === MODIFICATION START: Updated Date Filtering Logic ===
+             // Filter by start date (session start_time >= selected start date at 00:00:00)
              if (startDate) {
-                 const startDateTime = new Date(startDate); startDateTime.setHours(0, 0, 0, 0);
-                 filtered = filtered.filter(session => session.start_time && new Date(session.start_time) >= startDateTime);
+                 const startDateTime = new Date(startDate);
+                 startDateTime.setHours(0, 0, 0, 0); // Set to beginning of the day
+                 console.log(`Filtering: Start Date >= ${startDateTime.toISOString()}`);
+                 filtered = filtered.filter(session => {
+                     if (!session.start_time) return false;
+                     return new Date(session.start_time) >= startDateTime;
+                 });
              }
+             // Filter by end date (session start_time <= selected end date at 23:59:59)
              if (endDate) {
-                 const endDateTime = new Date(endDate); endDateTime.setHours(23, 59, 59, 999);
-                 filtered = filtered.filter(session => session.start_time && new Date(session.start_time) <= endDateTime);
+                 const endDateTime = new Date(endDate);
+                 endDateTime.setHours(23, 59, 59, 999); // Set to end of the day
+                 console.log(`Filtering: Start Date <= ${endDateTime.toISOString()}`);
+                 filtered = filtered.filter(session => {
+                     if (!session.start_time) return false;
+                     return new Date(session.start_time) <= endDateTime;
+                 });
              }
+             // === MODIFICATION END ===
 
              currentlyFilteredSessions = filtered; // Update the global filtered list
              console.log(`Filtering complete. ${currentlyFilteredSessions.length} sessions match.`);
@@ -784,7 +800,7 @@
              if (startDateFilter) startDateFilter.addEventListener('change', applyCurrentFilters);
              else console.warn("Start date filter not found");
 
-             if (endDateFilter) endDateFilter.addEventListener('change', applyCurrentFilters);
+             if (endDateFilter) endDateFilter.addEventListener('change', applyCurrentFilters); // This triggers filter on end date change too
              else console.warn("End date filter not found");
 
              if (userFilterDropdown) userFilterDropdown.addEventListener('change', applyCurrentFilters);
@@ -797,7 +813,7 @@
                      if(searchInput) searchInput.value = '';
                      if(qualityFilter) qualityFilter.value = '';
                      if(startDateFilter) startDateFilter.value = '';
-                     if(endDateFilter) endDateFilter.value = '';
+                     if(endDateFilter) endDateFilter.value = ''; // Also reset end date
                      if(userFilterDropdown) userFilterDropdown.value = '';
                      localStorage.removeItem(FILTER_STORAGE_KEY);
                      applyCurrentFilters(); // Apply the reset state
@@ -882,7 +898,7 @@
         // --- Initial Load ---
         checkUserRoleAndLoadDashboard(); // Start the process: check role, then load or show denied.
 
-        console.log("Admin Dashboard.js v2.3 script fully loaded and executing.");
+        console.log("Admin Dashboard.js v2.4 script fully loaded and executing.");
     });
     </script>
 
