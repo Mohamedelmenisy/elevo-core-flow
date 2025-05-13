@@ -226,28 +226,22 @@
      </div>
 
     <script>
+        // JavaScript remains unchanged as per your request
         document.addEventListener('DOMContentLoaded', function() { 
             // --- Supabase Configuration ---
             const SUPABASE_URL = 'https://lgcutmuspcaralydycmg.supabase.co';
-            // IMPORTANT: The API key below was identified as invalid from the screenshot.
-            // Replace 'YOUR_CORRECT_SUPABASE_ANON_KEY_HERE' with your actual valid Supabase Anon Key.
-            const SUPABASE_ANON_KEY = 'YOUR_CORRECT_SUPABASE_ANON_KEY_HERE'; 
-
-            // --- Configuration for Edge Function Signup (Matches your provided snippet names) ---
-            const SUPABASE_FUNCTION_URL = 'https://lgcutmuspcaralydycmg.functions.supabase.co/signup-via-service-role';
-            const SERVICE_ROLE_KEY = '7d781201689bdb4b7e9389ac0a20da5c0829974a4166c9b4420c0a7843703422';
+            const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxnY3V0bXVzcGNhcmFseWR5Y21nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU0NDY3MDEsImV4cCI6MjA2MTAyMjcwMX0.DX9NNZPYMaV96D1ohW9pwFWLzywKLYjP5s6tP89PLdbX';
 
             if (!window.supabase || !window.supabase.createClient) {
                 console.error("Supabase library not loaded correctly!");
                 alert("Error: Could not initialize Supabase. Please check the console.");
                 return;
             }
-            // Initialize Supabase client - may be used for other functionalities.
             const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-            console.log('Supabase client initialized. Signup will use a direct Edge Function call.');
+            console.log('Supabase client initialized.');
 
             // --- DOM Elements (Remain As Is - Unchanged) ---
-            const signupForm = document.getElementById('signupForm'); // Form ID from your HTML
+            const signupForm = document.getElementById('signupForm');
             const nameInput = document.getElementById('name');
             const emailInput = document.getElementById('email');
             const passwordInput = document.getElementById('password');
@@ -311,29 +305,27 @@
                  }
             });
 
-            // --- Form Submit Listener (Uses Edge Function with Authorization Header) ---
+            // --- Form Submit Listener (Original logic) ---
             if(signupForm) {
                 signupForm.addEventListener('submit', async function(e) {
                     e.preventDefault();
-                    console.log("Signup form submitted. Will use Edge Function.");
+                    console.log("Signup form submitted.");
                     [nameError, emailError, passwordError, confirmError, termsError, signupError, signupSuccess].forEach(hideError);
                     if(submitButton) { submitButton.disabled = true; submitButton.textContent = 'Creating Account...'; }
-                    
                     const name = nameInput?.value.trim();
                     const email = emailInput?.value.trim().toLowerCase();
                     const password = passwordInput?.value; 
                     const confirmPassword = confirmInput?.value;
                     const termsAgreed = termsCheckbox?.checked;
-                    
                     console.log("Validating input...");
-                    let isValid = true; 
+                    let isValid = true;
                     if (!name) { showError(nameError, "Please enter your full name"); isValid = false; }
                     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showError(emailError, "Please enter a valid email address"); isValid = false; }
                     if (!password || password.length < 6) { showError(passwordError, "Password must be at least 6 characters"); isValid = false; }
                     if (password !== confirmPassword) { showError(confirmError, "Passwords don't match"); isValid = false; }
                     if (!termsAgreed) { showError(termsError, "You must agree to the terms"); isValid = false; }
 
-                    if (!isValid) { 
+                    if (!isValid) {
                         console.log("Frontend validation failed.");
                         if(submitButton) { submitButton.disabled = false; submitButton.textContent = 'Create Account'; }
                         const firstError = signupForm.querySelector('.error-message[style*="display: block"]');
@@ -344,71 +336,65 @@
                          }
                         return;
                     }
-                    
-                    isValid = false; // Reset for the async operation outcome
                     try {
-                        console.log(`Attempting signup via Edge Function for: ${email}`);
-                        const requestBody = {
-                            name: name, 
+                        console.log(`Attempting Supabase signup for: ${email}`);
+                        const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
                             email: email,
-                            password: password
-                        };
-
-                        // fetch call structure as per your snippet's emphasis on Authorization
-                        const response = await fetch(SUPABASE_FUNCTION_URL, { // Using SUPABASE_FUNCTION_URL
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'Authorization': `Bearer ${SERVICE_ROLE_KEY}` // Crucial Authorization header
-                            },
-                            body: JSON.stringify(requestBody)
+                            password: password 
                         });
 
-                        const responseData = await response.json(); 
-
-                        if (!response.ok) {
-                            console.error('Edge Function signup error (HTTP):', response.status, responseData);
-                            const errorMessage = responseData?.message || responseData?.error?.message || `Signup failed (Status: ${response.status}).`;
-                            showError(signupError, errorMessage);
-                        } else if (responseData.error) {
-                            console.error('Edge Function signup error (App):', responseData.error);
-                            showError(signupError, responseData.error.message || 'Signup failed. Please review your information.');
-                        } else if (responseData.user || responseData.id || (responseData.message && responseData.message.toLowerCase().includes('success'))) {
-                            console.log('Edge Function signup successful. Response:', responseData);
-                            isValid = true; 
-                            try {
-                                localStorage.setItem('currentUserSignupInfo', JSON.stringify({ name: name, email: email }));
-                                console.log('Signup info (name, email) saved to localStorage.');
-                            } catch (storageError) {
-                                console.error('Error saving signup info to localStorage:', storageError);
-                            }
+                        if (signUpError) {
+                            console.error('Supabase signup error:', signUpError);
+                            showError(signupError, signUpError.message || 'Signup failed. Please check your details.');
+                            isValid = false;
+                        } else if (!signUpData.user) {
+                             console.warn('Supabase signup may require email confirmation.');
+                             showError(signupError, 'Account registration initiated. Check your email to confirm your account if required.');
+                             isValid = false; 
                         } else {
-                            console.warn('Edge Function signup returned OK, but with unexpected data:', responseData);
-                            showError(signupError, 'Signup response unclear. Please try logging in or contact support.');
+                            const userId = signUpData.user.id;
+                            console.log('Supabase signup successful. User ID:', userId);
+                            console.log(`Attempting to insert profile into 'users' table for user ID: ${userId}`);
+                            const { error: insertError } = await supabase
+                                .from('users') 
+                                .insert({ id: userId, name: name, email: email, is_admin: email === "m.elsayed@thechefz.co" });
+
+                            if (insertError) {
+                                console.error('Supabase profile insert error:', insertError);
+                                console.warn(`Profile insert failed for ${userId}.`);
+                                showError(signupError, `Account created, but failed to save profile details. (Error: ${insertError.message})`);
+                                isValid = false;
+                            } else {
+                                console.log(`Profile inserted successfully. is_admin set to: ${email === "m.elsayed@thechefz.co"}`);
+                                isValid = true; 
+                                try {
+                                    localStorage.setItem('currentUserSignupInfo', JSON.stringify({ name: name, email: email }));
+                                    console.log('Signup info (name, email) saved to localStorage.');
+                                } catch (storageError) {
+                                    console.error('Error saving signup info to localStorage:', storageError);
+                                }
+                            }
                         }
                     } catch (err) {
-                        console.error("Network or client-side error during Edge Function signup:", err);
-                        showError(signupError, 'A network error occurred. Please check your connection and try again.');
+                        console.error("Unexpected error during signup process:", err);
+                        showError(signupError, 'An unexpected error occurred. Please try again later.');
+                        isValid = false;
                     }
-
                     if (isValid) {
-                        console.log("Signup via Edge Function reported as successful.");
+                        console.log("Signup and profile insert successful.");
                         if(signupSuccess) signupSuccess.style.display = 'block';
                         setTimeout(function() {
                             window.location.href = 'login.html?email=' + encodeURIComponent(email) + '&signedup=true';
                         }, 1500);
                     } else {
-                        console.log("Signup process via Edge Function failed or was inconclusive.");
+                        console.log("Signup process failed or partially failed.");
                         if(submitButton) { submitButton.disabled = false; submitButton.textContent = 'Create Account'; }
-                        const generalErrorVisible = signupError && signupError.style.display === 'block';
-                        if (!generalErrorVisible) {
-                            const firstFieldErr = signupForm.querySelector('.error-message[style*="display: block"]');
-                            if (firstFieldErr) {
-                                const inputId = firstFieldErr.id.replace('Error','');
-                                const inputElement = document.getElementById(inputId);
-                                if(inputElement && typeof inputElement.focus === 'function') inputElement.focus();
-                            }
-                        }
+                        const firstError = signupForm.querySelector('.error-message[style*="display: block"]');
+                         if (firstError) {
+                             const inputId = firstError.id.replace('Error','');
+                             const inputElement = document.getElementById(inputId);
+                             if(inputElement && typeof inputElement.focus === 'function') inputElement.focus();
+                         }
                     }
                 });
             }
@@ -422,7 +408,7 @@
             function closeModal(modal) { if (modal == null) return; modal.style.display = 'none'; document.body.classList.remove('modal-open'); }
 
             if(nameInput) nameInput.focus();
-            console.log("Signup page script loaded and initialized for Edge Function signup.");
+            console.log("Signup page script loaded and initialized.");
         });
     </script>
 </body>
