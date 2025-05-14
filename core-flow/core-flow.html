@@ -407,14 +407,12 @@
                     .single();
 
                 if (scenarioError) throw scenarioError;
-                // Ensure steps is an array and each step is an object with a 'text' property (or that steps themselves are strings if not objects)
+
                 if (!scenarioData || !Array.isArray(scenarioData.steps) || scenarioData.steps.length === 0) {
                     throw new Error("Scenario data is invalid or has no steps.");
                 }
-                // Further validation if steps are expected to be objects with 'text'
+
                 if (scenarioData.steps.some(step => typeof step !== 'object' || typeof step.text !== 'string')) {
-                     // If steps are just strings, this check is not needed, or needs adjustment.
-                     // For now, assuming steps are [{text: "..."}, ...] as per the [object Object] issue.
                     console.warn("Some steps may not have the expected {text: '...'} structure. Falling back to string conversion if needed.");
                 }
 
@@ -423,6 +421,7 @@
                 currentStepIndex = 0;
                 accumulatedStepDurations = new Array(currentScenario.steps.length).fill(0);
 
+                console.log("Attempting to insert new call session...");
                 const { data: newSession, error: sessionInsertError } = await supabase
                     .from('call_sessions')
                     .insert({
@@ -435,8 +434,12 @@
                     .select('id')
                     .single();
                 
-                if (sessionInsertError) throw sessionInsertError;
+                if (sessionInsertError) {
+                    console.error("Error inserting new call session:", JSON.stringify(sessionInsertError, null, 2));
+                    throw sessionInsertError;
+                }
                 callSessionId = newSession.id;
+                console.log("New call session created with ID:", callSessionId);
                 
                 scenarioTitleElement.textContent = currentScenario.title; 
                 updateSystemStatus("🟢 In Call", "status-in-call");
@@ -444,10 +447,10 @@
                 showAssistantMessage(`🚀 Scenario "${currentScenario.title}" started! Follow the steps.`, false, 0);
 
             } catch (err) {
-                console.error("Error starting call:", err);
+                console.error("Error starting call:", err.message);
                 resetCallState();
                 switchToInitialView();
-                showAssistantMessage(`⚠️ Error starting call: ${err.message}`, true, 7000);
+                showAssistantMessage(`⚠️ Error starting call: ${err.message}. Check console for details.`, true, 7000);
                 await loadActiveScenarios(); 
             }
         });
@@ -459,10 +462,9 @@
             }
             
             const stepObject = currentScenario.steps[currentStepIndex];
-            // MODIFIED: Access the 'text' property of the step object. Fallback if it's just a string.
             const stepInstructionText = (typeof stepObject === 'object' && stepObject !== null && typeof stepObject.text === 'string') 
                                         ? stepObject.text 
-                                        : String(stepObject); // Fallback to string conversion
+                                        : String(stepObject); 
 
             stepsContainer.innerHTML = `<p>${stepInstructionText}</p>`;
             
@@ -479,7 +481,6 @@
             startStepTimer();
             saveCallState(); 
 
-            // MODIFIED: Use stepInstructionText for assistant message
             showAssistantMessage(`📌 Step ${currentStepIndex + 1}: ${stepInstructionText.length > 45 ? stepInstructionText.substring(0, 42) + "..." : stepInstructionText}`, false, 0);
         }
         
@@ -584,15 +585,15 @@
                                completedAllSteps ? "status-completed" : "status-ended");
 
             if (callSessionId) {
-                // MODIFIED: Update call session with corrected field names as per user example
                 const updatePayload = {
                     end_time: endTimeISO,
-                    duration: totalDuration, // Using totalDuration (sum of step durations in seconds) for 'duration'
-                    completed: completedAllSteps, // Using 'completed' as the key
+                    duration: totalDuration, 
+                    completed: completedAllSteps, 
                     call_quality: quality,
                     quality_reason: reason
                 };
-                console.log("Updating call session:", callSessionId, "with payload:", updatePayload);
+                // Enhanced logging before update
+                console.log("Attempting to update call session in Supabase. Session ID:", callSessionId, "Payload:", updatePayload);
 
                 const { error: updateError } = await supabase
                     .from('call_sessions')
@@ -600,22 +601,18 @@
                     .eq('id', callSessionId);
 
                 if (updateError) {
-                    console.error("Error updating call session in Supabase:", updateError);
-                    // Show an error to the user if the update fails, as this is critical
-                    showAssistantMessage(`⚠️ Error saving call summary: ${updateError.message}`, false, 7000);
+                    // Enhanced error logging
+                    console.error("Failed to update call session in Supabase. Session ID:", callSessionId, "Error:", JSON.stringify(updateError, null, 2));
+                    showAssistantMessage(`⚠️ Error saving call summary: ${updateError.message}. Check console for details.`, false, 7000);
                 } else {
-                    console.log("Call session updated successfully in Supabase.");
+                    console.log("Call session (ID: " + callSessionId + ") updated successfully in Supabase.");
                 }
 
-                // Invoking Edge Function (as before)
-                // This function might perform further evaluations or updates.
-                // Ensure it doesn't conflict with the client-side updates made above.
                  try {
                     console.log(`Invoking evaluate-call-session for session: ${callSessionId}`);
                     const { data: evalData, error: funcError } = await supabase.functions.invoke('evaluate-call-session', {
                         body: { 
                             sessionId: callSessionId, 
-                            // Pass the same values if the function needs them, or let it re-evaluate
                             quality: quality, 
                             reason: reason 
                         }
@@ -626,7 +623,8 @@
                     console.error("Error invoking evaluate-call-session:", err);
                 }
             } else {
-                console.warn("callSessionId is null, cannot update call session in Supabase.");
+                // More explicit warning if callSessionId is null
+                console.warn("callSessionId is null or undefined. Cannot update call session in Supabase. This may happen if the session was not created successfully or was cleared prematurely.");
             }
             
             displayPostCallSummary(quality, reason, totalDuration);
@@ -643,9 +641,8 @@
                 <ul style="list-style: none; padding-left: 0; max-height: 150px; overflow-y: auto;">`;
 
             if (currentScenario && currentScenario.steps) {
-                currentScenario.steps.forEach((stepObject, index) => { // Iterate over stepObjects
+                currentScenario.steps.forEach((stepObject, index) => { 
                     const duration = accumulatedStepDurations[index] || 0;
-                    // MODIFIED: Access 'text' property for display, fallback if step is simple string
                     const stepInstructionText = (typeof stepObject === 'object' && stepObject !== null && typeof stepObject.text === 'string')
                                               ? stepObject.text
                                               : String(stepObject);
