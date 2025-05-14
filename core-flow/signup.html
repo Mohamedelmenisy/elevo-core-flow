@@ -370,27 +370,39 @@
 
                 } catch (error) {
                     console.error("Signup error:", error);
-                    let errorMessage = "An unexpected error occurred. Please try again.";
+                    let errorMessage = "An unexpected error occurred. Please try again."; // Default
+
                     if (error.message) {
                         const lowerMessage = error.message.toLowerCase();
                         if (lowerMessage.includes("user already registered") || lowerMessage.includes("email already registered")) {
                             errorMessage = "This email is already registered. Please log in instead.";
+                            displayError(signupGeneralError, errorMessage);
+                            return; // Stop further execution
                         } else if (lowerMessage.includes("email link is invalid or has expired")) {
                             errorMessage = "A confirmation is pending for this email, or the email link is invalid/expired. Please check your email.";
+                            displayError(signupGeneralError, errorMessage);
+                            return; // Stop further execution
                         } else if (lowerMessage.includes("password should be at least")) {
                             errorMessage = error.message; 
                             displayError(passwordError, errorMessage); // Show under password field
+                            return; // Stop further execution (prevents also showing in general error field)
                         } else if (lowerMessage.includes("rate limit exceeded")) {
                             errorMessage = "Too many signup attempts. Please try again later.";
+                            displayError(signupGeneralError, errorMessage);
+                            return; // Stop further execution
                         } else {
+                            // For other Supabase errors not specifically handled, use their message.
                             errorMessage = error.message;
                         }
                     }
+                    // If we reach here, it means an error occurred that wasn't one of the specific cases with a 'return'
+                    // or error.message was null/empty. Display the determined errorMessage.
                     displayError(signupGeneralError, errorMessage);
                 } finally {
                     // Only set loading to false if not redirecting.
                     // Success with redirection has its own timeout.
                     // Success needing email confirmation should also reset button.
+                    // This will also be called if 'return' was used in the catch block.
                     if (!signupSuccessMessage.textContent.includes("Redirecting")) {
                         setButtonLoading(false);
                     }
