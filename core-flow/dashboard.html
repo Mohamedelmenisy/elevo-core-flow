@@ -1,1 +1,765 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard - Elevo Core</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2317a2b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M3 12h18M3 6h12M3 18h15'/><path d='M17 9l4 3l-4 3'/></svg>">
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        /* Styles from dash.txt <style> block are here */
+        #accessDeniedModal {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(0, 0, 0, 0.7); display: none; 
+            justify-content: center; align-items: center; z-index: 1000; color: #333;
+        }
+        .access-denied-content {
+            background-color: var(--card-bg-color, #fff); /* Adjusted to use var */
+            padding: 2rem 3rem; border-radius: 8px; text-align: center;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2); max-width: 450px;
+        }
+        .dark .access-denied-content { /* Ensure dark mode is applied */
+             background-color: var(--card-bg-dark, #2d3748);
+             color: var(--text-color-dark, #f7fafc);
+        }
+        .access-denied-content svg {
+            margin-bottom: 1rem; stroke: var(--danger-color, #dc3545); 
+            width: 56px; height: 56px;
+        }
+        .access-denied-content h3 {
+            margin-top: 0; margin-bottom: 0.75rem; font-size: 1.5rem;
+            color: var(--text-color, #333); /* Adjusted */
+        }
+        .dark .access-denied-content h3 { color: var(--text-color-dark, #f7fafc); }
+         .access-denied-content p {
+            margin-bottom: 1.5rem; color: var(--text-color-light, #6c757d); /* Adjusted */
+         }
+        .dark .access-denied-content p { color: var(--text-secondary-dark, #a0aec0); }
+        #returnToAppBtn { padding: 0.75rem 1.5rem; font-size: 1rem; cursor: pointer; }
 
+        .filter-grid > div > label {
+            display: block; margin-bottom: 0.25rem; font-size: 0.875rem;
+            color: var(--text-color-light, #6c757d); /* Adjusted */
+        }
+        .dark .filter-grid > div > label { color: var(--text-secondary-dark, #a0aec0); }
+        .filter-grid > div > input[type="date"] {
+            display: block; width: 100%; box-sizing: border-box;
+        }
+
+        #liveCallsContainerWrapper {
+            background-color: var(--card-bg-color, #fff); /* Adjusted */
+            padding: 1rem 1.5rem;
+            border-radius: var(--border-radius-lg, 8px); /* Adjusted */
+            box-shadow: var(--shadow-md, 0 2px 10px rgba(0,0,0,0.05)); /* Adjusted */
+        }
+        .dark #liveCallsContainerWrapper {
+            background-color: var(--card-bg-dark, #1a202c);
+            box-shadow: var(--shadow-lg, 0 2px 10px rgba(0,0,0,0.2)); /* Adjusted */
+        }
+        #liveCallsContainerWrapper h2 {
+            font-size: 1.15rem; font-weight: 600; margin-bottom: 1rem;
+            color: var(--text-color); /* Adjusted */
+            border-bottom: 1px solid var(--border-color, #e2e8f0); /* Adjusted */
+            padding-bottom: 0.75rem; display: flex; align-items: center; gap: 0.5rem;
+        }
+        .dark #liveCallsContainerWrapper h2 {
+            color: var(--text-color-dark);
+            border-bottom-color: var(--border-color-dark, #4a5568);
+        }
+        #liveCallsContainerWrapper h2 svg {
+            stroke: var(--primary-color); 
+            animation: pulseIconLive 2s infinite ease-in-out; /* Renamed animation */
+        }
+        @keyframes pulseIconLive { /* Renamed animation */
+            0% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.7; transform: scale(1.1); }
+            100% { opacity: 1; transform: scale(1); }
+        }
+        .live-calls-list { max-height: 250px; overflow-y: auto; padding-right: 0.5rem; }
+        .live-call-item {
+            background-color: var(--bg-color); /* Adjusted for contrast */
+            border: 1px solid var(--border-color, #e2e8f0); /* Adjusted */
+            padding: 0.75rem 1rem; border-radius: 6px; margin-bottom: 0.75rem;
+            font-size: 0.9rem; transition: background-color 0.2s ease;
+        }
+        .dark .live-call-item {
+            background-color: var(--bg-color); /* Dark mode accent */
+            border-color: var(--border-color-dark, #4a5568);
+        }
+        .live-call-item:last-child { margin-bottom: 0; }
+        .live-call-item:hover { background-color: var(--button-secondary-bg); } /* Adjusted */
+        .dark .live-call-item:hover { background-color: var(--secondary-hover-color); } /* Adjusted */
+        .live-call-item-agent {
+            font-weight: 600; color: var(--primary-color); margin-bottom: 0.25rem;
+        }
+        .live-call-item-scenario, .live-call-item-time {
+            font-size: 0.85rem; color: var(--text-color-light); margin-bottom: 0.125rem; /* Adjusted */
+        }
+        .dark .live-call-item-scenario, .dark .live-call-item-time {
+            color: var(--text-secondary-dark);
+        }
+        #noLiveCallsMessage {
+            padding: 1rem; text-align: center; color: var(--text-color-subtle); font-style: italic; /* Adjusted */
+        }
+        .dark #noLiveCallsMessage { color: var(--text-color-subtle); }
+    </style>
+</head>
+<body>
+    <div id="accessDeniedModal">
+         <div class="access-denied-content">
+             <svg xmlns="http://www.w3.org/2000/svg" width="56" height="56" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                 <circle cx="12" cy="12" r="10"></circle>
+                 <line x1="12" y1="8" x2="12" y2="12"></line>
+                 <line x1="12" y1="16" x2="12.01" y2="16"></line>
+             </svg>
+             <h3>Access Denied</h3>
+             <p>You do not have permission to view this page. This section is restricted to administrators.</p>
+             <button id="returnToAppBtn" class="action-button primary-button">Return to Agent App</button>
+         </div>
+    </div>
+
+    <div class="app-container" id="appContainerContent" style="display: none; flex-direction: column;">
+        <header class="app-header">
+            <div class="logo-container">
+                 <svg class="company-logo" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M6 17L10 17M6 12L12 12M6 7L14 7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    <path d="M15 6L19 10L15 14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <rect x="3" y="3" width="18" height="18" rx="3" stroke="currentColor" stroke-width="1.5" fill="transparent" opacity="0.6"/>
+                </svg>
+                <span class="app-title">Admin Dashboard - Elevo Core</span>
+            </div>
+            <div class="header-controls">
+                 <a href="core-flow.html" class="nav-link">Core Flow</a>
+                 <div class="user-info" id="userInfo" style="display: none;">
+                    <span id="userNameDisplay" class="user-name-display"></span>
+                     <button id="logoutButton" class="logout-btn">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+                        <span>Logout</span>
+                    </button>
+                 </div>
+            </div>
+        </header>
+
+        <main class="app-main dashboard-main">
+            <div id="authLoadingMessage" class="loading-container" style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 70vh;">
+                <div class="spinner"></div>
+                <p>Verifying access and loading dashboard...</p>
+            </div>
+            
+            <div id="dashboardContent" style="display:none; width:100%;">
+                <div class="dashboard-header">
+                    <div class="greeting-section">
+                        <div id="userAvatarCharacter" class="user-avatar-char-dashboard"></div>
+                        <div>
+                            <h1 id="dashboardUserGreeting">Welcome, Admin!</h1>
+                            <p id="dashboardUserSubtext">Overview of all agent activities.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="stats-grid" id="statsGrid">
+                     <div class="stat-card"><h3>Total Calls (Filtered)</h3><p id="totalCalls">0</p><span class="stat-period" id="statsPeriod">All Agents</span></div>
+                     <div class="stat-card"><h3>Avg. Call Duration</h3><p id="avgCallDuration">0m 0s</p><span class="stat-period" id="statsPeriodDuration">All Agents</span></div>
+                     <div class="stat-card"><h3>Completion Rate</h3><p id="completionRate">0%</p><span class="stat-period" id="statsPeriodCompletion">All Agents</span></div>
+                     <div class="stat-card"><h3>Avg. Call Quality</h3><div class="quality-gauge"><div class="gauge-bar-container"><div id="gaugeGood" class="gauge-segment good"></div><div id="gaugeNormal" class="gauge-segment normal"></div><div id="gaugeBad" class="gauge-segment bad"></div></div><span id="avgQualityText">N/A</span></div></div>
+                </div>
+
+                <div id="liveCallsContainerWrapper" class="card" style="margin-bottom: 1.5rem;">
+                    <h2>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1.5"></circle><circle cx="12" cy="12" r="5.5"></circle><circle cx="12" cy="12" r="9.5"></circle></svg>
+                        Live Call Monitoring
+                    </h2>
+                    <div id="liveCallsContainer" class="live-calls-list">
+                        <p id="noLiveCallsMessage" style="display:block;">Loading live calls...</p>
+                        
+                    </div>
+                </div>
+
+                <div class="filter-controls card" id="filterControlsCard">
+                    <h3>Filter Call Sessions</h3>
+                    <div class="filter-grid">
+                        <div><label for="userFilterDropdown">Agent:</label><select id="userFilterDropdown"><option value="">All Agents</option></select></div>
+                        <div><label for="searchInput">Search (Scenario, Reason, Agent):</label><input type="text" id="searchInput" placeholder="Type and wait..."></div>
+                        <div><label for="qualityFilter">Call Quality:</label><select id="qualityFilter"><option value="">All</option><option value="Good">Good</option><option value="Normal">Normal</option><option value="Bad">Bad</option><option value="N/A">N/A</option></select></div>
+                        <div> 
+                            <label for="startDateFilter">Start Date:</label>
+                            <input type="date" id="startDateFilter" title="Start date for filtering calls" style="margin-bottom: 0.5rem;">
+                            <label for="endDateFilter">End Date:</label>
+                            <input type="date" id="endDateFilter" title="End date for filtering calls">
+                        </div>
+                        <div class="filter-buttons-group">
+                             <button id="resetFiltersBtn" class="action-button secondary-button">Reset Filters</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="recent-activity-section card" id="recentActivitySection">
+                    <h2 id="recentCallsTitle">Recent Call Sessions</h2>
+                    <div class="table-responsive">
+                        <table id="recentCallsTable">
+                            <thead>
+                                <tr>
+                                    <th>Agent Name</th><th>Agent Email</th><th>Scenario</th><th>Start Time</th><th>Duration</th><th>Completed</th><th>Quality</th><th>Reason</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                
+                            </tbody>
+                        </table>
+                    </div>
+                    <div id="paginationControls" class="pagination-container"></div>
+                    <button id="exportDataBtn" class="action-button secondary-button" style="margin-top: 1.5rem;">Export Filtered Data (CSV)</button>
+                </div>
+            </div>
+        </main>
+
+        <footer class="app-footer">
+            <p>© <span id="currentYear"></span> Mohamed Elmenisy - Elevo Core. All rights reserved.</p>
+        </footer>
+    </div>
+
+    <script type="module">
+        // Supabase Client Setup
+        const SUPABASE_URL = 'https://aefiigottnlcmjzilqnh.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFlZmlpZ290dG5sY21qemlscW5oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcxNzY2MDQsImV4cCI6MjA2Mjc1MjYwNH0.FypB02v3tGMnxXV9ZmZMdMC0oQpREKOJWgHMPxUzwX4';
+        
+        let supabase;
+        try {
+            supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+            console.log('Supabase client initialized for dashboard.html');
+        } catch (error) {
+            console.error("Supabase client initialization failed:", error);
+            const authLoading = document.getElementById('authLoadingMessage');
+            if(authLoading) authLoading.innerHTML = '<p style="color:red; text-align:center;">Critical Error: Services unavailable. Dashboard cannot be loaded.</p>';
+        }
+        
+        // DOM Elements
+        const appContainerContent = document.getElementById('appContainerContent');
+        const authLoadingMessageDiv = document.getElementById('authLoadingMessage');
+        const dashboardContentDiv = document.getElementById('dashboardContent');
+        const accessDeniedModal = document.getElementById('accessDeniedModal');
+        const returnToAppBtn = document.getElementById('returnToAppBtn');
+        
+        const userNameDisplayHeader = document.getElementById('userNameDisplay');
+        const dashboardUserGreeting = document.getElementById('dashboardUserGreeting');
+        const dashboardUserSubtext = document.getElementById('dashboardUserSubtext');
+        const userAvatarCharEl = document.getElementById('userAvatarCharacter');
+        const userInfoDivHeader = document.getElementById('userInfo');
+        const logoutButton = document.getElementById('logoutButton');
+        document.getElementById('currentYear').textContent = new Date().getFullYear();
+
+        // Stats elements
+        const totalCallsEl = document.getElementById('totalCalls');
+        const avgCallDurationEl = document.getElementById('avgCallDuration');
+        const completionRateEl = document.getElementById('completionRate');
+        const gaugeGoodEl = document.getElementById('gaugeGood');
+        const gaugeNormalEl = document.getElementById('gaugeNormal');
+        const gaugeBadEl = document.getElementById('gaugeBad');
+        const avgQualityTextEl = document.getElementById('avgQualityText');
+        const statsPeriodEl = document.getElementById('statsPeriod');
+        const statsPeriodDurationEl = document.getElementById('statsPeriodDuration');
+        const statsPeriodCompletionEl = document.getElementById('statsPeriodCompletion');
+
+        // Filter elements
+        const userFilterDropdown = document.getElementById('userFilterDropdown');
+        const searchInput = document.getElementById('searchInput');
+        const qualityFilter = document.getElementById('qualityFilter');
+        const startDateFilter = document.getElementById('startDateFilter');
+        const endDateFilter = document.getElementById('endDateFilter');
+        const resetFiltersBtn = document.getElementById('resetFiltersBtn');
+        
+        // Table and Pagination elements
+        const recentCallsTableBody = document.querySelector('#recentCallsTable tbody');
+        const recentCallsTitleEl = document.getElementById('recentCallsTitle');
+        const paginationControlsContainer = document.getElementById('paginationControls');
+        const exportDataBtn = document.getElementById('exportDataBtn');
+
+        // Live Calls elements
+        const liveCallsContainerWrapper = document.getElementById('liveCallsContainerWrapper');
+        const liveCallsContainer = document.getElementById('liveCallsContainer');
+        const noLiveCallsMessage = document.getElementById('noLiveCallsMessage');
+
+        // State Variables
+        let currentUser = null; // {id, email, name, isAdmin}
+        let allCallSessions = [];
+        let filteredCallSessions = [];
+        let allAgents = []; // {id, name, email}
+        let currentPage = 1;
+        const ROWS_PER_PAGE = 10;
+        let filterTimeoutId = null;
+        let liveCallsChannel = null;
+        const FILTER_STORAGE_KEY = 'elevoCoreAdminFilters_v2';
+
+
+        // --- Auth and Admin Check ---
+        async function initializeDashboard() {
+            if (!supabase) return; // Supabase client failed
+
+            const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+
+            if (sessionError || !session) {
+                console.log("No session or error fetching session. Redirecting to login.");
+                // MODIFIED: Redirect to login.html without redirectTo parameter.
+                window.location.replace('login.html');
+                return;
+            }
+
+            // User is authenticated, now check if admin
+            // First, try to get user data from localStorage
+            const storedUserData = JSON.parse(localStorage.getItem('elevoCoreUserData'));
+            if (storedUserData && storedUserData.id === session.user.id) {
+                currentUser = storedUserData;
+            } else { // Fetch from DB users table
+                const { data: profile, error: profileError } = await supabase
+                    .from('users')
+                    .select('name, is_admin')
+                    .eq('id', session.user.id)
+                    .single();
+                
+                if (profileError && profileError.code !== 'PGRST116') {
+                    console.error("Error fetching user profile:", profileError);
+                    showAccessDenied("Could not verify your user profile.");
+                    return;
+                }
+                currentUser = {
+                    id: session.user.id,
+                    email: session.user.email,
+                    name: profile?.name || session.user.user_metadata?.full_name || session.user.email.split('@')[0],
+                    isAdmin: profile?.is_admin || false
+                };
+                localStorage.setItem('elevoCoreUserData', JSON.stringify(currentUser));
+            }
+            
+            if (!currentUser.isAdmin) {
+                // Invoke Edge Function as a secondary check or if direct DB check isn't preferred
+                try {
+                    console.log("User not admin via local check, invoking Edge Function 'check-admin-access' as fallback/confirmation.");
+                    const { data: adminStatus, error: functionError } = await supabase.functions.invoke('check-admin-access');
+                    if (functionError) throw functionError;
+                    
+                    if (!adminStatus || !adminStatus.isAdmin) {
+                        showAccessDenied();
+                        return;
+                    }
+                    currentUser.isAdmin = true; // Update local state if function confirms admin
+                    localStorage.setItem('elevoCoreUserData', JSON.stringify(currentUser)); // Persist
+                } catch (err) {
+                    console.error("Error checking admin status via Edge Function:", err);
+                    showAccessDenied("Could not verify administrator privileges.");
+                    return;
+                }
+            }
+            
+            // User is Admin, proceed to load dashboard
+            console.log("Admin access confirmed for:", currentUser.email);
+            appContainerContent.style.display = 'flex'; // Show main app container
+            authLoadingMessageDiv.style.display = 'none';
+            dashboardContentDiv.style.display = 'block'; // Show dashboard content
+
+            setupAdminUI();
+            await loadInitialData();
+            loadPersistedFilters(); // Load filters before applying
+            applyFiltersAndRender();
+            setupEventListeners();
+            setupLiveCallMonitoring();
+        }
+
+        function showAccessDenied(message = "You do not have permission to view this page. This section is restricted to administrators.") {
+            authLoadingMessageDiv.style.display = 'none';
+            dashboardContentDiv.style.display = 'none';
+            appContainerContent.style.display = 'flex'; // Keep header/footer visible for context
+            
+            accessDeniedModal.querySelector('p').textContent = message;
+            accessDeniedModal.style.display = 'flex';
+            if (liveCallsChannel) { // Unsubscribe if modal is shown
+                supabase.removeChannel(liveCallsChannel);
+                liveCallsChannel = null;
+            }
+        }
+        
+        returnToAppBtn.addEventListener('click', () => {
+            window.location.href = 'core-flow.html';
+        });
+
+        function setupAdminUI() {
+            userNameDisplayHeader.textContent = currentUser.name;
+            dashboardUserGreeting.textContent = `Welcome, ${currentUser.name}!`;
+            userAvatarCharEl.textContent = currentUser.name.charAt(0).toUpperCase();
+            userInfoDivHeader.style.display = 'flex';
+        }
+
+        // --- Data Loading ---
+        async function loadInitialData() {
+            try {
+                // Fetch all agents
+                const { data: agentsData, error: agentsError } = await supabase
+                    .from('users')
+                    .select('id, name, email')
+                    .order('name', { ascending: true });
+                if (agentsError) throw agentsError;
+                allAgents = agentsData || [];
+                populateAgentFilter();
+
+                // Fetch all call sessions
+                const { data: sessionsData, error: sessionsError } = await supabase
+                    .from('call_sessions')
+                    .select(`
+                        *,
+                        call_scenarios (name)
+                    `)
+                    .order('start_time', { ascending: false });
+                if (sessionsError) throw sessionsError;
+                allCallSessions = sessionsData || [];
+                
+                console.log(`Loaded ${allAgents.length} agents and ${allCallSessions.length} call sessions.`);
+
+            } catch (error) {
+                console.error("Error loading initial dashboard data:", error);
+                // Display an error message on the dashboard
+                recentCallsTableBody.innerHTML = `<tr><td colspan="8" style="text-align:center; color:var(--danger-color);">Failed to load data: ${error.message}</td></tr>`;
+            }
+        }
+        
+        function populateAgentFilter() {
+            userFilterDropdown.innerHTML = '<option value="">All Agents</option>';
+            allAgents.forEach(agent => {
+                const option = document.createElement('option');
+                option.value = agent.id;
+                option.textContent = agent.name ? `${agent.name} (${agent.email})` : agent.email;
+                userFilterDropdown.appendChild(option);
+            });
+        }
+
+        // --- Filtering and Rendering ---
+        function applyFiltersAndRender() {
+            saveFiltersToLocalStorage(); // Save current filter state
+            let tempFiltered = [...allCallSessions];
+            const searchTerm = searchInput.value.toLowerCase().trim();
+            const selectedAgentId = userFilterDropdown.value;
+            const selectedQuality = qualityFilter.value;
+            const startDate = startDateFilter.value;
+            const endDate = endDateFilter.value;
+
+            // Agent filter
+            if (selectedAgentId) {
+                tempFiltered = tempFiltered.filter(s => s.user_id === selectedAgentId);
+                const agent = allAgents.find(a => a.id === selectedAgentId);
+                const agentName = agent?.name || agent?.email || 'Selected Agent';
+                [statsPeriodEl, statsPeriodDurationEl, statsPeriodCompletionEl].forEach(el => el.textContent = agentName);
+                recentCallsTitleEl.textContent = `Call Sessions for ${agentName}`;
+            } else {
+                [statsPeriodEl, statsPeriodDurationEl, statsPeriodCompletionEl].forEach(el => el.textContent = 'All Agents');
+                recentCallsTitleEl.textContent = 'All Recent Call Sessions';
+            }
+
+            // Search term filter
+            if (searchTerm) {
+                tempFiltered = tempFiltered.filter(s => {
+                    const agent = allAgents.find(a => a.id === s.user_id);
+                    return (
+                        (s.call_scenarios?.name || '').toLowerCase().includes(searchTerm) ||
+                        (s.quality_reason || '').toLowerCase().includes(searchTerm) ||
+                        (agent?.name || '').toLowerCase().includes(searchTerm) ||
+                        (agent?.email || '').toLowerCase().includes(searchTerm)
+                    );
+                });
+            }
+            // Quality filter
+            if (selectedQuality) {
+                tempFiltered = tempFiltered.filter(s => (selectedQuality === "N/A" ? !s.call_quality : s.call_quality === selectedQuality));
+            }
+            // Date filter
+            if (startDate) {
+                tempFiltered = tempFiltered.filter(s => s.start_time && new Date(s.start_time) >= new Date(startDate + "T00:00:00"));
+            }
+            if (endDate) {
+                tempFiltered = tempFiltered.filter(s => s.start_time && new Date(s.start_time) <= new Date(endDate + "T23:59:59"));
+            }
+            
+            filteredCallSessions = tempFiltered;
+            currentPage = 1; // Reset to first page after filtering
+            renderTable();
+            updateStats();
+            renderPagination();
+        }
+        
+        function renderTable() {
+            recentCallsTableBody.innerHTML = '';
+            if (filteredCallSessions.length === 0) {
+                recentCallsTableBody.innerHTML = `
+                    <tr class="placeholder-row">
+                        <td colspan="8">
+                             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom: 0.5rem; opacity: 0.6;"><circle cx="12" cy="12" r="10"></circle><line x1="8" y1="15" x2="16" y2="15"></line><line x1="9" y1="9" x2="9.01" y2="9"></line><line x1="15" y1="9" x2="15.01" y2="9"></line></svg>
+                             <br>
+                            No call sessions match your filters.
+                        </td>
+                     </tr>`;
+                return;
+            }
+
+            const paginatedSessions = filteredCallSessions.slice((currentPage - 1) * ROWS_PER_PAGE, currentPage * ROWS_PER_PAGE);
+            paginatedSessions.forEach(session => {
+                const agent = allAgents.find(a => a.id === session.user_id);
+                const row = recentCallsTableBody.insertRow();
+                row.insertCell().textContent = agent?.name || 'Unknown Agent';
+                row.insertCell().textContent = agent?.email || 'N/A';
+                row.insertCell().textContent = session.call_scenarios?.name || 'N/A';
+                row.insertCell().textContent = session.start_time ? new Date(session.start_time).toLocaleString() : 'N/A';
+                const duration = session.total_duration_seconds || 0;
+                row.insertCell().textContent = `${Math.floor(duration / 60)}m ${duration % 60}s`;
+                row.insertCell().textContent = session.completed_all_steps ? 'Yes' : 'No';
+                
+                const qualityCell = row.insertCell();
+                qualityCell.classList.add('quality-cell');
+                const qualityIcon = document.createElement('span');
+                qualityIcon.classList.add('quality-icon');
+                let iconSvg = '', qualityClass = 'na';
+                switch (session.call_quality?.toLowerCase()) {
+                    case 'good': iconSvg = `<svg viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>`; qualityClass = 'good'; break;
+                    case 'normal': iconSvg = `<svg viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>`; qualityClass = 'normal'; break;
+                    case 'bad': iconSvg = `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>`; qualityClass = 'bad'; break;
+                    default: iconSvg = `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="8" y1="12" x2="16" y2="12"></line></svg>`;
+                }
+                qualityIcon.innerHTML = iconSvg.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"');
+                qualityIcon.classList.add(qualityClass);
+                qualityCell.appendChild(qualityIcon);
+                qualityCell.appendChild(document.createTextNode(` ${session.call_quality || 'N/A'}`));
+                
+                row.insertCell().textContent = session.quality_reason || '-';
+            });
+        }
+        
+        function updateStats() {
+            const count = filteredCallSessions.length;
+            totalCallsEl.textContent = count;
+
+            if (count > 0) {
+                const totalDuration = filteredCallSessions.reduce((sum, s) => sum + (s.total_duration_seconds || 0), 0);
+                const avgDuration = Math.round(totalDuration / count);
+                avgCallDurationEl.textContent = `${Math.floor(avgDuration / 60)}m ${avgDuration % 60}s`;
+
+                const completedCount = filteredCallSessions.filter(s => s.completed_all_steps).length;
+                completionRateEl.textContent = `${Math.round((completedCount / count) * 100)}%`;
+
+                const qualityCounts = { good: 0, normal: 0, bad: 0, rated: 0 };
+                filteredCallSessions.forEach(s => {
+                    if (s.call_quality === 'Good') { qualityCounts.good++; qualityCounts.rated++; }
+                    else if (s.call_quality === 'Normal') { qualityCounts.normal++; qualityCounts.rated++; }
+                    else if (s.call_quality === 'Bad') { qualityCounts.bad++; qualityCounts.rated++; }
+                });
+                if (qualityCounts.rated > 0) {
+                    gaugeGoodEl.style.width = `${(qualityCounts.good / qualityCounts.rated) * 100}%`;
+                    gaugeNormalEl.style.width = `${(qualityCounts.normal / qualityCounts.rated) * 100}%`;
+                    gaugeBadEl.style.width = `${(qualityCounts.bad / qualityCounts.rated) * 100}%`;
+                    if (qualityCounts.bad / qualityCounts.rated > 0.3) avgQualityTextEl.textContent = "Improvement Needed";
+                    else if (qualityCounts.good / qualityCounts.rated >= 0.5) avgQualityTextEl.textContent = "Mostly Good";
+                    else avgQualityTextEl.textContent = "Mixed Quality";
+                } else {
+                    [gaugeGoodEl, gaugeNormalEl, gaugeBadEl].forEach(el => el.style.width = '0%');
+                    avgQualityTextEl.textContent = 'No Rated Calls';
+                }
+            } else {
+                avgCallDurationEl.textContent = '0m 0s';
+                completionRateEl.textContent = '0%';
+                [gaugeGoodEl, gaugeNormalEl, gaugeBadEl].forEach(el => el.style.width = '0%');
+                avgQualityTextEl.textContent = 'No Calls';
+            }
+        }
+        
+        function renderPagination() {
+            paginationControlsContainer.innerHTML = '';
+            const totalPages = Math.ceil(filteredCallSessions.length / ROWS_PER_PAGE);
+            if (totalPages <= 1) return;
+
+            // Simplified pagination: Prev, Current Page / Total Pages, Next
+            const prevBtn = document.createElement('button');
+            prevBtn.textContent = 'Previous';
+            prevBtn.disabled = currentPage === 1;
+            prevBtn.addEventListener('click', () => { currentPage--; renderTable(); renderPagination(); });
+            paginationControlsContainer.appendChild(prevBtn);
+
+            const pageInfo = document.createElement('span');
+            pageInfo.textContent = ` Page ${currentPage} of ${totalPages} `;
+            pageInfo.style.margin = "0 10px";
+            paginationControlsContainer.appendChild(pageInfo);
+
+            const nextBtn = document.createElement('button');
+            nextBtn.textContent = 'Next';
+            nextBtn.disabled = currentPage === totalPages;
+            nextBtn.addEventListener('click', () => { currentPage++; renderTable(); renderPagination(); });
+            paginationControlsContainer.appendChild(nextBtn);
+        }
+        
+        function saveFiltersToLocalStorage() {
+            const filters = {
+                agentId: userFilterDropdown.value,
+                searchTerm: searchInput.value,
+                quality: qualityFilter.value,
+                startDate: startDateFilter.value,
+                endDate: endDateFilter.value
+            };
+            localStorage.setItem(FILTER_STORAGE_KEY, JSON.stringify(filters));
+        }
+
+        function loadPersistedFilters() {
+            const savedFilters = localStorage.getItem(FILTER_STORAGE_KEY);
+            if (savedFilters) {
+                try {
+                    const filters = JSON.parse(savedFilters);
+                    userFilterDropdown.value = filters.agentId || '';
+                    searchInput.value = filters.searchTerm || '';
+                    qualityFilter.value = filters.quality || '';
+                    startDateFilter.value = filters.startDate || '';
+                    endDateFilter.value = filters.endDate || '';
+                } catch (e) {
+                    console.error("Error parsing saved filters:", e);
+                    localStorage.removeItem(FILTER_STORAGE_KEY);
+                }
+            }
+        }
+
+        // --- Event Listeners Setup ---
+        function setupEventListeners() {
+            logoutButton.addEventListener('click', async () => {
+                if (liveCallsChannel) {
+                    supabase.removeChannel(liveCallsChannel);
+                    liveCallsChannel = null;
+                }
+                localStorage.removeItem('elevoCoreUserData');
+                const { error } = await supabase.auth.signOut();
+                if (error) console.error("Logout error:", error);
+                window.location.replace("login.html");
+            });
+
+            [userFilterDropdown, qualityFilter, startDateFilter, endDateFilter].forEach(el => {
+                el.addEventListener('change', applyFiltersAndRender);
+            });
+            searchInput.addEventListener('input', () => {
+                clearTimeout(filterTimeoutId);
+                filterTimeoutId = setTimeout(applyFiltersAndRender, 500); // Debounce
+            });
+            resetFiltersBtn.addEventListener('click', () => {
+                userFilterDropdown.value = '';
+                searchInput.value = '';
+                qualityFilter.value = '';
+                startDateFilter.value = '';
+                endDateFilter.value = '';
+                localStorage.removeItem(FILTER_STORAGE_KEY);
+                applyFiltersAndRender();
+            });
+            exportDataBtn.addEventListener('click', exportFilteredDataToCSV);
+        }
+
+        // --- CSV Export ---
+        function exportFilteredDataToCSV() {
+            if (filteredCallSessions.length === 0) {
+                alert("No data to export based on current filters.");
+                return;
+            }
+            const headers = ["Agent Name", "Agent Email", "Scenario", "Start Time", "Duration (s)", "Completed", "Quality", "Reason"];
+            const rows = filteredCallSessions.map(session => {
+                const agent = allAgents.find(a => a.id === session.user_id);
+                return [
+                    agent?.name || 'Unknown',
+                    agent?.email || 'N/A',
+                    session.call_scenarios?.name || 'N/A',
+                    session.start_time ? new Date(session.start_time).toLocaleString() : 'N/A',
+                    session.total_duration_seconds || 0,
+                    session.completed_all_steps ? 'Yes' : 'No',
+                    session.call_quality || 'N/A',
+                    session.quality_reason || '-'
+                ].map(field => `"${String(field).replace(/"/g, '""')}"`); // Escape quotes
+            });
+
+            const csvContent = [headers.join(','), ...rows.map(row => row.join(','))].join('\n');
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            const url = URL.createObjectURL(blob);
+            link.setAttribute("href", url);
+            link.setAttribute("download", `elevo_dashboard_export_${new Date().toISOString().slice(0,10)}.csv`);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        }
+        
+        // --- Live Call Monitoring ---
+        async function setupLiveCallMonitoring() {
+            if (!supabase) return;
+            await fetchAndRenderLiveCalls(); // Initial fetch
+
+            if (liveCallsChannel) { // Remove existing channel if any (e.g., on re-init)
+                supabase.removeChannel(liveCallsChannel);
+            }
+
+            liveCallsChannel = supabase
+                .channel('public:call_sessions:live')
+                .on('postgres_changes', 
+                    { event: '*', schema: 'public', table: 'call_sessions' },
+                    (payload) => {
+                        console.log('Realtime: Call session change detected', payload);
+                        // Could optimize by checking if the change affects live calls (end_time is null)
+                        fetchAndRenderLiveCalls(); 
+                    }
+                )
+                .subscribe((status, err) => {
+                    if (status === 'SUBSCRIBED') {
+                        console.log('Subscribed to live call updates!');
+                    } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+                        console.error('Live call subscription error:', status, err);
+                        noLiveCallsMessage.textContent = "Error connecting to live updates.";
+                        noLiveCallsMessage.style.display = 'block';
+                    } else if (status === 'CLOSED') {
+                        console.log('Live call subscription closed.');
+                    }
+                });
+        }
+
+        async function fetchAndRenderLiveCalls() {
+            try {
+                const { data: liveSessions, error } = await supabase
+                    .from('call_sessions')
+                    .select('id, user_id, scenario_id, start_time, call_scenarios (name)')
+                    .is('end_time', null) // Actively live calls
+                    .order('start_time', { ascending: true });
+
+                if (error) throw error;
+
+                liveCallsContainer.innerHTML = ''; // Clear previous
+                if (liveSessions && liveSessions.length > 0) {
+                    noLiveCallsMessage.style.display = 'none';
+                    liveSessions.forEach(call => {
+                        const agent = allAgents.find(a => a.id === call.user_id);
+                        const agentName = agent?.name || agent?.email || `Agent ID: ${call.user_id.substring(0,8)}`;
+                        const scenarioName = call.call_scenarios?.name || 'Loading scenario...';
+                        const startTimeFormatted = new Date(call.start_time).toLocaleTimeString();
+
+                        const callDiv = document.createElement('div');
+                        callDiv.className = 'live-call-item';
+                        callDiv.innerHTML = `
+                            <div class="live-call-item-agent">${agentName}</div>
+                            <div class="live-call-item-scenario">Scenario: ${scenarioName}</div>
+                            <div class="live-call-item-time">Started: ${startTimeFormatted}</div>
+                        `;
+                        liveCallsContainer.appendChild(callDiv);
+                    });
+                } else {
+                    noLiveCallsMessage.textContent = "No active calls at the moment.";
+                    noLiveCallsMessage.style.display = 'block';
+                }
+            } catch (error) {
+                console.error("Error fetching live calls:", error);
+                noLiveCallsMessage.textContent = "Failed to load live calls data.";
+                noLiveCallsMessage.style.display = 'block';
+            }
+        }
+
+        // Start the dashboard initialization
+        initializeDashboard();
+        console.log("Dashboard.html script loaded and initialized.");
+    </script>
+</body>
+</html>
