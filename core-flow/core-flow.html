@@ -165,7 +165,7 @@
         let currentScenario = null; 
         let currentStepIndex = 0;
         let callSessionId = null;
-        let callSessionStartTimeISO = null; 
+        let callSessionStartTimeISO = null; // MODIFIED: To store the actual start time of the call session
         let stepTimerInterval = null;
         let stepStartTime = 0; 
         let accumulatedStepDurations = []; 
@@ -298,7 +298,7 @@
             authLoadingDiv.style.display = 'none';
             
             if (restoreCallState()) {
-                console.log("Restored active call session. Restored callSessionId:", callSessionId);
+                console.log("Restored active call session.");
                 switchToCallFlowView(false); 
                 if (currentScenario && currentScenario.title) {
                     scenarioTitleElement.textContent = currentScenario.title;
@@ -419,29 +419,23 @@
                 currentStepIndex = 0;
                 accumulatedStepDurations = new Array(currentScenario.steps.length).fill(0);
                 
-                const actualSessionStartTimeISO = new Date().toISOString(); 
+                const actualSessionStartTimeISO = new Date().toISOString(); // MODIFIED: Capture precise start time
 
                 const { data: newSession, error: sessionInsertError } = await supabase
                     .from('call_sessions')
                     .insert({
                         user_id: currentUser.id,
                         scenario_id: currentScenario.id,
-                        start_time: actualSessionStartTimeISO, 
+                        start_time: actualSessionStartTimeISO, // MODIFIED: Store precise start time in DB
                         agent_name: currentUser.name, 
                         agent_email: currentUser.email
                     })
-                    .select('id') 
+                    .select('id')
                     .single();
                 
                 if (sessionInsertError) throw sessionInsertError;
-                
-                callSessionId = newSession.id; 
-                console.log('Call session CREATED. ID:', callSessionId); 
-                if (!callSessionId) {
-                    console.error("CRITICAL: callSessionId is NULL after insert!");
-                }
-
-                callSessionStartTimeISO = actualSessionStartTimeISO; 
+                callSessionId = newSession.id;
+                callSessionStartTimeISO = actualSessionStartTimeISO; // MODIFIED: Store for client-side duration calculation
 
                 scenarioTitleElement.textContent = currentScenario.title; 
                 updateSystemStatus("🟢 In Call", "status-in-call");
@@ -482,8 +476,7 @@
 
             startStepTimer();
             saveCallState(); 
-            
-            // CORRECTED THIS LINE - removed stray backtick
+
             showAssistantMessage(`📌 Step ${currentStepIndex + 1}: ${stepInstructionText.length > 45 ? stepInstructionText.substring(0, 42) + "..." : stepInstructionText}`, false, 0);
         }
         
@@ -568,7 +561,7 @@
         function stopAndRecordStepTimer() {
             if (stepTimerInterval) clearInterval(stepTimerInterval);
             stepTimerInterval = null;
-            if (stepStartTime > 0 && currentScenario && currentStepIndex < accumulatedStepDurATIONS.length) { // accumulatedStepDurATIONS was a typo, fixed to accumulatedStepDurations
+            if (stepStartTime > 0 && currentStepIndex < accumulatedStepDurations.length) {
                 const durationSeconds = Math.floor((Date.now() - stepStartTime) / 1000);
                 accumulatedStepDurations[currentStepIndex] += durationSeconds;
             }
@@ -576,98 +569,81 @@
         }
         
         // --- Call Completion & Summary ---
-        async function finishCall(allStepsWereCompletedByUser) { 
-            console.log('[finishCall] Started. allStepsWereCompletedByUser:', allStepsWereCompletedByUser); 
-            console.log('[finishCall] Current callSessionId before update attempt:', callSessionId); 
-
+        async function finishCall(completedAllSteps) {
             stopAndRecordStepTimer(); 
             
-            const currentEndTimeISO = new Date().toISOString();
-            let overallDurationSeconds = 0;
+            const endTimeISO = new Date().toISOString();
+            let calculatedOverallDurationSeconds = 0;
 
             if (callSessionStartTimeISO) {
                 try {
-                    overallDurationSeconds = Math.floor((new Date(currentEndTimeISO).getTime() - new Date(callSessionStartTimeISO).getTime()) / 1000);
-                    if (overallDurationSeconds < 0) overallDurationSeconds = 0; 
+                    calculatedOverallDurationSeconds = Math.floor((new Date(endTimeISO).getTime() - new Date(callSessionStartTimeISO).getTime()) / 1000);
+                     if (calculatedOverallDurationSeconds < 0) calculatedOverallDurationSeconds = 0; // Ensure non-negative
                 } catch (e) {
-                    console.error("[finishCall] Error calculating duration from ISO strings:", e);
-                    overallDurationSeconds = accumulatedStepDurations.reduce((sum, dur) => sum + dur, 0); 
+                    console.error("Error calculating duration from ISO strings:", e);
+                    // Fallback to sum of step durations if ISO string parsing fails
+                    calculatedOverallDurationSeconds = accumulatedStepDurations.reduce((sum, dur) => sum + dur, 0);
                 }
             } else {
-                overallDurationSeconds = accumulatedStepDurations.reduce((sum, dur) => sum + dur, 0); 
-                console.warn("[finishCall] callSessionStartTimeISO was not available. Using sum of step durations for overall call duration.");
+                // Fallback if callSessionStartTimeISO was not set (e.g., error during session creation or restore)
+                calculatedOverallDurationSeconds = accumulatedStepDurations.reduce((sum, dur) => sum + dur, 0);
+                console.warn("callSessionStartTimeISO was not available. Using sum of step durations for overall call duration.");
             }
             
-            const qualityReasonText = allStepsWereCompletedByUser ? 'All steps completed successfully.' : 'Call ended prematurely.';
+            const quality = completedAllSteps ? 'Good' : (calculatedOverallDurationSeconds > 0 ? 'Bad' : 'N/A'); 
+            const reason = completedAllSteps ? 'All steps completed successfully.' : 'Call ended prematurely.';
             
-            let callQualityIntValue;
-            if (allStepsWereCompletedByUser) {
-                callQualityIntValue = 2; 
-            } else { 
-                if (overallDurationSeconds > 0) {
-                    callQualityIntValue = 1; 
-                } else {
-                    callQualityIntValue = 0; 
-                }
-            }
-            
-            updateSystemStatus(allStepsWereCompletedByUser ? "✅ Call Completed" : "⚪ Call Ended", 
-                               allStepsWereCompletedByUser ? "status-completed" : "status-ended");
+            updateSystemStatus(completedAllSteps ? "✅ Call Completed" : "⚪ Call Ended", 
+                               completedAllSteps ? "status-completed" : "status-ended");
 
-            if (callSessionId) { 
+            if (callSessionId) {
                 const updatePayload = {
-                    end_time: currentEndTimeISO,
-                    duration: overallDurationSeconds, 
-                    completed: true, 
-                    call_quality: callQualityIntValue, 
-                    quality_reason: qualityReasonText 
+                    end_time: endTimeISO,
+                    duration: calculatedOverallDurationSeconds, // MODIFIED: Use overall duration
+                    completed: completedAllSteps, // DB column 'completed' updated with this boolean
+                    call_quality: quality, // Placeholder for potential user rating
+                    quality_reason: reason
                 };
-                console.log('[finishCall] Update payload for call_sessions:', updatePayload); 
+                console.log("Updating call session:", callSessionId, "with payload:", updatePayload);
 
                 const { error: updateError } = await supabase
                     .from('call_sessions')
                     .update(updatePayload)
-                    .eq('id', callSessionId); 
+                    .eq('id', callSessionId);
 
                 if (updateError) {
-                    console.error("[finishCall] Error updating call session in Supabase:", updateError);
-                    showAssistantMessage(`⚠️ Error saving call summary: ${updateError.message}. Ensure RLS policies are correctly set for UPDATE.`, false, 10000);
+                    console.error("Error updating call session in Supabase:", updateError);
+                    showAssistantMessage(`⚠️ Error saving call summary: ${updateError.message}`, false, 7000);
                 } else {
-                    console.log("[finishCall] Call session updated successfully in Supabase. ID:", callSessionId);
+                    console.log("Call session updated successfully in Supabase.");
                 }
 
                  try {
-                    console.log(`[finishCall] Invoking evaluate-call-session for session: ${callSessionId}`);
+                    console.log(`Invoking evaluate-call-session for session: ${callSessionId}`);
                     const { data: evalData, error: funcError } = await supabase.functions.invoke('evaluate-call-session', {
                         body: { 
                             sessionId: callSessionId, 
-                            quality: callQualityIntValue, 
-                            reason: qualityReasonText 
+                            quality: quality, 
+                            reason: reason 
                         }
                     });
                     if (funcError) throw funcError;
-                    console.log("[finishCall] evaluate-call-session response:", evalData);
+                    console.log("evaluate-call-session response:", evalData);
                 } catch (err) {
-                    console.error("[finishCall] Error invoking evaluate-call-session:", err);
+                    console.error("Error invoking evaluate-call-session:", err);
                 }
             } else {
-                console.warn("[finishCall] callSessionId is null or invalid, cannot update call session in Supabase.");
-                showAssistantMessage("⚠️ Critical error: Could not save call summary (no session ID).", false, 7000);
+                console.warn("callSessionId is null, cannot update call session in Supabase.");
             }
             
-            let qualityDisplayText = "N/A";
-            if (callQualityIntValue === 2) qualityDisplayText = "Good";
-            else if (callQualityIntValue === 1) qualityDisplayText = "Bad";
-            else if (callQualityIntValue === 0) qualityDisplayText = "N/A";
-
-            displayPostCallSummary(qualityDisplayText, qualityReasonText, overallDurationSeconds);
+            displayPostCallSummary(quality, reason, calculatedOverallDurationSeconds);
             clearCallState(); 
         }
 
-        function displayPostCallSummary(qualityText, reasonText, totalDurationSeconds) {
+        function displayPostCallSummary(quality, reason, totalDurationSeconds) {
             let summaryHTML = `
-                <p><strong>Call Quality:</strong> <span class="quality-text quality-${qualityText?.toLowerCase() || 'na'}">${qualityText}</span></p>
-                <p><strong>Reason:</strong> ${reasonText || "N/A"}</p>
+                <p><strong>Call Quality:</strong> <span class="quality-text quality-${quality?.toLowerCase() || 'na'}">${quality || 'N/A'}</span></p>
+                <p><strong>Reason:</strong> ${reason || "N/A"}</p>
                 <p><strong>Total Duration:</strong> ${Math.floor(totalDurationSeconds / 60)}m ${totalDurationSeconds % 60}s</p>
                 <hr style="margin: 1rem 0; border-color: var(--border-color);">
                 <p><strong>Step Durations:</strong></p>
@@ -706,7 +682,7 @@
                 currentStepIndex,
                 accumulatedStepDurations: [...accumulatedStepDurations], 
                 stepStartTime: stepStartTime, 
-                callSessionStartTimeISO, 
+                callSessionStartTimeISO, // MODIFIED: Save actual call start time
                 timestamp: Date.now()
             };
             try {
@@ -726,7 +702,7 @@
                 currentStepIndex = savedState.currentStepIndex;
                 accumulatedStepDurations = savedState.accumulatedStepDurations || (currentScenario && currentScenario.steps ? new Array(currentScenario.steps.length).fill(0) : []);
                 stepStartTime = savedState.stepStartTime; 
-                callSessionStartTimeISO = savedState.callSessionStartTimeISO; 
+                callSessionStartTimeISO = savedState.callSessionStartTimeISO; // MODIFIED: Restore actual call start time
                 
                 if (!callSessionId || !currentScenario || !currentScenario.steps || typeof currentScenario.title === 'undefined' || currentStepIndex < 0) {
                     throw new Error("Invalid restored state data (missing title or other fields).");
@@ -756,7 +732,7 @@
             currentStepIndex = 0;
             accumulatedStepDurations = [];
             stepStartTime = 0;
-            callSessionStartTimeISO = null; 
+            callSessionStartTimeISO = null; // MODIFIED: Reset actual call start time
             
             if (switchToInitial) {
                 switchToInitialView();
