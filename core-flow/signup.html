@@ -273,9 +273,9 @@
                 setButtonLoading(true);
 
                 const name = nameInput.value.trim();
-                const email = emailInput.value.trim().toLowerCase();
-                const password = passwordInput.value;
-                const confirmPassword = confirmInput.value;
+                const emailValue = emailInput.value.trim().toLowerCase(); // Renamed to avoid conflict
+                const passwordValue = passwordInput.value; // Renamed to avoid conflict
+                const confirmPasswordValue = confirmInput.value; // Renamed to avoid conflict
                 const termsAgreed = termsCheckbox.checked;
 
                 let isValid = true;
@@ -284,20 +284,20 @@
                     displayError(nameError, "Full name is required.");
                     isValid = false;
                 }
-                if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+                if (!emailValue || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailValue)) {
                     displayError(emailError, "Please enter a valid email address.");
                     isValid = false;
                 }
-                if (!password || password.length < 8) { 
+                if (!passwordValue || passwordValue.length < 8) { 
                     displayError(passwordError, "Password must be at least 8 characters.");
                     isValid = false;
                 }
-                updatePasswordStrength(password); 
+                updatePasswordStrength(passwordValue); 
                 if (passwordStrengthEl && (passwordStrengthEl.classList.contains('strength-weak') || passwordStrengthEl.classList.contains('strength-very-weak'))) {
-                    // isValid = false; // Uncomment if strict client-side blocking is desired
+                    // isValid = false; 
                 }
 
-                if (password !== confirmPassword) {
+                if (passwordValue !== confirmPasswordValue) {
                     displayError(confirmError, "Passwords do not match.");
                     isValid = false;
                 }
@@ -311,10 +311,12 @@
                     return;
                 }
 
+                console.log(`Attempting signup for email: ${emailValue}`); // Log email being used
+
                 try {
                     const { data: authData, error: authError } = await supabase.auth.signUp({
-                        email: email,
-                        password: password,
+                        email: emailValue,
+                        password: passwordValue,
                         options: {
                             data: { 
                                 full_name: name 
@@ -322,35 +324,82 @@
                         }
                     });
 
+                    // --- DETAILED LOGGING ---
+                    console.log("--- Supabase signUp Response ---");
+                    console.log("authData:", JSON.parse(JSON.stringify(authData || null))); // Deep copy for logging
+                    console.log("authError:", JSON.parse(JSON.stringify(authError || null))); // Deep copy for logging
+                    if (authData && authData.user) {
+                        console.log("authData.user details:", {
+                            id: authData.user.id,
+                            email: authData.user.email,
+                            created_at: authData.user.created_at,
+                            updated_at: authData.user.updated_at,
+                            email_confirmed_at: authData.user.email_confirmed_at,
+                            phone_confirmed_at: authData.user.phone_confirmed_at,
+                            last_sign_in_at: authData.user.last_sign_in_at,
+                            role: authData.user.role,
+                            aud: authData.user.aud,
+                            identities: authData.user.identities ? JSON.parse(JSON.stringify(authData.user.identities)) : null
+                        });
+                         console.log("authData.session exists:", !!authData.session);
+                    }
+                     console.log("-----------------------------");
+                    // --- END DETAILED LOGGING ---
+
+
                     if (authError) {
-                        throw authError; 
+                        // Even if there's an error, check if a user object was returned (for unconfirmed user case)
+                        if (authData && authData.user && authData.user.email === emailValue && authData.user.email_confirmed_at === null) {
+                            // This scenario implies Supabase might return an error *and* user data if user exists but is unconfirmed.
+                            // This is unusual but let's handle it.
+                             console.log("AuthError present, but user object also found for unconfirmed email. Prioritizing unconfirmed user flow.");
+                             // Fall through to the `if (authData.user)` block below.
+                        } else {
+                            console.log("AuthError received, throwing error to catch block:", authError.message);
+                            throw authError; 
+                        }
                     }
                     
-                    if (authData.user) {
-                        if (!authData.session) { 
-                            // Email confirmation is pending for this user object.
-                            // Check if this user was created "just now" or existed before (unconfirmed).
+                    if (authData && authData.user) {
+                        console.log("Processing 'authData.user' exists branch.");
+                        if (!authData.session && authData.user.email_confirmed_at === null) { 
+                            console.log("User exists, no session, email_confirmed_at is null. (Email confirmation pending).");
+                            
                             const userCreatedAt = new Date(authData.user.created_at).getTime();
                             const now = Date.now();
-                            // Threshold (e.g., 5 seconds) to distinguish a new record from an older, unconfirmed one.
-                            const creationThreshold = 5 * 1000; 
+                            const creationThreshold = 10 * 1000; // Increased threshold to 10 seconds
 
-                            if ( (now - userCreatedAt) > creationThreshold && authData.user.email_confirmed_at === null ) {
-                                // User record was created previously (> threshold ago) and email is still not confirmed.
-                                // Supabase resends the confirmation email in this case.
-                                clearError(signupSuccessMessage); // Ensure no generic success message is shown
-                                displayError(signupGeneralError, "This email is already registered but not yet confirmed. A new confirmation email has been sent. Please check your inbox (and spam folder).");
-                                // Do not reset the form or change focus, allow user to see the message.
+                            console.log("Timestamps for unconfirmed check:", {
+                                userCreatedAt,
+                                now,
+                                diff_ms: now - userCreatedAt,
+                                threshold_ms: creationThreshold,
+                                isEmailConfirmed: authData.user.email_confirmed_at,
+                                identities_length: authData.user.identities ? authData.user.identities.length : 'N/A'
+                            });
+
+                            // A key indicator for a "new" user vs "existing unconfirmed" is `identities`.
+                            // For a truly new user signup (even if email confirmation is required), `identities` array might be empty or length 0 initially.
+                            // If trying to sign up again for an unconfirmed email, Supabase might return the user object
+                            // with identities already populated from the first attempt.
+                            // However, the most reliable is `email_confirmed_at` combined with how recent `created_at` is.
+                            // Supabase itself handles resending confirmation email if you try to sign up again with an unconfirmed email.
+                            // The goal here is to provide a more specific message.
+
+                            if ( (now - userCreatedAt) > creationThreshold ) { // If created more than 10s ago
+                                console.log("Condition MET: User created > 10s ago and email not confirmed.");
+                                clearError(signupSuccessMessage);
+                                displayError(signupGeneralError, "This email is already registered but not yet confirmed. A confirmation email has been resent. Please check your inbox (and spam folder).");
                             } else {
-                                // User record was likely created just now by this signup attempt (or very rapid retry).
-                                // Standard "new signup, needs confirmation" message is appropriate.
+                                // This path is for a brand new signup that requires email confirmation, or a very quick retry.
+                                console.log("Condition NOT MET: New user (or very recent retry) needing confirmation.");
                                 displaySuccess(signupSuccessMessage, "Signup successful! Please check your email to confirm your account.");
                                 signupForm.reset(); 
                                 if(nameInput) nameInput.focus();
                             }
-                        } else { 
-                            // User created AND session active (e.g., auto-confirm enabled or email confirmation disabled)
-                            const isAdmin = (email === "m.elsayed@thechefz.co"); 
+                        } else if (authData.session) { 
+                            console.log("User exists AND session is active (auto-confirmed or email verification disabled).");
+                            const isAdmin = (emailValue === "m.elsayed@thechefz.co"); 
                             
                             const appUser = {
                                 id: authData.user.id,
@@ -386,41 +435,57 @@
                                 
                                 displaySuccess(signupSuccessMessage, "Signup successful! Redirecting to login...");
                                 setTimeout(() => {
-                                    window.location.href = `login.html?email=${encodeURIComponent(email)}&signedup=true`;
+                                    window.location.href = `login.html?email=${encodeURIComponent(emailValue)}&signedup=true`;
                                 }, 2000);
                             }
+                        } else {
+                             // User exists, but no session, AND email_confirmed_at is NOT null (i.e., user is confirmed but somehow no session).
+                             // This is an unusual state for signup.
+                            console.warn("User exists, email_confirmed_at is NOT null, but no session. This is an unusual state for signup. Treating as general error.");
+                            throw new Error("Signup completed but session could not be established. Please try logging in.");
                         }
                     } else { 
-                        throw new Error("Signup process did not complete successfully: No user data was returned. Please try again or contact support if the issue persists.");
+                         // No authData.user AND no authError (already handled if authError existed)
+                        console.log("No authData.user and no authError (after initial check). Throwing custom error.");
+                        throw new Error("Signup process did not complete successfully: No user data or error was returned from the server. Please try again or contact support.");
                     }
 
                 } catch (error) {
-                    console.error("Signup error:", error);
+                    console.error("--- Signup CATCH Block Error ---");
+                    console.error("Error Name:", error.name);
+                    console.error("Error Message:", error.message);
+                    console.error("Error Stack:", error.stack);
+                    console.error("Full Error Object:", JSON.parse(JSON.stringify(error)));
+                    console.error("--------------------------------");
+
                     clearError(signupSuccessMessage); 
 
-                    let errorMessage = "An unexpected error occurred. Please try again."; 
+                    let errorMessage = "An unexpected error occurred during signup. Please try again."; 
 
                     if (error && error.message) { 
                         const lowerMessage = error.message.toLowerCase();
-                        if (lowerMessage.includes("user already registered") || lowerMessage.includes("email already registered")) {
-                            errorMessage = "This email is already registered. Please log in instead.";
+                        if (lowerMessage.includes("user already registered") || lowerMessage.includes("email address is already registered") || (error.status === 400 && lowerMessage.includes("user already exists"))) {
+                            // This is a common error for existing, confirmed users.
+                            // For unconfirmed, we hope the logic above caught it. If not, this is the fallback.
+                            errorMessage = "This email is already registered. Please try logging in or use 'Forgot Password' if needed.";
                             displayError(signupGeneralError, errorMessage);
                         } else if (lowerMessage.includes("email link is invalid or has expired")) {
-                            errorMessage = "A confirmation is pending for this email, or the email link is invalid/expired. Please check your email.";
+                            errorMessage = "The confirmation link for this email is invalid or has expired. Please try signing up again to receive a new link.";
                             displayError(signupGeneralError, errorMessage);
                         } else if (lowerMessage.includes("password should be at least")) {
                             errorMessage = error.message; 
                             displayError(passwordError, errorMessage); 
                             clearError(signupGeneralError); 
-                        } else if (lowerMessage.includes("rate limit exceeded")) {
+                        } else if (lowerMessage.includes("rate limit exceeded") || (error.status === 429)) {
                             errorMessage = "Too many signup attempts. Please try again later.";
                             displayError(signupGeneralError, errorMessage);
-                        } else if (lowerMessage.includes("signup process did not complete successfully")) { 
+                        } else if (lowerMessage.includes("signup process did not complete successfully") || lowerMessage.includes("session could not be established")) { 
                              errorMessage = error.message; 
                              displayError(signupGeneralError, errorMessage);
                         }
                          else {
-                            errorMessage = error.message; 
+                            // For other Supabase errors or generic errors
+                            errorMessage = `Signup failed: ${error.message}`; 
                             displayError(signupGeneralError, errorMessage);
                         }
                     } else {
@@ -429,7 +494,8 @@
                 } finally {
                     if (!signupSuccessMessage.textContent.includes("Redirecting") || 
                         (signupGeneralError.textContent.includes("failed to save session locally")) ||
-                        (signupGeneralError.textContent.includes("already registered but not yet confirmed")) // Add condition for the new error message
+                        (signupGeneralError.textContent.includes("already registered but not yet confirmed")) ||
+                        (signupGeneralError.textContent.includes("already registered. Please try logging in")) // Added this condition
                         ) {
                         setButtonLoading(false);
                     }
@@ -437,7 +503,7 @@
             });
         }
 
-        // Modal Handling
+        // Modal Handling ( остаётся без изменений )
         const modalTriggers = document.querySelectorAll('[data-modal-target]');
         const closeButtons = document.querySelectorAll('[data-close-modal]');
 
