@@ -161,14 +161,13 @@
         document.getElementById('currentYear').textContent = new Date().getFullYear();
 
         // State Variables
-        let currentUser = null; 
-        let currentScenario = null; 
+        let currentUser = null; // Will store {id, email, name, isAdmin}
+        let currentScenario = null; // MODIFIED: {id, title, steps}
         let currentStepIndex = 0;
         let callSessionId = null;
-        let callSessionStartTimeISO = null; // MODIFIED: To store the actual start time of the call session
         let stepTimerInterval = null;
-        let stepStartTime = 0; 
-        let accumulatedStepDurations = []; 
+        let stepStartTime = 0; // Timestamp for current step's start
+        let accumulatedStepDurations = []; // Array to store duration of each step in seconds
 
         const SESSION_STATE_KEY = 'elevoCoreActiveCallState_v2'; 
 
@@ -183,7 +182,7 @@
         function animateView(viewElement) {
             if (viewElement) {
                 viewElement.classList.remove('fade-in');
-                void viewElement.offsetWidth; 
+                void viewElement.offsetWidth; // Trigger reflow
                 viewElement.classList.add('fade-in');
                 viewElement.style.display = 'block';
             }
@@ -300,10 +299,11 @@
             if (restoreCallState()) {
                 console.log("Restored active call session.");
                 switchToCallFlowView(false); 
+                // MODIFIED: Set scenario title from restored currentScenario
                 if (currentScenario && currentScenario.title) {
                     scenarioTitleElement.textContent = currentScenario.title;
                 } else {
-                    scenarioTitleElement.textContent = "Restored Scenario"; 
+                    scenarioTitleElement.textContent = "Restored Scenario"; // Fallback
                 }
                 renderStep(); 
                 updateSystemStatus("🟢 In Call (Restored)", "status-in-call");
@@ -401,9 +401,10 @@
             scenarioTitleElement.textContent = 'Loading...';
 
             try {
+                // MODIFIED: Fetch 'title' instead of 'name' from 'call_scenarios'
                 const { data: scenarioData, error: scenarioError } = await supabase
                     .from('call_scenarios') 
-                    .select('id, title, steps') 
+                    .select('id, title, steps') // MODIFIED: 'title' instead of 'name'
                     .eq('id', selectedScenarioId)
                     .single();
 
@@ -411,22 +412,17 @@
                 if (!scenarioData || !Array.isArray(scenarioData.steps) || scenarioData.steps.length === 0) {
                     throw new Error("Scenario data is invalid or has no steps.");
                 }
-                if (scenarioData.steps.some(step => typeof step !== 'object' || typeof step.text !== 'string')) {
-                    console.warn("Some steps may not have the expected {text: '...'} structure. Ensure 'steps' in 'call_scenarios' is a JSON array of objects like [{""text"": ""Step 1 instruction""}, ...].");
-                }
 
-                currentScenario = scenarioData; 
+                currentScenario = scenarioData; // currentScenario will have .id, .title, .steps
                 currentStepIndex = 0;
                 accumulatedStepDurations = new Array(currentScenario.steps.length).fill(0);
-                
-                const actualSessionStartTimeISO = new Date().toISOString(); // MODIFIED: Capture precise start time
 
                 const { data: newSession, error: sessionInsertError } = await supabase
                     .from('call_sessions')
                     .insert({
                         user_id: currentUser.id,
                         scenario_id: currentScenario.id,
-                        start_time: actualSessionStartTimeISO, // MODIFIED: Store precise start time in DB
+                        start_time: new Date().toISOString(),
                         agent_name: currentUser.name, 
                         agent_email: currentUser.email
                     })
@@ -435,11 +431,12 @@
                 
                 if (sessionInsertError) throw sessionInsertError;
                 callSessionId = newSession.id;
-                callSessionStartTimeISO = actualSessionStartTimeISO; // MODIFIED: Store for client-side duration calculation
-
+                
+                // MODIFIED: Use currentScenario.title
                 scenarioTitleElement.textContent = currentScenario.title; 
                 updateSystemStatus("🟢 In Call", "status-in-call");
                 renderStep(); 
+                // MODIFIED: Use currentScenario.title in assistant message
                 showAssistantMessage(`🚀 Scenario "${currentScenario.title}" started! Follow the steps.`, false, 0);
 
             } catch (err) {
@@ -457,12 +454,8 @@
                 return;
             }
             
-            const stepObject = currentScenario.steps[currentStepIndex];
-            const stepInstructionText = (typeof stepObject === 'object' && stepObject !== null && typeof stepObject.text === 'string') 
-                                        ? stepObject.text 
-                                        : String(stepObject); 
-
-            stepsContainer.innerHTML = `<p>${stepInstructionText}</p>`;
+            const stepText = currentScenario.steps[currentStepIndex];
+            stepsContainer.innerHTML = `<p>${stepText}</p>`;
             
             renderProgressTracker();
 
@@ -477,7 +470,7 @@
             startStepTimer();
             saveCallState(); 
 
-            showAssistantMessage(`📌 Step ${currentStepIndex + 1}: ${stepInstructionText.length > 45 ? stepInstructionText.substring(0, 42) + "..." : stepInstructionText}`, false, 0);
+            showAssistantMessage(`📌 Step ${currentStepIndex + 1}: ${stepText.length > 45 ? stepText.substring(0, 42) + "..." : stepText}`, false, 0);
         }
         
         function renderProgressTracker() {
@@ -572,71 +565,39 @@
         async function finishCall(completedAllSteps) {
             stopAndRecordStepTimer(); 
             
-            const endTimeISO = new Date().toISOString();
-            let calculatedOverallDurationSeconds = 0;
-
-            if (callSessionStartTimeISO) {
-                try {
-                    calculatedOverallDurationSeconds = Math.floor((new Date(endTimeISO).getTime() - new Date(callSessionStartTimeISO).getTime()) / 1000);
-                     if (calculatedOverallDurationSeconds < 0) calculatedOverallDurationSeconds = 0; // Ensure non-negative
-                } catch (e) {
-                    console.error("Error calculating duration from ISO strings:", e);
-                    // Fallback to sum of step durations if ISO string parsing fails
-                    calculatedOverallDurationSeconds = accumulatedStepDurations.reduce((sum, dur) => sum + dur, 0);
-                }
-            } else {
-                // Fallback if callSessionStartTimeISO was not set (e.g., error during session creation or restore)
-                calculatedOverallDurationSeconds = accumulatedStepDurations.reduce((sum, dur) => sum + dur, 0);
-                console.warn("callSessionStartTimeISO was not available. Using sum of step durations for overall call duration.");
-            }
-            
-            const quality = completedAllSteps ? 'Good' : (calculatedOverallDurationSeconds > 0 ? 'Bad' : 'N/A'); 
+            const totalDuration = accumulatedStepDurations.reduce((sum, dur) => sum + dur, 0);
+            const quality = completedAllSteps ? 'Good' : (totalDuration > 0 ? 'Bad' : 'N/A'); 
             const reason = completedAllSteps ? 'All steps completed successfully.' : 'Call ended prematurely.';
             
             updateSystemStatus(completedAllSteps ? "✅ Call Completed" : "⚪ Call Ended", 
                                completedAllSteps ? "status-completed" : "status-ended");
 
             if (callSessionId) {
-                const updatePayload = {
-                    end_time: endTimeISO,
-                    duration: calculatedOverallDurationSeconds, // MODIFIED: Use overall duration
-                    completed: completedAllSteps, // DB column 'completed' updated with this boolean
-                    call_quality: quality, // Placeholder for potential user rating
-                    quality_reason: reason
-                };
-                console.log("Updating call session:", callSessionId, "with payload:", updatePayload);
-
                 const { error: updateError } = await supabase
                     .from('call_sessions')
-                    .update(updatePayload)
+                    .update({
+                        end_time: new Date().toISOString(),
+                        total_duration_seconds: totalDuration,
+                        completed_all_steps: completedAllSteps,
+                        call_quality: quality, 
+                        quality_reason: reason   
+                    })
                     .eq('id', callSessionId);
-
-                if (updateError) {
-                    console.error("Error updating call session in Supabase:", updateError);
-                    showAssistantMessage(`⚠️ Error saving call summary: ${updateError.message}`, false, 7000);
-                } else {
-                    console.log("Call session updated successfully in Supabase.");
-                }
+                if (updateError) console.error("Error updating call session (pre-eval):", updateError);
 
                  try {
                     console.log(`Invoking evaluate-call-session for session: ${callSessionId}`);
                     const { data: evalData, error: funcError } = await supabase.functions.invoke('evaluate-call-session', {
-                        body: { 
-                            sessionId: callSessionId, 
-                            quality: quality, 
-                            reason: reason 
-                        }
+                        body: { sessionId: callSessionId, quality: quality, reason: reason }
                     });
                     if (funcError) throw funcError;
                     console.log("evaluate-call-session response:", evalData);
                 } catch (err) {
                     console.error("Error invoking evaluate-call-session:", err);
                 }
-            } else {
-                console.warn("callSessionId is null, cannot update call session in Supabase.");
             }
             
-            displayPostCallSummary(quality, reason, calculatedOverallDurationSeconds);
+            displayPostCallSummary(quality, reason, totalDuration);
             clearCallState(); 
         }
 
@@ -650,12 +611,9 @@
                 <ul style="list-style: none; padding-left: 0; max-height: 150px; overflow-y: auto;">`;
 
             if (currentScenario && currentScenario.steps) {
-                currentScenario.steps.forEach((stepObject, index) => { 
+                currentScenario.steps.forEach((step, index) => {
                     const duration = accumulatedStepDurations[index] || 0;
-                    const stepInstructionText = (typeof stepObject === 'object' && stepObject !== null && typeof stepObject.text === 'string')
-                                              ? stepObject.text
-                                              : String(stepObject);
-                    const stepShortText = stepInstructionText.length > 25 ? stepInstructionText.substring(0, 22) + "..." : stepInstructionText;
+                    const stepShortText = step.length > 25 ? step.substring(0, 22) + "..." : step;
                     const timeStr = `${Math.floor(duration / 60)}m ${duration % 60}s`;
                     summaryHTML += `<li style="margin-bottom: 0.3rem;">${index + 1}. "${stepShortText}": ${timeStr}</li>`;
                 });
@@ -678,11 +636,10 @@
             if (!callSessionId || !currentScenario) return;
             const state = {
                 callSessionId,
-                currentScenario, 
+                currentScenario, // This will now store {id, title, steps}
                 currentStepIndex,
                 accumulatedStepDurations: [...accumulatedStepDurations], 
                 stepStartTime: stepStartTime, 
-                callSessionStartTimeISO, // MODIFIED: Save actual call start time
                 timestamp: Date.now()
             };
             try {
@@ -698,17 +655,14 @@
                 const savedState = JSON.parse(savedStateJSON);
                 
                 callSessionId = savedState.callSessionId;
-                currentScenario = savedState.currentScenario; 
+                currentScenario = savedState.currentScenario; // Restored object has .title
                 currentStepIndex = savedState.currentStepIndex;
-                accumulatedStepDurations = savedState.accumulatedStepDurations || (currentScenario && currentScenario.steps ? new Array(currentScenario.steps.length).fill(0) : []);
+                accumulatedStepDurations = savedState.accumulatedStepDurations || new Array(currentScenario.steps.length).fill(0);
                 stepStartTime = savedState.stepStartTime; 
-                callSessionStartTimeISO = savedState.callSessionStartTimeISO; // MODIFIED: Restore actual call start time
                 
+                // Ensure currentScenario and its title are valid after restore
                 if (!callSessionId || !currentScenario || !currentScenario.steps || typeof currentScenario.title === 'undefined' || currentStepIndex < 0) {
                     throw new Error("Invalid restored state data (missing title or other fields).");
-                }
-                if (!callSessionStartTimeISO) {
-                    console.warn("Restored state is missing callSessionStartTimeISO. Duration calculation might be affected if call ends immediately after restore without progressing steps.");
                 }
                 return true;
             } catch (e) {
@@ -732,7 +686,6 @@
             currentStepIndex = 0;
             accumulatedStepDurations = [];
             stepStartTime = 0;
-            callSessionStartTimeISO = null; // MODIFIED: Reset actual call start time
             
             if (switchToInitial) {
                 switchToInitialView();
