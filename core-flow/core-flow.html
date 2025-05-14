@@ -298,7 +298,7 @@
             authLoadingDiv.style.display = 'none';
             
             if (restoreCallState()) {
-                console.log("Restored active call session.");
+                console.log("Restored active call session. Restored callSessionId:", callSessionId);
                 switchToCallFlowView(false); 
                 if (currentScenario && currentScenario.title) {
                     scenarioTitleElement.textContent = currentScenario.title;
@@ -429,13 +429,19 @@
                         start_time: actualSessionStartTimeISO, 
                         agent_name: currentUser.name, 
                         agent_email: currentUser.email
-                        // `completed` will be false by default in the DB or as per DB schema
                     })
-                    .select('id')
+                    .select('id') // Ensure 'id' is returned after insert
                     .single();
                 
                 if (sessionInsertError) throw sessionInsertError;
-                callSessionId = newSession.id;
+                
+                callSessionId = newSession.id; // MODIFIED: Ensure this is correctly assigned
+                console.log('Call session CREATED. ID:', callSessionId); // ADDED: Log for callSessionId
+                if (!callSessionId) {
+                    console.error("CRITICAL: callSessionId is NULL after insert!");
+                    // Potentially show an error to the user or halt flow
+                }
+
                 callSessionStartTimeISO = actualSessionStartTimeISO; 
 
                 scenarioTitleElement.textContent = currentScenario.title; 
@@ -522,7 +528,7 @@
                 currentStepIndex++;
                 renderStep();
             } else {
-                finishCall(true); // True: All steps were completed
+                finishCall(true); 
             }
         });
 
@@ -536,7 +542,7 @@
         
         endCallBtn.addEventListener('click', () => {
             stopAndRecordStepTimer();
-            finishCall(false); // False: Call ended prematurely by user
+            finishCall(false); 
         });
 
         // --- Timer Logic ---
@@ -570,7 +576,10 @@
         }
         
         // --- Call Completion & Summary ---
-        async function finishCall(allStepsWereCompletedByUser) { // Renamed parameter for clarity
+        async function finishCall(allStepsWereCompletedByUser) { 
+            console.log('[finishCall] Started. allStepsWereCompletedByUser:', allStepsWereCompletedByUser); // ADDED: Log
+            console.log('[finishCall] Current callSessionId before update attempt:', callSessionId); // ADDED: Log
+
             stopAndRecordStepTimer(); 
             
             const currentEndTimeISO = new Date().toISOString();
@@ -581,76 +590,75 @@
                     overallDurationSeconds = Math.floor((new Date(currentEndTimeISO).getTime() - new Date(callSessionStartTimeISO).getTime()) / 1000);
                     if (overallDurationSeconds < 0) overallDurationSeconds = 0; 
                 } catch (e) {
-                    console.error("Error calculating duration from ISO strings:", e);
-                    overallDurationSeconds = accumulatedStepDurations.reduce((sum, dur) => sum + dur, 0); // Fallback
+                    console.error("[finishCall] Error calculating duration from ISO strings:", e);
+                    overallDurationSeconds = accumulatedStepDurations.reduce((sum, dur) => sum + dur, 0); 
                 }
             } else {
-                overallDurationSeconds = accumulatedStepDurations.reduce((sum, dur) => sum + dur, 0); // Fallback
-                console.warn("callSessionStartTimeISO was not available. Using sum of step durations for overall call duration.");
+                overallDurationSeconds = accumulatedStepDurations.reduce((sum, dur) => sum + dur, 0); 
+                console.warn("[finishCall] callSessionStartTimeISO was not available. Using sum of step durations for overall call duration.");
             }
             
             const qualityReasonText = allStepsWereCompletedByUser ? 'All steps completed successfully.' : 'Call ended prematurely.';
             
             let callQualityIntValue;
             if (allStepsWereCompletedByUser) {
-                callQualityIntValue = 2; // Represents 'Good'
-            } else { // Not all steps completed
+                callQualityIntValue = 2; 
+            } else { 
                 if (overallDurationSeconds > 0) {
-                    callQualityIntValue = 1; // Represents 'Bad' (prematurely ended but had some interaction)
+                    callQualityIntValue = 1; 
                 } else {
-                    callQualityIntValue = 0; // Represents 'N/A' or call ended instantly
+                    callQualityIntValue = 0; 
                 }
             }
             
             updateSystemStatus(allStepsWereCompletedByUser ? "✅ Call Completed" : "⚪ Call Ended", 
                                allStepsWereCompletedByUser ? "status-completed" : "status-ended");
 
-            if (callSessionId) {
+            if (callSessionId) { // Check if callSessionId is valid
                 const updatePayload = {
                     end_time: currentEndTimeISO,
                     duration: overallDurationSeconds, 
-                    completed: true, // MODIFIED: Set to true as the call session is now finished
-                    call_quality: callQualityIntValue, // MODIFIED: Mapped to integer
+                    completed: true, 
+                    call_quality: callQualityIntValue, 
                     quality_reason: qualityReasonText 
                 };
-                console.log("Updating call session:", callSessionId, "with payload:", updatePayload);
+                console.log('[finishCall] Update payload for call_sessions:', updatePayload); // ADDED: Log
 
                 const { error: updateError } = await supabase
                     .from('call_sessions')
                     .update(updatePayload)
-                    .eq('id', callSessionId);
+                    .eq('id', callSessionId); // Ensured .eq('id', callSessionId) is present
 
                 if (updateError) {
-                    console.error("Error updating call session in Supabase:", updateError);
-                    showAssistantMessage(`⚠️ Error saving call summary: ${updateError.message}`, false, 7000);
+                    console.error("[finishCall] Error updating call session in Supabase:", updateError);
+                    showAssistantMessage(`⚠️ Error saving call summary: ${updateError.message}. Ensure RLS policies are correctly set for UPDATE.`, false, 10000);
                 } else {
-                    console.log("Call session updated successfully in Supabase.");
+                    console.log("[finishCall] Call session updated successfully in Supabase. ID:", callSessionId);
                 }
 
                  try {
-                    console.log(`Invoking evaluate-call-session for session: ${callSessionId}`);
-                    // Pass integer quality if Edge Function expects it, or adapt as needed
+                    console.log(`[finishCall] Invoking evaluate-call-session for session: ${callSessionId}`);
                     const { data: evalData, error: funcError } = await supabase.functions.invoke('evaluate-call-session', {
                         body: { 
                             sessionId: callSessionId, 
-                            quality: callQualityIntValue, // Pass integer quality
+                            quality: callQualityIntValue, 
                             reason: qualityReasonText 
                         }
                     });
                     if (funcError) throw funcError;
-                    console.log("evaluate-call-session response:", evalData);
+                    console.log("[finishCall] evaluate-call-session response:", evalData);
                 } catch (err) {
-                    console.error("Error invoking evaluate-call-session:", err);
+                    console.error("[finishCall] Error invoking evaluate-call-session:", err);
                 }
             } else {
-                console.warn("callSessionId is null, cannot update call session in Supabase.");
+                console.warn("[finishCall] callSessionId is null or invalid, cannot update call session in Supabase.");
+                showAssistantMessage("⚠️ Critical error: Could not save call summary (no session ID).", false, 7000);
             }
             
-            // For display, convert int quality back to string if needed, or adjust displayPostCallSummary
             let qualityDisplayText = "N/A";
             if (callQualityIntValue === 2) qualityDisplayText = "Good";
             else if (callQualityIntValue === 1) qualityDisplayText = "Bad";
-            else if (callQualityIntValue === 0) qualityDisplayText = "N/A"; // or "Poor" / "Incomplete"
+            else if (callQualityIntValue === 0) qualityDisplayText = "N/A";
 
             displayPostCallSummary(qualityDisplayText, qualityReasonText, overallDurationSeconds);
             clearCallState(); 
