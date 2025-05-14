@@ -140,8 +140,7 @@
             console.log('Supabase client initialized for signup.html using ES Modules');
         } catch (error) {
             console.error("Supabase client initialization failed:", error);
-            // Display error in the designated div if it exists
-            const supabaseErrorDiv = document.getElementById('signupError'); // Or a dedicated supabase error div
+            const supabaseErrorDiv = document.getElementById('signupError'); 
             if (supabaseErrorDiv) {
                  supabaseErrorDiv.textContent = "Error: Could not initialize authentication service. Signup is currently unavailable.";
                  supabaseErrorDiv.style.display = 'block';
@@ -151,7 +150,6 @@
             }
             const submitBtn = document.getElementById('submitButton');
             if(submitBtn) submitBtn.disabled = true;
-            // Optionally hide the form
             const signupFrm = document.getElementById('signupForm');
             if(signupFrm) signupFrm.style.display = 'none';
              const signupHeader = document.querySelector('.signup-header');
@@ -181,7 +179,7 @@
         function displayError(element, message) {
             if(element) {
                 element.textContent = message;
-                element.style.display = 'block'; // Ensure it's visible
+                element.style.display = 'block'; 
             }
         }
         function clearError(element) {
@@ -193,19 +191,19 @@
         function displaySuccess(element, message) {
             if(element) {
                 element.textContent = message;
-                element.style.display = 'block'; // Ensure it's visible
+                element.style.display = 'block'; 
             }
         }
-        function setButtonLoading(isLoading) { // Added for signup button
+        function setButtonLoading(isLoading) { 
             if (!submitButton) return;
             submitButton.disabled = isLoading;
-            submitButton.classList.toggle('loading', isLoading); // Assumes 'loading' class for spinner
+            submitButton.classList.toggle('loading', isLoading); 
         }
 
         function updatePasswordStrength(password) {
             if (!passwordStrengthEl) return;
             let strength = 0;
-            let feedback = []; // Changed to array to join later
+            let feedback = []; 
             if (!password) {
                 passwordStrengthEl.textContent = '';
                 passwordStrengthEl.className = 'password-strength';
@@ -242,9 +240,9 @@
         if (passwordInput) {
             passwordInput.addEventListener('input', (e) => updatePasswordStrength(e.target.value));
         }
-        if (confirmInput && passwordInput) { // Added null check for passwordInput
+        if (confirmInput && passwordInput) { 
             confirmInput.addEventListener('input', () => {
-                 if (!passwordInput) return; // Defensive check
+                 if (!passwordInput) return; 
                 if (passwordInput.value !== confirmInput.value) {
                     displayError(confirmError, "Passwords do not match.");
                 } else {
@@ -254,7 +252,6 @@
         }
 
         passwordToggles.forEach(toggle => {
-            // Adjusted to find input within the same input-wrapper
             const inputWrapper = toggle.closest('.input-wrapper');
             const inputElement = inputWrapper ? inputWrapper.querySelector('input[type="password"], input[type="text"]') : null;
             
@@ -296,12 +293,8 @@
                     displayError(passwordError, "Password must be at least 8 characters.");
                     isValid = false;
                 }
-                 // Check strength for UI feedback, but server handles actual rules
-                updatePasswordStrength(password); // Call it here to ensure feedback is current
+                updatePasswordStrength(password); 
                 if (passwordStrengthEl && (passwordStrengthEl.classList.contains('strength-weak') || passwordStrengthEl.classList.contains('strength-very-weak'))) {
-                    // Optionally prevent submission for very weak passwords client-side,
-                    // but Supabase itself will enforce its own rules (e.g., min length).
-                    // For now, just showing the error is enough.
                     // isValid = false; // Uncomment if strict client-side blocking is desired
                 }
 
@@ -327,7 +320,6 @@
                             data: { 
                                 full_name: name 
                             }
-                            // emailRedirectTo: `${window.location.origin}/login.html` // Or your confirmation page
                         }
                     });
 
@@ -335,13 +327,11 @@
                         throw authError; 
                     }
                     
-                    // Supabase signUp now often returns a user object even if email confirmation is pending
-                    // The key is to check if a session is also created, or if user.identities is empty (new user needing confirmation)
-                    if (authData.user && (!authData.session || authData.user.identities?.length === 0)) {
+                    // Check for user data and session state
+                    if (authData.user && !authData.session) { // User exists/created, email confirmation pending
                          displaySuccess(signupSuccessMessage, "Signup successful! Please check your email to confirm your account.");
                          signupForm.reset(); 
                          if(nameInput) nameInput.focus();
-                         // Don't redirect, user needs to confirm email first
                     } else if (authData.user && authData.session) { // User created and session active (e.g. auto-confirm enabled)
                         const isAdmin = (email === "m.elsayed@thechefz.co"); 
                         const { error: insertError } = await supabase
@@ -355,54 +345,65 @@
 
                         if (insertError) {
                             console.error("Error inserting user profile:", insertError);
+                            // Clear success message if profile insertion fails, show specific error
+                            clearError(signupSuccessMessage);
                             displayError(signupGeneralError, `Account created, but profile setup failed. Please contact support. (${insertError.message})`);
-                            // User is technically signed up, but profile failed.
-                            // May need to log them out or guide them.
                         } else {
+                            // Store user information in localStorage
+                            const appUser = {
+                                id: authData.user.id,
+                                email: authData.user.email,
+                                name: authData.user.user_metadata.full_name || name, // Use name from metadata, fallback to form
+                                is_admin: isAdmin 
+                            };
+                            localStorage.setItem('appUser', JSON.stringify(appUser));
+                            // Supabase client automatically persists the session.
+
                             displaySuccess(signupSuccessMessage, "Signup successful! Redirecting to login...");
                             setTimeout(() => {
                                 window.location.href = `login.html?email=${encodeURIComponent(email)}&signedup=true`;
                             }, 2000);
                         }
-                    } else { // Unexpected response
+                    } else { // Unexpected response if no error but also no user
                         displayError(signupGeneralError, "Signup response unclear. Please try logging in or contact support.");
                     }
 
                 } catch (error) {
                     console.error("Signup error:", error);
-                    let errorMessage = "An unexpected error occurred. Please try again."; // Default
+                    clearError(signupSuccessMessage); // Ensure success message is cleared on any error
 
-                    if (error.message) {
+                    let errorMessage = "An unexpected error occurred. Please try again."; 
+
+                    if (error && error.message) { // Check if error and error.message exist
                         const lowerMessage = error.message.toLowerCase();
                         if (lowerMessage.includes("user already registered") || lowerMessage.includes("email already registered")) {
                             errorMessage = "This email is already registered. Please log in instead.";
                             displayError(signupGeneralError, errorMessage);
-                            return; // Stop further execution
+                            // No return here, finally block will handle setButtonLoading
                         } else if (lowerMessage.includes("email link is invalid or has expired")) {
                             errorMessage = "A confirmation is pending for this email, or the email link is invalid/expired. Please check your email.";
                             displayError(signupGeneralError, errorMessage);
-                            return; // Stop further execution
                         } else if (lowerMessage.includes("password should be at least")) {
                             errorMessage = error.message; 
                             displayError(passwordError, errorMessage); // Show under password field
-                            return; // Stop further execution (prevents also showing in general error field)
+                            // To avoid double error messages, we can clear the general one if passwordError is shown
+                            clearError(signupGeneralError);
                         } else if (lowerMessage.includes("rate limit exceeded")) {
                             errorMessage = "Too many signup attempts. Please try again later.";
                             displayError(signupGeneralError, errorMessage);
-                            return; // Stop further execution
                         } else {
-                            // For other Supabase errors not specifically handled, use their message.
-                            errorMessage = error.message;
+                            errorMessage = error.message; // Use Supabase's error message
+                            displayError(signupGeneralError, errorMessage);
                         }
+                    } else {
+                        // If error or error.message is null/undefined, display the default message
+                        displayError(signupGeneralError, errorMessage);
                     }
-                    // If we reach here, it means an error occurred that wasn't one of the specific cases with a 'return'
-                    // or error.message was null/empty. Display the determined errorMessage.
-                    displayError(signupGeneralError, errorMessage);
+                    // The original returns in the catch block were to prevent the generic error message
+                    // at the end of the catch block from showing if a specific one was already shown.
+                    // Now, with specific displayError calls, and a final one for general errors,
+                    // we ensure only one relevant error message is prominent.
                 } finally {
-                    // Only set loading to false if not redirecting.
-                    // Success with redirection has its own timeout.
-                    // Success needing email confirmation should also reset button.
-                    // This will also be called if 'return' was used in the catch block.
                     if (!signupSuccessMessage.textContent.includes("Redirecting")) {
                         setButtonLoading(false);
                     }
@@ -431,7 +432,7 @@
         });
 
         window.addEventListener('click', function(event) {
-            document.querySelectorAll('.modal.active').forEach(modal => { // Check only active modals
+            document.querySelectorAll('.modal.active').forEach(modal => { 
                 if (event.target == modal) {
                     closeModal(modal);
                 }
@@ -439,7 +440,7 @@
         });
         window.addEventListener('keydown', function(event) {
             if (event.key === 'Escape') {
-                 document.querySelectorAll('.modal.active').forEach(modal => { // Check only active modals
+                 document.querySelectorAll('.modal.active').forEach(modal => { 
                      closeModal(modal);
                 });
             }
@@ -447,8 +448,8 @@
 
         function openModal(modal) {
             if (modal == null) return;
-            modal.style.display = 'block'; // Or 'flex' if using flex for centering
-            modal.classList.add('active'); // To track active modal for Esc/click outside
+            modal.style.display = 'block'; 
+            modal.classList.add('active'); 
             document.body.classList.add('modal-open');
             modal.setAttribute('aria-hidden', 'false');
             const firstFocusableElement = modal.querySelector('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
@@ -463,8 +464,7 @@
             modal.setAttribute('aria-hidden', 'true');
         }
 
-        // Initial focus
-        if (supabase && nameInput) { // Ensure supabase initialized before setting focus
+        if (supabase && nameInput) { 
             nameInput.focus();
         }
         console.log("Signup page script loaded and initialized.");
