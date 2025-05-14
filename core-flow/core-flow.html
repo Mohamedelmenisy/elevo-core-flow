@@ -64,7 +64,7 @@
                 <div class="scenario-selector-container">
                     <label for="scenarioDropdown">Select Scenario:</label>
                     <select id="scenarioDropdown" class="scenario-dropdown">
-                        <option value="">Loading scenarios...</option> {/* Initial HTML, JS will update */}
+                        <option value="">Loading scenarios...</option>
                     </select>
                 </div>
 
@@ -162,14 +162,14 @@
 
         // State Variables
         let currentUser = null; // Will store {id, email, name, isAdmin}
-        let currentScenario = null; // {id, name, steps} - Note: 'name' is used here from 'call_scenarios' fetch
+        let currentScenario = null; // MODIFIED: {id, title, steps}
         let currentStepIndex = 0;
         let callSessionId = null;
         let stepTimerInterval = null;
         let stepStartTime = 0; // Timestamp for current step's start
         let accumulatedStepDurations = []; // Array to store duration of each step in seconds
 
-        const SESSION_STATE_KEY = 'elevoCoreActiveCallState_v2'; // Updated key for sessionStorage
+        const SESSION_STATE_KEY = 'elevoCoreActiveCallState_v2'; 
 
         // --- Helper Functions ---
         function updateSystemStatus(statusText, statusClass = 'status-waiting') {
@@ -207,13 +207,13 @@
             clearTimeout(assistantTimeout);
             if (typingInterval) clearInterval(typingInterval);
 
-            assistantBox.classList.remove('show', 'assistant-initial-position'); // Clear old states
-            void assistantBox.offsetWidth; // Reflow
+            assistantBox.classList.remove('show', 'assistant-initial-position'); 
+            void assistantBox.offsetWidth; 
 
             if (isInitial) {
                 assistantBox.classList.add('assistant-initial-position');
             } else {
-                assistantBox.classList.add('show'); // For fixed position slide-in
+                assistantBox.classList.add('show'); 
             }
             assistantBox.style.display = 'flex';
 
@@ -234,18 +234,17 @@
              } else {
                 assistantBox.classList.remove('show');
              }
-             // Hide after transition or immediately
              setTimeout(() => {
                 if (!assistantBox.classList.contains('show') && !assistantBox.classList.contains('assistant-initial-position')) {
                     assistantBox.style.display = 'none';
                 }
-             }, wasInitial ? 0 : 400); // 400ms for slide-out transition
+             }, wasInitial ? 0 : 400); 
         }
 
 
         // --- Authentication and Initialization ---
         async function initializeApp() {
-            if (!supabase) { // Supabase client failed to init
+            if (!supabase) { 
                  authLoadingDiv.innerHTML = '<p style="color:red; text-align:center;">Critical Error: Services unavailable. Please try again later.</p>';
                  return;
             }
@@ -300,6 +299,12 @@
             if (restoreCallState()) {
                 console.log("Restored active call session.");
                 switchToCallFlowView(false); 
+                // MODIFIED: Set scenario title from restored currentScenario
+                if (currentScenario && currentScenario.title) {
+                    scenarioTitleElement.textContent = currentScenario.title;
+                } else {
+                    scenarioTitleElement.textContent = "Restored Scenario"; // Fallback
+                }
                 renderStep(); 
                 updateSystemStatus("🟢 In Call (Restored)", "status-in-call");
             } else {
@@ -349,38 +354,33 @@
         async function loadActiveScenarios() {
             scenarioDropdown.disabled = true;
             receiveCallBtn.disabled = true;
-            // Use 'disabled selected' for the initial loading message as per user's example HTML
             scenarioDropdown.innerHTML = '<option value="" disabled selected>Loading scenarios...</option>';
 
             try {
                 const { data: scenarios, error } = await supabase
-                    .from('call_scenarios_with_creator') // MODIFIED: Use view or specified table
-                    .select('id, title')                 // MODIFIED: Select 'title' for display
+                    .from('call_scenarios_with_creator') 
+                    .select('id, title')                 
                     .eq('is_active', true)
-                    .order('created_at', { ascending: false }); // MODIFIED: Order by creation date
+                    .order('created_at', { ascending: false }); 
 
                 if (error) throw error;
 
                 if (scenarios && scenarios.length > 0) {
-                    scenarioDropdown.innerHTML = '<option value="">-- Select a Scenario --</option>'; // Standard prompt
+                    scenarioDropdown.innerHTML = '<option value="">-- Select a Scenario --</option>'; 
                     scenarios.forEach(s => {
                         const option = document.createElement('option');
                         option.value = s.id;
-                        option.textContent = s.title; // MODIFIED: Use 'title' for option text
+                        option.textContent = s.title; 
                         scenarioDropdown.appendChild(option);
                     });
                     scenarioDropdown.disabled = false;
                 } else {
-                    // MODIFIED: Dropdown message for no scenarios
                     scenarioDropdown.innerHTML = '<option value="" disabled>No scenarios available.</option>';
-                    // Existing assistant message can remain or be aligned
                     showAssistantMessage("⚠️ No active call scenarios available.", true, 0);
                 }
             } catch (err) {
                 console.error("Error loading scenarios:", err);
-                // MODIFIED: Dropdown message for failure
                 scenarioDropdown.innerHTML = '<option value="" disabled>⚠️ Failed to load scenarios.</option>';
-                // Existing assistant message can remain or be aligned
                 showAssistantMessage(`⚠️ Error loading scenarios: ${err.message}`, true, 8000);
             }
         }
@@ -401,12 +401,10 @@
             scenarioTitleElement.textContent = 'Loading...';
 
             try {
-                // Fetch full scenario details (including steps and 'name' if it's used for title display in call flow)
-                // This part remains fetching from 'call_scenarios' and using 'name' for currentScenario.name
-                // as 'title' from 'call_scenarios_with_creator' is only for dropdown display.
+                // MODIFIED: Fetch 'title' instead of 'name' from 'call_scenarios'
                 const { data: scenarioData, error: scenarioError } = await supabase
-                    .from('call_scenarios') // This table should contain 'name' and 'steps'
-                    .select('id, name, steps') // 'name' here is used for scenarioTitleElement
+                    .from('call_scenarios') 
+                    .select('id, title, steps') // MODIFIED: 'title' instead of 'name'
                     .eq('id', selectedScenarioId)
                     .single();
 
@@ -415,7 +413,7 @@
                     throw new Error("Scenario data is invalid or has no steps.");
                 }
 
-                currentScenario = scenarioData; // currentScenario will have .id, .name, .steps
+                currentScenario = scenarioData; // currentScenario will have .id, .title, .steps
                 currentStepIndex = 0;
                 accumulatedStepDurations = new Array(currentScenario.steps.length).fill(0);
 
@@ -425,7 +423,7 @@
                         user_id: currentUser.id,
                         scenario_id: currentScenario.id,
                         start_time: new Date().toISOString(),
-                        agent_name: currentUser.name, // User's name
+                        agent_name: currentUser.name, 
                         agent_email: currentUser.email
                     })
                     .select('id')
@@ -434,10 +432,12 @@
                 if (sessionInsertError) throw sessionInsertError;
                 callSessionId = newSession.id;
                 
-                scenarioTitleElement.textContent = currentScenario.name; // Uses 'name' from 'call_scenarios'
+                // MODIFIED: Use currentScenario.title
+                scenarioTitleElement.textContent = currentScenario.title; 
                 updateSystemStatus("🟢 In Call", "status-in-call");
                 renderStep(); 
-                showAssistantMessage(`🚀 Scenario "${currentScenario.name}" started! Follow the steps.`, false, 0);
+                // MODIFIED: Use currentScenario.title in assistant message
+                showAssistantMessage(`🚀 Scenario "${currentScenario.title}" started! Follow the steps.`, false, 0);
 
             } catch (err) {
                 console.error("Error starting call:", err);
@@ -636,7 +636,7 @@
             if (!callSessionId || !currentScenario) return;
             const state = {
                 callSessionId,
-                currentScenario,
+                currentScenario, // This will now store {id, title, steps}
                 currentStepIndex,
                 accumulatedStepDurations: [...accumulatedStepDurations], 
                 stepStartTime: stepStartTime, 
@@ -655,13 +655,14 @@
                 const savedState = JSON.parse(savedStateJSON);
                 
                 callSessionId = savedState.callSessionId;
-                currentScenario = savedState.currentScenario;
+                currentScenario = savedState.currentScenario; // Restored object has .title
                 currentStepIndex = savedState.currentStepIndex;
                 accumulatedStepDurations = savedState.accumulatedStepDurations || new Array(currentScenario.steps.length).fill(0);
                 stepStartTime = savedState.stepStartTime; 
                 
-                if (!callSessionId || !currentScenario || !currentScenario.steps || currentStepIndex < 0) {
-                    throw new Error("Invalid restored state data.");
+                // Ensure currentScenario and its title are valid after restore
+                if (!callSessionId || !currentScenario || !currentScenario.steps || typeof currentScenario.title === 'undefined' || currentStepIndex < 0) {
+                    throw new Error("Invalid restored state data (missing title or other fields).");
                 }
                 return true;
             } catch (e) {
@@ -703,7 +704,6 @@
 
         // Dropdown listener (enable/disable receive call button)
         scenarioDropdown.addEventListener('change', () => {
-            // Ensure the selected option is not a placeholder (like "-- Select a Scenario --" which has value="")
             receiveCallBtn.disabled = !scenarioDropdown.value || scenarioDropdown.selectedOptions[0]?.disabled;
         });
 
