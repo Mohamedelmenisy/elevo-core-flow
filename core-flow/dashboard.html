@@ -301,66 +301,51 @@
 
             if (sessionError || !session) {
                 console.log("No session or error fetching session. Redirecting to login.");
-                // MODIFIED: Redirect to login.html without redirectTo parameter.
                 window.location.replace('login.html');
                 return;
             }
 
             // User is authenticated, now check if admin
-            // First, try to get user data from localStorage
             const storedUserData = JSON.parse(localStorage.getItem('elevoCoreUserData'));
             if (storedUserData && storedUserData.id === session.user.id) {
                 currentUser = storedUserData;
-            } else { // Fetch from DB users table
+            } else { 
                 const { data: profile, error: profileError } = await supabase
                     .from('users')
                     .select('name, is_admin')
                     .eq('id', session.user.id)
                     .single();
                 
-                if (profileError && profileError.code !== 'PGRST116') {
+                if (profileError && profileError.code !== 'PGRST116') { // PGRST116 means no rows found, which is okay if user not in profiles yet
                     console.error("Error fetching user profile:", profileError);
-                    showAccessDenied("Could not verify your user profile.");
+                    showAccessDenied("Could not verify your user profile. Please try again later.");
                     return;
                 }
                 currentUser = {
                     id: session.user.id,
                     email: session.user.email,
                     name: profile?.name || session.user.user_metadata?.full_name || session.user.email.split('@')[0],
-                    isAdmin: profile?.is_admin || false
+                    isAdmin: profile?.is_admin || false // Default to false if no profile or is_admin is null/false
                 };
                 localStorage.setItem('elevoCoreUserData', JSON.stringify(currentUser));
             }
             
+            // Admin check directly based on the fetched or stored profile
             if (!currentUser.isAdmin) {
-                // Invoke Edge Function as a secondary check or if direct DB check isn't preferred
-                try {
-                    console.log("User not admin via local check, invoking Edge Function 'check-admin-access' as fallback/confirmation.");
-                    const { data: adminStatus, error: functionError } = await supabase.functions.invoke('check-admin-access');
-                    if (functionError) throw functionError;
-                    
-                    if (!adminStatus || !adminStatus.isAdmin) {
-                        showAccessDenied();
-                        return;
-                    }
-                    currentUser.isAdmin = true; // Update local state if function confirms admin
-                    localStorage.setItem('elevoCoreUserData', JSON.stringify(currentUser)); // Persist
-                } catch (err) {
-                    console.error("Error checking admin status via Edge Function:", err);
-                    showAccessDenied("Could not verify administrator privileges.");
-                    return;
-                }
+                console.log("User is not an administrator based on their profile:", currentUser.email);
+                showAccessDenied("You do not have permission to view this page. Administrator access required.");
+                return;
             }
             
             // User is Admin, proceed to load dashboard
             console.log("Admin access confirmed for:", currentUser.email);
-            appContainerContent.style.display = 'flex'; // Show main app container
+            appContainerContent.style.display = 'flex'; 
             authLoadingMessageDiv.style.display = 'none';
-            dashboardContentDiv.style.display = 'block'; // Show dashboard content
+            dashboardContentDiv.style.display = 'block'; 
 
             setupAdminUI();
             await loadInitialData();
-            loadPersistedFilters(); // Load filters before applying
+            loadPersistedFilters(); 
             applyFiltersAndRender();
             setupEventListeners();
             setupLiveCallMonitoring();
@@ -369,11 +354,11 @@
         function showAccessDenied(message = "You do not have permission to view this page. This section is restricted to administrators.") {
             authLoadingMessageDiv.style.display = 'none';
             dashboardContentDiv.style.display = 'none';
-            appContainerContent.style.display = 'flex'; // Keep header/footer visible for context
+            appContainerContent.style.display = 'flex'; 
             
             accessDeniedModal.querySelector('p').textContent = message;
             accessDeniedModal.style.display = 'flex';
-            if (liveCallsChannel) { // Unsubscribe if modal is shown
+            if (liveCallsChannel) { 
                 supabase.removeChannel(liveCallsChannel);
                 liveCallsChannel = null;
             }
@@ -417,7 +402,6 @@
 
             } catch (error) {
                 console.error("Error loading initial dashboard data:", error);
-                // Display an error message on the dashboard
                 recentCallsTableBody.innerHTML = `<tr><td colspan="8" style="text-align:center; color:var(--danger-color);">Failed to load data: ${error.message}</td></tr>`;
             }
         }
@@ -434,7 +418,7 @@
 
         // --- Filtering and Rendering ---
         function applyFiltersAndRender() {
-            saveFiltersToLocalStorage(); // Save current filter state
+            saveFiltersToLocalStorage(); 
             let tempFiltered = [...allCallSessions];
             const searchTerm = searchInput.value.toLowerCase().trim();
             const selectedAgentId = userFilterDropdown.value;
@@ -442,7 +426,6 @@
             const startDate = startDateFilter.value;
             const endDate = endDateFilter.value;
 
-            // Agent filter
             if (selectedAgentId) {
                 tempFiltered = tempFiltered.filter(s => s.user_id === selectedAgentId);
                 const agent = allAgents.find(a => a.id === selectedAgentId);
@@ -454,7 +437,6 @@
                 recentCallsTitleEl.textContent = 'All Recent Call Sessions';
             }
 
-            // Search term filter
             if (searchTerm) {
                 tempFiltered = tempFiltered.filter(s => {
                     const agent = allAgents.find(a => a.id === s.user_id);
@@ -466,11 +448,9 @@
                     );
                 });
             }
-            // Quality filter
             if (selectedQuality) {
                 tempFiltered = tempFiltered.filter(s => (selectedQuality === "N/A" ? !s.call_quality : s.call_quality === selectedQuality));
             }
-            // Date filter
             if (startDate) {
                 tempFiltered = tempFiltered.filter(s => s.start_time && new Date(s.start_time) >= new Date(startDate + "T00:00:00"));
             }
@@ -479,7 +459,7 @@
             }
             
             filteredCallSessions = tempFiltered;
-            currentPage = 1; // Reset to first page after filtering
+            currentPage = 1; 
             renderTable();
             updateStats();
             renderPagination();
@@ -573,7 +553,6 @@
             const totalPages = Math.ceil(filteredCallSessions.length / ROWS_PER_PAGE);
             if (totalPages <= 1) return;
 
-            // Simplified pagination: Prev, Current Page / Total Pages, Next
             const prevBtn = document.createElement('button');
             prevBtn.textContent = 'Previous';
             prevBtn.disabled = currentPage === 1;
@@ -638,7 +617,7 @@
             });
             searchInput.addEventListener('input', () => {
                 clearTimeout(filterTimeoutId);
-                filterTimeoutId = setTimeout(applyFiltersAndRender, 500); // Debounce
+                filterTimeoutId = setTimeout(applyFiltersAndRender, 500); 
             });
             resetFiltersBtn.addEventListener('click', () => {
                 userFilterDropdown.value = '';
@@ -670,7 +649,7 @@
                     session.completed_all_steps ? 'Yes' : 'No',
                     session.call_quality || 'N/A',
                     session.quality_reason || '-'
-                ].map(field => `"${String(field).replace(/"/g, '""')}"`); // Escape quotes
+                ].map(field => `"${String(field).replace(/"/g, '""')}"`); 
             });
 
             const csvContent = [headers.join(','), ...rows.map(row => row.join(','))].join('\n');
@@ -689,19 +668,18 @@
         // --- Live Call Monitoring ---
         async function setupLiveCallMonitoring() {
             if (!supabase) return;
-            await fetchAndRenderLiveCalls(); // Initial fetch
+            await fetchAndRenderLiveCalls(); 
 
-            if (liveCallsChannel) { // Remove existing channel if any (e.g., on re-init)
+            if (liveCallsChannel) { 
                 supabase.removeChannel(liveCallsChannel);
             }
 
             liveCallsChannel = supabase
-                .channel('public:call_sessions:live')
+                .channel('public:call_sessions:live') // Changed channel name slightly for clarity, can be any unique string
                 .on('postgres_changes', 
                     { event: '*', schema: 'public', table: 'call_sessions' },
                     (payload) => {
                         console.log('Realtime: Call session change detected', payload);
-                        // Could optimize by checking if the change affects live calls (end_time is null)
                         fetchAndRenderLiveCalls(); 
                     }
                 )
@@ -723,12 +701,12 @@
                 const { data: liveSessions, error } = await supabase
                     .from('call_sessions')
                     .select('id, user_id, scenario_id, start_time, call_scenarios (name)')
-                    .is('end_time', null) // Actively live calls
+                    .is('end_time', null) 
                     .order('start_time', { ascending: true });
 
                 if (error) throw error;
 
-                liveCallsContainer.innerHTML = ''; // Clear previous
+                liveCallsContainer.innerHTML = ''; 
                 if (liveSessions && liveSessions.length > 0) {
                     noLiveCallsMessage.style.display = 'none';
                     liveSessions.forEach(call => {
