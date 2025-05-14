@@ -161,13 +161,13 @@
         document.getElementById('currentYear').textContent = new Date().getFullYear();
 
         // State Variables
-        let currentUser = null; // Will store {id, email, name, isAdmin}
-        let currentScenario = null; // MODIFIED: {id, title, steps}
+        let currentUser = null; 
+        let currentScenario = null; // {id, title, steps: [{text: "instruction"}, ...]}
         let currentStepIndex = 0;
         let callSessionId = null;
         let stepTimerInterval = null;
-        let stepStartTime = 0; // Timestamp for current step's start
-        let accumulatedStepDurations = []; // Array to store duration of each step in seconds
+        let stepStartTime = 0; 
+        let accumulatedStepDurations = []; 
 
         const SESSION_STATE_KEY = 'elevoCoreActiveCallState_v2'; 
 
@@ -182,7 +182,7 @@
         function animateView(viewElement) {
             if (viewElement) {
                 viewElement.classList.remove('fade-in');
-                void viewElement.offsetWidth; // Trigger reflow
+                void viewElement.offsetWidth; 
                 viewElement.classList.add('fade-in');
                 viewElement.style.display = 'block';
             }
@@ -299,11 +299,10 @@
             if (restoreCallState()) {
                 console.log("Restored active call session.");
                 switchToCallFlowView(false); 
-                // MODIFIED: Set scenario title from restored currentScenario
                 if (currentScenario && currentScenario.title) {
                     scenarioTitleElement.textContent = currentScenario.title;
                 } else {
-                    scenarioTitleElement.textContent = "Restored Scenario"; // Fallback
+                    scenarioTitleElement.textContent = "Restored Scenario"; 
                 }
                 renderStep(); 
                 updateSystemStatus("🟢 In Call (Restored)", "status-in-call");
@@ -401,19 +400,26 @@
             scenarioTitleElement.textContent = 'Loading...';
 
             try {
-                // MODIFIED: Fetch 'title' instead of 'name' from 'call_scenarios'
                 const { data: scenarioData, error: scenarioError } = await supabase
                     .from('call_scenarios') 
-                    .select('id, title, steps') // MODIFIED: 'title' instead of 'name'
+                    .select('id, title, steps') 
                     .eq('id', selectedScenarioId)
                     .single();
 
                 if (scenarioError) throw scenarioError;
+                // Ensure steps is an array and each step is an object with a 'text' property (or that steps themselves are strings if not objects)
                 if (!scenarioData || !Array.isArray(scenarioData.steps) || scenarioData.steps.length === 0) {
                     throw new Error("Scenario data is invalid or has no steps.");
                 }
+                // Further validation if steps are expected to be objects with 'text'
+                if (scenarioData.steps.some(step => typeof step !== 'object' || typeof step.text !== 'string')) {
+                     // If steps are just strings, this check is not needed, or needs adjustment.
+                     // For now, assuming steps are [{text: "..."}, ...] as per the [object Object] issue.
+                    console.warn("Some steps may not have the expected {text: '...'} structure. Falling back to string conversion if needed.");
+                }
 
-                currentScenario = scenarioData; // currentScenario will have .id, .title, .steps
+
+                currentScenario = scenarioData; 
                 currentStepIndex = 0;
                 accumulatedStepDurations = new Array(currentScenario.steps.length).fill(0);
 
@@ -432,11 +438,9 @@
                 if (sessionInsertError) throw sessionInsertError;
                 callSessionId = newSession.id;
                 
-                // MODIFIED: Use currentScenario.title
                 scenarioTitleElement.textContent = currentScenario.title; 
                 updateSystemStatus("🟢 In Call", "status-in-call");
                 renderStep(); 
-                // MODIFIED: Use currentScenario.title in assistant message
                 showAssistantMessage(`🚀 Scenario "${currentScenario.title}" started! Follow the steps.`, false, 0);
 
             } catch (err) {
@@ -454,8 +458,13 @@
                 return;
             }
             
-            const stepText = currentScenario.steps[currentStepIndex];
-            stepsContainer.innerHTML = `<p>${stepText}</p>`;
+            const stepObject = currentScenario.steps[currentStepIndex];
+            // MODIFIED: Access the 'text' property of the step object. Fallback if it's just a string.
+            const stepInstructionText = (typeof stepObject === 'object' && stepObject !== null && typeof stepObject.text === 'string') 
+                                        ? stepObject.text 
+                                        : String(stepObject); // Fallback to string conversion
+
+            stepsContainer.innerHTML = `<p>${stepInstructionText}</p>`;
             
             renderProgressTracker();
 
@@ -470,7 +479,8 @@
             startStepTimer();
             saveCallState(); 
 
-            showAssistantMessage(`📌 Step ${currentStepIndex + 1}: ${stepText.length > 45 ? stepText.substring(0, 42) + "..." : stepText}`, false, 0);
+            // MODIFIED: Use stepInstructionText for assistant message
+            showAssistantMessage(`📌 Step ${currentStepIndex + 1}: ${stepInstructionText.length > 45 ? stepInstructionText.substring(0, 42) + "..." : stepInstructionText}`, false, 0);
         }
         
         function renderProgressTracker() {
@@ -565,6 +575,7 @@
         async function finishCall(completedAllSteps) {
             stopAndRecordStepTimer(); 
             
+            const endTimeISO = new Date().toISOString();
             const totalDuration = accumulatedStepDurations.reduce((sum, dur) => sum + dur, 0);
             const quality = completedAllSteps ? 'Good' : (totalDuration > 0 ? 'Bad' : 'N/A'); 
             const reason = completedAllSteps ? 'All steps completed successfully.' : 'Call ended prematurely.';
@@ -573,28 +584,49 @@
                                completedAllSteps ? "status-completed" : "status-ended");
 
             if (callSessionId) {
+                // MODIFIED: Update call session with corrected field names as per user example
+                const updatePayload = {
+                    end_time: endTimeISO,
+                    duration: totalDuration, // Using totalDuration (sum of step durations in seconds) for 'duration'
+                    completed: completedAllSteps, // Using 'completed' as the key
+                    call_quality: quality,
+                    quality_reason: reason
+                };
+                console.log("Updating call session:", callSessionId, "with payload:", updatePayload);
+
                 const { error: updateError } = await supabase
                     .from('call_sessions')
-                    .update({
-                        end_time: new Date().toISOString(),
-                        total_duration_seconds: totalDuration,
-                        completed_all_steps: completedAllSteps,
-                        call_quality: quality, 
-                        quality_reason: reason   
-                    })
+                    .update(updatePayload)
                     .eq('id', callSessionId);
-                if (updateError) console.error("Error updating call session (pre-eval):", updateError);
 
+                if (updateError) {
+                    console.error("Error updating call session in Supabase:", updateError);
+                    // Show an error to the user if the update fails, as this is critical
+                    showAssistantMessage(`⚠️ Error saving call summary: ${updateError.message}`, false, 7000);
+                } else {
+                    console.log("Call session updated successfully in Supabase.");
+                }
+
+                // Invoking Edge Function (as before)
+                // This function might perform further evaluations or updates.
+                // Ensure it doesn't conflict with the client-side updates made above.
                  try {
                     console.log(`Invoking evaluate-call-session for session: ${callSessionId}`);
                     const { data: evalData, error: funcError } = await supabase.functions.invoke('evaluate-call-session', {
-                        body: { sessionId: callSessionId, quality: quality, reason: reason }
+                        body: { 
+                            sessionId: callSessionId, 
+                            // Pass the same values if the function needs them, or let it re-evaluate
+                            quality: quality, 
+                            reason: reason 
+                        }
                     });
                     if (funcError) throw funcError;
                     console.log("evaluate-call-session response:", evalData);
                 } catch (err) {
                     console.error("Error invoking evaluate-call-session:", err);
                 }
+            } else {
+                console.warn("callSessionId is null, cannot update call session in Supabase.");
             }
             
             displayPostCallSummary(quality, reason, totalDuration);
@@ -611,9 +643,13 @@
                 <ul style="list-style: none; padding-left: 0; max-height: 150px; overflow-y: auto;">`;
 
             if (currentScenario && currentScenario.steps) {
-                currentScenario.steps.forEach((step, index) => {
+                currentScenario.steps.forEach((stepObject, index) => { // Iterate over stepObjects
                     const duration = accumulatedStepDurations[index] || 0;
-                    const stepShortText = step.length > 25 ? step.substring(0, 22) + "..." : step;
+                    // MODIFIED: Access 'text' property for display, fallback if step is simple string
+                    const stepInstructionText = (typeof stepObject === 'object' && stepObject !== null && typeof stepObject.text === 'string')
+                                              ? stepObject.text
+                                              : String(stepObject);
+                    const stepShortText = stepInstructionText.length > 25 ? stepInstructionText.substring(0, 22) + "..." : stepInstructionText;
                     const timeStr = `${Math.floor(duration / 60)}m ${duration % 60}s`;
                     summaryHTML += `<li style="margin-bottom: 0.3rem;">${index + 1}. "${stepShortText}": ${timeStr}</li>`;
                 });
@@ -636,7 +672,7 @@
             if (!callSessionId || !currentScenario) return;
             const state = {
                 callSessionId,
-                currentScenario, // This will now store {id, title, steps}
+                currentScenario, 
                 currentStepIndex,
                 accumulatedStepDurations: [...accumulatedStepDurations], 
                 stepStartTime: stepStartTime, 
@@ -655,12 +691,11 @@
                 const savedState = JSON.parse(savedStateJSON);
                 
                 callSessionId = savedState.callSessionId;
-                currentScenario = savedState.currentScenario; // Restored object has .title
+                currentScenario = savedState.currentScenario; 
                 currentStepIndex = savedState.currentStepIndex;
-                accumulatedStepDurations = savedState.accumulatedStepDurations || new Array(currentScenario.steps.length).fill(0);
+                accumulatedStepDurations = savedState.accumulatedStepDurations || (currentScenario && currentScenario.steps ? new Array(currentScenario.steps.length).fill(0) : []);
                 stepStartTime = savedState.stepStartTime; 
                 
-                // Ensure currentScenario and its title are valid after restore
                 if (!callSessionId || !currentScenario || !currentScenario.steps || typeof currentScenario.title === 'undefined' || currentStepIndex < 0) {
                     throw new Error("Invalid restored state data (missing title or other fields).");
                 }
