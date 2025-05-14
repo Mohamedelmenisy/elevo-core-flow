@@ -392,7 +392,7 @@
                     .from('call_sessions')
                     .select(`
                         *,
-                        call_scenarios (name)
+                        call_scenarios!call_sessions_scenario_id_fkey (name)
                     `)
                     .order('start_time', { ascending: false });
                 if (sessionsError) throw sessionsError;
@@ -440,6 +440,7 @@
             if (searchTerm) {
                 tempFiltered = tempFiltered.filter(s => {
                     const agent = allAgents.find(a => a.id === s.user_id);
+                    // Use s.call_scenarios directly as Supabase will place the embedded data there
                     return (
                         (s.call_scenarios?.name || '').toLowerCase().includes(searchTerm) ||
                         (s.quality_reason || '').toLowerCase().includes(searchTerm) ||
@@ -485,6 +486,7 @@
                 const row = recentCallsTableBody.insertRow();
                 row.insertCell().textContent = agent?.name || 'Unknown Agent';
                 row.insertCell().textContent = agent?.email || 'N/A';
+                // Use session.call_scenarios directly
                 row.insertCell().textContent = session.call_scenarios?.name || 'N/A';
                 row.insertCell().textContent = session.start_time ? new Date(session.start_time).toLocaleString() : 'N/A';
                 const duration = session.total_duration_seconds || 0;
@@ -643,7 +645,7 @@
                 return [
                     agent?.name || 'Unknown',
                     agent?.email || 'N/A',
-                    session.call_scenarios?.name || 'N/A',
+                    session.call_scenarios?.name || 'N/A', // Use session.call_scenarios
                     session.start_time ? new Date(session.start_time).toLocaleString() : 'N/A',
                     session.total_duration_seconds || 0,
                     session.completed_all_steps ? 'Yes' : 'No',
@@ -675,7 +677,7 @@
             }
 
             liveCallsChannel = supabase
-                .channel('public:call_sessions:live') // Changed channel name slightly for clarity, can be any unique string
+                .channel('public:call_sessions:live') 
                 .on('postgres_changes', 
                     { event: '*', schema: 'public', table: 'call_sessions' },
                     (payload) => {
@@ -700,7 +702,7 @@
             try {
                 const { data: liveSessions, error } = await supabase
                     .from('call_sessions')
-                    .select('id, user_id, scenario_id, start_time, call_scenarios (name)')
+                    .select('id, user_id, scenario_id, start_time, call_scenarios!call_sessions_scenario_id_fkey (name)')
                     .is('end_time', null) 
                     .order('start_time', { ascending: true });
 
@@ -712,6 +714,7 @@
                     liveSessions.forEach(call => {
                         const agent = allAgents.find(a => a.id === call.user_id);
                         const agentName = agent?.name || agent?.email || `Agent ID: ${call.user_id.substring(0,8)}`;
+                        // Use call.call_scenarios directly
                         const scenarioName = call.call_scenarios?.name || 'Loading scenario...';
                         const startTimeFormatted = new Date(call.start_time).toLocaleTimeString();
 
