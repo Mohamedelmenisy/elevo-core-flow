@@ -324,85 +324,93 @@
                     });
 
                     if (authError) {
-                        throw authError; 
+                        throw authError; // Error from Supabase (e.g., user already exists, weak password policy)
                     }
                     
-                    // Check for user data and session state
-                    if (authData.user && !authData.session) { // User exists/created, email confirmation pending
-                         displaySuccess(signupSuccessMessage, "Signup successful! Please check your email to confirm your account.");
-                         signupForm.reset(); 
-                         if(nameInput) nameInput.focus();
-                    } else if (authData.user && authData.session) { // User created and session active (e.g. auto-confirm enabled)
-                        const isAdmin = (email === "m.elsayed@thechefz.co"); 
-                        const { error: insertError } = await supabase
-                            .from('users') 
-                            .insert({
-                                id: authData.user.id, 
-                                name: name,
-                                email: email,
-                                is_admin: isAdmin 
-                            });
+                    // If we reach here, authError was null.
+                    // Now, a successful signup depends on authData.user being present.
+                    if (authData.user) {
+                        // User object exists. This is a successful signup.
+                        // Differentiate based on session to determine if email confirmation is pending or auto-confirmed.
+                        if (!authData.session) { 
+                            // Email confirmation is pending
+                            displaySuccess(signupSuccessMessage, "Signup successful! Please check your email to confirm your account.");
+                            signupForm.reset(); 
+                            if(nameInput) nameInput.focus();
+                        } else { 
+                            // User created and session active (e.g., auto-confirm enabled or email confirmation disabled by Supabase settings)
+                            const isAdmin = (email === "m.elsayed@thechefz.co"); 
+                            const { error: insertError } = await supabase
+                                .from('users') 
+                                .insert({
+                                    id: authData.user.id, 
+                                    name: name,
+                                    email: email,
+                                    is_admin: isAdmin 
+                                });
 
-                        if (insertError) {
-                            console.error("Error inserting user profile:", insertError);
-                            // Clear success message if profile insertion fails, show specific error
-                            clearError(signupSuccessMessage);
-                            displayError(signupGeneralError, `Account created, but profile setup failed. Please contact support. (${insertError.message})`);
-                        } else {
-                            // Store user information in localStorage
-                            const appUser = {
-                                id: authData.user.id,
-                                email: authData.user.email,
-                                name: authData.user.user_metadata.full_name || name, // Use name from metadata, fallback to form
-                                is_admin: isAdmin 
-                            };
-                            localStorage.setItem('appUser', JSON.stringify(appUser));
-                            // Supabase client automatically persists the session.
-
-                            displaySuccess(signupSuccessMessage, "Signup successful! Redirecting to login...");
-                            setTimeout(() => {
-                                window.location.href = `login.html?email=${encodeURIComponent(email)}&signedup=true`;
-                            }, 2000);
+                            if (insertError) {
+                                console.error("Error inserting user profile:", insertError);
+                                // Account created, but profile setup failed. This is an error state.
+                                // Ensure signupSuccessMessage is not shown.
+                                clearError(signupSuccessMessage); 
+                                displayError(signupGeneralError, `Account created, but profile setup failed. Please contact support. (${insertError.message})`);
+                                // User is technically signed up, but profile failed.
+                            } else {
+                                // Profile insertion successful. Store user info and redirect.
+                                const appUser = {
+                                    id: authData.user.id,
+                                    email: authData.user.email,
+                                    name: authData.user.user_metadata.full_name || name,
+                                    is_admin: isAdmin 
+                                };
+                                localStorage.setItem('appUser', JSON.stringify(appUser));
+                                
+                                displaySuccess(signupSuccessMessage, "Signup successful! Redirecting to login...");
+                                setTimeout(() => {
+                                    window.location.href = `login.html?email=${encodeURIComponent(email)}&signedup=true`;
+                                }, 2000);
+                            }
                         }
-                    } else { // Unexpected response if no error but also no user
-                        displayError(signupGeneralError, "Signup response unclear. Please try logging in or contact support.");
+                    } else { 
+                        // authError was null, but authData.user is also null.
+                        // This means signUp didn't "fail" with an AuthError, but it also didn't "succeed" by returning a user.
+                        // This is an unexpected state and should be treated as a failure.
+                        throw new Error("Signup process did not complete successfully: No user data was returned. Please try again or contact support if the issue persists.");
                     }
 
                 } catch (error) {
                     console.error("Signup error:", error);
-                    clearError(signupSuccessMessage); // Ensure success message is cleared on any error
+                    clearError(signupSuccessMessage); // CRITICAL: Ensure success message is cleared on ANY error path.
 
                     let errorMessage = "An unexpected error occurred. Please try again."; 
 
-                    if (error && error.message) { // Check if error and error.message exist
+                    if (error && error.message) { 
                         const lowerMessage = error.message.toLowerCase();
                         if (lowerMessage.includes("user already registered") || lowerMessage.includes("email already registered")) {
                             errorMessage = "This email is already registered. Please log in instead.";
                             displayError(signupGeneralError, errorMessage);
-                            // No return here, finally block will handle setButtonLoading
                         } else if (lowerMessage.includes("email link is invalid or has expired")) {
                             errorMessage = "A confirmation is pending for this email, or the email link is invalid/expired. Please check your email.";
                             displayError(signupGeneralError, errorMessage);
                         } else if (lowerMessage.includes("password should be at least")) {
                             errorMessage = error.message; 
-                            displayError(passwordError, errorMessage); // Show under password field
-                            // To avoid double error messages, we can clear the general one if passwordError is shown
-                            clearError(signupGeneralError);
+                            displayError(passwordError, errorMessage); 
+                            clearError(signupGeneralError); // Avoid double error message
                         } else if (lowerMessage.includes("rate limit exceeded")) {
                             errorMessage = "Too many signup attempts. Please try again later.";
                             displayError(signupGeneralError, errorMessage);
-                        } else {
-                            errorMessage = error.message; // Use Supabase's error message
+                        } else if (lowerMessage.includes("signup process did not complete successfully")) { // Handle the new custom error
+                             errorMessage = error.message; // Use the full message from the thrown error
+                             displayError(signupGeneralError, errorMessage);
+                        }
+                         else {
+                            errorMessage = error.message; 
                             displayError(signupGeneralError, errorMessage);
                         }
                     } else {
-                        // If error or error.message is null/undefined, display the default message
                         displayError(signupGeneralError, errorMessage);
                     }
-                    // The original returns in the catch block were to prevent the generic error message
-                    // at the end of the catch block from showing if a specific one was already shown.
-                    // Now, with specific displayError calls, and a final one for general errors,
-                    // we ensure only one relevant error message is prominent.
                 } finally {
                     if (!signupSuccessMessage.textContent.includes("Redirecting")) {
                         setButtonLoading(false);
