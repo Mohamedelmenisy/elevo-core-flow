@@ -407,7 +407,7 @@
                     .from('call_sessions')
                     .select(`
                         *,
-                        call_scenarios!fk_scenario (name)
+                        call_scenarios (name)
                     `)
                     .order('start_time', { ascending: false });
                 if (sessionsError) throw sessionsError;
@@ -458,9 +458,8 @@
             if (searchTerm) {
                 tempFiltered = tempFiltered.filter(s => {
                     const agent = allAgents.find(a => a.id === s.user_id);
-                    const scenario = s.call_sessions_scenario_id_fkey; // Use the aliased/correct foreign key name
                     return (
-                        (scenario?.name || '').toLowerCase().includes(searchTerm) ||
+                        (s.call_scenarios?.name || '').toLowerCase().includes(searchTerm) ||
                         (s.quality_reason || '').toLowerCase().includes(searchTerm) ||
                         (agent?.name || '').toLowerCase().includes(searchTerm) ||
                         (agent?.email || '').toLowerCase().includes(searchTerm)
@@ -503,11 +502,10 @@
             const paginatedSessions = filteredCallSessions.slice((currentPage - 1) * ROWS_PER_PAGE, currentPage * ROWS_PER_PAGE);
             paginatedSessions.forEach(session => {
                 const agent = allAgents.find(a => a.id === session.user_id);
-                const scenario = session.call_sessions_scenario_id_fkey; // Use the aliased/correct foreign key name
                 const row = recentCallsTableBody.insertRow();
                 row.insertCell().textContent = agent?.name || 'Unknown Agent';
                 row.insertCell().textContent = agent?.email || 'N/A';
-                row.insertCell().textContent = scenario?.name || 'N/A';
+                row.insertCell().textContent = session.call_scenarios?.name || 'N/A';
                 row.insertCell().textContent = session.start_time ? new Date(session.start_time).toLocaleString() : 'N/A';
                 const duration = session.total_duration_seconds || 0;
                 row.insertCell().textContent = `${Math.floor(duration / 60)}m ${duration % 60}s`;
@@ -663,11 +661,10 @@
             const headers = ["Agent Name", "Agent Email", "Scenario", "Start Time", "Duration (s)", "Completed", "Quality", "Reason"];
             const rows = filteredCallSessions.map(session => {
                 const agent = allAgents.find(a => a.id === session.user_id);
-                const scenario = session.call_sessions_scenario_id_fkey; // Use the aliased/correct foreign key name
                 return [
                     agent?.name || 'Unknown',
                     agent?.email || 'N/A',
-                    scenario?.name || 'N/A',
+                    session.call_scenarios?.name || 'N/A',
                     session.start_time ? new Date(session.start_time).toLocaleString() : 'N/A',
                     session.total_duration_seconds || 0,
                     session.completed_all_steps ? 'Yes' : 'No',
@@ -725,7 +722,7 @@
             try {
                 const { data: liveSessions, error } = await supabase
                     .from('call_sessions')
-                    .select('id, user_id, scenario_id, start_time, call_sessions_scenario_id_fkey (name)')
+                    .select('id, user_id, scenario_id, start_time, call_scenarios (name)')
                     .is('end_time', null) // Actively live calls
                     .order('start_time', { ascending: true });
 
@@ -736,9 +733,8 @@
                     noLiveCallsMessage.style.display = 'none';
                     liveSessions.forEach(call => {
                         const agent = allAgents.find(a => a.id === call.user_id);
-                        const scenario = call.call_sessions_scenario_id_fkey; // Use the aliased/correct foreign key name
                         const agentName = agent?.name || agent?.email || `Agent ID: ${call.user_id.substring(0,8)}`;
-                        const scenarioName = scenario?.name || 'Loading scenario...';
+                        const scenarioName = call.call_scenarios?.name || 'Loading scenario...';
                         const startTimeFormatted = new Date(call.start_time).toLocaleTimeString();
 
                         const callDiv = document.createElement('div');
