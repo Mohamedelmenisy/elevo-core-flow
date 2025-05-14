@@ -328,17 +328,34 @@
                     
                     if (authData.user) {
                         if (!authData.session) { 
-                            displaySuccess(signupSuccessMessage, "Signup successful! Please check your email to confirm your account.");
-                            signupForm.reset(); 
-                            if(nameInput) nameInput.focus();
+                            // Email confirmation is pending for this user object.
+                            // Check if this user was created "just now" or existed before (unconfirmed).
+                            const userCreatedAt = new Date(authData.user.created_at).getTime();
+                            const now = Date.now();
+                            // Threshold (e.g., 5 seconds) to distinguish a new record from an older, unconfirmed one.
+                            const creationThreshold = 5 * 1000; 
+
+                            if ( (now - userCreatedAt) > creationThreshold && authData.user.email_confirmed_at === null ) {
+                                // User record was created previously (> threshold ago) and email is still not confirmed.
+                                // Supabase resends the confirmation email in this case.
+                                clearError(signupSuccessMessage); // Ensure no generic success message is shown
+                                displayError(signupGeneralError, "This email is already registered but not yet confirmed. A new confirmation email has been sent. Please check your inbox (and spam folder).");
+                                // Do not reset the form or change focus, allow user to see the message.
+                            } else {
+                                // User record was likely created just now by this signup attempt (or very rapid retry).
+                                // Standard "new signup, needs confirmation" message is appropriate.
+                                displaySuccess(signupSuccessMessage, "Signup successful! Please check your email to confirm your account.");
+                                signupForm.reset(); 
+                                if(nameInput) nameInput.focus();
+                            }
                         } else { 
+                            // User created AND session active (e.g., auto-confirm enabled or email confirmation disabled)
                             const isAdmin = (email === "m.elsayed@thechefz.co"); 
                             
-                            // Construct appUser with safer access to user_metadata
                             const appUser = {
                                 id: authData.user.id,
                                 email: authData.user.email,
-                                name: authData.user.user_metadata?.full_name || name, // Use optional chaining
+                                name: authData.user.user_metadata?.full_name || name, 
                                 is_admin: isAdmin 
                             };
 
@@ -346,8 +363,8 @@
                                 .from('users') 
                                 .insert({
                                     id: appUser.id, 
-                                    name: appUser.name, // Use name from appUser object
-                                    email: appUser.email, // Use email from appUser object
+                                    name: appUser.name, 
+                                    email: appUser.email,
                                     is_admin: appUser.is_admin 
                                 });
 
@@ -356,19 +373,14 @@
                                 clearError(signupSuccessMessage); 
                                 displayError(signupGeneralError, `Account created, but profile setup failed. Please contact support. (${insertError.message})`);
                             } else {
-                                // Profile insertion successful. Store user info and redirect.
                                 console.log('Attempting to set appUser to localStorage:', appUser);
                                 try {
                                     localStorage.setItem('appUser', JSON.stringify(appUser));
                                     console.log('appUser successfully set in localStorage.');
-                                    // Optional: Verify it's there for debugging
-                                    // console.log('localStorage content for appUser:', localStorage.getItem('appUser'));
                                 } catch (e) {
                                     console.error('Error setting item in localStorage:', e);
                                     clearError(signupSuccessMessage);
                                     displayError(signupGeneralError, "Signup was successful, but failed to save session locally. Please try logging in or contact support.");
-                                    // Do not proceed with redirect if local storage failed.
-                                    // setButtonLoading(false) will be handled in finally
                                     return; 
                                 }
                                 
@@ -415,9 +427,10 @@
                         displayError(signupGeneralError, errorMessage);
                     }
                 } finally {
-                    // Only set loading to false if not redirecting OR if localStorage saving failed (and we returned)
                     if (!signupSuccessMessage.textContent.includes("Redirecting") || 
-                        (signupGeneralError.textContent.includes("failed to save session locally"))) {
+                        (signupGeneralError.textContent.includes("failed to save session locally")) ||
+                        (signupGeneralError.textContent.includes("already registered but not yet confirmed")) // Add condition for the new error message
+                        ) {
                         setButtonLoading(false);
                     }
                 }
