@@ -6,7 +6,6 @@
     <title>Sign Up - Elevo Core</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%233b82f6' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M3 12h18M3 6h12M3 18h15'/><path d='M17 9l4 3l-4 3'/></svg>">
     <link rel="stylesheet" href="style.css">
-    <!-- تم حذف السطر <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script> من هنا -->
 </head>
 <body>
     <div class="signup-container">
@@ -324,47 +323,54 @@
                     });
 
                     if (authError) {
-                        throw authError; // Error from Supabase (e.g., user already exists, weak password policy)
+                        throw authError; 
                     }
                     
-                    // If we reach here, authError was null.
-                    // Now, a successful signup depends on authData.user being present.
                     if (authData.user) {
-                        // User object exists. This is a successful signup.
-                        // Differentiate based on session to determine if email confirmation is pending or auto-confirmed.
                         if (!authData.session) { 
-                            // Email confirmation is pending
                             displaySuccess(signupSuccessMessage, "Signup successful! Please check your email to confirm your account.");
                             signupForm.reset(); 
                             if(nameInput) nameInput.focus();
                         } else { 
-                            // User created and session active (e.g., auto-confirm enabled or email confirmation disabled by Supabase settings)
                             const isAdmin = (email === "m.elsayed@thechefz.co"); 
+                            
+                            // Construct appUser with safer access to user_metadata
+                            const appUser = {
+                                id: authData.user.id,
+                                email: authData.user.email,
+                                name: authData.user.user_metadata?.full_name || name, // Use optional chaining
+                                is_admin: isAdmin 
+                            };
+
                             const { error: insertError } = await supabase
                                 .from('users') 
                                 .insert({
-                                    id: authData.user.id, 
-                                    name: name,
-                                    email: email,
-                                    is_admin: isAdmin 
+                                    id: appUser.id, 
+                                    name: appUser.name, // Use name from appUser object
+                                    email: appUser.email, // Use email from appUser object
+                                    is_admin: appUser.is_admin 
                                 });
 
                             if (insertError) {
                                 console.error("Error inserting user profile:", insertError);
-                                // Account created, but profile setup failed. This is an error state.
-                                // Ensure signupSuccessMessage is not shown.
                                 clearError(signupSuccessMessage); 
                                 displayError(signupGeneralError, `Account created, but profile setup failed. Please contact support. (${insertError.message})`);
-                                // User is technically signed up, but profile failed.
                             } else {
                                 // Profile insertion successful. Store user info and redirect.
-                                const appUser = {
-                                    id: authData.user.id,
-                                    email: authData.user.email,
-                                    name: authData.user.user_metadata.full_name || name,
-                                    is_admin: isAdmin 
-                                };
-                                localStorage.setItem('appUser', JSON.stringify(appUser));
+                                console.log('Attempting to set appUser to localStorage:', appUser);
+                                try {
+                                    localStorage.setItem('appUser', JSON.stringify(appUser));
+                                    console.log('appUser successfully set in localStorage.');
+                                    // Optional: Verify it's there for debugging
+                                    // console.log('localStorage content for appUser:', localStorage.getItem('appUser'));
+                                } catch (e) {
+                                    console.error('Error setting item in localStorage:', e);
+                                    clearError(signupSuccessMessage);
+                                    displayError(signupGeneralError, "Signup was successful, but failed to save session locally. Please try logging in or contact support.");
+                                    // Do not proceed with redirect if local storage failed.
+                                    // setButtonLoading(false) will be handled in finally
+                                    return; 
+                                }
                                 
                                 displaySuccess(signupSuccessMessage, "Signup successful! Redirecting to login...");
                                 setTimeout(() => {
@@ -373,15 +379,12 @@
                             }
                         }
                     } else { 
-                        // authError was null, but authData.user is also null.
-                        // This means signUp didn't "fail" with an AuthError, but it also didn't "succeed" by returning a user.
-                        // This is an unexpected state and should be treated as a failure.
                         throw new Error("Signup process did not complete successfully: No user data was returned. Please try again or contact support if the issue persists.");
                     }
 
                 } catch (error) {
                     console.error("Signup error:", error);
-                    clearError(signupSuccessMessage); // CRITICAL: Ensure success message is cleared on ANY error path.
+                    clearError(signupSuccessMessage); 
 
                     let errorMessage = "An unexpected error occurred. Please try again."; 
 
@@ -396,12 +399,12 @@
                         } else if (lowerMessage.includes("password should be at least")) {
                             errorMessage = error.message; 
                             displayError(passwordError, errorMessage); 
-                            clearError(signupGeneralError); // Avoid double error message
+                            clearError(signupGeneralError); 
                         } else if (lowerMessage.includes("rate limit exceeded")) {
                             errorMessage = "Too many signup attempts. Please try again later.";
                             displayError(signupGeneralError, errorMessage);
-                        } else if (lowerMessage.includes("signup process did not complete successfully")) { // Handle the new custom error
-                             errorMessage = error.message; // Use the full message from the thrown error
+                        } else if (lowerMessage.includes("signup process did not complete successfully")) { 
+                             errorMessage = error.message; 
                              displayError(signupGeneralError, errorMessage);
                         }
                          else {
@@ -412,7 +415,9 @@
                         displayError(signupGeneralError, errorMessage);
                     }
                 } finally {
-                    if (!signupSuccessMessage.textContent.includes("Redirecting")) {
+                    // Only set loading to false if not redirecting OR if localStorage saving failed (and we returned)
+                    if (!signupSuccessMessage.textContent.includes("Redirecting") || 
+                        (signupGeneralError.textContent.includes("failed to save session locally"))) {
                         setButtonLoading(false);
                     }
                 }
