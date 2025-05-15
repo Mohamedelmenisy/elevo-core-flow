@@ -265,18 +265,23 @@
              if (sessionError) throw sessionError;
 
              // START OF MODIFIED AUTH CHECK BLOCK
-             if (!session) {
-               const currentUrl = window.location.href;
+             const isOnLoginPage = window.location.pathname.includes("login.html");
 
-               // لو أصلًا على login.html، متعملش redirect تاني
-               if (!currentUrl.includes("login.html")) {
-                 const redirectToPathAndQuery = window.location.pathname + window.location.search;
-                 window.location.href = `login.html?redirectTo=${encodeURIComponent(redirectToPathAndQuery)}`;
-               }
-               return; // ضروري علشان يوقف بقية الكود
+             if (!session && !isOnLoginPage) {
+               const redirectTo = encodeURIComponent(window.location.pathname + window.location.search);
+               window.location.href = `login.html?redirectTo=${redirectTo}`;
+               return; // Stop script execution for this page if redirecting
+             }
+
+             if (!session && isOnLoginPage) {
+               console.log("Already on login page. No redirect. Halting core-flow script logic.");
+               // Hide loading if it was shown, as this script won't proceed.
+               if (authLoadingDiv) authLoadingDiv.style.display = 'none';
+               return; // Stop script execution for this page
              }
              // END OF MODIFIED AUTH CHECK BLOCK
 
+             // If we reach here, it means a session exists.
              console.log('User is authenticated.');
              if (session.user.email && userNameSpan && userInfoDiv) {
                  const emailPrefix = session.user.email.split('@')[0];
@@ -288,7 +293,7 @@
                      clearCallState(); // Clear state on logout
                      const { error } = await supabase.auth.signOut();
                      if (error) console.error("Logout error:", error);
-                     // Logout redirection remains as previously set
+                     // Logout redirection remains as previously set, targeting login.html with a default redirectTo
 else window.location.href = 'login.html?redirectTo=core-flow.html';
                  });
              }
@@ -304,21 +309,16 @@ else window.location.href = 'login.html?redirectTo=core-flow.html';
                  if (initialViewDiv) initialViewDiv.style.display = 'none';
                  if (callFlowViewDiv) {
                      callFlowViewDiv.style.display = 'block';
-                     // No animation needed on restore? Or maybe a subtle one? Let's skip for now.
-                     // animateElement(callFlowViewDiv);
                  }
                  if (scenarioTitleElement) scenarioTitleElement.textContent = currentScenarioName || 'Restored Scenario';
                  updateSystemStatus("🟢 In Call (Restored)", "status-in-call");
                  if (endCallBtn) endCallBtn.style.display = 'inline-flex';
 
-                 renderProgressTracker(); // Render tracker based on restored index
-                 renderStep(); // Render current step (this will also restart the timer correctly)
-
-                 // No need to load scenarios again if restoring
+                 renderProgressTracker();
+                 renderStep();
              } else {
                  console.log("No active call state found or state invalid. Loading initial view.");
-                 // Proceed with normal initial view loading
-                 clearCallState(); // Ensure any invalid state is cleared
+                 clearCallState();
                  await loadActiveScenarios();
 
                  if (initialViewDiv) {
@@ -337,7 +337,7 @@ else window.location.href = 'login.html?redirectTo=core-flow.html';
             console.error("Auth or Initial Load/Restore error:", error);
             if (authLoadingDiv) authLoadingDiv.innerHTML = `<p style="color:red;">Error: ${error.message}</p>`;
             updateSystemStatus("🔴 Error", "status-error");
-            clearCallState(); // Clear state on error
+            clearCallState();
         }
 
         // --- 2. LOAD ACTIVE SCENARIOS ---
@@ -352,7 +352,7 @@ else window.location.href = 'login.html?redirectTo=core-flow.html';
                     .from('call_scenarios')
                     .select('id, title') // Uses 'title' as per previous request
                     .eq('is_active', true)
-                    .order('title', { ascending: true }); // Also order by 'title' now
+                    .order('title', { ascending: true });
 
                 if (error) throw error;
 
@@ -390,31 +390,30 @@ else window.location.href = 'login.html?redirectTo=core-flow.html';
         }
 
         function startStepTimer() {
-            if (callTimerDiv) callTimerDiv.style.display = 'inline-block'; // Changed from block
+            if (callTimerDiv) callTimerDiv.style.display = 'inline-block';
             if (stepTimerInterval) clearInterval(stepTimerInterval);
 
             let accumulatedSeconds = 0;
-            if (stepStartTime > 0) { // Check if restoring or returning to step
+            if (stepStartTime > 0) {
                  accumulatedSeconds = totalElapsedSecondsOnLoad > 0 ? totalElapsedSecondsOnLoad : Math.floor((Date.now() - stepStartTime) / 1000);
                  console.log(`Restarting timer. Start time: ${stepStartTime}, Accumulated: ${accumulatedSeconds}s`);
-                 totalElapsedSecondsOnLoad = 0; // Reset accumulator for load
-             } else { // Starting step fresh
+                 totalElapsedSecondsOnLoad = 0;
+             } else {
                  stepStartTime = Date.now();
                  accumulatedSeconds = 0;
                  console.log(`Starting timer fresh. Start time: ${stepStartTime}`);
             }
-            // Save state immediately when timer starts/restarts
             saveCallState();
 
             const updateDisplay = () => {
                 const currentElapsedTime = Math.floor((Date.now() - stepStartTime) / 1000);
-                const totalSecondsForStep = currentElapsedTime; // Keep track of current step time
+                const totalSecondsForStep = currentElapsedTime;
                 const minutes = String(Math.floor(totalSecondsForStep / 60)).padStart(2, '0');
                 const seconds = String(totalSecondsForStep % 60).padStart(2, '0');
                 if (callTimerDiv) callTimerDiv.textContent = `${minutes}:${seconds}`;
             };
 
-            updateDisplay(); // Initial display
+            updateDisplay();
 
             stepTimerInterval = setInterval(updateDisplay, 1000);
         }
@@ -424,26 +423,25 @@ else window.location.href = 'login.html?redirectTo=core-flow.html';
             stepTimerInterval = null;
             if (stepStartTime > 0 && currentStepIndex >= 0 && currentStepIndex < currentSteps.length) {
                 const duration = Math.floor((Date.now() - stepStartTime) / 1000);
-                 if (!stepDurations) stepDurations = new Array(currentSteps.length).fill(0); // Initialize if needed
+                 if (!stepDurations) stepDurations = new Array(currentSteps.length).fill(0);
 
                  if (currentStepIndex < stepDurations.length) {
-                     // Only add the *new* duration since the last start/resume
                     stepDurations[currentStepIndex] = (stepDurations[currentStepIndex] || 0) + duration;
                     console.log(`Step ${currentStepIndex + 1} duration recorded: ${duration}s. Accumulated: ${stepDurations[currentStepIndex]}s`);
                  } else {
                     console.warn(`Attempted to record duration for invalid step index ${currentStepIndex}`);
                  }
-                 stepStartTime = 0; // Reset start time for the *next* step
-                 saveCallState(); // Save state after recording duration
+                 stepStartTime = 0;
+                 saveCallState();
             } else {
-                 stepStartTime = 0; // Ensure start time is reset even if no duration recorded
+                 stepStartTime = 0;
             }
         }
 
 
         function resetCallSessionState() {
-            stopAndRecordStepTimer(); // Stop timer first
-            clearCallState(); // Clear from SessionStorage
+            stopAndRecordStepTimer();
+            clearCallState();
 
             if (callTimerDiv) {
                 callTimerDiv.textContent = '00:00';
@@ -455,7 +453,7 @@ else window.location.href = 'login.html?redirectTo=core-flow.html';
             currentScenarioName = null;
             currentSteps = [];
             currentStepIndex = 0;
-            stepStartTime = 0; // Reset start time
+            stepStartTime = 0;
             totalElapsedSecondsOnLoad = 0;
             console.log("Call session state reset completely.");
         }
@@ -489,7 +487,6 @@ else window.location.href = 'login.html?redirectTo=core-flow.html';
                 stepTitle.textContent = `Action ${index + 1}`;
 
                 stepLi.appendChild(stepNumber);
-                // stepLi.appendChild(stepTitle); // Titles still hidden by default css
 
                 if (index < currentStepIndex) {
                     stepLi.classList.add('completed');
@@ -509,24 +506,18 @@ else window.location.href = 'login.html?redirectTo=core-flow.html';
 
             stepperWrapper.appendChild(stepperUl);
             progressTrackerContainer.style.display = 'block';
-             // Avoid redundant animation on simple re-render
-             // animateElement(progressTrackerContainer);
         }
 
         function renderStep() {
             if (!stepsContainer) return;
 
-            // Ensure stepStartTime is reset if moving to a step that hasn't been started yet
-            // Check if we're moving to a step whose duration is 0 (or undefined) and start time isn't already set
             if ((!stepDurations[currentStepIndex] || stepDurations[currentStepIndex] === 0) && stepStartTime === 0 && totalElapsedSecondsOnLoad === 0) {
-                stepStartTime = Date.now(); // Set start time only if truly starting fresh
+                stepStartTime = Date.now();
                  console.log(`Setting new stepStartTime for step ${currentStepIndex + 1}: ${stepStartTime}`);
             } else if (totalElapsedSecondsOnLoad > 0) {
-                 // If restoring from load, stepStartTime is already set by loadCallState
                  console.log(`Restoring step ${currentStepIndex + 1}, using existing stepStartTime: ${stepStartTime}`);
              } else if (stepStartTime === 0) {
-                // Navigating back to a step that *was* started before
-                stepStartTime = Date.now() - (stepDurations[currentStepIndex] * 1000 || 0); // Estimate original start based on recorded duration
+                stepStartTime = Date.now() - (stepDurations[currentStepIndex] * 1000 || 0);
                 console.log(`Returning to step ${currentStepIndex + 1}. Estimated start time: ${stepStartTime}`);
              }
 
@@ -538,15 +529,11 @@ else window.location.href = 'login.html?redirectTo=core-flow.html';
             }
             if (currentStepIndex >= 0 && currentStepIndex < currentSteps.length) {
                 const stepContent = currentSteps[currentStepIndex];
-                 // Subtle content update without harsh flash
                  stepsContainer.innerHTML = `<p>${stepContent}</p>`;
-                 // stepsContainer.classList.remove('fade-in');
-                 // void stepsContainer.offsetWidth;
-                 // stepsContainer.classList.add('fade-in');
 
                 showAssistantMessage(`📌 Step ${currentStepIndex + 1}: ${stepContent.length > 45 ? stepContent.substring(0, 42) + "..." : stepContent}`, true, 'call', 0);
-                startStepTimer(); // This now handles restoring elapsed time too
-                 saveCallState(); // Save state whenever a step is rendered
+                startStepTimer();
+                 saveCallState();
             } else {
                  console.error("Invalid currentStepIndex:", currentStepIndex);
                  stepsContainer.innerHTML = '<p class="placeholder-text" style="color: var(--danger-color);">Error: Invalid step.</p>';
@@ -580,7 +567,7 @@ else window.location.href = 'login.html?redirectTo=core-flow.html';
                     callStartSound.play().catch(e => console.warn("Audio play failed:", e));
                  }
 
-                resetCallSessionState(); // Reset state *before* starting new session
+                resetCallSessionState();
                 currentScenarioId = parseInt(selectedScenarioId, 10);
 
                 if (initialViewDiv) initialViewDiv.style.display = 'none';
@@ -600,31 +587,28 @@ else window.location.href = 'login.html?redirectTo=core-flow.html';
                     const { data: { user } , error: userError } = await supabase.auth.getUser();
 
                     if (userError || !user) {
-                        console.error("Error fetching user:", userError?.message || "User not found.");
                         if (userError) throw userError;
-                        if (!user) throw new Error("User not identified. Cannot start call.");
+                        throw new Error("User not identified. Cannot start call.");
                     } else {
-                        // --- START OF AGENT_NAME MODIFICATION ---
                         console.log("User object for agent_name determination:", {
                             id: user.id,
                             email: user.email,
                             user_metadata: user.user_metadata
-                        }); // Log for debugging
+                        });
 
                         let agentNameValue = '';
                         if (user.user_metadata?.full_name) {
                             agentNameValue = user.user_metadata.full_name;
-                        } else if (user.user_metadata?.name) { // Check for user_metadata.name as another common field
+                        } else if (user.user_metadata?.name) {
                             agentNameValue = user.user_metadata.name;
                         } else if (user.email) {
-                            agentNameValue = user.email.split('@')[0]; // Fallback to email prefix
-                        } else if (user.id) { // Fallback to a generic ID if email also somehow missing
+                            agentNameValue = user.email.split('@')[0];
+                        } else if (user.id) {
                             agentNameValue = `Agent_${user.id.substring(0, 6)}`;
                         } else {
-                            agentNameValue = 'UnknownAgent'; // Ultimate fallback
+                            agentNameValue = 'UnknownAgent';
                         }
                         console.log("Determined agent_name for session:", agentNameValue);
-                        // --- END OF AGENT_NAME MODIFICATION ---
 
 
                         const { data: scenario, error: scenarioError } = await supabase
@@ -651,22 +635,16 @@ else window.location.href = 'login.html?redirectTo=core-flow.html';
                                 user_id: user.id,
                                 scenario_id: currentScenarioId,
                                 start_time: new Date().toISOString(),
-                                // completed_all_steps: false, // Schema uses 'completed'
-                                completed: false, // Set initial 'completed' status
+                                completed: false,
                                 agent_name: agentNameValue, 
                                 agent_email: user.email || ''
-                                // Fields like end_time, duration, call_quality, quality_reason will be set on call completion/end
                             })
                             .select('id')
                             .single();
 
-                        if (sessionInsertError) {
-                            console.error("Error creating session:", sessionInsertError.message);
-                            throw sessionInsertError;
-                        }
-                        if (!newSession) {
-                             throw new Error("Failed to create session record (newSession is null).");
-                        }
+                        if (sessionInsertError) throw sessionInsertError;
+                        if (!newSession) throw new Error("Failed to create session record (newSession is null).");
+                        
 
                         currentCallSessionId = newSession.id;
                         console.log("✅ New call session created. ID:", currentCallSessionId);
@@ -704,25 +682,23 @@ else window.location.href = 'login.html?redirectTo=core-flow.html';
         // --- 5. NAVIGATION BUTTONS (Next/Prev) ---
         if (nextStepBtn) {
             nextStepBtn.addEventListener('click', async () => {
-                stopAndRecordStepTimer(); // Records duration, resets stepStartTime, saves state
+                stopAndRecordStepTimer();
                 if (currentStepIndex < currentSteps.length - 1) {
                     currentStepIndex++;
-                    stepStartTime = 0; // Explicitly reset for next step start
-                    totalElapsedSecondsOnLoad = 0; // Not restoring
-                    renderStep(); // Starts timer for new step, saves state
+                    stepStartTime = 0;
+                    totalElapsedSecondsOnLoad = 0;
+                    renderStep();
                 } else if (currentStepIndex === currentSteps.length - 1) {
-                    // --- Call FINISHED ---
                     console.log(`Scenario ${currentScenarioName} fully completed by user.`);
                     updateSystemStatus("✅ Call Completed", "status-completed");
                     
                     const totalDuration = stepDurations.reduce((acc, duration) => acc + (duration || 0), 0);
-                    const completedAllSteps = true; // Scenario finished successfully
+                    const completedAllSteps = true;
                     let quality = 'Good'; 
                     let reason = 'All steps completed.';
                     
-                    clearCallState(); // Clear state on successful completion FIRST, before async operations
+                    clearCallState();
 
-                    // --- START: DIRECT DATABASE UPDATE for Finish Call (Replaces Edge Function) ---
                     if (currentCallSessionId) {
                         console.log(`🚀 Updating call_sessions (Finish) for session: ${currentCallSessionId}`);
                         const updatePayload = {
@@ -742,9 +718,8 @@ else window.location.href = 'login.html?redirectTo=core-flow.html';
 
                             if (updateError) {
                                 console.error("❌ Error updating call_sessions (Finish):", updateError);
-                                // Modify reason/quality for summary if DB update fails
                                 reason = `DB Update Failed: ${updateError.message}. Original: ${reason}`;
-                                quality = 'N/A'; // Indicate an issue
+                                quality = 'N/A';
                             } else {
                                 console.log("✅ call_sessions updated successfully (Finish). Response:", updateData);
                             }
@@ -758,12 +733,10 @@ else window.location.href = 'login.html?redirectTo=core-flow.html';
                         reason = "Internal Error: Missing Session ID for final update.";
                         quality = 'N/A';
                     }
-                    // --- END: DIRECT DATABASE UPDATE for Finish Call ---
 
                     console.log(`Final Outcome (Finish) - Quality: ${quality}, Reason: ${reason}`);
-                    displayPostCallSummary(quality, reason, totalDuration); // Display summary
+                    displayPostCallSummary(quality, reason, totalDuration);
 
-                    // Hide call controls after summary is prepared
                     if (nextStepBtn) nextStepBtn.style.display = 'none';
                     if (prevStepBtn) prevStepBtn.style.display = 'none';
                     if (endCallBtn) endCallBtn.style.display = 'none';
@@ -773,13 +746,12 @@ else window.location.href = 'login.html?redirectTo=core-flow.html';
 
         if (prevStepBtn) {
             prevStepBtn.addEventListener('click', () => {
-                stopAndRecordStepTimer(); // Record time of the step we are leaving, save state
+                stopAndRecordStepTimer();
                 if (currentStepIndex > 0) {
                     currentStepIndex--;
-                    // Timer restart logic is handled within renderStep
-                    stepStartTime = 0; // Explicitly reset, renderStep will handle re-estimating based on duration
-                    totalElapsedSecondsOnLoad = 0; // Not restoring
-                    renderStep(); // Renders the previous step, timer will restart, state will be saved
+                    stepStartTime = 0;
+                    totalElapsedSecondsOnLoad = 0;
+                    renderStep();
                 }
             });
         }
@@ -787,18 +759,17 @@ else window.location.href = 'login.html?redirectTo=core-flow.html';
         // --- 6. END CALL BUTTON ---
         if (endCallBtn) {
             endCallBtn.addEventListener('click', async () => {
-                stopAndRecordStepTimer(); // Record time for the current step before ending
+                stopAndRecordStepTimer();
                 const totalDuration = stepDurations.reduce((acc, duration) => acc + (duration || 0), 0);
                 console.log("🟡 End Call button clicked by user.");
                 updateSystemStatus("⚪ Call Ended", "status-ended");
                 
-                const completedAllSteps = false; // Call ended prematurely
+                const completedAllSteps = false;
                 let quality = 'Bad'; 
                 let reason = 'Call ended prematurely by user.';
 
-                clearCallState(); // Clear state on manual end FIRST, before async operations
+                clearCallState();
 
-                 // --- START: DIRECT DATABASE UPDATE for End Call (Replaces Edge Function) ---
                  if (currentCallSessionId) {
                     console.log(`🚀 Updating call_sessions (End Call) for session: ${currentCallSessionId}`);
                     const updatePayload = {
@@ -833,12 +804,10 @@ else window.location.href = 'login.html?redirectTo=core-flow.html';
                     reason = "Internal Error: Missing Session ID for final update.";
                     quality = 'N/A';
                 }
-                // --- END: DIRECT DATABASE UPDATE for End Call ---
 
                 console.log(`Final Outcome (End Call) - Quality: ${quality}, Reason: ${reason}`);
                 displayPostCallSummary(quality, reason, totalDuration);
 
-                // Hide call controls
                 if (nextStepBtn) nextStepBtn.style.display = 'none';
                 if (prevStepBtn) prevStepBtn.style.display = 'none';
                 if (endCallBtn) endCallBtn.style.display = 'none';
@@ -847,41 +816,37 @@ else window.location.href = 'login.html?redirectTo=core-flow.html';
 
         // --- 7. POST CALL SUMMARY & RETURN ---
         function displayPostCallSummary(quality, reason, totalDuration) {
-             // clearCallState(); // Already cleared before DB update calls
-
             if (callFlowViewDiv) callFlowViewDiv.style.display = 'none';
             if (progressTrackerContainer) progressTrackerContainer.style.display = 'none';
-            if (callTimerDiv) callTimerDiv.style.display = 'none'; // Hide timer
+            if (callTimerDiv) callTimerDiv.style.display = 'none';
             if (assistantBox) {
-                 assistantBox.classList.remove('show', 'assistant-initial-position'); // Hide assistant
+                 assistantBox.classList.remove('show', 'assistant-initial-position');
                  assistantBox.style.display = 'none';
             }
 
 
             if (callSummaryContentDiv && postCallSummaryDiv) {
                 let summaryHTML = `
-                    <p><strong>Call Quality:</strong> <span class="quality-text quality-${quality?.toLowerCase().replace(/\s+/g, '-') || 'na'}">${quality || 'N/A'}</span></p> <!-- Improved class handling -->
+                    <p><strong>Call Quality:</strong> <span class="quality-text quality-${quality?.toLowerCase().replace(/\s+/g, '-') || 'na'}">${quality || 'N/A'}</span></p>
                     <p><strong>Reason:</strong> ${reason || "N/A"}</p>
                     <p><strong>Total Duration:</strong> ${Math.floor(totalDuration / 60)}m ${totalDuration % 60}s</p>
                     <hr style="margin: 1rem 0; border-color: var(--border-color);">
-                    <p><strong>Step Durations (approx):</strong></p> <!-- Added 'approx' -->
+                    <p><strong>Step Durations (approx):</strong></p>
                     <ul style="list-style: none; padding-left: 0; max-height: 150px; overflow-y: auto;">`;
 
-                 if (currentSteps && currentSteps.length > 0 && stepDurations && stepDurations.length > 0) { // Adjusted check
+                 if (currentSteps && currentSteps.length > 0 && stepDurations && stepDurations.length > 0) {
                      const maxValidIndex = Math.min(currentSteps.length, stepDurations.length);
                      for (let index = 0; index < maxValidIndex; index++) {
                           const duration = stepDurations[index] || 0;
                           const stepText = currentSteps[index] || `Step ${index + 1}`;
                           const stepShortText = stepText.length > 25 ? stepText.substring(0, 22) + "..." : stepText;
                           const timeStr = `${Math.floor(duration / 60)}m ${duration % 60}s`;
-                          // Determine status based on *final* outcome
                           const wasCompleted = (quality === 'Good' && index === maxValidIndex - 1) || index < currentStepIndex;
                           const status = duration > 0 ? (wasCompleted ? 'Completed' : 'Ended At') : 'Not Reached';
 
-                          if(duration > 0 || (index === currentStepIndex && quality !=='Good' && quality !== 'N/A')) { // Show if duration exists OR it was the last active step in a non-good call
+                          if(duration > 0 || (index === currentStepIndex && quality !=='Good' && quality !== 'N/A')) {
                             summaryHTML += `<li style="margin-bottom: 0.3rem;">${index + 1}. "${stepShortText}" (${status}): ${timeStr}</li>`;
                           } else if (index > currentStepIndex && stepDurations[index-1] > 0 && quality !== 'Good') {
-                             // Optionally show next step as not reached if call ended early
                               summaryHTML += `<li style="margin-bottom: 0.3rem; opacity: 0.6;">${index + 1}. "${stepShortText}" (Not Reached)</li>`;
                           }
                      }
@@ -899,7 +864,7 @@ else window.location.href = 'login.html?redirectTo=core-flow.html';
 
          // Function to reset the UI to the initial state
          async function resetToInitialView() {
-             resetCallSessionState(); // Clear logical state and SessionStorage
+             resetCallSessionState();
 
              if (postCallSummaryDiv) postCallSummaryDiv.style.display = 'none';
              if (callFlowViewDiv) callFlowViewDiv.style.display = 'none';
@@ -911,7 +876,7 @@ else window.location.href = 'login.html?redirectTo=core-flow.html';
 
              if (nextStepBtn) {
                  nextStepBtn.innerHTML = `<span>Next Step</span><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>`;
-                 nextStepBtn.style.display = 'none'; // Ensure hidden
+                 nextStepBtn.style.display = 'none';
              }
              if (prevStepBtn) prevStepBtn.style.display = 'none';
              if (endCallBtn) endCallBtn.style.display = 'none';
@@ -920,7 +885,7 @@ else window.location.href = 'login.html?redirectTo=core-flow.html';
              if (scenarioTitleElement) scenarioTitleElement.textContent = "Call Scenario";
              if (stepsContainer) stepsContainer.innerHTML = '<p class="placeholder-text">Select a scenario to begin.</p>';
 
-              await loadActiveScenarios(); // Reload scenarios
+              await loadActiveScenarios();
               if (scenarioDropdown) scenarioDropdown.value = "";
               if (receiveCallBtn) receiveCallBtn.disabled = true;
 
@@ -942,22 +907,19 @@ else window.location.href = 'login.html?redirectTo=core-flow.html';
             }, speed);
         }
 
-        // Modified showAssistantMessage to handle position
         function showAssistantMessage(message, showImmediately = false, position = 'call', duration = 5000, onHideCallback) {
             if (assistantMessageElement && assistantBox) {
                 clearTimeout(assistantTimeout);
-                if (typingInterval) clearInterval(typingInterval); // Stop existing typing
+                if (typingInterval) clearInterval(typingInterval);
 
                  const displayMessage = () => {
-                     assistantBox.style.display = 'flex'; // Make visible first
-                     assistantBox.classList.remove('show', 'slide-in-right', 'assistant-initial-position'); // Clear previous states
-                      void assistantBox.offsetWidth; // Trigger reflow
+                     assistantBox.style.display = 'flex';
+                     assistantBox.classList.remove('show', 'slide-in-right', 'assistant-initial-position');
+                      void assistantBox.offsetWidth;
 
-                     // Apply position-specific classes and animations
                      if (position === 'initial') {
                          assistantBox.classList.add('assistant-initial-position');
-                         // No slide-in needed for initial static position
-                     } else { // Default 'call' position (fixed, bottom-right)
+                     } else {
                          assistantBox.classList.add('slide-in-right', 'show');
                      }
 
@@ -973,32 +935,27 @@ else window.location.href = 'login.html?redirectTo=core-flow.html';
 
                  const hideAssistant = () => {
                      if (position === 'initial') {
-                         // For initial position, might just fade or hide directly
                          assistantBox.style.display = 'none';
                          assistantBox.classList.remove('assistant-initial-position');
                      } else {
                          assistantBox.classList.remove('show');
-                         // Hide after transition
                          setTimeout(() => {
                               if (!assistantBox.classList.contains('show')) {
                                   assistantBox.style.display = 'none';
                               }
-                         }, 400); // Match transition duration
+                         }, 400);
                      }
                  }
 
-                 // Always clear previous timeout when showing new message
                  clearTimeout(assistantTimeout);
 
-                 // Determine if we should show immediately or update in place
                  const isCurrentlyVisible = assistantBox.style.display === 'flex' || assistantBox.classList.contains('show');
                  const isCorrectPosition = (position === 'initial' && assistantBox.classList.contains('assistant-initial-position')) ||
                                            (position === 'call' && !assistantBox.classList.contains('assistant-initial-position'));
 
                  if (!isCurrentlyVisible || !isCorrectPosition || showImmediately) {
-                     displayMessage(); // Show from hidden or if forcing immediate display/position change
+                     displayMessage();
                  } else {
-                      // If already shown in the correct position, just update text
                       typeWriterEffect(assistantMessageElement, message, 30, () => {
                          if (duration && duration > 0) {
                            assistantTimeout = setTimeout(() => {
@@ -1012,7 +969,7 @@ else window.location.href = 'login.html?redirectTo=core-flow.html';
         }
 
 
-        console.log("CoreFlow.js v2.4 script fully loaded and initialized."); // Version updated
+        console.log("CoreFlow.js v2.4 script fully loaded and initialized.");
     });
     </script>
 </body>
