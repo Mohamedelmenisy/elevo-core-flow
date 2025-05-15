@@ -1,12 +1,11 @@
---- START OF FILE dash.txt ---
-
-<!DOCTYPE html>
+د<!DOCTYPE html>
 <html lang="en" class="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin Dashboard - Elevo Core</title>
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2317a2b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M3 12h18M3 6h12M3 18h15'/><path d='M17 9l4 3l-4 3'/></svg>">
+    <link rel="icon" href="favicon.ico" type="image/x-icon">
+    <link rel="apple-touch-icon" href="favicon.ico">
     <link rel="stylesheet" href="style.css">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -175,7 +174,7 @@
                     </h2>
                     <div id="liveCallsContainer" class="live-calls-list">
                         <p id="noLiveCallsMessage" style="display:block;">Loading live calls...</p>
-                        
+                        {/* Live calls will be dynamically inserted here */}
                     </div>
                 </div>
 
@@ -207,7 +206,7 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                
+                                {/* Placeholder shown via JS */}
                             </tbody>
                         </table>
                     </div>
@@ -294,22 +293,6 @@
         let liveCallsChannel = null;
         const FILTER_STORAGE_KEY = 'elevoCoreAdminFilters_v2';
 
-        // --- Time Formatting Function ---
-        function formatEgyptTime(dateStr) {
-            if (!dateStr) return 'N/A'; // Handle null or undefined date strings
-            try {
-                return new Date(dateStr).toLocaleString("en-GB", {
-                    timeZone: "Africa/Cairo",
-                    year: 'numeric', month: '2-digit', day: '2-digit',
-                    hour: '2-digit', minute: '2-digit', second: '2-digit',
-                    hour12: false,
-                }).replace(',', ''); // "dd/mm/yyyy HH:MM:SS"
-            } catch (e) {
-                console.error("Error formatting date to Egypt time:", dateStr, e);
-                // Fallback to local string if error, or could return the original string or a specific error message
-                return new Date(dateStr).toLocaleString(); 
-            }
-        }
 
         // --- Auth and Admin Check ---
         async function initializeDashboard() {
@@ -319,14 +302,17 @@
 
             if (sessionError || !session) {
                 console.log("No session or error fetching session. Redirecting to login.");
-                window.location.replace('login.html');
+                const currentPath = window.location.pathname + window.location.search;
+                window.location.replace(`login.html?redirectTo=${encodeURIComponent(currentPath)}`);
                 return;
             }
 
+            // User is authenticated, now check if admin
+            // First, try to get user data from localStorage
             const storedUserData = JSON.parse(localStorage.getItem('elevoCoreUserData'));
             if (storedUserData && storedUserData.id === session.user.id) {
                 currentUser = storedUserData;
-            } else { 
+            } else { // Fetch from DB users table
                 const { data: profile, error: profileError } = await supabase
                     .from('users')
                     .select('name, is_admin')
@@ -348,6 +334,7 @@
             }
             
             if (!currentUser.isAdmin) {
+                // Invoke Edge Function as a secondary check or if direct DB check isn't preferred
                 try {
                     console.log("User not admin via local check, invoking Edge Function 'check-admin-access' as fallback/confirmation.");
                     const { data: adminStatus, error: functionError } = await supabase.functions.invoke('check-admin-access');
@@ -357,8 +344,8 @@
                         showAccessDenied();
                         return;
                     }
-                    currentUser.isAdmin = true; 
-                    localStorage.setItem('elevoCoreUserData', JSON.stringify(currentUser)); 
+                    currentUser.isAdmin = true; // Update local state if function confirms admin
+                    localStorage.setItem('elevoCoreUserData', JSON.stringify(currentUser)); // Persist
                 } catch (err) {
                     console.error("Error checking admin status via Edge Function:", err);
                     showAccessDenied("Could not verify administrator privileges.");
@@ -366,14 +353,15 @@
                 }
             }
             
+            // User is Admin, proceed to load dashboard
             console.log("Admin access confirmed for:", currentUser.email);
-            appContainerContent.style.display = 'flex'; 
+            appContainerContent.style.display = 'flex'; // Show main app container
             authLoadingMessageDiv.style.display = 'none';
-            dashboardContentDiv.style.display = 'block'; 
+            dashboardContentDiv.style.display = 'block'; // Show dashboard content
 
             setupAdminUI();
             await loadInitialData();
-            loadPersistedFilters(); 
+            loadPersistedFilters(); // Load filters before applying
             applyFiltersAndRender();
             setupEventListeners();
             setupLiveCallMonitoring();
@@ -382,11 +370,11 @@
         function showAccessDenied(message = "You do not have permission to view this page. This section is restricted to administrators.") {
             authLoadingMessageDiv.style.display = 'none';
             dashboardContentDiv.style.display = 'none';
-            appContainerContent.style.display = 'flex'; 
+            appContainerContent.style.display = 'flex'; // Keep header/footer visible for context
             
             accessDeniedModal.querySelector('p').textContent = message;
             accessDeniedModal.style.display = 'flex';
-            if (liveCallsChannel) { 
+            if (liveCallsChannel) { // Unsubscribe if modal is shown
                 supabase.removeChannel(liveCallsChannel);
                 liveCallsChannel = null;
             }
@@ -406,6 +394,7 @@
         // --- Data Loading ---
         async function loadInitialData() {
             try {
+                // Fetch all agents
                 const { data: agentsData, error: agentsError } = await supabase
                     .from('users')
                     .select('id, name, email')
@@ -414,11 +403,12 @@
                 allAgents = agentsData || [];
                 populateAgentFilter();
 
+                // Fetch all call sessions
                 const { data: sessionsData, error: sessionsError } = await supabase
                     .from('call_sessions')
                     .select(`
                         *,
-                        call_scenarios (title)
+                        call_scenarios (name)
                     `)
                     .order('start_time', { ascending: false });
                 if (sessionsError) throw sessionsError;
@@ -428,6 +418,7 @@
 
             } catch (error) {
                 console.error("Error loading initial dashboard data:", error);
+                // Display an error message on the dashboard
                 recentCallsTableBody.innerHTML = `<tr><td colspan="8" style="text-align:center; color:var(--danger-color);">Failed to load data: ${error.message}</td></tr>`;
             }
         }
@@ -444,7 +435,7 @@
 
         // --- Filtering and Rendering ---
         function applyFiltersAndRender() {
-            saveFiltersToLocalStorage(); 
+            saveFiltersToLocalStorage(); // Save current filter state
             let tempFiltered = [...allCallSessions];
             const searchTerm = searchInput.value.toLowerCase().trim();
             const selectedAgentId = userFilterDropdown.value;
@@ -452,6 +443,7 @@
             const startDate = startDateFilter.value;
             const endDate = endDateFilter.value;
 
+            // Agent filter
             if (selectedAgentId) {
                 tempFiltered = tempFiltered.filter(s => s.user_id === selectedAgentId);
                 const agent = allAgents.find(a => a.id === selectedAgentId);
@@ -463,20 +455,23 @@
                 recentCallsTitleEl.textContent = 'All Recent Call Sessions';
             }
 
+            // Search term filter
             if (searchTerm) {
                 tempFiltered = tempFiltered.filter(s => {
                     const agent = allAgents.find(a => a.id === s.user_id);
                     return (
-                        (s.call_scenarios?.title || '').toLowerCase().includes(searchTerm) ||
+                        (s.call_scenarios?.name || '').toLowerCase().includes(searchTerm) ||
                         (s.quality_reason || '').toLowerCase().includes(searchTerm) ||
                         (agent?.name || '').toLowerCase().includes(searchTerm) ||
                         (agent?.email || '').toLowerCase().includes(searchTerm)
                     );
                 });
             }
+            // Quality filter
             if (selectedQuality) {
                 tempFiltered = tempFiltered.filter(s => (selectedQuality === "N/A" ? !s.call_quality : s.call_quality === selectedQuality));
             }
+            // Date filter
             if (startDate) {
                 tempFiltered = tempFiltered.filter(s => s.start_time && new Date(s.start_time) >= new Date(startDate + "T00:00:00"));
             }
@@ -485,7 +480,7 @@
             }
             
             filteredCallSessions = tempFiltered;
-            currentPage = 1; 
+            currentPage = 1; // Reset to first page after filtering
             renderTable();
             updateStats();
             renderPagination();
@@ -511,11 +506,11 @@
                 const row = recentCallsTableBody.insertRow();
                 row.insertCell().textContent = agent?.name || 'Unknown Agent';
                 row.insertCell().textContent = agent?.email || 'N/A';
-                row.insertCell().textContent = session.call_scenarios?.title || 'N/A';
-                row.insertCell().textContent = formatEgyptTime(session.start_time); // MODIFIED HERE
-                const durationSeconds = session.duration || 0; 
-                row.insertCell().textContent = `${Math.floor(durationSeconds / 60)}m ${durationSeconds % 60}s`;
-                row.insertCell().textContent = session.completed ? 'Yes' : 'No'; 
+                row.insertCell().textContent = session.call_scenarios?.name || 'N/A';
+                row.insertCell().textContent = session.start_time ? new Date(session.start_time).toLocaleString() : 'N/A';
+                const duration = session.total_duration_seconds || 0;
+                row.insertCell().textContent = `${Math.floor(duration / 60)}m ${duration % 60}s`;
+                row.insertCell().textContent = session.completed_all_steps ? 'Yes' : 'No';
                 
                 const qualityCell = row.insertCell();
                 qualityCell.classList.add('quality-cell');
@@ -542,11 +537,11 @@
             totalCallsEl.textContent = count;
 
             if (count > 0) {
-                const totalDurationSeconds = filteredCallSessions.reduce((sum, s) => sum + (s.duration || 0), 0); 
-                const avgDurationSeconds = Math.round(totalDurationSeconds / count);
-                avgCallDurationEl.textContent = `${Math.floor(avgDurationSeconds / 60)}m ${avgDurationSeconds % 60}s`;
+                const totalDuration = filteredCallSessions.reduce((sum, s) => sum + (s.total_duration_seconds || 0), 0);
+                const avgDuration = Math.round(totalDuration / count);
+                avgCallDurationEl.textContent = `${Math.floor(avgDuration / 60)}m ${avgDuration % 60}s`;
 
-                const completedCount = filteredCallSessions.filter(s => s.completed).length; 
+                const completedCount = filteredCallSessions.filter(s => s.completed_all_steps).length;
                 completionRateEl.textContent = `${Math.round((completedCount / count) * 100)}%`;
 
                 const qualityCounts = { good: 0, normal: 0, bad: 0, rated: 0 };
@@ -579,6 +574,7 @@
             const totalPages = Math.ceil(filteredCallSessions.length / ROWS_PER_PAGE);
             if (totalPages <= 1) return;
 
+            // Simplified pagination: Prev, Current Page / Total Pages, Next
             const prevBtn = document.createElement('button');
             prevBtn.textContent = 'Previous';
             prevBtn.disabled = currentPage === 1;
@@ -643,7 +639,7 @@
             });
             searchInput.addEventListener('input', () => {
                 clearTimeout(filterTimeoutId);
-                filterTimeoutId = setTimeout(applyFiltersAndRender, 500); 
+                filterTimeoutId = setTimeout(applyFiltersAndRender, 500); // Debounce
             });
             resetFiltersBtn.addEventListener('click', () => {
                 userFilterDropdown.value = '';
@@ -669,13 +665,13 @@
                 return [
                     agent?.name || 'Unknown',
                     agent?.email || 'N/A',
-                    session.call_scenarios?.title || 'N/A', 
-                    formatEgyptTime(session.start_time), // MODIFIED HERE
-                    session.duration || 0, 
-                    session.completed ? 'Yes' : 'No', 
+                    session.call_scenarios?.name || 'N/A',
+                    session.start_time ? new Date(session.start_time).toLocaleString() : 'N/A',
+                    session.total_duration_seconds || 0,
+                    session.completed_all_steps ? 'Yes' : 'No',
                     session.call_quality || 'N/A',
                     session.quality_reason || '-'
-                ].map(field => `"${String(field).replace(/"/g, '""')}"`); 
+                ].map(field => `"${String(field).replace(/"/g, '""')}"`); // Escape quotes
             });
 
             const csvContent = [headers.join(','), ...rows.map(row => row.join(','))].join('\n');
@@ -694,9 +690,9 @@
         // --- Live Call Monitoring ---
         async function setupLiveCallMonitoring() {
             if (!supabase) return;
-            await fetchAndRenderLiveCalls(); 
+            await fetchAndRenderLiveCalls(); // Initial fetch
 
-            if (liveCallsChannel) { 
+            if (liveCallsChannel) { // Remove existing channel if any (e.g., on re-init)
                 supabase.removeChannel(liveCallsChannel);
             }
 
@@ -706,6 +702,7 @@
                     { event: '*', schema: 'public', table: 'call_sessions' },
                     (payload) => {
                         console.log('Realtime: Call session change detected', payload);
+                        // Could optimize by checking if the change affects live calls (end_time is null)
                         fetchAndRenderLiveCalls(); 
                     }
                 )
@@ -726,20 +723,20 @@
             try {
                 const { data: liveSessions, error } = await supabase
                     .from('call_sessions')
-                    .select('id, user_id, scenario_id, start_time, call_scenarios (title)') 
-                    .is('end_time', null) 
+                    .select('id, user_id, scenario_id, start_time, call_scenarios (name)')
+                    .is('end_time', null) // Actively live calls
                     .order('start_time', { ascending: true });
 
                 if (error) throw error;
 
-                liveCallsContainer.innerHTML = ''; 
+                liveCallsContainer.innerHTML = ''; // Clear previous
                 if (liveSessions && liveSessions.length > 0) {
                     noLiveCallsMessage.style.display = 'none';
                     liveSessions.forEach(call => {
                         const agent = allAgents.find(a => a.id === call.user_id);
                         const agentName = agent?.name || agent?.email || `Agent ID: ${call.user_id.substring(0,8)}`;
-                        const scenarioName = call.call_scenarios?.title || 'Loading scenario...'; 
-                        const startTimeFormatted = formatEgyptTime(call.start_time); // MODIFIED HERE
+                        const scenarioName = call.call_scenarios?.name || 'Loading scenario...';
+                        const startTimeFormatted = new Date(call.start_time).toLocaleTimeString();
 
                         const callDiv = document.createElement('div');
                         callDiv.className = 'live-call-item';
