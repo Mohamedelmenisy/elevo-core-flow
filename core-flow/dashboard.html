@@ -301,17 +301,14 @@
 
             if (sessionError || !session) {
                 console.log("No session or error fetching session. Redirecting to login.");
-                // MODIFIED: Redirect to login.html without redirectTo parameter.
                 window.location.replace('login.html');
                 return;
             }
 
-            // User is authenticated, now check if admin
-            // First, try to get user data from localStorage
             const storedUserData = JSON.parse(localStorage.getItem('elevoCoreUserData'));
             if (storedUserData && storedUserData.id === session.user.id) {
                 currentUser = storedUserData;
-            } else { // Fetch from DB users table
+            } else { 
                 const { data: profile, error: profileError } = await supabase
                     .from('users')
                     .select('name, is_admin')
@@ -333,7 +330,6 @@
             }
             
             if (!currentUser.isAdmin) {
-                // Invoke Edge Function as a secondary check or if direct DB check isn't preferred
                 try {
                     console.log("User not admin via local check, invoking Edge Function 'check-admin-access' as fallback/confirmation.");
                     const { data: adminStatus, error: functionError } = await supabase.functions.invoke('check-admin-access');
@@ -343,8 +339,8 @@
                         showAccessDenied();
                         return;
                     }
-                    currentUser.isAdmin = true; // Update local state if function confirms admin
-                    localStorage.setItem('elevoCoreUserData', JSON.stringify(currentUser)); // Persist
+                    currentUser.isAdmin = true; 
+                    localStorage.setItem('elevoCoreUserData', JSON.stringify(currentUser)); 
                 } catch (err) {
                     console.error("Error checking admin status via Edge Function:", err);
                     showAccessDenied("Could not verify administrator privileges.");
@@ -352,15 +348,14 @@
                 }
             }
             
-            // User is Admin, proceed to load dashboard
             console.log("Admin access confirmed for:", currentUser.email);
-            appContainerContent.style.display = 'flex'; // Show main app container
+            appContainerContent.style.display = 'flex'; 
             authLoadingMessageDiv.style.display = 'none';
-            dashboardContentDiv.style.display = 'block'; // Show dashboard content
+            dashboardContentDiv.style.display = 'block'; 
 
             setupAdminUI();
             await loadInitialData();
-            loadPersistedFilters(); // Load filters before applying
+            loadPersistedFilters(); 
             applyFiltersAndRender();
             setupEventListeners();
             setupLiveCallMonitoring();
@@ -369,11 +364,11 @@
         function showAccessDenied(message = "You do not have permission to view this page. This section is restricted to administrators.") {
             authLoadingMessageDiv.style.display = 'none';
             dashboardContentDiv.style.display = 'none';
-            appContainerContent.style.display = 'flex'; // Keep header/footer visible for context
+            appContainerContent.style.display = 'flex'; 
             
             accessDeniedModal.querySelector('p').textContent = message;
             accessDeniedModal.style.display = 'flex';
-            if (liveCallsChannel) { // Unsubscribe if modal is shown
+            if (liveCallsChannel) { 
                 supabase.removeChannel(liveCallsChannel);
                 liveCallsChannel = null;
             }
@@ -393,7 +388,6 @@
         // --- Data Loading ---
         async function loadInitialData() {
             try {
-                // Fetch all agents
                 const { data: agentsData, error: agentsError } = await supabase
                     .from('users')
                     .select('id, name, email')
@@ -402,13 +396,13 @@
                 allAgents = agentsData || [];
                 populateAgentFilter();
 
-                // Fetch all call sessions
+                // MODIFICATION: Corrected select to use foreign_key_name(columns)
                 const { data: sessionsData, error: sessionsError } = await supabase
                     .from('call_sessions')
                     .select(`
                         *,
-                        call_scenarios (title) 
-                    `) // MODIFIED: call_scenarios (title) instead of (name)
+                        call_sessions_scenario_id_fkey(title) 
+                    `) // MODIFIED: 'name' changed to 'title' for scenario
                     .order('start_time', { ascending: false });
                 if (sessionsError) throw sessionsError;
                 allCallSessions = sessionsData || [];
@@ -417,7 +411,6 @@
 
             } catch (error) {
                 console.error("Error loading initial dashboard data:", error);
-                // Display an error message on the dashboard
                 recentCallsTableBody.innerHTML = `<tr><td colspan="8" style="text-align:center; color:var(--danger-color);">Failed to load data: ${error.message}</td></tr>`;
             }
         }
@@ -434,7 +427,7 @@
 
         // --- Filtering and Rendering ---
         function applyFiltersAndRender() {
-            saveFiltersToLocalStorage(); // Save current filter state
+            saveFiltersToLocalStorage(); 
             let tempFiltered = [...allCallSessions];
             const searchTerm = searchInput.value.toLowerCase().trim();
             const selectedAgentId = userFilterDropdown.value;
@@ -442,7 +435,6 @@
             const startDate = startDateFilter.value;
             const endDate = endDateFilter.value;
 
-            // Agent filter
             if (selectedAgentId) {
                 tempFiltered = tempFiltered.filter(s => s.user_id === selectedAgentId);
                 const agent = allAgents.find(a => a.id === selectedAgentId);
@@ -454,23 +446,20 @@
                 recentCallsTitleEl.textContent = 'All Recent Call Sessions';
             }
 
-            // Search term filter
             if (searchTerm) {
                 tempFiltered = tempFiltered.filter(s => {
                     const agent = allAgents.find(a => a.id === s.user_id);
                     return (
-                        (s.call_scenarios?.title || '').toLowerCase().includes(searchTerm) || // MODIFIED: .title
+                        (s.call_sessions_scenario_id_fkey?.title || '').toLowerCase().includes(searchTerm) || // MODIFIED: .name to .title
                         (s.quality_reason || '').toLowerCase().includes(searchTerm) ||
                         (agent?.name || '').toLowerCase().includes(searchTerm) ||
                         (agent?.email || '').toLowerCase().includes(searchTerm)
                     );
                 });
             }
-            // Quality filter
             if (selectedQuality) {
                 tempFiltered = tempFiltered.filter(s => (selectedQuality === "N/A" ? !s.call_quality : s.call_quality === selectedQuality));
             }
-            // Date filter
             if (startDate) {
                 tempFiltered = tempFiltered.filter(s => s.start_time && new Date(s.start_time) >= new Date(startDate + "T00:00:00"));
             }
@@ -479,7 +468,7 @@
             }
             
             filteredCallSessions = tempFiltered;
-            currentPage = 1; // Reset to first page after filtering
+            currentPage = 1; 
             renderTable();
             updateStats();
             renderPagination();
@@ -505,11 +494,11 @@
                 const row = recentCallsTableBody.insertRow();
                 row.insertCell().textContent = agent?.name || 'Unknown Agent';
                 row.insertCell().textContent = agent?.email || 'N/A';
-                row.insertCell().textContent = session.call_scenarios?.title || 'N/A'; // MODIFIED: .title
+                row.insertCell().textContent = session.call_sessions_scenario_id_fkey?.title || 'N/A'; // MODIFIED: .name to .title
                 row.insertCell().textContent = session.start_time ? new Date(session.start_time).toLocaleString() : 'N/A';
-                const durationSeconds = session.duration || 0; // MODIFIED: session.duration
-                row.insertCell().textContent = `${Math.floor(durationSeconds / 60)}m ${durationSeconds % 60}s`;
-                row.insertCell().textContent = session.completed ? 'Yes' : 'No'; // MODIFIED: session.completed
+                const duration = session.duration || 0; // MODIFIED: total_duration_seconds to duration
+                row.insertCell().textContent = `${Math.floor(duration / 60)}m ${duration % 60}s`;
+                row.insertCell().textContent = session.completed ? 'Yes' : 'No'; // MODIFIED: completed_all_steps to completed
                 
                 const qualityCell = row.insertCell();
                 qualityCell.classList.add('quality-cell');
@@ -536,11 +525,11 @@
             totalCallsEl.textContent = count;
 
             if (count > 0) {
-                const totalDurationSeconds = filteredCallSessions.reduce((sum, s) => sum + (s.duration || 0), 0); // MODIFIED: s.duration
-                const avgDurationSeconds = Math.round(totalDurationSeconds / count);
-                avgCallDurationEl.textContent = `${Math.floor(avgDurationSeconds / 60)}m ${avgDurationSeconds % 60}s`;
+                const totalDuration = filteredCallSessions.reduce((sum, s) => sum + (s.duration || 0), 0); // MODIFIED: total_duration_seconds to duration
+                const avgDuration = Math.round(totalDuration / count);
+                avgCallDurationEl.textContent = `${Math.floor(avgDuration / 60)}m ${avgDuration % 60}s`;
 
-                const completedCount = filteredCallSessions.filter(s => s.completed).length; // MODIFIED: s.completed
+                const completedCount = filteredCallSessions.filter(s => s.completed).length; // MODIFIED: completed_all_steps to completed
                 completionRateEl.textContent = `${Math.round((completedCount / count) * 100)}%`;
 
                 const qualityCounts = { good: 0, normal: 0, bad: 0, rated: 0 };
@@ -573,7 +562,6 @@
             const totalPages = Math.ceil(filteredCallSessions.length / ROWS_PER_PAGE);
             if (totalPages <= 1) return;
 
-            // Simplified pagination: Prev, Current Page / Total Pages, Next
             const prevBtn = document.createElement('button');
             prevBtn.textContent = 'Previous';
             prevBtn.disabled = currentPage === 1;
@@ -620,7 +608,6 @@
             }
         }
 
-        // --- Event Listeners Setup ---
         function setupEventListeners() {
             logoutButton.addEventListener('click', async () => {
                 if (liveCallsChannel) {
@@ -638,7 +625,7 @@
             });
             searchInput.addEventListener('input', () => {
                 clearTimeout(filterTimeoutId);
-                filterTimeoutId = setTimeout(applyFiltersAndRender, 500); // Debounce
+                filterTimeoutId = setTimeout(applyFiltersAndRender, 500); 
             });
             resetFiltersBtn.addEventListener('click', () => {
                 userFilterDropdown.value = '';
@@ -652,7 +639,6 @@
             exportDataBtn.addEventListener('click', exportFilteredDataToCSV);
         }
 
-        // --- CSV Export ---
         function exportFilteredDataToCSV() {
             if (filteredCallSessions.length === 0) {
                 alert("No data to export based on current filters.");
@@ -664,13 +650,13 @@
                 return [
                     agent?.name || 'Unknown',
                     agent?.email || 'N/A',
-                    session.call_scenarios?.title || 'N/A', // MODIFIED: .title
+                    session.call_sessions_scenario_id_fkey?.title || 'N/A', // MODIFIED: .name to .title
                     session.start_time ? new Date(session.start_time).toLocaleString() : 'N/A',
-                    session.duration || 0, // MODIFIED: session.duration
-                    session.completed ? 'Yes' : 'No', // MODIFIED: session.completed
+                    session.duration || 0, // MODIFIED: total_duration_seconds to duration
+                    session.completed ? 'Yes' : 'No', // MODIFIED: completed_all_steps to completed
                     session.call_quality || 'N/A',
                     session.quality_reason || '-'
-                ].map(field => `"${String(field).replace(/"/g, '""')}"`); // Escape quotes
+                ].map(field => `"${String(field).replace(/"/g, '""')}"`); 
             });
 
             const csvContent = [headers.join(','), ...rows.map(row => row.join(','))].join('\n');
@@ -686,12 +672,11 @@
             URL.revokeObjectURL(url);
         }
         
-        // --- Live Call Monitoring ---
         async function setupLiveCallMonitoring() {
             if (!supabase) return;
-            await fetchAndRenderLiveCalls(); // Initial fetch
+            await fetchAndRenderLiveCalls(); 
 
-            if (liveCallsChannel) { // Remove existing channel if any (e.g., on re-init)
+            if (liveCallsChannel) { 
                 supabase.removeChannel(liveCallsChannel);
             }
 
@@ -699,10 +684,28 @@
                 .channel('public:call_sessions:live')
                 .on('postgres_changes', 
                     { event: '*', schema: 'public', table: 'call_sessions' },
-                    (payload) => {
+                    async (payload) => { 
                         console.log('Realtime: Call session change detected', payload);
-                        // Could optimize by checking if the change affects live calls (end_time is null)
-                        fetchAndRenderLiveCalls(); 
+                        // Check if new data affects currently displayed live calls
+                        if (payload.new && !payload.new.end_time) { // New call started or ongoing call updated
+                             await fetchAndRenderLiveCalls(); 
+                        } else if (payload.old && !payload.old.end_time && payload.new && payload.new.end_time) { // Call ended
+                             await fetchAndRenderLiveCalls(); 
+                        }
+                        // Always refresh main table data as any change could be relevant
+                        const { data: sessionsData, error: sessionsError } = await supabase
+                            .from('call_sessions')
+                            .select(`
+                                *,
+                                call_sessions_scenario_id_fkey(title)
+                            `) // MODIFIED: 'name' changed to 'title' for scenario
+                            .order('start_time', { ascending: false });
+                        if (!sessionsError) {
+                            allCallSessions = sessionsData || [];
+                            applyFiltersAndRender(); 
+                        } else {
+                            console.error("Error reloading all sessions after live update:", sessionsError);
+                        }
                     }
                 )
                 .subscribe((status, err) => {
@@ -720,21 +723,27 @@
 
         async function fetchAndRenderLiveCalls() {
             try {
+                // MODIFICATION: Corrected select to use foreign_key_name(columns)
                 const { data: liveSessions, error } = await supabase
                     .from('call_sessions')
-                    .select('id, user_id, scenario_id, start_time, call_scenarios (title)') // MODIFIED: call_scenarios (title)
-                    .is('end_time', null) // Actively live calls
+                    .select('id, user_id, scenario_id, start_time, call_sessions_scenario_id_fkey(title)') // MODIFIED: 'name' to 'title'
+                    .is('end_time', null) 
                     .order('start_time', { ascending: true });
 
-                if (error) throw error;
+                if (error) {
+                    console.error("❌ Live call fetch error:", error.message); 
+                    throw error; 
+                } else {
+                    console.log("✅ Live calls:", liveSessions); 
+                }
 
-                liveCallsContainer.innerHTML = ''; // Clear previous
+                liveCallsContainer.innerHTML = ''; 
                 if (liveSessions && liveSessions.length > 0) {
                     noLiveCallsMessage.style.display = 'none';
                     liveSessions.forEach(call => {
                         const agent = allAgents.find(a => a.id === call.user_id);
                         const agentName = agent?.name || agent?.email || `Agent ID: ${call.user_id.substring(0,8)}`;
-                        const scenarioName = call.call_scenarios?.title || 'Loading scenario...'; // MODIFIED: .title
+                        const scenarioName = call.call_sessions_scenario_id_fkey?.title || 'Loading scenario...'; // MODIFIED: .name to .title
                         const startTimeFormatted = new Date(call.start_time).toLocaleTimeString();
 
                         const callDiv = document.createElement('div');
@@ -751,13 +760,13 @@
                     noLiveCallsMessage.style.display = 'block';
                 }
             } catch (error) {
-                console.error("Error fetching live calls:", error);
+                console.error("Error fetching live calls:", error); 
                 noLiveCallsMessage.textContent = "Failed to load live calls data.";
                 noLiveCallsMessage.style.display = 'block';
+                liveCallsContainer.innerHTML = ''; 
             }
         }
 
-        // Start the dashboard initialization
         initializeDashboard();
         console.log("Dashboard.html script loaded and initialized.");
     </script>
