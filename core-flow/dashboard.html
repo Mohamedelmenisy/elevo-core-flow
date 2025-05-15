@@ -292,6 +292,54 @@
         let liveCallsChannel = null;
         const FILTER_STORAGE_KEY = 'elevoCoreAdminFilters_v2';
 
+        // --- Date Formatting Helper for Egypt Time ---
+        const EGYPT_TIMEZONE = 'Africa/Cairo';
+
+        function formatDateTimeEgypt(dateString, options = {}) {
+            if (!dateString) return 'N/A';
+            const date = new Date(dateString);
+            const defaultOptions = {
+                timeZone: EGYPT_TIMEZONE,
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: true
+            };
+            return date.toLocaleString('en-GB', { ...defaultOptions, ...options }); // en-GB gives DD/MM/YYYY
+        }
+
+        function formatTimeEgypt(dateString) {
+            if (!dateString) return 'N/A';
+            const date = new Date(dateString);
+            return date.toLocaleTimeString('en-GB', { // en-GB gives HH:MM:SS
+                timeZone: EGYPT_TIMEZONE,
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: true
+            });
+        }
+        
+        function formatDateForCSVEgypt(dateString) {
+            if (!dateString) return 'N/A';
+            const date = new Date(dateString);
+            // For CSV, a more universal, sortable format is often better like YYYY-MM-DD HH:MM:SS (24h)
+            const year = date.toLocaleDateString('en-CA', { year: 'numeric', timeZone: EGYPT_TIMEZONE }); // YYYY
+            const month = date.toLocaleDateString('en-CA', { month: '2-digit', timeZone: EGYPT_TIMEZONE }); // MM
+            const day = date.toLocaleDateString('en-CA', { day: '2-digit', timeZone: EGYPT_TIMEZONE }); // DD
+            const time = date.toLocaleTimeString('en-GB', { // HH:MM:SS (24h from en-GB)
+                hour: '2-digit', 
+                minute: '2-digit', 
+                second: '2-digit', 
+                hour12: false, 
+                timeZone: EGYPT_TIMEZONE 
+            });
+            return `${year}-${month.padStart(2,'0')}-${day.padStart(2,'0')} ${time}`; // Ensure MM and DD are two digits
+        }
+
 
         // --- Auth and Admin Check ---
         async function initializeDashboard() {
@@ -495,9 +543,7 @@
                 row.insertCell().textContent = agent?.name || 'Unknown Agent';
                 row.insertCell().textContent = agent?.email || 'N/A';
                 row.insertCell().textContent = session.call_sessions_scenario_id_fkey?.title || 'N/A'; // MODIFIED: .name to .title
-                // MODIFICATION START: Display start_time in Africa/Cairo timezone
-                row.insertCell().textContent = session.start_time ? new Date(session.start_time).toLocaleString('en-GB', { timeZone: 'Africa/Cairo' }) : 'N/A';
-                // MODIFICATION END
+                row.insertCell().textContent = formatDateTimeEgypt(session.start_time); // MODIFIED for Egypt Time
                 const duration = session.duration || 0; // MODIFIED: total_duration_seconds to duration
                 row.insertCell().textContent = `${Math.floor(duration / 60)}m ${duration % 60}s`;
                 row.insertCell().textContent = session.completed ? 'Yes' : 'No'; // MODIFIED: completed_all_steps to completed
@@ -646,16 +692,14 @@
                 alert("No data to export based on current filters.");
                 return;
             }
-            const headers = ["Agent Name", "Agent Email", "Scenario", "Start Time", "Duration (s)", "Completed", "Quality", "Reason"];
+            const headers = ["Agent Name", "Agent Email", "Scenario", "Start Time (Egypt)", "Duration (s)", "Completed", "Quality", "Reason"]; // MODIFIED Header
             const rows = filteredCallSessions.map(session => {
                 const agent = allAgents.find(a => a.id === session.user_id);
                 return [
                     agent?.name || 'Unknown',
                     agent?.email || 'N/A',
                     session.call_sessions_scenario_id_fkey?.title || 'N/A', // MODIFIED: .name to .title
-                    // MODIFICATION START: Export start_time in Africa/Cairo timezone for CSV
-                    session.start_time ? new Date(session.start_time).toLocaleString('en-GB', { timeZone: 'Africa/Cairo' }) : 'N/A',
-                    // MODIFICATION END
+                    formatDateForCSVEgypt(session.start_time), // MODIFIED for Egypt Time CSV format
                     session.duration || 0, // MODIFIED: total_duration_seconds to duration
                     session.completed ? 'Yes' : 'No', // MODIFIED: completed_all_steps to completed
                     session.call_quality || 'N/A',
@@ -664,16 +708,11 @@
             });
 
             const csvContent = [headers.join(','), ...rows.map(row => row.join(','))].join('\n');
-            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const blob = new Blob(["\uFEFF"+csvContent], { type: 'text/csv;charset=utf-8;' }); // Added BOM for Excel
             const link = document.createElement("a");
             const url = URL.createObjectURL(blob);
             link.setAttribute("href", url);
-            
-            const todayInCairo = new Date().toLocaleDateString('en-CA', {
-              timeZone: 'Africa/Cairo'
-            });
-            link.setAttribute("download", `elevo_dashboard_export_${todayInCairo}.csv`);
-            
+            link.setAttribute("download", `elevo_dashboard_export_${new Date().toISOString().slice(0,10)}.csv`);
             link.style.visibility = 'hidden';
             document.body.appendChild(link);
             link.click();
@@ -743,7 +782,7 @@
                     console.error("❌ Live call fetch error:", error.message); 
                     throw error; 
                 } else {
-                    console.log("✅ Live calls:", liveSessions); 
+                    // console.log("✅ Live calls:", liveSessions); // Reduced logging for cleaner console
                 }
 
                 liveCallsContainer.innerHTML = ''; 
@@ -753,9 +792,7 @@
                         const agent = allAgents.find(a => a.id === call.user_id);
                         const agentName = agent?.name || agent?.email || `Agent ID: ${call.user_id.substring(0,8)}`;
                         const scenarioName = call.call_sessions_scenario_id_fkey?.title || 'Loading scenario...'; // MODIFIED: .name to .title
-                        // MODIFICATION START: Display live call start_time in Africa/Cairo timezone
-                        const startTimeFormatted = new Date(call.start_time).toLocaleString('en-GB', { timeZone: 'Africa/Cairo' });
-                        // MODIFICATION END
+                        const startTimeFormatted = formatTimeEgypt(call.start_time); // MODIFIED for Egypt Time
 
                         const callDiv = document.createElement('div');
                         callDiv.className = 'live-call-item';
@@ -779,7 +816,7 @@
         }
 
         initializeDashboard();
-        console.log("Dashboard.html script loaded and initialized.");
+        console.log("Dashboard.html script v1.1 (Egypt Time) loaded and initialized.");
     </script>
 </body>
 </html>
