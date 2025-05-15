@@ -156,7 +156,7 @@
         
         const callSummaryContentDiv = document.getElementById('callSummaryContent');
         const returnToInitialViewBtn = document.getElementById('returnToInitialViewBtn');
-        const callStartSound = document.getElementById('callStartSound');
+        const callStartSound = document.getElementById('callStartSound'); // Assuming you have an <audio> element with this ID if you want sound
         document.getElementById('currentYear').textContent = new Date().getFullYear();
 
         // State Variables
@@ -164,6 +164,7 @@
         let currentScenario = null; // {id, title, steps: [{text: "instruction"}, ...]}
         let currentStepIndex = 0;
         let callSessionId = null;
+        let callStartTimeISO = null; // To store the ISO string of the call start time
         let stepTimerInterval = null;
         let stepStartTime = 0; 
         let accumulatedStepDurations = []; 
@@ -272,7 +273,7 @@
                     .eq('id', session.user.id)
                     .single();
                 
-                if (profileError && profileError.code !== 'PGRST116') {
+                if (profileError && profileError.code !== 'PGRST116') { // PGRST116: no rows found (ok if profile not created yet)
                     console.error("Error fetching user profile:", profileError);
                     authLoadingDiv.innerHTML = '<p style="color:red;">Could not load user profile.</p>';
                     return;
@@ -415,18 +416,20 @@
                     console.warn("Some steps may not have the expected {text: '...'} structure. Falling back to string conversion if needed.");
                 }
 
-
                 currentScenario = scenarioData; 
                 currentStepIndex = 0;
                 accumulatedStepDurations = new Array(currentScenario.steps.length).fill(0);
 
                 console.log("Attempting to insert new call session...");
+                const initialCallTimeISO = new Date().toISOString(); // Store the exact time for duration calculation
+                callStartTimeISO = initialCallTimeISO; // Set global state variable
+
                 const { data: newSession, error: sessionInsertError } = await supabase
                     .from('call_sessions')
                     .insert({
                         user_id: currentUser.id,
                         scenario_id: currentScenario.id,
-                        start_time: new Date().toISOString(),
+                        start_time: callStartTimeISO, // Use the stored ISO string
                         agent_name: currentUser.name, 
                         agent_email: currentUser.email
                     })
@@ -435,10 +438,11 @@
                 
                 if (sessionInsertError) {
                     console.error("Error inserting new call session:", JSON.stringify(sessionInsertError, null, 2));
+                    callStartTimeISO = null; // Reset if insertion fails
                     throw sessionInsertError;
                 }
                 callSessionId = newSession.id;
-                console.log("New call session created with ID:", callSessionId);
+                console.log("New call session created with ID:", callSessionId, "at", callStartTimeISO);
                 
                 scenarioTitleElement.textContent = currentScenario.title; 
                 updateSystemStatus("🟢 In Call", "status-in-call");
@@ -447,7 +451,7 @@
 
             } catch (err) {
                 console.error("Error starting call:", err.message);
-                resetCallState();
+                resetCallState(); // This will clear callStartTimeISO as well
                 switchToInitialView();
                 showAssistantMessage(`⚠️ Error starting call: ${err.message}. Check console for details.`, true, 7000);
                 await loadActiveScenarios(); 
@@ -576,8 +580,18 @@
             stopAndRecordStepTimer(); 
             
             const endTimeISO = new Date().toISOString();
-            const totalDuration = accumulatedStepDurations.reduce((sum, dur) => sum + dur, 0);
-            const quality = completedAllSteps ? 'Good' : (totalDuration > 0 ? 'Bad' : 'N/A'); 
+            let durationInSeconds;
+
+            if (callStartTimeISO) {
+                durationInSeconds = Math.floor((new Date(endTimeISO).getTime() - new Date(callStartTimeISO).getTime()) / 1000);
+                if (durationInSeconds < 0) durationInSeconds = 0; // Ensure duration is not negative
+            } else {
+                // Fallback if callStartTimeISO was somehow not set (e.g., older stored state)
+                console.warn("callStartTimeISO is not set. Calculating duration from accumulated step times as a fallback.");
+                durationInSeconds = accumulatedStepDurations.reduce((sum, dur) => sum + dur, 0);
+            }
+            
+            const quality = completedAllSteps ? 'Good' : (durationInSeconds > 0 ? 'Bad' : 'N/A'); 
             const reason = completedAllSteps ? 'All steps completed successfully.' : 'Call ended prematurely.';
             
             updateSystemStatus(completedAllSteps ? "✅ Call Completed" : "⚪ Call Ended", 
@@ -586,7 +600,7 @@
             if (callSessionId) {
                 const updatePayload = {
                     end_time: endTimeISO,
-                    duration: totalDuration, 
+                    duration: durationInSeconds, // Using total session duration
                     completed: completedAllSteps, 
                     call_quality: quality,
                     quality_reason: reason
@@ -608,7 +622,7 @@
                 console.warn("callSessionId is null or undefined. Cannot update call session in Supabase. This may happen if the session was not created successfully or was cleared prematurely.");
             }
             
-            displayPostCallSummary(quality, reason, totalDuration);
+            displayPostCallSummary(quality, reason, durationInSeconds); // Pass the new total duration
             clearCallState(); 
         }
 
@@ -616,9 +630,9 @@
             let summaryHTML = `
                 <p><strong>Call Quality:</strong> <span class="quality-text quality-${quality?.toLowerCase() || 'na'}">${quality || 'N/A'}</span></p>
                 <p><strong>Reason:</strong> ${reason || "N/A"}</p>
-                <p><strong>Total Duration:</strong> ${Math.floor(totalDurationSeconds / 60)}m ${totalDurationSeconds % 60}s</p>
+                <p><strong>Total Call Duration:</strong> ${Math.floor(totalDurationSeconds / 60)}m ${totalDurationSeconds % 60}s</p>
                 <hr style="margin: 1rem 0; border-color: var(--border-color);">
-                <p><strong>Step Durations:</strong></p>
+                <p><strong>Time Spent on Steps:</strong></p>
                 <ul style="list-style: none; padding-left: 0; max-height: 150px; overflow-y: auto;">`;
 
             if (currentScenario && currentScenario.steps) {
@@ -631,6 +645,9 @@
                     const timeStr = `${Math.floor(duration / 60)}m ${duration % 60}s`;
                     summaryHTML += `<li style="margin-bottom: 0.3rem;">${index + 1}. "${stepShortText}": ${timeStr}</li>`;
                 });
+                 const totalAccumulatedDuration = accumulatedStepDurations.reduce((sum, dur) => sum + dur, 0);
+                 summaryHTML += `<li style="margin-top: 0.5rem; font-weight: bold;">Total Active Step Time: ${Math.floor(totalAccumulatedDuration / 60)}m ${totalAccumulatedDuration % 60}s</li>`;
+
             } else {
                 summaryHTML += `<li>No step duration data available.</li>`;
             }
@@ -654,6 +671,7 @@
                 currentStepIndex,
                 accumulatedStepDurations: [...accumulatedStepDurations], 
                 stepStartTime: stepStartTime, 
+                callStartTimeISO: callStartTimeISO, // Save call start time
                 timestamp: Date.now()
             };
             try {
@@ -673,32 +691,38 @@
                 currentStepIndex = savedState.currentStepIndex;
                 accumulatedStepDurations = savedState.accumulatedStepDurations || (currentScenario && currentScenario.steps ? new Array(currentScenario.steps.length).fill(0) : []);
                 stepStartTime = savedState.stepStartTime; 
+                callStartTimeISO = savedState.callStartTimeISO; // Restore call start time
                 
                 if (!callSessionId || !currentScenario || !currentScenario.steps || typeof currentScenario.title === 'undefined' || currentStepIndex < 0) {
-                    throw new Error("Invalid restored state data (missing title or other fields).");
+                    throw new Error("Invalid restored state data (missing critical fields).");
+                }
+                if (!callStartTimeISO) {
+                    console.warn("Restored state is missing callStartTimeISO. Duration calculation might fallback if call ends.");
                 }
                 return true;
             } catch (e) {
                 console.error("Error restoring call state:", e);
-                clearCallState();
+                clearCallState(); // This will also clear callStartTimeISO
                 return false;
             }
         }
 
         function clearCallState() {
             sessionStorage.removeItem(SESSION_STATE_KEY);
-            console.log("Cleared call state from sessionStorage.");
+            callStartTimeISO = null; // Clear call start time
+            console.log("Cleared call state from sessionStorage and reset callStartTimeISO.");
         }
 
         function resetCallState(switchToInitial = false) {
             stopAndRecordStepTimer(); 
-            clearCallState(); 
+            clearCallState(); // This now also clears callStartTimeISO
 
             callSessionId = null;
             currentScenario = null;
             currentStepIndex = 0;
             accumulatedStepDurations = [];
             stepStartTime = 0;
+            // callStartTimeISO is nulled by clearCallState()
             
             if (switchToInitial) {
                 switchToInitialView();
@@ -717,38 +741,29 @@
 
         // Dropdown listener (enable/disable receive call button)
         scenarioDropdown.addEventListener('change', () => {
-            let disableButton = true; // Default to disabled
+            let disableButton = true; 
 
-            // Check if a valid option with a non-empty value is selected
             if (scenarioDropdown.value && scenarioDropdown.value !== "") {
-                // Safely access the selected option element
-                // Ensure selectedIndex is valid and options collection exists
                 if (scenarioDropdown.selectedIndex >= 0 && 
                     scenarioDropdown.options && 
                     scenarioDropdown.options[scenarioDropdown.selectedIndex]) {
                     
                     const selectedOptionElement = scenarioDropdown.options[scenarioDropdown.selectedIndex];
-                    
-                    // Enable the button ONLY IF this selected option element is NOT itself disabled
                     if (!selectedOptionElement.disabled) {
                         disableButton = false;
                     }
-                    // If selectedOptionElement.disabled is true, disableButton remains true.
                 }
-                // If selectedIndex is invalid or options array is problematic, disableButton remains true (safe default).
             }
-            // If scenarioDropdown.value is empty (placeholder, e.g., "-- Select a Scenario --"), 
-            // disableButton remains true.
-
             receiveCallBtn.disabled = disableButton;
         });
 
         // --- Global Error Handler & Unload ---
         window.addEventListener('error', function(event) {
             console.error('Global error caught:', event.error, 'at', event.filename, ':', event.lineno);
+            // Consider more robust error reporting here if needed
         });
         window.addEventListener('beforeunload', () => {
-            if (callSessionId && currentScenario) { 
+            if (callSessionId && currentScenario) { // Only save if a call is active
                 saveCallState(); 
             }
         });
