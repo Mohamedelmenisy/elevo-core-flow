@@ -394,7 +394,7 @@
             }
             
             if(callStartSound && callStartSound.src) { // Check if src is set to avoid error on empty src
-                callStartSound.play().catch(e => console.warn("Call start audio play failed:", e));
+                callStartSound.play().catch(e => console.warn("Call start audio play failed:", e.message, e));
             }
 
             resetCallState(); // Clear any previous call state
@@ -561,12 +561,8 @@
             callTimerDiv.style.display = 'inline-block';
             if (stepTimerInterval) clearInterval(stepTimerInterval);
             
-            // If stepStartTime is 0, it's a fresh start for this step (or resumed after page load)
-            // If stepStartTime was already set (e.g., from restoreCallState), it means we are resuming.
-            // We want the timer to reflect total time *for this current viewing of the step*.
-            // The accumulatedStepDurations handles persistence of time across step navigations.
             if (stepStartTime === 0) { 
-                stepStartTime = Date.now(); // Mark the beginning of this step's active timing
+                stepStartTime = Date.now(); 
             }
             
             function updateTimerDisplay() {
@@ -576,7 +572,7 @@
                 const seconds = String(totalSeconds % 60).padStart(2, '0');
                 callTimerDiv.textContent = `${minutes}:${seconds}`;
             }
-            updateTimerDisplay(); // Immediate update
+            updateTimerDisplay(); 
             stepTimerInterval = setInterval(updateTimerDisplay, 1000);
         }
 
@@ -584,31 +580,31 @@
             if (stepTimerInterval) clearInterval(stepTimerInterval);
             stepTimerInterval = null;
 
-            // Add the duration of the just-completed step segment to its accumulated total
             if (stepStartTime > 0 && currentScenario && currentStepIndex < accumulatedStepDurations.length) {
                 const durationSeconds = Math.floor((Date.now() - stepStartTime) / 1000);
                 accumulatedStepDurations[currentStepIndex] += durationSeconds;
             }
-            stepStartTime = 0; // Reset for the next step or if call ends
+            stepStartTime = 0; 
         }
         
         // --- Call Completion & Summary ---
         async function finishCall(completedAllSteps) {
-            stopAndRecordStepTimer(); // Ensure the very last step's time is recorded
+            stopAndRecordStepTimer(); 
             
             const endTimeISO = new Date().toISOString();
-            let durationInSeconds = 0;
+            // Calculate duration for summary display, but DO NOT send it to Supabase if 'duration' is a generated column
+            let durationInSecondsForSummary = 0; 
 
             if (callStartTimeISO) {
-                durationInSeconds = Math.floor((new Date(endTimeISO).getTime() - new Date(callStartTimeISO).getTime()) / 1000);
-                if (durationInSeconds < 0) durationInSeconds = 0; // Safety net
+                durationInSecondsForSummary = Math.floor((new Date(endTimeISO).getTime() - new Date(callStartTimeISO).getTime()) / 1000);
+                if (durationInSecondsForSummary < 0) durationInSecondsForSummary = 0;
             } else {
-                // Fallback: if callStartTimeISO was somehow lost (e.g., very old/corrupted session state)
-                console.warn("callStartTimeISO was not available. Calculating total duration from accumulated step times as a fallback.");
-                durationInSeconds = accumulatedStepDurations.reduce((sum, dur) => sum + (dur || 0), 0);
+                console.warn("callStartTimeISO was not available. Calculating total duration for summary from accumulated step times as a fallback.");
+                durationInSecondsForSummary = accumulatedStepDurations.reduce((sum, dur) => sum + (dur || 0), 0);
             }
             
-            const quality = completedAllSteps ? 'Good' : (durationInSeconds > 0 ? 'Bad' : 'N/A'); 
+            // Use durationInSecondsForSummary for quality calculation if needed by your logic
+            const quality = completedAllSteps ? 'Good' : (durationInSecondsForSummary > 0 ? 'Bad' : 'N/A'); 
             const reason = completedAllSteps ? 'All steps completed successfully.' : 'Call ended prematurely.';
             
             updateSystemStatus(completedAllSteps ? "✅ Call Completed" : "⚪ Call Ended", 
@@ -617,11 +613,10 @@
             if (callSessionId) {
                 const updatePayload = {
                     end_time: endTimeISO,
-                    duration: durationInSeconds,      // Total session duration
+                    // duration: durationInSecondsForSummary, // <--- !!! DO NOT SEND 'duration' IF IT'S A GENERATED COLUMN !!!
                     completed: completedAllSteps, 
                     call_quality: quality,
                     quality_reason: reason
-                    // step_durations: accumulatedStepDurations // Optional: store individual step times if your DB schema supports it
                 };
                 
                 console.log("Attempting to update call session. ID:", callSessionId, "Payload:", updatePayload);
@@ -633,31 +628,34 @@
 
                 if (updateError) {
                     console.error("Failed to update call session in Supabase. ID:", callSessionId, "Error:", JSON.stringify(updateError, null, 2));
-                    showAssistantMessage(`⚠️ Error saving call summary: ${updateError.message}. Data might be lost.`, false, 8000);
+                    showAssistantMessage(`⚠️ Error saving call summary: ${updateError.message}. Check console.`, false, 8000);
                 } else {
-                    console.log("Call session (ID: " + callSessionId + ") updated successfully.");
+                    console.log("Call session (ID: " + callSessionId + ") updated successfully in Supabase.");
                 }
             } else {
                 console.warn("callSessionId is null or undefined. Cannot update call session in Supabase. This session's final data will not be saved.");
                 showAssistantMessage("⚠️ Could not save call summary: No active session ID.", false, 8000);
             }
             
-            displayPostCallSummary(quality, reason, durationInSeconds);
-            clearCallState(); // Clean up session storage after call is fully processed
+            // Pass the locally calculated duration (durationInSecondsForSummary) for display purposes.
+            // The actual 'duration' in the database will be whatever the generated column computes.
+            displayPostCallSummary(quality, reason, durationInSecondsForSummary);
+            clearCallState(); 
         }
 
         function displayPostCallSummary(quality, reason, totalDurationSeconds) {
             let summaryHTML = `
                 <p><strong>Call Quality:</strong> <span class="quality-text quality-${quality?.toLowerCase() || 'na'}">${quality || 'N/A'}</span></p>
                 <p><strong>Reason:</strong> ${reason || "N/A"}</p>
-                <p><strong>Total Call Duration:</strong> ${Math.floor(totalDurationSeconds / 60)}m ${totalDurationSeconds % 60}s</p>
+                <p><strong>Total Call Duration (calculated by client):</strong> ${Math.floor(totalDurationSeconds / 60)}m ${totalDurationSeconds % 60}s</p>
+                <p><small>(Note: Actual duration in DB might be calculated by the database if it's a generated column.)</small></p>
                 <hr style="margin: 1rem 0; border-color: var(--border-color);">
                 <p><strong>Time Spent on Steps:</strong></p>
                 <ul style="list-style: none; padding-left: 0; max-height: 150px; overflow-y: auto;">`;
 
             if (currentScenario && currentScenario.steps && accumulatedStepDurations.length > 0) {
                 currentScenario.steps.forEach((stepObject, index) => { 
-                    const duration = accumulatedStepDurations[index] || 0; // Default to 0 if undefined
+                    const duration = accumulatedStepDurations[index] || 0; 
                     const stepInstructionText = (typeof stepObject === 'object' && stepObject !== null && typeof stepObject.text === 'string')
                                               ? stepObject.text
                                               : String(stepObject);
@@ -677,14 +675,13 @@
         }
         
         returnToInitialViewBtn.addEventListener('click', async () => {
-            resetCallState(true); // true to switch to initial view
+            resetCallState(true); 
             await loadActiveScenarios();
             showAssistantMessage("💡 Ready for the next call! Select a scenario.", true, 7000);
         });
 
         // --- State Management (SessionStorage for reload resilience) ---
         function saveCallState() {
-            // Only save if a call is truly active and has necessary data
             if (!callSessionId || !currentScenario || !callStartTimeISO) {
                 console.warn("Attempted to save call state, but critical data (session ID, scenario, or start time) is missing. Skipping save.");
                 return;
@@ -694,9 +691,9 @@
                 currentScenario, 
                 currentStepIndex,
                 accumulatedStepDurations: [...accumulatedStepDurations], 
-                stepStartTime: stepStartTime, // Save the timestamp when the current step's timer started
+                stepStartTime: stepStartTime, 
                 callStartTimeISO: callStartTimeISO, 
-                timestamp: Date.now() // For debugging or state versioning
+                timestamp: Date.now()
             };
             try {
                 sessionStorage.setItem(SESSION_STATE_KEY, JSON.stringify(state));
@@ -711,10 +708,9 @@
 
                 const savedState = JSON.parse(savedStateJSON);
                 
-                // Validate essential restored data
                 if (!savedState.callSessionId || !savedState.currentScenario || !savedState.currentScenario.steps ||
                     typeof savedState.currentScenario.title === 'undefined' || typeof savedState.currentStepIndex !== 'number' ||
-                    !savedState.callStartTimeISO) { // callStartTimeISO is crucial
+                    !savedState.callStartTimeISO) { 
                     console.warn("Invalid or incomplete call state found in sessionStorage. Clearing it.", savedState);
                     clearCallState();
                     return false;
@@ -723,20 +719,11 @@
                 callSessionId = savedState.callSessionId;
                 currentScenario = savedState.currentScenario; 
                 currentStepIndex = savedState.currentStepIndex;
-                // Ensure accumulatedStepDurations is an array of the correct length
                 accumulatedStepDurations = Array.isArray(savedState.accumulatedStepDurations) && savedState.accumulatedStepDurations.length === currentScenario.steps.length
                                            ? savedState.accumulatedStepDurations 
                                            : new Array(currentScenario.steps.length).fill(0);
                 
-                // If restoring, the step timer needs to account for time passed *while page was closed* if stepStartTime was active
-                // For simplicity, we restart the step's active timer from 0, but the accumulated time is preserved.
-                // If stepStartTime from saved state refers to a time before page load, it's not useful for the *current* timer interval.
-                // The more accurate approach is to rely on accumulatedStepDurations and restart stepStartTime for the display timer.
-                stepStartTime = savedState.stepStartTime ? Date.now() : 0; // If there was an active step, treat it as just resumed.
-                                                                           // This means the displayed step timer resets, but total step time is in accumulatedStepDurations.
-                                                                           // A more complex solution would calculate offline progress, but this is simpler.
-                                                                           // Actually, the original behavior to just use saved `stepStartTime` and let the timer continue is fine if the duration calculation is robust.
-                stepStartTime = savedState.stepStartTime || 0; // Restore timer start for current step if it was active
+                stepStartTime = savedState.stepStartTime || 0;
 
 
                 callStartTimeISO = savedState.callStartTimeISO; 
@@ -753,20 +740,18 @@
         function clearCallState() {
             sessionStorage.removeItem(SESSION_STATE_KEY);
             callStartTimeISO = null; 
-            callSessionId = null; // Also clear session ID as it's part of the active call state
+            callSessionId = null; 
             console.log("Cleared call state from sessionStorage and reset related state variables.");
         }
 
         function resetCallState(switchToInitial = false) {
-            stopAndRecordStepTimer(); // Stop any active timers and record duration
-            clearCallState();         // Clear from sessionStorage and nullify related vars
+            stopAndRecordStepTimer(); 
+            clearCallState();         
 
-            // Reset all in-memory call-specific state variables
             currentScenario = null;
             currentStepIndex = 0;
             accumulatedStepDurations = [];
             stepStartTime = 0;
-            // callSessionId and callStartTimeISO are nulled by clearCallState()
             
             if (switchToInitial) {
                 switchToInitialView();
@@ -778,11 +763,9 @@
         logoutButton.addEventListener('click', async () => {
             const wasCallActive = !!callSessionId;
             if (wasCallActive) {
-                // Optionally, you might want to call finishCall(false) here if rules dictate logging out ends a call
-                // For now, just reset state without saving to DB as an incomplete call.
                 console.log("Logging out during an active call. Call will not be formally 'ended' in DB.");
             }
-            resetCallState(); // Clear local call state
+            resetCallState(); 
             localStorage.removeItem('elevoCoreUserData'); 
             
             if (supabase) {
@@ -793,8 +776,6 @@
         });
 
         scenarioDropdown.addEventListener('change', () => {
-            // Enable receive call button only if a valid scenario is selected
-            // (not the placeholder "-- Select a Scenario --" or "Loading...")
             const isValidSelection = scenarioDropdown.value && 
                                      scenarioDropdown.value !== "" &&
                                      scenarioDropdown.options[scenarioDropdown.selectedIndex] &&
@@ -804,20 +785,17 @@
 
         // --- Global Error Handler & Page Lifecycle ---
         window.addEventListener('error', function(event) {
-            // Log unhandled JS errors
             console.error('Global error caught:', event.error, 'at', event.filename, ':', event.lineno);
-            // Potentially send to an error reporting service
         });
 
         window.addEventListener('beforeunload', () => {
-            // Save state if a call is active, to allow resuming on page reload
             if (callSessionId && currentScenario && callStartTimeISO) { 
                 saveCallState(); 
             }
         });
         
         // --- Application Start ---
-        if (supabase) { // Only initialize if Supabase client is available
+        if (supabase) { 
             initializeApp();
         } else {
             authLoadingDiv.innerHTML = '<p style="color:red; text-align:center;">Core services could not be initialized. Application cannot start.</p>';
