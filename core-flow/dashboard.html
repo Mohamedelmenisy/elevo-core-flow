@@ -177,6 +177,19 @@
             flex-grow: 1; /* Allow canvas to take available space */
             max-height: 350px; /* Max height for consistency */
         }
+        /* Style for placeholder message in bad reasons chart */
+        #noBadReasonsMessage {
+            /* display:none;  Handled by JS */
+            text-align:center; 
+            padding: 2rem; /* Ensure it's visible if chart is small */
+            color: var(--text-color-subtle); 
+            font-style: italic;
+            flex-grow: 1; /* Take up space if canvas is hidden */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
     </style>
 </head>
 <body>
@@ -260,6 +273,10 @@
                         <div class="chart-container">
                             <h3>Bad Call Reasons</h3>
                             <canvas id="badQualityReasonsChart"></canvas>
+                            <!-- MODIFICATION: Placeholder for empty bad reasons chart -->
+                            <p id="noBadReasonsMessage" style="display:none;"> 
+                                No bad call reasons available for the current selection.
+                            </p>
                         </div>
                     </div>
                 </div>
@@ -298,7 +315,6 @@
                     <div id="paginationControls" class="pagination-container"></div>
                     <div class="export-buttons-container" style="margin-top: 1.5rem; display: flex; gap: 0.75rem; flex-wrap: wrap;">
                         <button id="exportDataBtn" class="action-button secondary-button">Export Filtered Data (CSV)</button>
-                        <!-- MODIFICATION: Added XLSX Export Button -->
                         <button id="exportDataXLSXBtn" class="action-button primary-button">Export to Excel (XLSX)</button>
                     </div>
                 </div>
@@ -365,12 +381,18 @@
         const recentCallsTitleEl = document.getElementById('recentCallsTitle');
         const paginationControlsContainer = document.getElementById('paginationControls');
         const exportDataBtn = document.getElementById('exportDataBtn');
-        const exportDataXLSXBtn = document.getElementById('exportDataXLSXBtn'); // MODIFICATION: XLSX Button
+        const exportDataXLSXBtn = document.getElementById('exportDataXLSXBtn');
 
         // Live Calls elements
         const liveCallsContainerWrapper = document.getElementById('liveCallsContainerWrapper');
         const liveCallsContainer = document.getElementById('liveCallsContainer');
         const noLiveCallsMessage = document.getElementById('noLiveCallsMessage');
+
+        // MODIFICATION: Chart related DOM elements
+        const qualityEvolutionChartCanvas = document.getElementById('qualityEvolutionChart');
+        const badQualityReasonsChartCanvas = document.getElementById('badQualityReasonsChart');
+        const noBadReasonsMessageEl = document.getElementById('noBadReasonsMessage');
+
 
         // State Variables
         let currentUser = null; // {id, email, name, isAdmin}
@@ -386,6 +408,81 @@
         // MODIFICATION: Chart instance variables
         let qualityEvolutionChartInstance = null;
         let badQualityReasonsChartInstance = null;
+
+        // --- MODIFICATION: Chart Theming and Configuration ---
+        const chartColorsDark = {
+            line: {
+                good: 'rgba(52, 152, 219, 1)',     // Sky Blue
+                goodBg: 'rgba(52, 152, 219, 0.3)',
+                normal: 'rgba(241, 196, 15, 1)',   // Bright Yellow
+                normalBg: 'rgba(241, 196, 15, 0.3)',
+                bad: 'rgba(231, 76, 60, 1)',       // Light Red
+                badBg: 'rgba(231, 76, 60, 0.3)',
+            },
+            pie: {
+                backgrounds: [
+                    'rgba(52, 152, 219, 0.8)', 'rgba(241, 196, 15, 0.8)', 'rgba(231, 76, 60, 0.8)',
+                    'rgba(46, 204, 113, 0.8)', 'rgba(155, 89, 182, 0.8)', 'rgba(26, 188, 156, 0.8)',
+                    'rgba(230, 126, 34, 0.8)', 'rgba(149, 165, 166, 0.8)' // Concrete
+                ],
+                borders: [ // Derived or explicit for contrast
+                    'rgba(52, 152, 219, 1)', 'rgba(241, 196, 15, 1)', 'rgba(231, 76, 60, 1)',
+                    'rgba(46, 204, 113, 1)', 'rgba(155, 89, 182, 1)', 'rgba(26, 188, 156, 1)',
+                    'rgba(230, 126, 34, 1)', 'rgba(149, 165, 166, 1)'
+                ]
+            },
+            defaultText: 'rgba(247, 250, 252, 0.9)', // Light text for dark mode (var(--text-color-dark-rgb), 0.9)
+            defaultBorder: 'rgba(74, 85, 104, 0.6)'  // Muted border for dark mode (var(--border-color-dark-rgb), 0.6)
+        };
+
+        const chartColorsLight = { // Original colors from the file, slightly organised
+            line: {
+                good: 'rgba(75, 192, 192, 1)',
+                goodBg: 'rgba(75, 192, 192, 0.2)',
+                normal: 'rgba(255, 206, 86, 1)',
+                normalBg: 'rgba(255, 206, 86, 0.2)',
+                bad: 'rgba(255, 99, 132, 1)',
+                badBg: 'rgba(255, 99, 132, 0.2)',
+            },
+            pie: { // Original colors from the file
+                backgrounds: [
+                    'rgba(255, 99, 132, 0.7)', 'rgba(54, 162, 235, 0.7)', 'rgba(255, 206, 86, 0.7)',
+                    'rgba(75, 192, 192, 0.7)', 'rgba(153, 102, 255, 0.7)', 'rgba(255, 159, 64, 0.7)',
+                    'rgba(199, 199, 199, 0.7)', 'rgba(83, 102, 255, 0.7)'
+                ],
+                borders: [ // Original derived method, making explicit
+                    'rgba(255, 99, 132, 1)', 'rgba(54, 162, 235, 1)', 'rgba(255, 206, 86, 1)',
+                    'rgba(75, 192, 192, 1)', 'rgba(153, 102, 255, 1)', 'rgba(255, 159, 64, 1)',
+                    'rgba(199, 199, 199, 1)', 'rgba(83, 102, 255, 1)'
+                ]
+            },
+            defaultText: 'rgba(51, 51, 51, 0.9)',    // Dark text for light mode (var(--text-color-rgb), 0.9)
+            defaultBorder: 'rgba(226, 232, 240, 0.9)' // Light border for light mode (var(--border-color-rgb), 0.9)
+        };
+
+        function getChartUiConfig() {
+            const isDarkMode = document.documentElement.classList.contains('dark');
+            const colors = isDarkMode ? chartColorsDark : chartColorsLight;
+            return {
+                colors: colors,
+                font: {
+                    size: 13, // Base font size for chart elements
+                    family: "'Poppins', sans-serif"
+                },
+                layoutPadding: { top: 15, right: 15, bottom: 10, left: 10 } // Adjusted for aesthetics
+            };
+        }
+
+        function setChartJsDefaults() {
+            if (typeof Chart === 'undefined') return;
+            const uiConfig = getChartUiConfig();
+
+            Chart.defaults.color = uiConfig.colors.defaultText;
+            Chart.defaults.borderColor = uiConfig.colors.defaultBorder;
+            Chart.defaults.font.family = uiConfig.font.family;
+            // Note: Specific font sizes (ticks, legend) are set per chart for better control
+        }
+        // --- End of Chart Theming ---
 
         // --- Date Formatting Helper for Egypt Time ---
         const EGYPT_TIMEZONE = 'Africa/Cairo';
@@ -438,6 +535,14 @@
         // --- Auth and Admin Check ---
         async function initializeDashboard() {
             if (!supabase) return; 
+
+            // MODIFICATION: Set Chart.js defaults early if Chart is available
+            if (typeof Chart !== 'undefined') {
+                setChartJsDefaults();
+            } else {
+                console.warn("Chart.js not yet loaded when initializeDashboard was called. Defaults might not apply correctly if charts render before Chart.js is ready.");
+            }
+
 
             const { data: { session }, error: sessionError } = await supabase.auth.getSession();
 
@@ -498,7 +603,7 @@
             setupAdminUI();
             await loadInitialData();
             loadPersistedFilters(); 
-            applyFiltersAndRender(); // This will also render charts for the first time
+            applyFiltersAndRender(); 
             setupEventListeners();
             setupLiveCallMonitoring();
         }
@@ -568,6 +673,11 @@
 
         // --- Filtering and Rendering ---
         function applyFiltersAndRender() {
+            // MODIFICATION: Ensure Chart.js defaults are set if they weren't (e.g. if Chart.js loaded after initial call)
+            if (typeof Chart !== 'undefined' && Chart.defaults.color !== getChartUiConfig().colors.defaultText) {
+                 setChartJsDefaults(); // Re-apply if theme changed or Chart.js loaded late
+            }
+
             saveFiltersToLocalStorage(); 
             let tempFiltered = [...allCallSessions];
             const searchTerm = searchInput.value.toLowerCase().trim();
@@ -613,7 +723,6 @@
             renderTable();
             updateStats();
             renderPagination();
-            // MODIFICATION: Render charts with filtered data
             renderQualityEvolutionChart(filteredCallSessions);
             renderBadQualityReasonsChart(filteredCallSessions);
         }
@@ -754,9 +863,9 @@
 
         // --- MODIFICATION: Chart Rendering Functions ---
         function renderQualityEvolutionChart(sessions) {
-            const qualityEvolutionChartCanvas = document.getElementById('qualityEvolutionChart');
             if (!qualityEvolutionChartCanvas || typeof Chart === 'undefined') return;
             const ctx = qualityEvolutionChartCanvas.getContext('2d');
+            const uiConfig = getChartUiConfig();
 
             if (qualityEvolutionChartInstance) {
                 qualityEvolutionChartInstance.destroy();
@@ -768,7 +877,7 @@
                 const sessionDateEgypt = new Date(session.start_time).toLocaleDateString('en-CA', { timeZone: EGYPT_TIMEZONE });
 
                 if (!dataByDate[sessionDateEgypt]) {
-                    dataByDate[sessionDateEgypt] = { Good: 0, Normal: 0, Bad: 0, total: 0, dateObj: new Date(sessionDateEgypt + "T00:00:00") }; // Store dateObj for sorting
+                    dataByDate[sessionDateEgypt] = { Good: 0, Normal: 0, Bad: 0, total: 0, dateObj: new Date(sessionDateEgypt + "T00:00:00") };
                 }
                 if (session.call_quality === 'Good') dataByDate[sessionDateEgypt].Good++;
                 else if (session.call_quality === 'Normal') dataByDate[sessionDateEgypt].Normal++;
@@ -778,7 +887,7 @@
 
             const sortedDates = Object.keys(dataByDate).sort((a, b) => dataByDate[a].dateObj - dataByDate[b].dateObj);
             
-            const labels = sortedDates.map(date => formatDateTimeEgypt(date, { day: '2-digit', month: 'short', year: '2-digit' }));
+            const labels = sortedDates.map(date => formatDateTimeEgypt(dataByDate[date].dateObj, { day: '2-digit', month: 'short' })); // Simpler date format
             const goodData = sortedDates.map(date => dataByDate[date].Good);
             const normalData = sortedDates.map(date => dataByDate[date].Normal);
             const badData = sortedDates.map(date => dataByDate[date].Bad);
@@ -788,23 +897,42 @@
                 data: {
                     labels: labels,
                     datasets: [
-                        { label: 'Good Calls', data: goodData, borderColor: 'rgba(75, 192, 192, 1)', backgroundColor: 'rgba(75, 192, 192, 0.2)', tension: 0.1, fill: false },
-                        { label: 'Normal Calls', data: normalData, borderColor: 'rgba(255, 206, 86, 1)', backgroundColor: 'rgba(255, 206, 86, 0.2)', tension: 0.1, fill: false },
-                        { label: 'Bad Calls', data: badData, borderColor: 'rgba(255, 99, 132, 1)', backgroundColor: 'rgba(255, 99, 132, 0.2)', tension: 0.1, fill: false }
+                        { label: 'Good Calls', data: goodData, borderColor: uiConfig.colors.line.good, backgroundColor: uiConfig.colors.line.goodBg, tension: 0.1, fill: false, borderWidth: 2 },
+                        { label: 'Normal Calls', data: normalData, borderColor: uiConfig.colors.line.normal, backgroundColor: uiConfig.colors.line.normalBg, tension: 0.1, fill: false, borderWidth: 2 },
+                        { label: 'Bad Calls', data: badData, borderColor: uiConfig.colors.line.bad, backgroundColor: uiConfig.colors.line.badBg, tension: 0.1, fill: false, borderWidth: 2 }
                     ]
                 },
                 options: {
                     responsive: true, maintainAspectRatio: false,
-                    scales: { y: { beginAtZero: true, suggestedMax: Math.max(...goodData, ...normalData, ...badData, 5) + 1 } }, // Ensure small numbers are visible
-                    plugins: { legend: { position: 'top' } }
+                    layout: { padding: uiConfig.layoutPadding },
+                    scales: { 
+                        y: { 
+                            beginAtZero: true, 
+                            suggestedMax: Math.max(...goodData, ...normalData, ...badData, 5) + 1,
+                            ticks: { font: { size: uiConfig.font.size -1 } } // Slightly smaller for axis
+                        },
+                        x: {
+                            ticks: { font: { size: uiConfig.font.size -1 } } // Slightly smaller for axis
+                        }
+                    },
+                    plugins: { 
+                        legend: { 
+                            position: 'top',
+                            labels: { font: { size: uiConfig.font.size } }
+                        },
+                        tooltip: {
+                            titleFont: { size: uiConfig.font.size },
+                            bodyFont: { size: uiConfig.font.size -1 }
+                        }
+                    }
                 }
             });
         }
 
         function renderBadQualityReasonsChart(sessions) {
-            const badQualityReasonsChartCanvas = document.getElementById('badQualityReasonsChart');
             if (!badQualityReasonsChartCanvas || typeof Chart === 'undefined') return;
             const ctx = badQualityReasonsChartCanvas.getContext('2d');
+            const uiConfig = getChartUiConfig();
 
             if (badQualityReasonsChartInstance) {
                 badQualityReasonsChartInstance.destroy();
@@ -820,13 +948,18 @@
             const labels = Object.keys(reasonCounts);
             const data = Object.values(reasonCounts);
             
-            const chartColors = [
-                'rgba(255, 99, 132, 0.7)', 'rgba(54, 162, 235, 0.7)', 'rgba(255, 206, 86, 0.7)',
-                'rgba(75, 192, 192, 0.7)', 'rgba(153, 102, 255, 0.7)', 'rgba(255, 159, 64, 0.7)',
-                'rgba(199, 199, 199, 0.7)', 'rgba(83, 102, 255, 0.7)'
-            ];
-            const backgroundColors = labels.map((_, i) => chartColors[i % chartColors.length]);
-            const borderColors = backgroundColors.map(color => color.replace('0.7', '1'));
+            // MODIFICATION: Handle empty data for bad reasons chart
+            if (labels.length === 0) {
+                badQualityReasonsChartCanvas.style.display = 'none';
+                noBadReasonsMessageEl.style.display = 'flex'; // Using flex to center with CSS
+                return;
+            } else {
+                badQualityReasonsChartCanvas.style.display = 'block';
+                noBadReasonsMessageEl.style.display = 'none';
+            }
+            
+            const backgroundColors = uiConfig.colors.pie.backgrounds;
+            const borderColors = uiConfig.colors.pie.borders;
 
             badQualityReasonsChartInstance = new Chart(ctx, {
                 type: 'pie',
@@ -835,14 +968,24 @@
                     datasets: [{
                         label: 'Bad Call Reasons', data: data,
                         backgroundColor: backgroundColors,
-                        borderColor: borderColors, borderWidth: 1
+                        borderColor: borderColors, borderWidth: 1.5
                     }]
                 },
                 options: {
                     responsive: true, maintainAspectRatio: false,
+                    layout: { padding: uiConfig.layoutPadding },
                     plugins: {
-                        legend: { position: 'right', labels: { boxWidth: 20, padding: 15 } }, // Adjusted legend
+                        legend: { 
+                            position: 'right', 
+                            labels: { 
+                                boxWidth: 15, 
+                                padding: 15,
+                                font: { size: uiConfig.font.size }
+                            } 
+                        },
                         tooltip: {
+                            titleFont: { size: uiConfig.font.size },
+                            bodyFont: { size: uiConfig.font.size -1 },
                             callbacks: {
                                 label: function(context) {
                                     let label = context.label || '';
@@ -891,7 +1034,7 @@
                 applyFiltersAndRender();
             });
             exportDataBtn.addEventListener('click', exportFilteredDataToCSV);
-            exportDataXLSXBtn.addEventListener('click', exportFilteredDataToXLSX); // MODIFICATION
+            exportDataXLSXBtn.addEventListener('click', exportFilteredDataToXLSX);
         }
 
         function exportFilteredDataToCSV() {
@@ -927,7 +1070,6 @@
             URL.revokeObjectURL(url);
         }
 
-        // MODIFICATION: New XLSX Export function
         function exportFilteredDataToXLSX() {
             if (typeof XLSX === 'undefined') {
                 alert("Excel export library (SheetJS) could not be loaded. Please check your internet connection or try refreshing the page.");
@@ -942,7 +1084,7 @@
             const headers = ["Agent Name", "Agent Email", "Scenario", "Start Time (Egypt)", "Duration (s)", "Completed", "Quality", "Reason"];
             const dataForExport = filteredCallSessions.map(session => {
                 const agent = allAgents.find(a => a.id === session.user_id);
-                return { // Using object keys that match headers for json_to_sheet
+                return { 
                     "Agent Name": agent?.name || 'Unknown',
                     "Agent Email": agent?.email || 'N/A',
                     "Scenario": session.call_sessions_scenario_id_fkey?.title || 'N/A',
@@ -954,17 +1096,16 @@
                 };
             });
 
-            const worksheet = XLSX.utils.json_to_sheet(dataForExport); // headers are derived from object keys
+            const worksheet = XLSX.utils.json_to_sheet(dataForExport); 
             const workbook = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(workbook, worksheet, "CallSessions");
 
-            // Basic auto-column width (optional, can be improved)
             const colWidths = headers.map(header => {
                  const maxLength = Math.max(
                     header.length, 
                     ...dataForExport.map(row => String(row[header] === null || typeof row[header] === 'undefined' ? '' : row[header]).length)
                 );
-                return { wch: maxLength + 2 }; // Add a little padding
+                return { wch: maxLength + 2 }; 
             });
             worksheet['!cols'] = colWidths;
 
@@ -987,7 +1128,7 @@
                     { event: '*', schema: 'public', table: 'call_sessions' },
                     async (payload) => { 
                         console.log('Realtime: Call session change detected', payload);
-                        await fetchAndRenderLiveCalls(); // Refresh live calls on any change
+                        await fetchAndRenderLiveCalls(); 
                         
                         const { data: sessionsData, error: sessionsError } = await supabase
                             .from('call_sessions')
@@ -1017,12 +1158,11 @@
                 });
         }
 
-        // MODIFICATION: Enhanced fetchAndRenderLiveCalls
         async function fetchAndRenderLiveCalls() {
             try {
                 const { data: liveSessions, error } = await supabase
                     .from('call_sessions')
-                    .select('id, user_id, scenario_id, start_time, agent_name, agent_email, call_sessions_scenario_id_fkey(title)') // Fetch agent_name and agent_email directly
+                    .select('id, user_id, scenario_id, start_time, agent_name, agent_email, call_sessions_scenario_id_fkey(title)') 
                     .is('end_time', null) 
                     .order('start_time', { ascending: true });
 
@@ -1075,7 +1215,7 @@
         }
 
         initializeDashboard();
-        console.log("Dashboard.html script (vNext with Analytics & XLSX) loaded and initialized.");
+        console.log("Dashboard.html script (vNext with Analytics & XLSX - Chart Enhancements) loaded and initialized.");
     </script>
 </body>
 </html>
