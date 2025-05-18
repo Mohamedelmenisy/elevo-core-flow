@@ -265,19 +265,16 @@
                 return;
             }
 
-            // Attempt to load user data from localStorage first for speed
             const storedUserData = JSON.parse(localStorage.getItem('elevoCoreUserData'));
             if (storedUserData && storedUserData.id === session.user.id) {
                 currentUser = storedUserData;
             } else { 
-                // Fetch profile if not in localStorage or ID mismatch
                 const { data: profile, error: profileError } = await supabase
-                    .from('users') // Assuming your table is named 'users'
+                    .from('users') 
                     .select('name, is_admin')
                     .eq('id', session.user.id)
                     .single();
                 
-                // PGRST116 means no profile row found, which might be okay if profile creation is optional/later
                 if (profileError && profileError.code !== 'PGRST116') { 
                     console.error("Error fetching user profile:", profileError);
                     authLoadingDiv.innerHTML = '<p style="color:red;">Could not load user profile.</p>';
@@ -296,14 +293,14 @@
             if (userNameSpan) userNameSpan.textContent = currentUser.name;
             if (userInfoDiv) userInfoDiv.style.display = 'flex';
             if (dashboardLink && !currentUser.isAdmin) { 
-                dashboardLink.style.display = 'none'; // Hide dashboard for non-admins
+                dashboardLink.style.display = 'none'; 
             }
 
             authLoadingDiv.style.display = 'none';
             
-            if (restoreCallState()) { // Check for an active call session to restore
+            if (restoreCallState()) { 
                 console.log("Restored active call session.");
-                switchToCallFlowView(false); // Don't animate if restoring
+                switchToCallFlowView(false); 
                 scenarioTitleElement.textContent = currentScenario?.title || "Restored Scenario";
                 renderStep(); 
                 updateSystemStatus("🟢 In Call (Restored)", "status-in-call");
@@ -313,7 +310,7 @@
                 await loadActiveScenarios();
                 showAssistantMessage("Welcome! Select a scenario to begin.", true, 7000, () => {
                      if (initialViewDiv && initialViewDiv.style.display === 'block') { 
-                          showAssistantMessage("💡 Tip: Choose a scenario and click 'Receive Call'.", true, 0); // Persist tip
+                          showAssistantMessage("💡 Tip: Choose a scenario and click 'Receive Call'.", true, 0); 
                      }
                  });
             }
@@ -327,7 +324,7 @@
             callTimerDiv.style.display = 'none';
             animateView(initialViewDiv);
             updateSystemStatus("🔴 Waiting for Call", "status-waiting");
-            hideAssistant(false); // Hide any non-initial assistant messages
+            hideAssistant(false); 
         }
 
         function switchToCallFlowView(animate = true) {
@@ -337,7 +334,7 @@
             else callFlowViewDiv.style.display = 'block';
             progressTrackerContainer.style.display = 'block'; 
             updateSystemStatus("🟢 In Call", "status-in-call");
-            hideAssistant(true); // Hide initial assistant message if it was showing
+            hideAssistant(true); 
         }
 
         function switchToSummaryView() {
@@ -357,11 +354,10 @@
             scenarioDropdown.innerHTML = '<option value="" disabled selected>Loading scenarios...</option>';
 
             try {
-                // Assuming 'call_scenarios_with_creator' is a view or table with 'id' and 'title'
                 const { data: scenarios, error } = await supabase
                     .from('call_scenarios_with_creator') 
                     .select('id, title')                 
-                    .eq('is_active', true) // Only load active scenarios
+                    .eq('is_active', true) 
                     .order('created_at', { ascending: false }); 
 
                 if (error) throw error;
@@ -371,13 +367,13 @@
                     scenarios.forEach(s => {
                         const option = document.createElement('option');
                         option.value = s.id;
-                        option.textContent = s.title; // Ensure 'title' is the correct column name
+                        option.textContent = s.title; 
                         scenarioDropdown.appendChild(option);
                     });
                     scenarioDropdown.disabled = false;
                 } else {
                     scenarioDropdown.innerHTML = '<option value="" disabled>No scenarios available.</option>';
-                    showAssistantMessage("⚠️ No active call scenarios available.", true, 0); // Persist message
+                    showAssistantMessage("⚠️ No active call scenarios available.", true, 0); 
                 }
             } catch (err) {
                 console.error("Error loading scenarios:", err);
@@ -393,20 +389,19 @@
                 return;
             }
             
-            if(callStartSound && callStartSound.src) { // Check if src is set to avoid error on empty src
+            if(callStartSound && callStartSound.src) { 
                 callStartSound.play().catch(e => console.warn("Call start audio play failed:", e.message, e));
             }
 
-            resetCallState(); // Clear any previous call state
+            resetCallState(); 
             switchToCallFlowView();
             updateSystemStatus("🟡 Loading Scenario...", "status-loading");
             stepsContainer.innerHTML = '<p class="placeholder-text">Loading scenario details...</p>';
             scenarioTitleElement.textContent = 'Loading...';
 
             try {
-                // Fetch the full scenario details including steps
                 const { data: scenarioData, error: scenarioError } = await supabase
-                    .from('call_scenarios') // Assuming 'call_scenarios' has 'id', 'title', 'steps'
+                    .from('call_scenarios') 
                     .select('id, title, steps') 
                     .eq('id', selectedScenarioId)
                     .single();
@@ -417,7 +412,6 @@
                     throw new Error("Scenario data is invalid or has no steps.");
                 }
 
-                // Validate step structure (optional, but good for robustness)
                 if (scenarioData.steps.some(step => typeof step !== 'object' || typeof step.text !== 'string')) {
                     console.warn("Some steps may not have the expected {text: '...'} structure. Will attempt to convert to string.");
                 }
@@ -426,24 +420,23 @@
                 currentStepIndex = 0;
                 accumulatedStepDurations = new Array(currentScenario.steps.length).fill(0);
                 
-                callStartTimeISO = new Date().toISOString(); // Record precise start time *before* DB insert
+                callStartTimeISO = new Date().toISOString(); 
 
                 const { data: newSession, error: sessionInsertError } = await supabase
                     .from('call_sessions')
                     .insert({
                         user_id: currentUser.id,
                         scenario_id: currentScenario.id,
-                        start_time: callStartTimeISO, // Use the recorded ISO string
+                        start_time: callStartTimeISO, 
                         agent_name: currentUser.name, 
                         agent_email: currentUser.email
-                        // end_time, duration, completed, etc., will be updated in finishCall()
                     })
-                    .select('id') // Important: select the ID of the newly created row
+                    .select('id') 
                     .single();
                 
                 if (sessionInsertError) {
                     console.error("Error inserting new call session:", JSON.stringify(sessionInsertError, null, 2));
-                    callStartTimeISO = null; // Nullify if insert failed
+                    callStartTimeISO = null; 
                     throw sessionInsertError;
                 }
                 callSessionId = newSession.id;
@@ -452,14 +445,15 @@
                 scenarioTitleElement.textContent = currentScenario.title; 
                 updateSystemStatus("🟢 In Call", "status-in-call");
                 renderStep(); 
-                showAssistantMessage(`🚀 Scenario "${currentScenario.title}" started! Follow the steps.`, false, 0); // Persist
+                // MODIFICATION: Removed the showAssistantMessage call from here.
+                // renderStep() will now handle the initial message for the first step.
 
             } catch (err) {
                 console.error("Error starting call:", err);
                 resetCallState(); 
                 switchToInitialView();
                 showAssistantMessage(`⚠️ Error starting call: ${err.message}. Please try again.`, true, 7000);
-                await loadActiveScenarios(); // Reload scenarios as a recovery step
+                await loadActiveScenarios(); 
             }
         });
 
@@ -471,12 +465,11 @@
             }
             
             const stepObject = currentScenario.steps[currentStepIndex];
-            // Ensure step instruction text is a string, handling potential variations in step object structure
             const stepInstructionText = (typeof stepObject === 'object' && stepObject !== null && typeof stepObject.text === 'string') 
                                         ? stepObject.text 
-                                        : String(stepObject); // Fallback to string conversion
+                                        : String(stepObject); 
 
-            stepsContainer.innerHTML = `<p>${stepInstructionText.replace(/\n/g, '<br>')}</p>`; // Support newlines in step text
+            stepsContainer.innerHTML = `<p>${stepInstructionText.replace(/\n/g, '<br>')}</p>`; 
             
             renderProgressTracker();
 
@@ -487,11 +480,20 @@
             
             endCallBtn.style.display = 'inline-flex';
 
-            startStepTimer(); // Start/resume timer for the current step
-            saveCallState();  // Persist current state for resilience
+            startStepTimer(); 
+            saveCallState();  
 
-            const assistantStepText = stepInstructionText.length > 45 ? stepInstructionText.substring(0, 42) + "..." : stepInstructionText;
-            showAssistantMessage(`📌 Step ${currentStepIndex + 1}: ${assistantStepText}`, false, 0); // Persist
+            // MODIFICATION: Centralized assistant message logic for steps
+            const assistantStepPreview = stepInstructionText.length > 45 ? stepInstructionText.substring(0, 42) + "..." : stepInstructionText;
+            let finalAssistantMessage;
+            if (currentStepIndex === 0 && currentScenario && currentScenario.title) {
+                // For the first step, include scenario title
+                const scenarioTitlePreview = currentScenario.title.length > 30 ? currentScenario.title.substring(0,27) + "..." : currentScenario.title;
+                finalAssistantMessage = `🚀 Scenario "${scenarioTitlePreview}"! First: ${assistantStepPreview}`;
+            } else {
+                finalAssistantMessage = `📌 Step ${currentStepIndex + 1}: ${assistantStepPreview}`;
+            }
+            showAssistantMessage(finalAssistantMessage, false, 0); // Persist
         }
         
         function renderProgressTracker() {
@@ -505,7 +507,7 @@
                 return;
             }
             
-            stepperWrapper.innerHTML = ''; // Clear previous tracker
+            stepperWrapper.innerHTML = ''; 
             const stepperUl = document.createElement('ul');
             stepperUl.className = 'stepper';
 
@@ -521,10 +523,10 @@
                 stepLi.appendChild(stepNumber);
                 stepperUl.appendChild(stepLi);
 
-                if (index < currentScenario.steps.length - 1) { // Add separator if not the last step
+                if (index < currentScenario.steps.length - 1) { 
                     const separator = document.createElement('li');
                     separator.className = 'step-separator';
-                     if (index < currentStepIndex) separator.style.backgroundColor = 'var(--success-color)'; // Color completed separators
+                     if (index < currentStepIndex) separator.style.backgroundColor = 'var(--success-color)'; 
                     stepperUl.appendChild(separator);
                 }
             });
@@ -534,17 +536,17 @@
 
         // --- Navigation Button Event Listeners ---
         nextStepBtn.addEventListener('click', () => {
-            stopAndRecordStepTimer(); // Finalize current step's time
+            stopAndRecordStepTimer(); 
             if (currentStepIndex < currentScenario.steps.length - 1) {
                 currentStepIndex++;
                 renderStep();
             } else {
-                finishCall(true); // All steps completed
+                finishCall(true); 
             }
         });
 
         prevStepBtn.addEventListener('click', () => {
-            stopAndRecordStepTimer(); // Finalize current step's time
+            stopAndRecordStepTimer(); 
             if (currentStepIndex > 0) {
                 currentStepIndex--;
                 renderStep();
@@ -552,8 +554,8 @@
         });
         
         endCallBtn.addEventListener('click', () => {
-            stopAndRecordStepTimer(); // Finalize current step's time
-            finishCall(false); // Call ended prematurely by user
+            stopAndRecordStepTimer(); 
+            finishCall(false); 
         });
 
         // --- Timer Logic ---
@@ -592,7 +594,6 @@
             stopAndRecordStepTimer(); 
             
             const endTimeISO = new Date().toISOString();
-            // Calculate duration for summary display, but DO NOT send it to Supabase if 'duration' is a generated column
             let durationInSecondsForSummary = 0; 
 
             if (callStartTimeISO) {
@@ -603,7 +604,6 @@
                 durationInSecondsForSummary = accumulatedStepDurations.reduce((sum, dur) => sum + (dur || 0), 0);
             }
             
-            // Use durationInSecondsForSummary for quality calculation if needed by your logic
             const quality = completedAllSteps ? 'Good' : (durationInSecondsForSummary > 0 ? 'Bad' : 'N/A'); 
             const reason = completedAllSteps ? 'All steps completed successfully.' : 'Call ended prematurely.';
             
@@ -637,8 +637,6 @@
                 showAssistantMessage("⚠️ Could not save call summary: No active session ID.", false, 8000);
             }
             
-            // Pass the locally calculated duration (durationInSecondsForSummary) for display purposes.
-            // The actual 'duration' in the database will be whatever the generated column computes.
             displayPostCallSummary(quality, reason, durationInSecondsForSummary);
             clearCallState(); 
         }
