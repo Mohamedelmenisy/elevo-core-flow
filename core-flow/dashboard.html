@@ -8,6 +8,8 @@
     <link rel="stylesheet" href="style.css">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
         /* Styles from dash.txt <style> block are here */
         #accessDeniedModal {
@@ -104,6 +106,77 @@
             padding: 1rem; text-align: center; color: var(--text-color-subtle); font-style: italic; /* Adjusted */
         }
         .dark #noLiveCallsMessage { color: var(--text-color-subtle); }
+
+        /* MODIFICATION: Styles for long live calls */
+        .live-call-item.long-call-alert {
+            border-left: 4px solid var(--danger-color, #dc3545);
+            /* Consider a subtle background for light mode if needed, current design seems okay */
+        }
+        .dark .live-call-item.long-call-alert {
+            background-color: rgba(220, 53, 69, 0.15); /* Subtle red accent for dark mode */
+        }
+        .long-call-indicator { /* Style for the (Long Call!) text */
+            color: var(--danger-color, #dc3545);
+            font-weight: bold;
+            font-size: 0.8em;
+            margin-left: 0.5em;
+        }
+
+        /* MODIFICATION: Styles for Analytics Section */
+        .analytics-section.card {
+            background-color: var(--card-bg-color);
+            padding: 1.5rem;
+            border-radius: var(--border-radius-lg);
+            box-shadow: var(--shadow-md);
+            margin-bottom: 1.5rem;
+        }
+        .dark .analytics-section.card {
+            background-color: var(--card-bg-dark);
+            box-shadow: var(--shadow-lg);
+        }
+        .analytics-section h2 {
+            margin-top:0; 
+            margin-bottom: 1.5rem; 
+            border-bottom: 1px solid var(--border-color); 
+            padding-bottom: 0.75rem;
+            font-size: 1.25rem;
+            color: var(--text-color);
+        }
+        .dark .analytics-section h2 {
+            border-bottom-color: var(--border-color-dark);
+            color: var(--text-color-dark);
+        }
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); /* Ensure charts have enough space */
+            gap: 1.5rem;
+        }
+        .chart-container {
+            padding: 1rem;
+            border: 1px solid var(--border-color);
+            border-radius: var(--border-radius-md);
+            background-color: var(--bg-color); /* Slightly different bg for chart card */
+            min-height: 300px; /* Ensure charts have some min height */
+            display: flex;
+            flex-direction: column;
+        }
+        .dark .chart-container {
+            border-color: var(--border-color-dark);
+            background-color: var(--bg-dark-accent); /* Darker accent for chart card */
+        }
+        .chart-container h3 {
+            font-size: 1.05rem; /* Slightly smaller than section h2 */
+            margin-bottom: 1rem;
+            color: var(--text-color);
+            text-align: center;
+        }
+        .dark .chart-container h3 {
+            color: var(--text-color-dark);
+        }
+        .chart-container canvas {
+            flex-grow: 1; /* Allow canvas to take available space */
+            max-height: 350px; /* Max height for consistency */
+        }
     </style>
 </head>
 <body>
@@ -173,7 +246,21 @@
                     </h2>
                     <div id="liveCallsContainer" class="live-calls-list">
                         <p id="noLiveCallsMessage" style="display:block;">Loading live calls...</p>
-                        
+                    </div>
+                </div>
+
+                <!-- MODIFICATION: Analytics Section Added -->
+                <div class="analytics-section card" id="analyticsSection">
+                    <h2>Call Analytics</h2>
+                    <div class="charts-grid">
+                        <div class="chart-container">
+                            <h3>Quality Evolution Over Time</h3>
+                            <canvas id="qualityEvolutionChart"></canvas>
+                        </div>
+                        <div class="chart-container">
+                            <h3>Bad Call Reasons</h3>
+                            <canvas id="badQualityReasonsChart"></canvas>
+                        </div>
                     </div>
                 </div>
 
@@ -205,12 +292,15 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                
                             </tbody>
                         </table>
                     </div>
                     <div id="paginationControls" class="pagination-container"></div>
-                    <button id="exportDataBtn" class="action-button secondary-button" style="margin-top: 1.5rem;">Export Filtered Data (CSV)</button>
+                    <div class="export-buttons-container" style="margin-top: 1.5rem; display: flex; gap: 0.75rem; flex-wrap: wrap;">
+                        <button id="exportDataBtn" class="action-button secondary-button">Export Filtered Data (CSV)</button>
+                        <!-- MODIFICATION: Added XLSX Export Button -->
+                        <button id="exportDataXLSXBtn" class="action-button primary-button">Export to Excel (XLSX)</button>
+                    </div>
                 </div>
             </div>
         </main>
@@ -275,6 +365,7 @@
         const recentCallsTitleEl = document.getElementById('recentCallsTitle');
         const paginationControlsContainer = document.getElementById('paginationControls');
         const exportDataBtn = document.getElementById('exportDataBtn');
+        const exportDataXLSXBtn = document.getElementById('exportDataXLSXBtn'); // MODIFICATION: XLSX Button
 
         // Live Calls elements
         const liveCallsContainerWrapper = document.getElementById('liveCallsContainerWrapper');
@@ -292,6 +383,10 @@
         let liveCallsChannel = null;
         const FILTER_STORAGE_KEY = 'elevoCoreAdminFilters_v2';
 
+        // MODIFICATION: Chart instance variables
+        let qualityEvolutionChartInstance = null;
+        let badQualityReasonsChartInstance = null;
+
         // --- Date Formatting Helper for Egypt Time ---
         const EGYPT_TIMEZONE = 'Africa/Cairo';
 
@@ -308,13 +403,13 @@
                 second: '2-digit',
                 hour12: true
             };
-            return date.toLocaleString('en-GB', { ...defaultOptions, ...options }); // en-GB gives DD/MM/YYYY
+            return date.toLocaleString('en-GB', { ...defaultOptions, ...options }); 
         }
 
         function formatTimeEgypt(dateString) {
             if (!dateString) return 'N/A';
             const date = new Date(dateString);
-            return date.toLocaleTimeString('en-GB', { // en-GB gives HH:MM:SS
+            return date.toLocaleTimeString('en-GB', { 
                 timeZone: EGYPT_TIMEZONE,
                 hour: '2-digit',
                 minute: '2-digit',
@@ -326,24 +421,23 @@
         function formatDateForCSVEgypt(dateString) {
             if (!dateString) return 'N/A';
             const date = new Date(dateString);
-            // For CSV, a more universal, sortable format is often better like YYYY-MM-DD HH:MM:SS (24h)
-            const year = date.toLocaleDateString('en-CA', { year: 'numeric', timeZone: EGYPT_TIMEZONE }); // YYYY
-            const month = date.toLocaleDateString('en-CA', { month: '2-digit', timeZone: EGYPT_TIMEZONE }); // MM
-            const day = date.toLocaleDateString('en-CA', { day: '2-digit', timeZone: EGYPT_TIMEZONE }); // DD
-            const time = date.toLocaleTimeString('en-GB', { // HH:MM:SS (24h from en-GB)
+            const year = date.toLocaleDateString('en-CA', { year: 'numeric', timeZone: EGYPT_TIMEZONE }); 
+            const month = date.toLocaleDateString('en-CA', { month: '2-digit', timeZone: EGYPT_TIMEZONE }); 
+            const day = date.toLocaleDateString('en-CA', { day: '2-digit', timeZone: EGYPT_TIMEZONE }); 
+            const time = date.toLocaleTimeString('en-GB', { 
                 hour: '2-digit', 
                 minute: '2-digit', 
                 second: '2-digit', 
                 hour12: false, 
                 timeZone: EGYPT_TIMEZONE 
             });
-            return `${year}-${month.padStart(2,'0')}-${day.padStart(2,'0')} ${time}`; // Ensure MM and DD are two digits
+            return `${year}-${month.padStart(2,'0')}-${day.padStart(2,'0')} ${time}`;
         }
 
 
         // --- Auth and Admin Check ---
         async function initializeDashboard() {
-            if (!supabase) return; // Supabase client failed
+            if (!supabase) return; 
 
             const { data: { session }, error: sessionError } = await supabase.auth.getSession();
 
@@ -404,7 +498,7 @@
             setupAdminUI();
             await loadInitialData();
             loadPersistedFilters(); 
-            applyFiltersAndRender();
+            applyFiltersAndRender(); // This will also render charts for the first time
             setupEventListeners();
             setupLiveCallMonitoring();
         }
@@ -444,13 +538,12 @@
                 allAgents = agentsData || [];
                 populateAgentFilter();
 
-                // MODIFICATION: Corrected select to use foreign_key_name(columns)
                 const { data: sessionsData, error: sessionsError } = await supabase
                     .from('call_sessions')
                     .select(`
                         *,
                         call_sessions_scenario_id_fkey(title) 
-                    `) // MODIFIED: 'name' changed to 'title' for scenario
+                    `) 
                     .order('start_time', { ascending: false });
                 if (sessionsError) throw sessionsError;
                 allCallSessions = sessionsData || [];
@@ -498,7 +591,7 @@
                 tempFiltered = tempFiltered.filter(s => {
                     const agent = allAgents.find(a => a.id === s.user_id);
                     return (
-                        (s.call_sessions_scenario_id_fkey?.title || '').toLowerCase().includes(searchTerm) || // MODIFIED: .name to .title
+                        (s.call_sessions_scenario_id_fkey?.title || '').toLowerCase().includes(searchTerm) || 
                         (s.quality_reason || '').toLowerCase().includes(searchTerm) ||
                         (agent?.name || '').toLowerCase().includes(searchTerm) ||
                         (agent?.email || '').toLowerCase().includes(searchTerm)
@@ -520,6 +613,9 @@
             renderTable();
             updateStats();
             renderPagination();
+            // MODIFICATION: Render charts with filtered data
+            renderQualityEvolutionChart(filteredCallSessions);
+            renderBadQualityReasonsChart(filteredCallSessions);
         }
         
         function renderTable() {
@@ -542,11 +638,11 @@
                 const row = recentCallsTableBody.insertRow();
                 row.insertCell().textContent = agent?.name || 'Unknown Agent';
                 row.insertCell().textContent = agent?.email || 'N/A';
-                row.insertCell().textContent = session.call_sessions_scenario_id_fkey?.title || 'N/A'; // MODIFIED: .name to .title
-                row.insertCell().textContent = formatDateTimeEgypt(session.start_time); // MODIFIED for Egypt Time
-                const duration = session.duration || 0; // MODIFIED: total_duration_seconds to duration
+                row.insertCell().textContent = session.call_sessions_scenario_id_fkey?.title || 'N/A'; 
+                row.insertCell().textContent = formatDateTimeEgypt(session.start_time); 
+                const duration = session.duration || 0; 
                 row.insertCell().textContent = `${Math.floor(duration / 60)}m ${duration % 60}s`;
-                row.insertCell().textContent = session.completed ? 'Yes' : 'No'; // MODIFIED: completed_all_steps to completed
+                row.insertCell().textContent = session.completed ? 'Yes' : 'No'; 
                 
                 const qualityCell = row.insertCell();
                 qualityCell.classList.add('quality-cell');
@@ -573,11 +669,11 @@
             totalCallsEl.textContent = count;
 
             if (count > 0) {
-                const totalDuration = filteredCallSessions.reduce((sum, s) => sum + (s.duration || 0), 0); // MODIFIED: total_duration_seconds to duration
+                const totalDuration = filteredCallSessions.reduce((sum, s) => sum + (s.duration || 0), 0); 
                 const avgDuration = Math.round(totalDuration / count);
                 avgCallDurationEl.textContent = `${Math.floor(avgDuration / 60)}m ${avgDuration % 60}s`;
 
-                const completedCount = filteredCallSessions.filter(s => s.completed).length; // MODIFIED: completed_all_steps to completed
+                const completedCount = filteredCallSessions.filter(s => s.completed).length; 
                 completionRateEl.textContent = `${Math.round((completedCount / count) * 100)}%`;
 
                 const qualityCounts = { good: 0, normal: 0, bad: 0, rated: 0 };
@@ -656,6 +752,116 @@
             }
         }
 
+        // --- MODIFICATION: Chart Rendering Functions ---
+        function renderQualityEvolutionChart(sessions) {
+            const qualityEvolutionChartCanvas = document.getElementById('qualityEvolutionChart');
+            if (!qualityEvolutionChartCanvas || typeof Chart === 'undefined') return;
+            const ctx = qualityEvolutionChartCanvas.getContext('2d');
+
+            if (qualityEvolutionChartInstance) {
+                qualityEvolutionChartInstance.destroy();
+            }
+
+            const dataByDate = {}; 
+            sessions.forEach(session => {
+                if (!session.start_time) return;
+                const sessionDateEgypt = new Date(session.start_time).toLocaleDateString('en-CA', { timeZone: EGYPT_TIMEZONE });
+
+                if (!dataByDate[sessionDateEgypt]) {
+                    dataByDate[sessionDateEgypt] = { Good: 0, Normal: 0, Bad: 0, total: 0, dateObj: new Date(sessionDateEgypt + "T00:00:00") }; // Store dateObj for sorting
+                }
+                if (session.call_quality === 'Good') dataByDate[sessionDateEgypt].Good++;
+                else if (session.call_quality === 'Normal') dataByDate[sessionDateEgypt].Normal++;
+                else if (session.call_quality === 'Bad') dataByDate[sessionDateEgypt].Bad++;
+                dataByDate[sessionDateEgypt].total++;
+            });
+
+            const sortedDates = Object.keys(dataByDate).sort((a, b) => dataByDate[a].dateObj - dataByDate[b].dateObj);
+            
+            const labels = sortedDates.map(date => formatDateTimeEgypt(date, { day: '2-digit', month: 'short', year: '2-digit' }));
+            const goodData = sortedDates.map(date => dataByDate[date].Good);
+            const normalData = sortedDates.map(date => dataByDate[date].Normal);
+            const badData = sortedDates.map(date => dataByDate[date].Bad);
+
+            qualityEvolutionChartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        { label: 'Good Calls', data: goodData, borderColor: 'rgba(75, 192, 192, 1)', backgroundColor: 'rgba(75, 192, 192, 0.2)', tension: 0.1, fill: false },
+                        { label: 'Normal Calls', data: normalData, borderColor: 'rgba(255, 206, 86, 1)', backgroundColor: 'rgba(255, 206, 86, 0.2)', tension: 0.1, fill: false },
+                        { label: 'Bad Calls', data: badData, borderColor: 'rgba(255, 99, 132, 1)', backgroundColor: 'rgba(255, 99, 132, 0.2)', tension: 0.1, fill: false }
+                    ]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    scales: { y: { beginAtZero: true, suggestedMax: Math.max(...goodData, ...normalData, ...badData, 5) + 1 } }, // Ensure small numbers are visible
+                    plugins: { legend: { position: 'top' } }
+                }
+            });
+        }
+
+        function renderBadQualityReasonsChart(sessions) {
+            const badQualityReasonsChartCanvas = document.getElementById('badQualityReasonsChart');
+            if (!badQualityReasonsChartCanvas || typeof Chart === 'undefined') return;
+            const ctx = badQualityReasonsChartCanvas.getContext('2d');
+
+            if (badQualityReasonsChartInstance) {
+                badQualityReasonsChartInstance.destroy();
+            }
+
+            const badSessions = sessions.filter(s => s.call_quality === 'Bad' && s.quality_reason);
+            const reasonCounts = {};
+            badSessions.forEach(session => {
+                const reason = (session.quality_reason || "Unspecified").trim();
+                reasonCounts[reason] = (reasonCounts[reason] || 0) + 1;
+            });
+
+            const labels = Object.keys(reasonCounts);
+            const data = Object.values(reasonCounts);
+            
+            const chartColors = [
+                'rgba(255, 99, 132, 0.7)', 'rgba(54, 162, 235, 0.7)', 'rgba(255, 206, 86, 0.7)',
+                'rgba(75, 192, 192, 0.7)', 'rgba(153, 102, 255, 0.7)', 'rgba(255, 159, 64, 0.7)',
+                'rgba(199, 199, 199, 0.7)', 'rgba(83, 102, 255, 0.7)'
+            ];
+            const backgroundColors = labels.map((_, i) => chartColors[i % chartColors.length]);
+            const borderColors = backgroundColors.map(color => color.replace('0.7', '1'));
+
+            badQualityReasonsChartInstance = new Chart(ctx, {
+                type: 'pie',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Bad Call Reasons', data: data,
+                        backgroundColor: backgroundColors,
+                        borderColor: borderColors, borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'right', labels: { boxWidth: 20, padding: 15 } }, // Adjusted legend
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.label || '';
+                                    if (label) { label += ': '; }
+                                    if (context.parsed !== null) {
+                                        const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                        const percentage = total > 0 ? (context.raw / total * 100).toFixed(1) + '%' : '0%';
+                                        label += context.raw + ' (' + percentage + ')';
+                                    }
+                                    return label;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        // --- End of Chart Rendering Functions ---
+
         function setupEventListeners() {
             logoutButton.addEventListener('click', async () => {
                 if (liveCallsChannel) {
@@ -685,6 +891,7 @@
                 applyFiltersAndRender();
             });
             exportDataBtn.addEventListener('click', exportFilteredDataToCSV);
+            exportDataXLSXBtn.addEventListener('click', exportFilteredDataToXLSX); // MODIFICATION
         }
 
         function exportFilteredDataToCSV() {
@@ -692,23 +899,23 @@
                 alert("No data to export based on current filters.");
                 return;
             }
-            const headers = ["Agent Name", "Agent Email", "Scenario", "Start Time (Egypt)", "Duration (s)", "Completed", "Quality", "Reason"]; // MODIFIED Header
+            const headers = ["Agent Name", "Agent Email", "Scenario", "Start Time (Egypt)", "Duration (s)", "Completed", "Quality", "Reason"]; 
             const rows = filteredCallSessions.map(session => {
                 const agent = allAgents.find(a => a.id === session.user_id);
                 return [
                     agent?.name || 'Unknown',
                     agent?.email || 'N/A',
-                    session.call_sessions_scenario_id_fkey?.title || 'N/A', // MODIFIED: .name to .title
-                    formatDateForCSVEgypt(session.start_time), // MODIFIED for Egypt Time CSV format
-                    session.duration || 0, // MODIFIED: total_duration_seconds to duration
-                    session.completed ? 'Yes' : 'No', // MODIFIED: completed_all_steps to completed
+                    session.call_sessions_scenario_id_fkey?.title || 'N/A', 
+                    formatDateForCSVEgypt(session.start_time), 
+                    session.duration || 0, 
+                    session.completed ? 'Yes' : 'No', 
                     session.call_quality || 'N/A',
                     session.quality_reason || '-'
                 ].map(field => `"${String(field).replace(/"/g, '""')}"`); 
             });
 
             const csvContent = [headers.join(','), ...rows.map(row => row.join(','))].join('\n');
-            const blob = new Blob(["\uFEFF"+csvContent], { type: 'text/csv;charset=utf-8;' }); // Added BOM for Excel
+            const blob = new Blob(["\uFEFF"+csvContent], { type: 'text/csv;charset=utf-8;' }); 
             const link = document.createElement("a");
             const url = URL.createObjectURL(blob);
             link.setAttribute("href", url);
@@ -718,6 +925,52 @@
             link.click();
             document.body.removeChild(link);
             URL.revokeObjectURL(url);
+        }
+
+        // MODIFICATION: New XLSX Export function
+        function exportFilteredDataToXLSX() {
+            if (typeof XLSX === 'undefined') {
+                alert("Excel export library (SheetJS) could not be loaded. Please check your internet connection or try refreshing the page.");
+                console.error("XLSX (SheetJS) is not defined. Ensure the library is loaded.");
+                return;
+            }
+            if (filteredCallSessions.length === 0) {
+                alert("No data to export based on current filters.");
+                return;
+            }
+
+            const headers = ["Agent Name", "Agent Email", "Scenario", "Start Time (Egypt)", "Duration (s)", "Completed", "Quality", "Reason"];
+            const dataForExport = filteredCallSessions.map(session => {
+                const agent = allAgents.find(a => a.id === session.user_id);
+                return { // Using object keys that match headers for json_to_sheet
+                    "Agent Name": agent?.name || 'Unknown',
+                    "Agent Email": agent?.email || 'N/A',
+                    "Scenario": session.call_sessions_scenario_id_fkey?.title || 'N/A',
+                    "Start Time (Egypt)": formatDateForCSVEgypt(session.start_time), 
+                    "Duration (s)": session.duration || 0,
+                    "Completed": session.completed ? 'Yes' : 'No',
+                    "Quality": session.call_quality || 'N/A',
+                    "Reason": session.quality_reason || '-'
+                };
+            });
+
+            const worksheet = XLSX.utils.json_to_sheet(dataForExport); // headers are derived from object keys
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "CallSessions");
+
+            // Basic auto-column width (optional, can be improved)
+            const colWidths = headers.map(header => {
+                 const maxLength = Math.max(
+                    header.length, 
+                    ...dataForExport.map(row => String(row[header] === null || typeof row[header] === 'undefined' ? '' : row[header]).length)
+                );
+                return { wch: maxLength + 2 }; // Add a little padding
+            });
+            worksheet['!cols'] = colWidths;
+
+            XLSX.writeFile(workbook, `elevo_dashboard_export_${new Date().toISOString().slice(0,10)}.xlsx`);
+            
+            console.info("Note: Exporting detailed step timings (from a potential 'session_step_details' table) requires backend data structure changes and is not included in this export.");
         }
         
         async function setupLiveCallMonitoring() {
@@ -734,19 +987,14 @@
                     { event: '*', schema: 'public', table: 'call_sessions' },
                     async (payload) => { 
                         console.log('Realtime: Call session change detected', payload);
-                        // Check if new data affects currently displayed live calls
-                        if (payload.new && !payload.new.end_time) { // New call started or ongoing call updated
-                             await fetchAndRenderLiveCalls(); 
-                        } else if (payload.old && !payload.old.end_time && payload.new && payload.new.end_time) { // Call ended
-                             await fetchAndRenderLiveCalls(); 
-                        }
-                        // Always refresh main table data as any change could be relevant
+                        await fetchAndRenderLiveCalls(); // Refresh live calls on any change
+                        
                         const { data: sessionsData, error: sessionsError } = await supabase
                             .from('call_sessions')
                             .select(`
                                 *,
                                 call_sessions_scenario_id_fkey(title)
-                            `) // MODIFIED: 'name' changed to 'title' for scenario
+                            `) 
                             .order('start_time', { ascending: false });
                         if (!sessionsError) {
                             allCallSessions = sessionsData || [];
@@ -769,37 +1017,48 @@
                 });
         }
 
+        // MODIFICATION: Enhanced fetchAndRenderLiveCalls
         async function fetchAndRenderLiveCalls() {
             try {
-                // MODIFICATION: Corrected select to use foreign_key_name(columns)
                 const { data: liveSessions, error } = await supabase
                     .from('call_sessions')
-                    .select('id, user_id, scenario_id, start_time, call_sessions_scenario_id_fkey(title)') // MODIFIED: 'name' to 'title'
+                    .select('id, user_id, scenario_id, start_time, agent_name, agent_email, call_sessions_scenario_id_fkey(title)') // Fetch agent_name and agent_email directly
                     .is('end_time', null) 
                     .order('start_time', { ascending: true });
 
                 if (error) {
                     console.error("❌ Live call fetch error:", error.message); 
                     throw error; 
-                } else {
-                    // console.log("✅ Live calls:", liveSessions); // Reduced logging for cleaner console
                 }
 
                 liveCallsContainer.innerHTML = ''; 
+                const LONG_CALL_THRESHOLD = 10 * 60 * 1000; // 10 minutes
+
                 if (liveSessions && liveSessions.length > 0) {
                     noLiveCallsMessage.style.display = 'none';
                     liveSessions.forEach(call => {
-                        const agent = allAgents.find(a => a.id === call.user_id);
-                        const agentName = agent?.name || agent?.email || `Agent ID: ${call.user_id.substring(0,8)}`;
-                        const scenarioName = call.call_sessions_scenario_id_fkey?.title || 'Loading scenario...'; // MODIFIED: .name to .title
-                        const startTimeFormatted = formatTimeEgypt(call.start_time); // MODIFIED for Egypt Time
+                        const agentName = call.agent_name || call.agent_email || `Agent ID: ${call.user_id.substring(0,8)}`;
+                        const scenarioName = call.call_sessions_scenario_id_fkey?.title || 'Loading scenario...';
+                        const startTimeFormatted = formatTimeEgypt(call.start_time);
 
                         const callDiv = document.createElement('div');
                         callDiv.className = 'live-call-item';
+
+                        const callDurationMs = Date.now() - new Date(call.start_time).getTime();
+                        let longCallIndicatorHTML = '';
+                        if (callDurationMs > LONG_CALL_THRESHOLD) {
+                            callDiv.classList.add('long-call-alert');
+                            longCallIndicatorHTML = `<span class="long-call-indicator">(Long Call!)</span>`;
+                        }
+                        
+                        const durationMinutes = Math.floor(callDurationMs / 60000);
+                        const durationSeconds = Math.floor((callDurationMs % 60000) / 1000);
+                        const liveDurationStr = `${durationMinutes}m ${durationSeconds}s`;
+
                         callDiv.innerHTML = `
-                            <div class="live-call-item-agent">${agentName}</div>
+                            <div class="live-call-item-agent">${agentName} ${longCallIndicatorHTML}</div>
                             <div class="live-call-item-scenario">Scenario: ${scenarioName}</div>
-                            <div class="live-call-item-time">Started: ${startTimeFormatted}</div>
+                            <div class="live-call-item-time">Started: ${startTimeFormatted} (Now: ${liveDurationStr})</div>
                         `;
                         liveCallsContainer.appendChild(callDiv);
                     });
@@ -816,7 +1075,7 @@
         }
 
         initializeDashboard();
-        console.log("Dashboard.html script v1.1 (Egypt Time) loaded and initialized.");
+        console.log("Dashboard.html script (vNext with Analytics & XLSX) loaded and initialized.");
     </script>
 </body>
 </html>
