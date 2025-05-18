@@ -82,7 +82,7 @@
                     </div>
                 </div>
 
-                <div class="analytics-section card" id="analyticsSection"> {/* Matched to new CSS .analytics-section.card */}
+                <div class="analytics-section card" id="analyticsSection">
                     <h2>Call Analytics</h2>
                     <div class="charts-grid">
                         <div class="chart-container">
@@ -255,7 +255,6 @@
                 timeZone: EGYPT_TIMEZONE,
                 hour: '2-digit',
                 minute: '2-digit',
-                // second: '2-digit', // Usually not needed for live call start time display
                 hour12: true
             };
             return date.toLocaleTimeString('en-GB', timeOptions);
@@ -309,7 +308,8 @@
                     id: session.user.id,
                     email: session.user.email,
                     name: profile?.name || session.user.user_metadata?.full_name || session.user.email.split('@')[0],
-                    isAdmin: profile?.is_admin || false
+                    // ✅ MODIFICATION: Strict boolean check for isAdmin
+                    isAdmin: profile?.is_admin === true 
                 };
                 localStorage.setItem('elevoCoreUserData', JSON.stringify(currentUser));
             }
@@ -320,7 +320,7 @@
                     const { data: adminStatus, error: functionError } = await supabase.functions.invoke('check-admin-access');
                     if (functionError) throw functionError;
                     
-                    if (!adminStatus || !adminStatus.isAdmin) {
+                    if (!adminStatus || adminStatus.isAdmin !== true) { // Strict check here too
                         showAccessDenied();
                         return;
                     }
@@ -594,7 +594,6 @@
             }
         }
 
-        // --- MODIFICATION: Chart Rendering Functions (Updated for new styles and placeholder) ---
         function renderQualityEvolutionChart(sessions) {
             const qualityEvolutionChartCanvas = document.getElementById('qualityEvolutionChart');
             if (!qualityEvolutionChartCanvas || typeof Chart === 'undefined') return;
@@ -629,7 +628,7 @@
 
             const sortedDates = Object.keys(dataByDate).sort((a, b) => dataByDate[a].dateObj - dataByDate[b].dateObj);
             
-            const labels = sortedDates.map(date => formatDateTimeEgypt(date, { day: '2-digit', month: 'short', year: 'numeric' })); // Using numeric year
+            const labels = sortedDates.map(date => formatDateTimeEgypt(date, { day: '2-digit', month: 'short', year: 'numeric' }));
             const goodData = sortedDates.map(date => dataByDate[date].Good);
             const normalData = sortedDates.map(date => dataByDate[date].Normal);
             const badData = sortedDates.map(date => dataByDate[date].Bad);
@@ -642,9 +641,9 @@
                 data: {
                     labels: labels,
                     datasets: [
-                        { label: 'Good Calls', data: goodData, borderColor: getCssVariable('--chart-color-good') || '#00E1FF', backgroundColor: (getCssVariable('--chart-color-good') || '#00E1FF') + '33', tension: 0.1, fill: false },
-                        { label: 'Normal Calls', data: normalData, borderColor: getCssVariable('--chart-color-normal') || '#FFC300', backgroundColor: (getCssVariable('--chart-color-normal') || '#FFC300') + '33', tension: 0.1, fill: false },
-                        { label: 'Bad Calls', data: badData, borderColor: getCssVariable('--chart-color-bad') || '#FF4C4C', backgroundColor: (getCssVariable('--chart-color-bad') || '#FF4C4C') + '33', tension: 0.1, fill: false }
+                        { label: 'Good Calls', data: goodData, borderColor: getCssVariable('--chart-color-good'), backgroundColor: getCssVariable('--chart-color-good') + '33', tension: 0.1, fill: false },
+                        { label: 'Normal Calls', data: normalData, borderColor: getCssVariable('--chart-color-normal'), backgroundColor: getCssVariable('--chart-color-normal') + '33', tension: 0.1, fill: false },
+                        { label: 'Bad Calls', data: badData, borderColor: getCssVariable('--chart-color-bad'), backgroundColor: getCssVariable('--chart-color-bad') + '33', tension: 0.1, fill: false }
                     ]
                 },
                 options: {
@@ -653,19 +652,19 @@
                         y: { 
                             beginAtZero: true, 
                             suggestedMax: Math.max(...goodData, ...normalData, ...badData, 5) + 1,
-                            ticks: { color: chartTextColor, font: { size: 14, weight: 'normal' } }, // Updated font
+                            ticks: { color: chartTextColor, font: { size: 14, weight: 'normal' } },
                             grid: { color: chartGridColor }
                         },
                         x: {
-                            ticks: { color: chartTextColor, font: { size: 14, weight: 'normal' } }, // Updated font
+                            ticks: { color: chartTextColor, font: { size: 14, weight: 'normal' } },
                             grid: { color: chartGridColor }
                         }
                     },
                     plugins: { 
-                        legend: { position: 'top', labels: { color: chartTextColor, font: { size: 14, weight: 'bold' } } }, // Updated font
+                        legend: { position: 'top', labels: { color: chartTextColor, font: { size: 14, weight: 'bold' } } },
                         tooltip: { 
-                            titleFont: { size: 14, weight: 'bold' }, // Updated font
-                            bodyFont: { size: 14 }, // Updated font
+                            titleFont: { size: 14, weight: 'bold' }, 
+                            bodyFont: { size: 14 },
                             backgroundColor: getCssVariable('--card-bg-color') || '#1f2937',
                             titleColor: chartTextColor,
                             bodyColor: chartTextColor,
@@ -701,29 +700,31 @@
             if (labels.length === 0) {
                 badQualityReasonsChartCanvas.style.display = 'none';
                 badQualityReasonsChartPlaceholder.style.display = 'flex';
-                badQualityReasonsChartPlaceholder.innerHTML = 'No "Bad" quality calls with reasons found for the current selection.';
+                badQualityReasonsChartPlaceholder.innerHTML = 'No "Bad" quality calls with specified reasons found for the current selection.';
                 return;
             }
             
             const pieChartColors = [
-                getCssVariable('--chart-color-bad') || '#FF4C4C', 
-                getCssVariable('--chart-color-accent1') || '#9B59B6',
-                getCssVariable('--chart-color-accent2') || '#3498DB',
-                getCssVariable('--chart-color-accent3') || '#F1C40F',
-                getCssVariable('--chart-color-accent4') || '#E74C3C',
-                getCssVariable('--chart-color-accent5') || '#2ECC71',
-                getCssVariable('--warning-color') || '#f59e0b',
-                getCssVariable('--primary-color') || '#3b82f6'
-            ];
+                getCssVariable('--chart-color-bad'), 
+                getCssVariable('--chart-color-accent1'),
+                getCssVariable('--chart-color-accent2'),
+                getCssVariable('--chart-color-accent3'),
+                getCssVariable('--chart-color-accent4'),
+                getCssVariable('--chart-color-accent5'),
+                getCssVariable('--warning-color'),
+                getCssVariable('--primary-color')
+            ].map(color => color || '#FF0000'); // Fallback for each color
 
             const backgroundColors = labels.map((_, i) => pieChartColors[i % pieChartColors.length]);
-            const borderColors = backgroundColors.map(color => color.replace(/, 0\.\d+\)/, ', 1)')); // Make border fully opaque if alpha was present
+            const borderColors = backgroundColors.map(color => color.replace(/, 0\.\d+\)/, ', 1)'));
 
             const chartTextColor = getCssVariable('--chart-text-color') || '#eeeeee';
             const chartGridColor = getCssVariable('--chart-grid-color') || '#444444';
+            
+            const chartType = labels.length > 5 ? 'bar' : 'pie'; // Switch to bar chart if many reasons
 
             badQualityReasonsChartInstance = new Chart(badQualityReasonsChartCanvas.getContext('2d'), {
-                type: 'pie', // Can be 'bar' if many reasons
+                type: chartType,
                 data: {
                     labels: labels,
                     datasets: [{
@@ -734,8 +735,24 @@
                 },
                 options: {
                     responsive: true, maintainAspectRatio: false,
+                    indexAxis: chartType === 'bar' ? 'y' : undefined, // For horizontal bar chart
+                    scales: chartType === 'bar' ? {
+                        x: {
+                            beginAtZero: true,
+                            ticks: { color: chartTextColor, font: { size: 14, weight: 'normal' } },
+                            grid: { color: chartGridColor }
+                        },
+                        y: {
+                            ticks: { color: chartTextColor, font: { size: 14, weight: 'normal' } },
+                            grid: { display: false } // Cleaner look for y-axis grid on bar chart
+                        }
+                    } : undefined,
                     plugins: {
-                        legend: { position: 'right', labels: { color: chartTextColor, font: { size: 14, weight: 'bold' }, boxWidth: 20, padding: 15 } },
+                        legend: { 
+                            display: chartType === 'pie', // Only show legend for pie chart
+                            position: 'right', 
+                            labels: { color: chartTextColor, font: { size: 14, weight: 'bold' }, boxWidth: 20, padding: 15 } 
+                        },
                         tooltip: {
                             titleFont: { size: 14, weight: 'bold' },
                             bodyFont: { size: 14 },
@@ -751,7 +768,7 @@
                                     if (context.parsed !== null) {
                                         const total = context.dataset.data.reduce((a, b) => a + b, 0);
                                         const percentage = total > 0 ? (context.raw / total * 100).toFixed(1) + '%' : '0%';
-                                        label += context.raw + ' (' + percentage + ')';
+                                        label += context.raw + (chartType === 'pie' ? ' (' + percentage + ')' : '');
                                     }
                                     return label;
                                 }
@@ -930,7 +947,7 @@
                 }
 
                 liveCallsContainer.innerHTML = ''; 
-                const LONG_CALL_THRESHOLD_MS = 10 * 60 * 1000; // 10 minutes in milliseconds
+                const LONG_CALL_THRESHOLD_MS = 10 * 60 * 1000; 
 
                 if (liveSessions && liveSessions.length > 0) {
                     noLiveCallsMessage.style.display = 'none';
@@ -976,7 +993,7 @@
         }
 
         initializeDashboard();
-        console.log("Dashboard.html script (vNext with Enhanced Analytics & Live Calls) loaded and initialized.");
+        console.log("Dashboard.html script (vAdminFix + Enhanced Analytics & Live Calls) loaded and initialized.");
     </script>
 </body>
 </html>
