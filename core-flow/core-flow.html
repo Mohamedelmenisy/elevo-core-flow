@@ -10,13 +10,115 @@ To add the new "Customer Inquiry – Compensation Flow" scenario, follow these s
 2. Click "Insert Row". Fill in:
    - title: Customer Inquiry – Compensation Flow
    - description: Automated steps for compensating customers based on delay and order type.
-   - steps: Copy-paste the JSON from customer_inquiry_scenario.json
+   - steps: Copy-paste the JSON from customer_inquiry_scenario.json (ensure it has id, type, text, next_id/options)
    - is_active: true
    - created_by: [your user id]
    - created_at: [leave empty or set to now()]
 
-Use this JSON:
-[Steps available in customer_inquiry_scenario.json file]
+Use this JSON (EXAMPLE STRUCTURE - ensure your JSON follows this):
+[
+  {
+    "id": "start_greeting",
+    "type": "info",
+    "text": "Agent: Good morning/afternoon, Elevo Customer Service, [Agent Name] speaking. How can I help you?",
+    "next_id": "identify_issue"
+  },
+  {
+    "id": "identify_issue",
+    "type": "info",
+    "text": "Customer explains their reason for calling. Agent listens actively.",
+    "next_id": "is_compensation_query"
+  },
+  {
+    "id": "is_compensation_query",
+    "type": "decision",
+    "text": "Agent: Is the customer's inquiry related to a potential compensation (e.g., delayed order, service issue)?",
+    "options": [
+      { "label": "Yes, compensation related", "next_id": "gather_compensation_details" },
+      { "label": "No, other inquiry", "next_id": "handle_other_inquiry" }
+    ]
+  },
+  {
+    "id": "gather_compensation_details",
+    "type": "info",
+    "text": "Agent: I understand. To look into this further for you, could I please have your order number or account details?",
+    "next_id": "verify_details"
+  },
+  {
+    "id": "verify_details",
+    "type": "info",
+    "text": "Agent verifies customer details and the specifics of the incident (e.g., delay duration, type of product/service).",
+    "next_id": "check_compensation_policy"
+  },
+  {
+    "id": "check_compensation_policy",
+    "type": "info",
+    "text": "Agent: Thank you for that information. Please allow me a moment to review our compensation policy for this situation.",
+    "next_id": "determine_eligibility"
+  },
+  {
+    "id": "determine_eligibility",
+    "type": "decision",
+    "text": "Agent (to self/system): Based on policy, is the customer eligible for compensation?",
+    "options": [
+      { "label": "Eligible", "next_id": "offer_compensation" },
+      { "label": "Not Eligible / Needs Review", "next_id": "explain_ineligibility_or_review" }
+    ]
+  },
+  {
+    "id": "offer_compensation",
+    "type": "info",
+    "text": "Agent: Thank you for waiting. Based on [reason, e.g., the delay of your order], we can offer you [compensation details, e.g., a 10% discount on your next purchase / a refund of X amount]. Would you like to accept this?",
+    "next_id": "customer_accepts_compensation"
+  },
+  {
+    "id": "customer_accepts_compensation",
+    "type": "decision",
+    "text": "Customer responds to offer.",
+    "options": [
+      { "label": "Customer Accepts", "next_id": "process_compensation" },
+      { "label": "Customer Declines/Negotiates", "next_id": "handle_decline_negotiate" }
+    ]
+  },
+  {
+    "id": "process_compensation",
+    "type": "info",
+    "text": "Agent: Great. I've processed that for you. You'll see [details of how compensation is applied/received]. Is there anything else I can assist you with today?",
+    "next_id": "final_check"
+  },
+  {
+    "id": "handle_decline_negotiate",
+    "type": "info",
+    "text": "Agent: I understand. Let me see if there are any alternative options available, or if further review is needed. [Agent follows internal procedure for declined offers or negotiation].",
+    "next_id": "final_check"
+  },
+  {
+    "id": "explain_ineligibility_or_review",
+    "type": "info",
+    "text": "Agent: Thank you for your patience. Upon review, [explain reason for ineligibility or state that it needs further review by another team]. We apologize for any inconvenience. [Offer alternative help if possible].",
+    "next_id": "final_check"
+  },
+  {
+    "id": "handle_other_inquiry",
+    "type": "info",
+    "text": "Agent: Okay, I understand your inquiry is about [other issue]. Let me help you with that. [Proceed with relevant flow for non-compensation issues].",
+    "next_id": "final_check"
+  },
+  {
+    "id": "final_check",
+    "type": "decision",
+    "text": "Agent: Is there anything else I can help you with today?",
+    "options": [
+      { "label": "Yes, more help needed", "next_id": "identify_issue" },
+      { "label": "No, all resolved", "next_id": "end_call_friendly" }
+    ]
+  },
+  {
+    "id": "end_call_friendly",
+    "type": "info",
+    "text": "Agent: Alright. Well, thank you for calling Elevo Core. We appreciate your business. Have a wonderful day/evening!"
+  }
+]
 -->
 
     <meta charset="UTF-8">
@@ -45,6 +147,35 @@ Use this JSON:
             0%, 100% { transform: scale(1); opacity: 1; }
             50% { transform: scale(1.03); opacity: 0.8; }
         }
+
+        /* MODIFICATION: CSS for decision buttons */
+        .step-actions {
+            margin-top: 1rem;
+            display: flex;
+            flex-direction: column; /* Stack buttons vertically */
+            gap: 0.75rem; /* Space between buttons */
+        }
+        .decision-button {
+            width: 100%; /* Make buttons take full width */
+            padding: 0.75rem 1rem;
+            font-size: 0.95rem;
+            border: 1px solid var(--primary-color);
+            background-color: var(--background-color);
+            color: var(--primary-color);
+            cursor: pointer;
+            border-radius: var(--border-radius);
+            transition: background-color 0.2s ease, color 0.2s ease;
+            text-align: center;
+        }
+        .decision-button:hover {
+            background-color: var(--primary-color);
+            color: var(--button-text-color);
+        }
+        .decision-button:focus {
+            outline: 2px solid var(--primary-color-dark);
+            outline-offset: 2px;
+        }
+
     </style>
 </head>
 <body>
@@ -115,20 +246,24 @@ Use this JSON:
                     <span>Receive Call</span>
                 </button>
                 <audio id="callStartSound" src="call_sound.mp3" preload="auto"></audio>
-                <!-- MODIFICATION: Added audio element for compensation scenario sound -->
-                <audio id="compensationScenarioSound" src="compensation_alert.mp3" preload="auto"></audio> <!-- Make sure you have this sound file -->
+                <audio id="compensationScenarioSound" src="compensation_alert.mp3" preload="auto"></audio>
             </div>
 
             <div id="call-flow-view" class="card call-flow-card fade-in" style="display: none;">
                 <h3 id="scenario-title" class="card-title scenario-title-dynamic">Call Scenario</h3>
                 <div id="steps-container" class="steps-area">
+                    <!-- Step text and dynamic buttons will go here -->
                     <p class="placeholder-text">Loading call steps...</p>
                 </div>
+                 <!-- MODIFICATION: This div will now hold decision buttons or be empty -->
+                <div id="decision-buttons-container" class="step-actions"></div>
+
                 <div class="navigation-buttons">
                     <button id="prev-step-btn" class="nav-button secondary-button" style="display: none;">
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
                         <span>Previous</span>
                     </button>
+                    <!-- MODIFICATION: This button's role will change based on step type -->
                     <button id="next-step-btn" class="nav-button primary-button">
                         <span>Next Step</span>
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
@@ -178,9 +313,10 @@ Use this JSON:
         const scenarioDropdown = document.getElementById('scenarioDropdown');
         const receiveCallBtn = document.getElementById('receive-call-btn');
         const scenarioTitleElement = document.getElementById('scenario-title');
-        const stepsContainer = document.getElementById('steps-container');
+        const stepsContainer = document.getElementById('steps-container'); // Will hold step text
+        const decisionButtonsContainer = document.getElementById('decision-buttons-container'); // For decision buttons
         const prevStepBtn = document.getElementById('prev-step-btn');
-        const nextStepBtn = document.getElementById('next-step-btn');
+        const nextStepBtn = document.getElementById('next-step-btn'); // For info steps or finish
         const endCallBtn = document.getElementById('end-call-btn');
         
         const userInfoDiv = document.getElementById('userInfo');
@@ -198,21 +334,24 @@ Use this JSON:
         const callSummaryContentDiv = document.getElementById('callSummaryContent');
         const returnToInitialViewBtn = document.getElementById('returnToInitialViewBtn');
         const callStartSound = document.getElementById('callStartSound'); 
-        // MODIFICATION: Get the new audio element
         const compensationScenarioSound = document.getElementById('compensationScenarioSound');
         document.getElementById('currentYear').textContent = new Date().getFullYear();
 
         // --- State Variables ---
         let currentUser = null; 
-        let currentScenario = null; 
-        let currentStepIndex = 0;
+        let currentScenario = null; // Full scenario object {id, title, steps: [...]}
+        // MODIFICATION: Manage current step by ID and maintain a history for "Previous"
+        let currentStepId = null;   // ID of the current step being displayed
+        let stepHistory = [];       // Array of step IDs visited, for "Previous" button
+        let currentStepIndexForProgressBar = 0; // Index of current step in original array, for progress bar
+
         let callSessionId = null;    
         let callStartTimeISO = null; 
         let stepTimerInterval = null;
         let stepStartTime = 0;      
-        let accumulatedStepDurations = [];
+        let accumulatedStepDurations = {}; // MODIFICATION: Store durations by step ID: { stepId: duration_ms, ... }
 
-        const SESSION_STATE_KEY = 'elevoCoreActiveCallState_v2'; 
+        const SESSION_STATE_KEY = 'elevoCoreActiveCallState_v3'; // Incremented version due to state changes
 
         // --- UI Helper Functions ---
         function updateSystemStatus(statusText, statusClass = 'status-waiting') {
@@ -246,20 +385,13 @@ Use this JSON:
         
         function showAssistantMessage(message, isInitial = false, duration = 5000, onHideCallback = null) {
             if (!assistantBox || !assistantMessageElement) return;
-
             clearTimeout(assistantTimeout);
             if (typingInterval) clearInterval(typingInterval);
-
             assistantBox.classList.remove('show', 'assistant-initial-position'); 
             void assistantBox.offsetWidth; 
-
-            if (isInitial) {
-                assistantBox.classList.add('assistant-initial-position');
-            } else {
-                assistantBox.classList.add('show'); 
-            }
+            if (isInitial) assistantBox.classList.add('assistant-initial-position');
+            else assistantBox.classList.add('show'); 
             assistantBox.style.display = 'flex';
-
             typeWriterEffect(assistantMessageElement, message, 30, () => {
                 if (duration > 0) {
                     assistantTimeout = setTimeout(() => {
@@ -272,11 +404,8 @@ Use this JSON:
 
         function hideAssistant(wasInitial = false) {
              if (!assistantBox) return;
-             if (wasInitial) {
-                 assistantBox.classList.remove('assistant-initial-position');
-             } else {
-                assistantBox.classList.remove('show');
-             }
+             if (wasInitial) assistantBox.classList.remove('assistant-initial-position');
+             else assistantBox.classList.remove('show');
              setTimeout(() => { 
                 if (!assistantBox.classList.contains('show') && !assistantBox.classList.contains('assistant-initial-position')) {
                     assistantBox.style.display = 'none';
@@ -291,34 +420,26 @@ Use this JSON:
                  authLoadingDiv.innerHTML = '<p style="color:red; text-align:center;">Critical Error: Services unavailable. Please try again later.</p>';
                  return;
             }
-
             const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-
             if (sessionError) {
                 console.error("initializeApp: Error fetching session:", sessionError);
                 authLoadingDiv.innerHTML = '<p style="color:red;">Error verifying session. Try refreshing.</p>';
                 return;
             }
-
             if (!session) {
                 console.log("initializeApp: No active session. Redirecting to login page.");
                 window.location.replace('login.html'); 
                 return;
             }
-            console.log(`initializeApp: Active session found for user ID: ${session.user.id}`); 
-
             const storedUserData = JSON.parse(localStorage.getItem('elevoCoreUserData'));
             if (storedUserData && storedUserData.id === session.user.id) {
                 currentUser = storedUserData;
-                console.log("initializeApp: User data loaded from localStorage:", currentUser); 
             } else { 
-                console.log(`initializeApp: Fetching user profile from Supabase for user ID: ${session.user.id}`); 
                 const { data: profile, error: profileError } = await supabase
                     .from('users') 
                     .select('name, is_admin')
                     .eq('id', session.user.id)
                     .single();
-                
                 if (profileError && profileError.code !== 'PGRST116') { 
                     console.error("initializeApp: Error fetching user profile:", profileError);
                     authLoadingDiv.innerHTML = '<p style="color:red;">Could not load user profile.</p>';
@@ -331,27 +452,11 @@ Use this JSON:
                     isAdmin: profile?.is_admin || false
                 };
                 localStorage.setItem('elevoCoreUserData', JSON.stringify(currentUser));
-                console.log("initializeApp: User profile fetched from Supabase and localStorage updated:", currentUser); 
             }
-            
-            console.log("initializeApp: Final Authenticated User:", currentUser); 
             if (userNameSpan) userNameSpan.textContent = currentUser.name;
             if (userInfoDiv) userInfoDiv.style.display = 'flex';
+            if (dashboardLink) dashboardLink.style.display = currentUser.isAdmin ? 'inline-block' : 'none';
             
-            if (dashboardLink) {
-                console.log(`initializeApp: Checking isAdmin for dashboard link. currentUser.isAdmin: ${currentUser.isAdmin}`);
-                if (currentUser.isAdmin) {
-                    dashboardLink.style.display = 'inline-block'; 
-                    console.log("initializeApp: Dashboard link SHOWN because user is admin.");
-                } else {
-                    dashboardLink.style.display = 'none'; 
-                    console.log("initializeApp: Dashboard link HIDDEN because user is not admin.");
-                }
-            } else {
-                console.warn("initializeApp: dashboardLink element not found in DOM.");
-            }
-
-
             authLoadingDiv.style.display = 'none';
             
             if (restoreCallState()) { 
@@ -408,16 +513,12 @@ Use this JSON:
             scenarioDropdown.disabled = true;
             receiveCallBtn.disabled = true;
             scenarioDropdown.innerHTML = '<option value="" disabled selected>Loading scenarios...</option>';
-
             try {
-                // MODIFICATION: Using 'call_scenarios' directly as a fallback if 'call_scenarios_with_creator' causes issues,
-                // but ideally, the view should be correct. For this exercise, let's assume the view is fine.
                 const { data: scenarios, error } = await supabase
-                    .from('call_scenarios_with_creator') // Or 'call_scenarios' if the view is problematic
+                    .from('call_scenarios_with_creator') 
                     .select('id, title')                 
                     .eq('is_active', true) 
                     .order('created_at', { ascending: false }); 
-
                 if (error) throw error;
 
                 if (scenarios && scenarios.length > 0) {
@@ -425,25 +526,12 @@ Use this JSON:
                     scenarios.forEach(s => {
                         const option = document.createElement('option');
                         option.value = s.id;
-                        
-                        // MODIFICATION: Check for the specific compensation scenario by title
-                        // (case-insensitive and trim whitespace for robustness)
-                        // The star in the DB title should already be included in s.title.
-                        // This adds a class for further styling if needed.
                         const normalizedTitle = s.title.trim().toLowerCase();
-                        const compensationKeyword = "customer inquiry – compensation flow"; // The title you added
-                        
-                        option.textContent = s.title; // This will include the ⭐ if it's in the DB title
-                        
+                        const compensationKeyword = "customer inquiry – compensation flow";
+                        option.textContent = s.title; 
                         if (normalizedTitle.includes(compensationKeyword.toLowerCase()) || normalizedTitle.startsWith('⭐')) {
                             option.classList.add('special-compensation-scenario');
-                            // If the star isn't in the DB title, you could add it here:
-                            // if (!s.title.startsWith('⭐')) {
-                            //    option.textContent = `⭐ ${s.title}`;
-                            // }
-                            console.log(`Marked scenario "${s.title}" as special.`);
                         }
-                        
                         scenarioDropdown.appendChild(option);
                     });
                     scenarioDropdown.disabled = false;
@@ -464,19 +552,15 @@ Use this JSON:
                 showAssistantMessage("⚠️ Please select a scenario first.", true, 5000);
                 return;
             }
-            
-            if(callStartSound && callStartSound.src) { 
-                callStartSound.play().catch(e => console.warn("Call start audio play failed:", e.message, e));
-            }
+            if(callStartSound && callStartSound.src) callStartSound.play().catch(e => console.warn("Call start audio play failed:", e.message, e));
 
             resetCallState(); 
             switchToCallFlowView();
             updateSystemStatus("🟡 Loading Scenario...", "status-loading");
             stepsContainer.innerHTML = '<p class="placeholder-text">Loading scenario details...</p>';
+            decisionButtonsContainer.innerHTML = ''; // Clear old decision buttons
             scenarioTitleElement.textContent = 'Loading...';
-            // MODIFICATION: Remove animation class if it was there from a previous special scenario
             scenarioTitleElement.classList.remove('highlight-scenario-title-animation');
-
 
             try {
                 const { data: scenarioData, error: scenarioError } = await supabase
@@ -490,57 +574,39 @@ Use this JSON:
                 if (!scenarioData || !Array.isArray(scenarioData.steps) || scenarioData.steps.length === 0) {
                     throw new Error("Scenario data is invalid or has no steps.");
                 }
-
-                if (scenarioData.steps.some(step => typeof step !== 'object' || typeof step.text !== 'string')) {
-                    console.warn("Some steps may not have the expected {text: '...'} structure. Will attempt to convert to string.");
+                // Basic validation for new step structure (first step should have an ID)
+                if (!scenarioData.steps[0] || typeof scenarioData.steps[0].id === 'undefined') {
+                    throw new Error("Scenario steps are not in the new format (missing 'id' in first step). Please update scenario JSON.");
                 }
 
                 currentScenario = scenarioData; 
-                currentStepIndex = 0;
-                accumulatedStepDurations = new Array(currentScenario.steps.length).fill(0);
-                
-                callStartTimeISO = new Date().toISOString(); 
+                currentStepId = currentScenario.steps[0].id; // MODIFICATION: Start with the ID of the first step
+                stepHistory = [];
+                accumulatedStepDurations = {}; // Reset durations
+                currentScenario.steps.forEach(step => accumulatedStepDurations[step.id] = 0); // Initialize durations for all step IDs
 
+                callStartTimeISO = new Date().toISOString(); 
                 const { data: newSession, error: sessionInsertError } = await supabase
                     .from('call_sessions')
-                    .insert({
-                        user_id: currentUser.id,
-                        scenario_id: currentScenario.id,
-                        start_time: callStartTimeISO, 
-                        agent_name: currentUser.name, 
-                        agent_email: currentUser.email
-                    })
+                    .insert({ user_id: currentUser.id, scenario_id: currentScenario.id, start_time: callStartTimeISO, agent_name: currentUser.name, agent_email: currentUser.email })
                     .select('id') 
                     .single();
-                
                 if (sessionInsertError) {
-                    console.error("Error inserting new call session:", JSON.stringify(sessionInsertError, null, 2));
                     callStartTimeISO = null; 
                     throw sessionInsertError;
                 }
                 callSessionId = newSession.id;
-                console.log("New call session created. ID:", callSessionId, "Start Time:", callStartTimeISO);
                 
                 scenarioTitleElement.textContent = currentScenario.title; 
-
-                // MODIFICATION: Check for compensation scenario to play sound/animation
                 const normalizedCurrentTitle = currentScenario.title.trim().toLowerCase();
-                const compensationKeyword = "customer inquiry – compensation flow"; // The title you added
+                const compensationKeyword = "customer inquiry – compensation flow";
                 if (normalizedCurrentTitle.includes(compensationKeyword.toLowerCase()) || normalizedCurrentTitle.startsWith('⭐')) {
-                    console.log("Compensation Flow scenario starting. Playing sound and animating title.");
-                    if (compensationScenarioSound && compensationScenarioSound.src) {
-                        compensationScenarioSound.play().catch(e => console.warn("Compensation scenario sound play failed:", e));
-                    }
+                    if (compensationScenarioSound && compensationScenarioSound.src) compensationScenarioSound.play().catch(e => console.warn("Compensation sound play failed:", e));
                     scenarioTitleElement.classList.add('highlight-scenario-title-animation');
-                    // Remove class after animation ends to allow re-triggering
-                    setTimeout(() => {
-                        scenarioTitleElement.classList.remove('highlight-scenario-title-animation');
-                    }, 1200); // Match animation duration (0.6s * 2 iterations)
+                    setTimeout(() => scenarioTitleElement.classList.remove('highlight-scenario-title-animation'), 1200);
                 }
-                
                 updateSystemStatus("🟢 In Call", "status-in-call");
                 renderStep(); 
-
             } catch (err) {
                 console.error("Error starting call:", err);
                 resetCallState(); 
@@ -550,43 +616,97 @@ Use this JSON:
             }
         });
 
+        // MODIFICATION: Central function to handle step rendering
         function renderStep() {
-            if (!currentScenario || currentStepIndex < 0 || currentStepIndex >= currentScenario.steps.length) {
-                stepsContainer.innerHTML = '<p class="placeholder-text">Error: Invalid step data.</p>';
-                console.error("Render step error: Invalid scenario or step index.", currentScenario, currentStepIndex);
+            if (!currentScenario || !currentStepId) {
+                stepsContainer.innerHTML = '<p class="placeholder-text">Error: Invalid scenario or step ID.</p>';
+                decisionButtonsContainer.innerHTML = '';
+                console.error("Render step error: Invalid scenario or currentStepId.", currentScenario, currentStepId);
+                return;
+            }
+
+            const stepObject = currentScenario.steps.find(s => s.id === currentStepId);
+
+            if (!stepObject) {
+                stepsContainer.innerHTML = `<p class="placeholder-text">Error: Step with ID "${currentStepId}" not found in scenario.</p>`;
+                decisionButtonsContainer.innerHTML = '';
+                console.error(`Render step error: Step ID "${currentStepId}" not found.`);
+                // Potentially end call or show error state
+                finishCall(false, "Error: Step not found");
                 return;
             }
             
-            const stepObject = currentScenario.steps[currentStepIndex];
-            const stepInstructionText = (typeof stepObject === 'object' && stepObject !== null && typeof stepObject.text === 'string') 
-                                        ? stepObject.text 
-                                        : String(stepObject); 
+            // Update currentStepIndexForProgressBar for the visual progress bar
+            currentStepIndexForProgressBar = currentScenario.steps.findIndex(s => s.id === currentStepId);
+            if (currentStepIndexForProgressBar === -1) currentStepIndexForProgressBar = 0; // Fallback
 
-            stepsContainer.innerHTML = `<p>${stepInstructionText.replace(/\n/g, '<br>')}</p>`; 
-            
-            renderProgressTracker();
+            stepsContainer.innerHTML = `<p>${stepObject.text.replace(/\n/g, '<br>')}</p>`; 
+            decisionButtonsContainer.innerHTML = ''; // Clear previous decision buttons
 
-            prevStepBtn.style.display = currentStepIndex > 0 ? 'inline-flex' : 'none';
-            nextStepBtn.innerHTML = (currentStepIndex === currentScenario.steps.length - 1)
-                ? `<span>Finish Scenario</span>`
-                : `<span>Next Step</span><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>`;
-            
+            renderProgressTracker(); // Uses currentStepIndexForProgressBar
+
+            prevStepBtn.style.display = stepHistory.length > 0 ? 'inline-flex' : 'none';
             endCallBtn.style.display = 'inline-flex';
+
+            if (stepObject.type === 'decision' && stepObject.options && stepObject.options.length > 0) {
+                nextStepBtn.style.display = 'none'; // Hide generic next button
+                stepObject.options.forEach(option => {
+                    const button = document.createElement('button');
+                    button.textContent = option.label;
+                    button.className = 'decision-button'; // Apply specific styling
+                    button.addEventListener('click', () => navigateToStep(option.next_id));
+                    decisionButtonsContainer.appendChild(button);
+                });
+            } else { // Info step or step without options (treat as info)
+                decisionButtonsContainer.innerHTML = ''; // Ensure it's clear
+                if (stepObject.next_id) {
+                    nextStepBtn.innerHTML = `<span>Next Step</span><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>`;
+                    nextStepBtn.style.display = 'inline-flex';
+                    // The existing nextStepBtn listener will handle this
+                } else { // This is a terminal step for this path
+                    nextStepBtn.innerHTML = `<span>Finish Scenario</span>`;
+                    nextStepBtn.style.display = 'inline-flex';
+                    // The existing nextStepBtn listener will treat this as finishing
+                }
+            }
 
             startStepTimer(); 
             saveCallState();  
 
-            const assistantStepPreview = stepInstructionText.length > 45 ? stepInstructionText.substring(0, 42) + "..." : stepInstructionText;
+            const assistantStepPreview = stepObject.text.length > 45 ? stepObject.text.substring(0, 42) + "..." : stepObject.text;
             let finalAssistantMessage;
-            if (currentStepIndex === 0 && currentScenario && currentScenario.title) {
+            if (stepHistory.length === 0 && currentScenario && currentScenario.title) { // First step
                 const scenarioTitlePreview = currentScenario.title.length > 30 ? currentScenario.title.substring(0,27) + "..." : currentScenario.title;
                 finalAssistantMessage = `🚀 Scenario "${scenarioTitlePreview}"! First: ${assistantStepPreview}`;
             } else {
-                finalAssistantMessage = `📌 Step ${currentStepIndex + 1}: ${assistantStepPreview}`;
+                finalAssistantMessage = `📌 Step (${currentStepIndexForProgressBar + 1}/${currentScenario.steps.length}): ${assistantStepPreview}`;
             }
             showAssistantMessage(finalAssistantMessage, false, 0); 
         }
         
+        // MODIFICATION: Function to handle navigation (for decision buttons and generic next)
+        function navigateToStep(nextId) {
+            stopAndRecordStepTimer();
+            if (!nextId) { // Reached an end point (e.g. decision option leads to null)
+                console.log("navigateToStep: No nextId provided, considering this path finished.");
+                finishCall(true); // Assume successful completion of this path
+                return;
+            }
+
+            const targetStep = currentScenario.steps.find(s => s.id === nextId);
+            if (!targetStep) {
+                console.error(`navigateToStep: Target step ID "${nextId}" not found in scenario.`);
+                showAssistantMessage(`⚠️ Error: Could not find next step ("${nextId}"). Ending call.`, false, 7000);
+                finishCall(false, `Error: Path broken, step ${nextId} not found.`);
+                return;
+            }
+
+            stepHistory.push(currentStepId); // Save current step to history
+            currentStepId = nextId;
+            renderStep();
+        }
+
+
         function renderProgressTracker() {
             if (!progressTrackerContainer || !currentScenario || !currentScenario.steps || currentScenario.steps.length === 0) {
                 if(progressTrackerContainer) progressTrackerContainer.style.display = 'none';
@@ -602,22 +722,33 @@ Use this JSON:
             const stepperUl = document.createElement('ul');
             stepperUl.className = 'stepper';
 
-            currentScenario.steps.forEach((_, index) => {
+            // Progress is based on the linear order of steps in the JSON,
+            // currentStepIndexForProgressBar reflects the "current" position in that linear list.
+            currentScenario.steps.forEach((step, index) => {
                 const stepLi = document.createElement('li');
                 stepLi.className = 'step';
-                if (index < currentStepIndex) stepLi.classList.add('completed');
-                else if (index === currentStepIndex) stepLi.classList.add('active');
+                
+                // A step is 'completed' if its ID is in stepHistory.
+                // The 'active' step is the currentStepId.
+                if (stepHistory.includes(step.id)) {
+                    stepLi.classList.add('completed');
+                } else if (step.id === currentStepId) {
+                    stepLi.classList.add('active');
+                }
 
                 const stepNumber = document.createElement('span');
                 stepNumber.className = 'step-number';
-                stepNumber.textContent = index < currentStepIndex ? '✓' : index + 1;
+                stepNumber.textContent = stepHistory.includes(step.id) ? '✓' : index + 1;
                 stepLi.appendChild(stepNumber);
                 stepperUl.appendChild(stepLi);
 
                 if (index < currentScenario.steps.length - 1) { 
                     const separator = document.createElement('li');
                     separator.className = 'step-separator';
-                     if (index < currentStepIndex) separator.style.backgroundColor = 'var(--success-color)'; 
+                     // Separator is "completed" if the step *before* it is completed
+                    if (stepHistory.includes(step.id) && currentStepId !== step.id) {
+                        separator.style.backgroundColor = 'var(--success-color)';
+                    }
                     stepperUl.appendChild(separator);
                 }
             });
@@ -625,38 +756,42 @@ Use this JSON:
             progressTrackerContainer.style.display = 'block';
         }
 
+
         // --- Navigation Button Event Listeners ---
         nextStepBtn.addEventListener('click', () => {
-            stopAndRecordStepTimer(); 
-            if (currentStepIndex < currentScenario.steps.length - 1) {
-                currentStepIndex++;
-                renderStep();
-            } else {
+            // This button is now only for "info" steps or "Finish Scenario"
+            const stepObject = currentScenario.steps.find(s => s.id === currentStepId);
+            if (!stepObject) {
+                console.error("Next button clicked, but current step object not found.");
+                return;
+            }
+
+            if (stepObject.next_id) { // It's an info step with a defined next
+                navigateToStep(stepObject.next_id);
+            } else { // No next_id, so this is a "Finish Scenario" button
+                stopAndRecordStepTimer(); 
                 finishCall(true); 
             }
         });
 
         prevStepBtn.addEventListener('click', () => {
             stopAndRecordStepTimer(); 
-            if (currentStepIndex > 0) {
-                currentStepIndex--;
+            if (stepHistory.length > 0) {
+                currentStepId = stepHistory.pop(); // Go to the last step in history
                 renderStep();
             }
         });
         
         endCallBtn.addEventListener('click', () => {
             stopAndRecordStepTimer(); 
-            finishCall(false); 
+            finishCall(false, "Call ended by agent"); 
         });
 
         // --- Timer Logic ---
         function startStepTimer() {
             callTimerDiv.style.display = 'inline-block';
             if (stepTimerInterval) clearInterval(stepTimerInterval);
-            
-            if (stepStartTime === 0) { 
-                stepStartTime = Date.now(); 
-            }
+            if (stepStartTime === 0) stepStartTime = Date.now(); 
             
             function updateTimerDisplay() {
                 const elapsedMilliseconds = Date.now() - stepStartTime;
@@ -673,15 +808,15 @@ Use this JSON:
             if (stepTimerInterval) clearInterval(stepTimerInterval);
             stepTimerInterval = null;
 
-            if (stepStartTime > 0 && currentScenario && currentStepIndex < accumulatedStepDurations.length) {
+            if (stepStartTime > 0 && currentScenario && currentStepId && accumulatedStepDurations.hasOwnProperty(currentStepId)) {
                 const durationSeconds = Math.floor((Date.now() - stepStartTime) / 1000);
-                accumulatedStepDurations[currentStepIndex] += durationSeconds;
+                accumulatedStepDurations[currentStepId] = (accumulatedStepDurations[currentStepId] || 0) + durationSeconds;
             }
             stepStartTime = 0; 
         }
         
         // --- Call Completion & Summary ---
-        async function finishCall(completedAllSteps) {
+        async function finishCall(completedAllSteps, reasonText) { // Added reasonText
             stopAndRecordStepTimer(); 
             
             const endTimeISO = new Date().toISOString();
@@ -691,12 +826,11 @@ Use this JSON:
                 durationInSecondsForSummary = Math.floor((new Date(endTimeISO).getTime() - new Date(callStartTimeISO).getTime()) / 1000);
                 if (durationInSecondsForSummary < 0) durationInSecondsForSummary = 0;
             } else {
-                console.warn("callStartTimeISO was not available. Calculating total duration for summary from accumulated step times as a fallback.");
-                durationInSecondsForSummary = accumulatedStepDurations.reduce((sum, dur) => sum + (dur || 0), 0);
+                durationInSecondsForSummary = Object.values(accumulatedStepDurations).reduce((sum, dur) => sum + (dur || 0), 0);
             }
             
             const quality = completedAllSteps ? 'Good' : (durationInSecondsForSummary > 0 ? 'Bad' : 'N/A'); 
-            const reason = completedAllSteps ? 'All steps completed successfully.' : 'Call ended prematurely.';
+            const reason = reasonText || (completedAllSteps ? 'Scenario path completed successfully.' : 'Call ended prematurely or path incomplete.');
             
             updateSystemStatus(completedAllSteps ? "✅ Call Completed" : "⚪ Call Ended", 
                                completedAllSteps ? "status-completed" : "status-ended");
@@ -707,11 +841,11 @@ Use this JSON:
                    duration: durationInSecondsForSummary,
                     completed: completedAllSteps, 
                     call_quality: quality,
-                    quality_reason: reason
+                    quality_reason: reason,
+                    // MODIFICATION: Potentially store step history or final step ID
+                    // metadata: { final_step_id: currentStepId, history_count: stepHistory.length } 
                 };
                 
-                console.log("Attempting to update call session. ID:", callSessionId, "Payload:", updatePayload);
-
                 const { error: updateError } = await supabase
                     .from('call_sessions')
                     .update(updatePayload)
@@ -724,7 +858,7 @@ Use this JSON:
                     console.log("Call session (ID: " + callSessionId + ") updated successfully in Supabase.");
                 }
             } else {
-                console.warn("callSessionId is null or undefined. Cannot update call session in Supabase. This session's final data will not be saved.");
+                console.warn("callSessionId is null. Cannot update call session.");
                 showAssistantMessage("⚠️ Could not save call summary: No active session ID.", false, 8000);
             }
             
@@ -736,22 +870,28 @@ Use this JSON:
             let summaryHTML = `
                 <p><strong>Call Quality:</strong> <span class="quality-text quality-${quality?.toLowerCase() || 'na'}">${quality || 'N/A'}</span></p>
                 <p><strong>Reason:</strong> ${reason || "N/A"}</p>
-                <p><strong>Total Call Duration (calculated by client):</strong> ${Math.floor(totalDurationSeconds / 60)}m ${totalDurationSeconds % 60}s</p>
+                <p><strong>Total Call Duration:</strong> ${Math.floor(totalDurationSeconds / 60)}m ${totalDurationSeconds % 60}s</p>
                 <hr style="margin: 1rem 0; border-color: var(--border-color);">
-                <p><strong>Time Spent on Steps:</strong></p>
+                <p><strong>Time Spent on Steps (visited):</strong></p>
                 <ul style="list-style: none; padding-left: 0; max-height: 150px; overflow-y: auto;">`;
 
-            if (currentScenario && currentScenario.steps && accumulatedStepDurations.length > 0) {
-                currentScenario.steps.forEach((stepObject, index) => { 
-                    const duration = accumulatedStepDurations[index] || 0; 
-                    const stepInstructionText = (typeof stepObject === 'object' && stepObject !== null && typeof stepObject.text === 'string')
-                                              ? stepObject.text
-                                              : String(stepObject);
-                    const stepShortText = stepInstructionText.length > 30 ? stepInstructionText.substring(0, 27) + "..." : stepInstructionText;
-                    const timeStr = `${Math.floor(duration / 60)}m ${duration % 60}s`;
-                    summaryHTML += `<li style="margin-bottom: 0.3rem;">${index + 1}. "${stepShortText}": ${timeStr}</li>`;
+            if (currentScenario && currentScenario.steps && Object.keys(accumulatedStepDurations).length > 0) {
+                // Display durations for steps that were actually visited and have a duration > 0
+                // Or iterate through stepHistory + currentStepId to show in order of visit
+                let visitedStepsInOrder = [...stepHistory, currentStepId].filter(id => id != null);
+                let uniqueVisitedSteps = [...new Set(visitedStepsInOrder)]; // Unique IDs in order of first visit
+                
+                uniqueVisitedSteps.forEach(stepId => {
+                    const stepObject = currentScenario.steps.find(s => s.id === stepId);
+                    const duration = accumulatedStepDurations[stepId] || 0;
+                    if (stepObject && duration > 0) { // Only show if step exists and has duration
+                        const stepShortText = stepObject.text.length > 30 ? stepObject.text.substring(0, 27) + "..." : stepObject.text;
+                        const timeStr = `${Math.floor(duration / 60)}m ${duration % 60}s`;
+                        summaryHTML += `<li style="margin-bottom: 0.3rem;">"${stepShortText}": ${timeStr}</li>`;
+                    }
                 });
-                 const totalAccumulatedDuration = accumulatedStepDurations.reduce((sum, dur) => sum + (dur || 0), 0);
+
+                 const totalAccumulatedDuration = Object.values(accumulatedStepDurations).reduce((sum, dur) => sum + (dur || 0), 0);
                  summaryHTML += `<li style="margin-top: 0.5rem; font-weight: bold;">Total Active Step Time: ${Math.floor(totalAccumulatedDuration / 60)}m ${totalAccumulatedDuration % 60}s</li>`;
 
             } else {
@@ -770,15 +910,16 @@ Use this JSON:
 
         // --- State Management (SessionStorage for reload resilience) ---
         function saveCallState() {
-            if (!callSessionId || !currentScenario || !callStartTimeISO) {
-                console.warn("Attempted to save call state, but critical data (session ID, scenario, or start time) is missing. Skipping save.");
+            if (!callSessionId || !currentScenario || !callStartTimeISO || !currentStepId) {
+                console.warn("Attempted to save call state, but critical data missing. Skipping save.");
                 return;
             }
             const state = {
                 callSessionId,
                 currentScenario, 
-                currentStepIndex,
-                accumulatedStepDurations: [...accumulatedStepDurations], 
+                currentStepId, // MODIFICATION
+                stepHistory: [...stepHistory], // MODIFICATION
+                accumulatedStepDurations: {...accumulatedStepDurations}, 
                 stepStartTime: stepStartTime, 
                 callStartTimeISO: callStartTimeISO, 
                 timestamp: Date.now()
@@ -793,33 +934,28 @@ Use this JSON:
             try {
                 const savedStateJSON = sessionStorage.getItem(SESSION_STATE_KEY);
                 if (!savedStateJSON) return false;
-
                 const savedState = JSON.parse(savedStateJSON);
                 
                 if (!savedState.callSessionId || !savedState.currentScenario || !savedState.currentScenario.steps ||
-                    typeof savedState.currentScenario.title === 'undefined' || typeof savedState.currentStepIndex !== 'number' ||
-                    !savedState.callStartTimeISO) { 
-                    console.warn("Invalid or incomplete call state found in sessionStorage. Clearing it.", savedState);
+                    !savedState.currentStepId || !savedState.callStartTimeISO || !Array.isArray(savedState.stepHistory) ||
+                    typeof savedState.accumulatedStepDurations !== 'object') { 
+                    console.warn("Invalid or incomplete call state (v3) found. Clearing it.", savedState);
                     clearCallState();
                     return false;
                 }
                 
                 callSessionId = savedState.callSessionId;
                 currentScenario = savedState.currentScenario; 
-                currentStepIndex = savedState.currentStepIndex;
-                accumulatedStepDurations = Array.isArray(savedState.accumulatedStepDurations) && savedState.accumulatedStepDurations.length === currentScenario.steps.length
-                                           ? savedState.accumulatedStepDurations 
-                                           : new Array(currentScenario.steps.length).fill(0);
-                
-                stepStartTime = savedState.stepStartTime || 0;
-
-
+                currentStepId = savedState.currentStepId;
+                stepHistory = savedState.stepHistory;
+                accumulatedStepDurations = savedState.accumulatedStepDurations;
+                stepStartTime = savedState.stepStartTime || 0; // If restoring mid-step timer
                 callStartTimeISO = savedState.callStartTimeISO; 
                 
-                console.log("Call state restored from sessionStorage:", savedState);
+                console.log("Call state (v3) restored from sessionStorage:", savedState);
                 return true;
             } catch (e) {
-                console.error("Error restoring call state from sessionStorage:", e);
+                console.error("Error restoring call state (v3) from sessionStorage:", e);
                 clearCallState(); 
                 return false;
             }
@@ -829,6 +965,8 @@ Use this JSON:
             sessionStorage.removeItem(SESSION_STATE_KEY);
             callStartTimeISO = null; 
             callSessionId = null; 
+            currentStepId = null;
+            stepHistory = [];
             console.log("Cleared call state from sessionStorage and reset related state variables.");
         }
 
@@ -837,9 +975,11 @@ Use this JSON:
             clearCallState();         
 
             currentScenario = null;
-            currentStepIndex = 0;
-            accumulatedStepDurations = [];
+            currentStepId = null;
+            stepHistory = [];
+            accumulatedStepDurations = {};
             stepStartTime = 0;
+            currentStepIndexForProgressBar = 0;
             
             if (switchToInitial) {
                 switchToInitialView();
@@ -849,13 +989,8 @@ Use this JSON:
 
         // --- User Actions ---
         logoutButton.addEventListener('click', async () => {
-            const wasCallActive = !!callSessionId;
-            if (wasCallActive) {
-                console.log("Logging out during an active call. Call will not be formally 'ended' in DB.");
-            }
             resetCallState(); 
             localStorage.removeItem('elevoCoreUserData'); 
-            
             if (supabase) {
                 const { error } = await supabase.auth.signOut();
                 if (error) console.error("Logout error:", error);
@@ -864,8 +999,7 @@ Use this JSON:
         });
 
         scenarioDropdown.addEventListener('change', () => {
-            const isValidSelection = scenarioDropdown.value && 
-                                     scenarioDropdown.value !== "" &&
+            const isValidSelection = scenarioDropdown.value && scenarioDropdown.value !== "" &&
                                      scenarioDropdown.options[scenarioDropdown.selectedIndex] &&
                                      !scenarioDropdown.options[scenarioDropdown.selectedIndex].disabled;
             receiveCallBtn.disabled = !isValidSelection;
@@ -874,10 +1008,11 @@ Use this JSON:
         // --- Global Error Handler & Page Lifecycle ---
         window.addEventListener('error', function(event) {
             console.error('Global error caught:', event.error, 'at', event.filename, ':', event.lineno);
+            // showAssistantMessage(`⚠️ A critical error occurred: ${event.message}. Try refreshing.`, false, 10000);
         });
 
         window.addEventListener('beforeunload', () => {
-            if (callSessionId && currentScenario && callStartTimeISO) { 
+            if (callSessionId && currentScenario && callStartTimeISO && currentStepId) { 
                 saveCallState(); 
             }
         });
@@ -888,7 +1023,7 @@ Use this JSON:
         } else {
             authLoadingDiv.innerHTML = '<p style="color:red; text-align:center;">Core services could not be initialized. Application cannot start.</p>';
         }
-        console.log("Elevo Core Flow script (v.with_compensation_scenario_enhancements) loaded and initialized execution.");
+        console.log("Elevo Core Flow script (v.with_decision_steps_v3) loaded and initialized execution.");
     </script>
 </body>
 </html>
