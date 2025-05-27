@@ -22,7 +22,8 @@
                 <span class="app-title">Elevo Core</span>
             </div>
             <div class="header-controls">
-                 <a href="dashboard.html" class="nav-link" id="dashboardLink">Dashboard</a>
+                 <!-- MODIFICATION: Set style to display: none by default -->
+                 <a href="dashboard.html" class="nav-link" id="dashboardLink" style="display: none;">Dashboard</a>
                 <div class="user-info" id="userInfo" style="display: none;">
                     <span id="userName" class="user-name-display"></span>
                     <button id="logoutButton" class="logout-btn">
@@ -76,9 +77,7 @@
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M6.05828 11.0452L4.00001 9.00002C4.00001 9.00002 3.58101 8.99902 3.51201 9.00002C2.04801 9.02602 1.00001 10.318 1.00001 11.785V12.214C1.00001 13.682 2.04801 14.973 3.51201 15H4.00001L6.05828 12.9548C6.12828 12.8848 6.16728 12.7948 6.16728 12C6.16728 11.2052 6.12828 11.1152 6.05828 11.0452ZM20.488 15H21C22.464 14.974 23.512 13.682 23.512 12.215V11.785C23.512 10.318 22.464 9.02602 21 9.00002C20.998 8.99902 20 9.00002 20 9.00002L17.9417 11.0452C17.8717 11.1152 17.8327 11.2052 17.8327 12C17.8327 12.7948 17.8717 12.8848 17.9417 12.9548L20.488 15Z"/><path d="M19.6623 5.08431C19.8803 5.08431 20.0943 5.17031 20.2503 5.32631L21.6743 6.74931C21.9863 7.06231 21.9863 7.56731 21.6743 7.87931C19.4003 10.1523 19.4003 13.8473 21.6743 16.1203C21.9863 16.4323 21.9863 16.9373 21.6743 17.2503L20.2503 18.6733C20.0943 18.8293 19.8803 18.9153 19.6623 18.9153C19.4443 18.9153 19.2303 18.8293 19.0743 18.6733C16.2573 15.8563 16.2573 8.14331 19.0743 5.32631C19.2303 5.17031 19.4443 5.08431 19.6623 5.08431ZM4.92575 5.32631C5.52575 4.72631 6.45075 4.72631 7.05075 5.32631C9.86775 8.14331 9.86775 15.8563 7.05075 18.6733C6.89475 18.8293 6.68075 18.9153 6.46275 18.9153C6.24475 18.9153 6.03075 18.8293 5.87475 18.6733L4.45075 17.2503C4.13875 16.9373 4.13875 16.4323 4.45075 16.1203C6.72375 13.8473 6.72375 10.1523 4.45075 7.87931C4.13875 7.56731 4.13875 7.06231 4.45075 6.74931L5.87475 5.32631C5.71875 5.17031 4.76975 5.17031 4.92575 5.32631Z"/></svg>
                     <span>Receive Call</span>
                 </button>
-                <!-- Audio element for call start sound - can be hidden -->
                 <audio id="callStartSound" src="call_sound.mp3" preload="auto"></audio> 
-                <!-- Replace "call_sound.mp3" with an actual sound file if desired, or remove if not using sound -->
             </div>
 
             <div id="call-flow-view" class="card call-flow-card fade-in" style="display: none;">
@@ -164,13 +163,13 @@
 
         // --- State Variables ---
         let currentUser = null; 
-        let currentScenario = null; // Expected: {id, title, steps: [{text: "instruction"}, ...]}
+        let currentScenario = null; 
         let currentStepIndex = 0;
-        let callSessionId = null;     // Supabase ID for the current call_sessions record
-        let callStartTimeISO = null;  // ISO string of when the call session began (for total duration)
-        let stepTimerInterval = null; // Interval ID for the per-step timer display
-        let stepStartTime = 0;        // Timestamp (Date.now()) when the current step was started/resumed
-        let accumulatedStepDurations = []; // Array to store duration (seconds) spent on each step
+        let callSessionId = null;    
+        let callStartTimeISO = null; 
+        let stepTimerInterval = null;
+        let stepStartTime = 0;      
+        let accumulatedStepDurations = [];
 
         const SESSION_STATE_KEY = 'elevoCoreActiveCallState_v2'; 
 
@@ -237,7 +236,7 @@
              } else {
                 assistantBox.classList.remove('show');
              }
-             setTimeout(() => { // Allow fade-out animation to complete
+             setTimeout(() => { 
                 if (!assistantBox.classList.contains('show') && !assistantBox.classList.contains('assistant-initial-position')) {
                     assistantBox.style.display = 'none';
                 }
@@ -246,6 +245,7 @@
 
         // --- Authentication and Initialization ---
         async function initializeApp() {
+            console.log("initializeApp: Starting core-flow initialization..."); // Debug line
             if (!supabase) { 
                  authLoadingDiv.innerHTML = '<p style="color:red; text-align:center;">Critical Error: Services unavailable. Please try again later.</p>';
                  return;
@@ -254,21 +254,24 @@
             const { data: { session }, error: sessionError } = await supabase.auth.getSession();
 
             if (sessionError) {
-                console.error("Error fetching session:", sessionError);
+                console.error("initializeApp: Error fetching session:", sessionError);
                 authLoadingDiv.innerHTML = '<p style="color:red;">Error verifying session. Try refreshing.</p>';
                 return;
             }
 
             if (!session) {
-                console.log("No active session. Redirecting to login page.");
+                console.log("initializeApp: No active session. Redirecting to login page.");
                 window.location.replace('login.html'); 
                 return;
             }
+            console.log(`initializeApp: Active session found for user ID: ${session.user.id}`); // Debug line
 
             const storedUserData = JSON.parse(localStorage.getItem('elevoCoreUserData'));
             if (storedUserData && storedUserData.id === session.user.id) {
                 currentUser = storedUserData;
+                console.log("initializeApp: User data loaded from localStorage:", currentUser); // Debug line
             } else { 
+                console.log(`initializeApp: Fetching user profile from Supabase for user ID: ${session.user.id}`); // Debug line
                 const { data: profile, error: profileError } = await supabase
                     .from('users') 
                     .select('name, is_admin')
@@ -276,7 +279,7 @@
                     .single();
                 
                 if (profileError && profileError.code !== 'PGRST116') { 
-                    console.error("Error fetching user profile:", profileError);
+                    console.error("initializeApp: Error fetching user profile:", profileError);
                     authLoadingDiv.innerHTML = '<p style="color:red;">Could not load user profile.</p>';
                     return;
                 }
@@ -287,25 +290,39 @@
                     isAdmin: profile?.is_admin || false
                 };
                 localStorage.setItem('elevoCoreUserData', JSON.stringify(currentUser));
+                console.log("initializeApp: User profile fetched from Supabase and localStorage updated:", currentUser); // Debug line
             }
             
-            console.log("Authenticated User:", currentUser);
+            console.log("initializeApp: Final Authenticated User:", currentUser); // Debug line
             if (userNameSpan) userNameSpan.textContent = currentUser.name;
             if (userInfoDiv) userInfoDiv.style.display = 'flex';
-            if (dashboardLink && !currentUser.isAdmin) { 
-                dashboardLink.style.display = 'none'; 
+            
+            // --- MODIFIED SECTION FOR DASHBOARD LINK VISIBILITY ---
+            if (dashboardLink) {
+                console.log(`initializeApp: Checking isAdmin for dashboard link. currentUser.isAdmin: ${currentUser.isAdmin}`);
+                if (currentUser.isAdmin) {
+                    dashboardLink.style.display = 'inline-block'; // Or 'flex' or 'block' based on your layout needs
+                    console.log("initializeApp: Dashboard link SHOWN because user is admin.");
+                } else {
+                    dashboardLink.style.display = 'none'; // Ensure it's hidden if not admin
+                    console.log("initializeApp: Dashboard link HIDDEN because user is not admin.");
+                }
+            } else {
+                console.warn("initializeApp: dashboardLink element not found in DOM.");
             }
+            // --- END OF MODIFIED SECTION ---
+
 
             authLoadingDiv.style.display = 'none';
             
             if (restoreCallState()) { 
-                console.log("Restored active call session.");
+                console.log("initializeApp: Restored active call session.");
                 switchToCallFlowView(false); 
                 scenarioTitleElement.textContent = currentScenario?.title || "Restored Scenario";
                 renderStep(); 
                 updateSystemStatus("🟢 In Call (Restored)", "status-in-call");
             } else {
-                console.log("No active call state found or state invalid. Loading initial view.");
+                console.log("initializeApp: No active call state found or state invalid. Loading initial view.");
                 switchToInitialView();
                 await loadActiveScenarios();
                 showAssistantMessage("Welcome! Select a scenario to begin.", true, 7000, () => {
@@ -445,8 +462,6 @@
                 scenarioTitleElement.textContent = currentScenario.title; 
                 updateSystemStatus("🟢 In Call", "status-in-call");
                 renderStep(); 
-                // MODIFICATION: Removed the showAssistantMessage call from here.
-                // renderStep() will now handle the initial message for the first step.
 
             } catch (err) {
                 console.error("Error starting call:", err);
@@ -483,17 +498,15 @@
             startStepTimer(); 
             saveCallState();  
 
-            // MODIFICATION: Centralized assistant message logic for steps
             const assistantStepPreview = stepInstructionText.length > 45 ? stepInstructionText.substring(0, 42) + "..." : stepInstructionText;
             let finalAssistantMessage;
             if (currentStepIndex === 0 && currentScenario && currentScenario.title) {
-                // For the first step, include scenario title
                 const scenarioTitlePreview = currentScenario.title.length > 30 ? currentScenario.title.substring(0,27) + "..." : currentScenario.title;
                 finalAssistantMessage = `🚀 Scenario "${scenarioTitlePreview}"! First: ${assistantStepPreview}`;
             } else {
                 finalAssistantMessage = `📌 Step ${currentStepIndex + 1}: ${assistantStepPreview}`;
             }
-            showAssistantMessage(finalAssistantMessage, false, 0); // Persist
+            showAssistantMessage(finalAssistantMessage, false, 0); 
         }
         
         function renderProgressTracker() {
@@ -797,7 +810,7 @@
         } else {
             authLoadingDiv.innerHTML = '<p style="color:red; text-align:center;">Core services could not be initialized. Application cannot start.</p>';
         }
-        console.log("Elevo Core Flow script loaded and initialized execution.");
+        console.log("Elevo Core Flow script (v.with_fixed_dashboard_link_flicker) loaded and initialized execution.");
     </script>
 </body>
 </html>
