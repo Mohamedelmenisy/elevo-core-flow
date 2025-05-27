@@ -1,100 +1,119 @@
 <!DOCTYPE html>
 <html lang="en" class="dark">
 <head>
-   <meta charset="UTF-8">
+
+<!--
+📌 SCENARIO INJECTION NOTE:
+To add the new "Customer Inquiry – Compensation Flow" scenario, follow these steps:
+
+1. Go to Supabase > Table Editor > call_scenarios table.
+2. Click "Insert Row" or Edit an existing one. Fill in:
+   - title: Customer Inquiry – Compensation Flow (Delayed Order)
+   - description: Automated steps for compensating customers based on delay and order type, following the Chefz diagram.
+   - steps: Copy-paste the JSON below into the 'steps' field.
+   - is_active: true
+   - created_by: [your user id]
+   - created_at: [leave empty or set to now()]
+
+Use this JSON for the 'steps' field:
+[
+  {
+    "id": "start_compensation_flow",
+    "type": "info",
+    "text": "Agent: Thank you for calling The Chefz. I understand you're inquiring about a delayed order, Order # [Order Number]. I'm sorry for the trouble. Let me check the details for you.",
+    "next_id": "determine_responsibility_internal"
+  },
+  {
+    "id": "determine_responsibility_internal",
+    "type": "info",
+    "text": "Agent (Internal Action): Check system to determine responsibility for the delay (Store, Driver, Company) and note it. Confirm order type: Scheduled or Fast Delivery.",
+    "next_id": "ask_delivery_type"
+  },
+  {
+    "id": "ask_delivery_type",
+    "type": "decision",
+    "text": "Agent: To proceed, could you confirm if this was a 'Scheduled Delivery' or a 'Fast Delivery' order? (Or confirm from system if visible)",
+    "options": [
+      { "label": "Scheduled Delivery", "next_id": "scheduled_check_delay_range" },
+      { "label": "Fast Delivery", "next_id": "fast_delivery_handle_delay" }
+    ]
+  },
+  {
+    "id": "fast_delivery_handle_delay",
+    "type": "info",
+    "text": "Agent: For your Fast Delivery order, I apologize for the delay. The current estimated delivery time is [New ETA for Fast Delivery]. Please keep the order when it arrives. We're working to get it to you as quickly as possible.",
+    "next_id": "offer_further_assistance"
+  },
+  {
+    "id": "scheduled_check_delay_range",
+    "type": "decision",
+    "text": "Agent: For this Scheduled Delivery, what is the current delay duration beyond the original estimate?",
+    "options": [
+      { "label": "0-30 Minutes", "next_id": "scheduled_resolve_delay_0_30" },
+      { "label": "31-45 Minutes", "next_id": "scheduled_resolve_delay_31_45" },
+      { "label": "46+ Minutes", "next_id": "scheduled_resolve_delay_46_plus" }
+    ]
+  },
+  {
+    "id": "scheduled_resolve_delay_0_30",
+    "type": "info",
+    "text": "Agent: I see the delay for your Scheduled Delivery is within 0-30 minutes. I sincerely apologize. Your order is now expected by [New Delivery Time]. Please keep the order when it arrives. We appreciate your patience.",
+    "next_id": "offer_further_assistance"
+  },
+  {
+    "id": "scheduled_resolve_delay_31_45",
+    "type": "info",
+    "text": "Agent: Due to this delay of 31-45 minutes with your Scheduled Delivery, we will compensate you by refunding the total order fees. This will be processed to your original payment method within [X] business days. We sincerely apologize for this experience.",
+    "next_id": "offer_further_assistance"
+  },
+  {
+    "id": "scheduled_resolve_delay_46_plus",
+    "type": "info",
+    "text": "Agent: We deeply apologize for this extensive delay of 46+ minutes with your Scheduled Delivery. We will provide a full refund of your order fees, AND additionally, we will credit your account with 50 Chefz Points for the inconvenience. The refund will be processed in [X] days, and points will be added shortly.",
+    "next_id": "offer_further_assistance"
+  },
+  {
+    "id": "offer_further_assistance",
+    "type": "decision",
+    "text": "Agent: Is there anything else I can help you with today regarding this order or any other matter?",
+    "options": [
+      { "label": "Yes, customer has another question/issue", "next_id": "handle_additional_inquiry" },
+      { "label": "No, all resolved for now", "next_id": "conclude_call_politely" }
+    ]
+  },
+  {
+    "id": "handle_additional_inquiry",
+    "type": "info",
+    "text": "Agent: Certainly, what else can I help you with? [Listen and address new inquiry - this may lead to other scenarios or general assistance].",
+    "next_id": "conclude_call_politely"
+  },
+  {
+    "id": "conclude_call_politely",
+    "type": "info",
+    "text": "Agent: Alright. Thank you for your patience and for choosing The Chefz. We appreciate your business. Have a wonderful day/evening!"
+  }
+]
+-->
+
+    <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Elevo Core Assistant</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2317a2b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M3 12h18M3 6h12M3 18h15'/><path d='M17 9l4 3l-4 3'/></svg>">
-    <link rel="stylesheet" href="style.css"> <!-- Assuming you have a base style.css -->
+    <link rel="stylesheet" href="style.css">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
-        /* --- CSS Variables Definition --- */
-        :root {
-            --primary-color-val: 53, 122, 189; /* Base primary color RGB */
-            --primary-color: rgb(var(--primary-color-val));
-            --primary-color-light: rgb(74, 144, 226); /* #4a90e2 */
-            --primary-color-dark: rgb(42, 100, 150); /* #2a6496 */
-
-            --accent-color-val: 230, 126, 34; /* Base accent color RGB */
-            --accent-color: rgb(var(--accent-color-val)); /* #e67e22 */
-
-            --success-color-val: 46, 204, 113; /* Base success color RGB */
-            --success-color: rgb(var(--success-color-val)); /* #2ecc71 */
-            --success-color-dark: rgb(39, 174, 96); /* #27ae60 */
-            --success-color-darker: rgb(30, 132, 73); /* #1e8449 */
-
-            --danger-color-val: 231, 76, 60; /* Base danger color RGB */
-            --danger-color: rgb(var(--danger-color-val)); /* #e74c3c */
-            --danger-color-dark: rgb(192, 57, 43); /* #c0392b */
-            --danger-color-darker: rgb(169, 50, 38); /* #a93226 */
-
-            --secondary-color-val: 149, 165, 166; /* Base secondary color RGB */
-            --secondary-color: rgb(var(--secondary-color-val)); /* #95a5a6 */
-            --secondary-color-dark: rgb(127, 140, 141); /* #7f8c8d */
-            --secondary-color-darker: rgb(96, 108, 109); /* #606c6d */
-
-            --button-text-color: #ffffff;
-            --button-text-color-hover: #ffffff;
-
-            /* Light Theme Specifics for offset areas */
-            --background-color-offset-light: #f4f6f8;
-            --text-color-on-offset-light: #2c3e50;
-            --border-color-offset-light: #dfe4e8;
-
-            /* Dark Theme Specifics for offset areas */
-            --background-color-offset-dark: #283747; /* Slightly lighter than main dark bg */
-            --text-color-on-offset-dark: #ecf0f1;
-            --border-color-offset-dark: #34495e;
-
-            /* Default to light theme vars for offset areas */
-            --background-color-offset: var(--background-color-offset-light);
-            --text-color-on-offset: var(--text-color-on-offset-light);
-            --border-color-offset: var(--border-color-offset-light);
-
-            --border-radius: 6px; /* Consistent border radius */
-        }
-
-        html.dark { /* Apply dark theme vars for offset areas when .dark class is present */
-            --background-color-offset: var(--background-color-offset-dark);
-            --text-color-on-offset: var(--text-color-on-offset-dark);
-            --border-color-offset: var(--border-color-offset-dark);
-
-            /* Override other base colors if needed for dark theme */
-            --primary-color-val: 79, 137, 196; /* A slightly less saturated blue for dark mode */
-            --primary-color: rgb(var(--primary-color-val));
-            --primary-color-light: rgb(100, 158, 217);
-            --primary-color-dark: rgb(58, 116, 175);
-            
-            --accent-color-val: 243, 156, 18; /* A more vibrant orange for dark mode #f39c12 */
-            --accent-color: rgb(var(--accent-color-val));
-        }
-
-        /* --- General App Enhancements --- */
-        body {
-            -webkit-font-smoothing: antialiased;
-            -moz-osx-font-smoothing: grayscale;
-        }
-
-        .card {
-            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1), 0 4px 10px rgba(0,0,0,0.05);
-            border: none;
-        }
-        html.dark .card {
-            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2), 0 4px 10px rgba(0,0,0,0.15); /* Darker shadow for dark mode */
-        }
-
-
-        /* Added CSS for special scenario styling */
+        /* MODIFICATION: Added CSS for special scenario styling */
         .scenario-dropdown .special-compensation-scenario {
             font-weight: bold;
-            color: var(--success-color);
+            color: #4CAF50; /* A distinct green, adjust as needed */
         }
         .scenario-dropdown .special-compensation-scenario::before {
             content: "⭐ ";
-            color: var(--accent-color);
+            color: #FFC107; /* Star color */
         }
 
+        /* MODIFICATION: Added CSS for title animation */
         .highlight-scenario-title-animation {
             animation: pulse-title 0.6s 2 ease-in-out;
         }
@@ -103,133 +122,32 @@
             50% { transform: scale(1.03); opacity: 0.8; }
         }
 
-        /* --- Step Area Enhancements --- */
-        .steps-area {
-            background-color: var(--background-color-offset);
-            color: var(--text-color-on-offset);
-            padding: 1.5rem;
-            border-radius: var(--border-radius);
-            margin-bottom: 1.5rem;
-            border: 1px solid var(--border-color-offset);
-            box-shadow: inset 0 2px 4px rgba(0,0,0,0.05);
-            line-height: 1.6;
-            font-size: 1.05rem;
-        }
-        .steps-area p { margin: 0; }
-
-        /* --- Decision Button Container --- */
+        /* MODIFICATION: CSS for decision buttons */
         .step-actions {
-            margin-top: 1.5rem;
-            display: grid;
-            grid-template-columns: 1fr; /* Default to single column */
-            gap: 0.75rem;
-        }
-        .step-actions.two-options { /* Applied by JS for two buttons */
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-        }
-
-        /* --- Enhanced Decision Buttons --- */
-        .decision-button {
+            margin-top: 1rem;
             display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 0.85rem 1.25rem;
-            font-size: 1rem;
-            font-weight: 500;
-            border-radius: 8px;
+            flex-direction: column; /* Stack buttons vertically */
+            gap: 0.75rem; /* Space between buttons */
+        }
+        .decision-button {
+            width: 100%; /* Make buttons take full width */
+            padding: 0.75rem 1rem;
+            font-size: 0.95rem;
+            border: 1px solid var(--primary-color);
+            background-color: var(--background-color);
+            color: var(--primary-color);
             cursor: pointer;
-            transition: all 0.25s cubic-bezier(0.25, 0.8, 0.25, 1); /* Smoother transition */
+            border-radius: var(--border-radius);
+            transition: background-color 0.2s ease, color 0.2s ease;
             text-align: center;
-            border: 2px solid transparent;
-            background-color: var(--primary-color-light);
-            color: var(--button-text-color);
-            box-shadow: 0 3px 8px rgba(0, 0, 0, 0.1);
-            letter-spacing: 0.5px;
         }
         .decision-button:hover {
             background-color: var(--primary-color);
-            color: var(--button-text-color-hover);
-            transform: translateY(-2px) scale(1.01);
-            box-shadow: 0 6px 12px rgba(var(--primary-color-val), 0.3);
-        }
-        .decision-button:active {
-            transform: translateY(0px) scale(0.99);
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.15);
-            background-color: var(--primary-color-dark);
-        }
-        .decision-button:focus-visible {
-            outline: none;
-            border-color: var(--accent-color);
-            box-shadow: 0 0 0 3px rgba(var(--accent-color-val), 0.4);
-        }
-
-        .decision-button.positive-action {
-            background-color: var(--success-color);
-        }
-        .decision-button.positive-action:hover {
-            background-color: var(--success-color-dark);
-            box-shadow: 0 6px 12px rgba(var(--success-color-val), 0.3);
-        }
-        .decision-button.positive-action:active {
-            background-color: var(--success-color-darker);
-        }
-
-        .decision-button.negative-action {
-            background-color: var(--danger-color);
-        }
-        .decision-button.negative-action:hover {
-            background-color: var(--danger-color-dark);
-            box-shadow: 0 6px 12px rgba(var(--danger-color-val), 0.3);
-        }
-        .decision-button.negative-action:active {
-            background-color: var(--danger-color-darker);
-        }
-        
-        .decision-button.neutral-action { /* For other options if needed */
-            background-color: var(--secondary-color);
-        }
-        .decision-button.neutral-action:hover {
-            background-color: var(--secondary-color-dark);
-            box-shadow: 0 6px 12px rgba(var(--secondary-color-val), 0.3);
-        }
-        .decision-button.neutral-action:active {
-            background-color: var(--secondary-color-darker);
-        }
-
-
-        /* --- Navigation Buttons (Next/Prev/End Call) to match --- */
-        .nav-button {
-            padding: 0.75rem 1.2rem;
-            font-weight: 500;
-            border-radius: 8px;
-            transition: all 0.2s ease-out;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.08);
-            border: none; /* Ensure no default browser borders */
-        }
-        .nav-button:hover {
-            transform: translateY(-1px);
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-        }
-        .nav-button.primary-button {
-            background-color: var(--primary-color);
             color: var(--button-text-color);
         }
-        .nav-button.primary-button:hover {
-            background-color: var(--primary-color-dark);
-        }
-        .nav-button.secondary-button { /* For "Previous" */
-            background-color: var(--secondary-color); /* Using neutral color */
-            color: var(--button-text-color);
-        }
-        .nav-button.secondary-button:hover {
-            background-color: var(--secondary-color-dark);
-        }
-        .nav-button.danger-button { /* For "End Call" */
-            background-color: var(--danger-color);
-            color: var(--button-text-color);
-        }
-        .nav-button.danger-button:hover {
-            background-color: var(--danger-color-dark);
+        .decision-button:focus {
+            outline: 2px solid var(--primary-color-dark);
+            outline-offset: 2px;
         }
 
     </style>
@@ -308,6 +226,7 @@
             <div id="call-flow-view" class="card call-flow-card fade-in" style="display: none;">
                 <h3 id="scenario-title" class="card-title scenario-title-dynamic">Call Scenario</h3>
                 <div id="steps-container" class="steps-area">
+                    <!-- Step text and dynamic buttons will go here -->
                     <p class="placeholder-text">Loading call steps...</p>
                 </div>
                 <div id="decision-buttons-container" class="step-actions"></div>
@@ -350,6 +269,7 @@
         let supabase;
         try {
             supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+            console.log('Supabase client initialized for core-flow.html');
         } catch (error) {
             console.error("Supabase client initialization failed:", error);
             const authLoading = document.getElementById('auth-loading');
@@ -361,6 +281,7 @@
         const initialViewDiv = document.getElementById('initial-view');
         const callFlowViewDiv = document.getElementById('call-flow-view');
         const postCallSummaryDiv = document.getElementById('postCallSummary');
+        
         const scenarioDropdown = document.getElementById('scenarioDropdown');
         const receiveCallBtn = document.getElementById('receive-call-btn');
         const scenarioTitleElement = document.getElementById('scenario-title');
@@ -369,15 +290,19 @@
         const prevStepBtn = document.getElementById('prev-step-btn');
         const nextStepBtn = document.getElementById('next-step-btn'); 
         const endCallBtn = document.getElementById('end-call-btn');
+        
         const userInfoDiv = document.getElementById('userInfo');
         const userNameSpan = document.getElementById('userName');
         const logoutButton = document.getElementById('logoutButton');
         const dashboardLink = document.getElementById('dashboardLink');
+        
         const systemStatusDiv = document.getElementById('systemStatus');
         const callTimerDiv = document.getElementById('callTimer');
         const progressTrackerContainer = document.getElementById('progressTracker');
+        
         const assistantBox = document.getElementById('assistantBox');
         const assistantMessageElement = document.getElementById('assistantMessageElement');
+        
         const callSummaryContentDiv = document.getElementById('callSummaryContent');
         const returnToInitialViewBtn = document.getElementById('returnToInitialViewBtn');
         const callStartSound = document.getElementById('callStartSound'); 
@@ -385,11 +310,19 @@
         document.getElementById('currentYear').textContent = new Date().getFullYear();
 
         // --- State Variables ---
-        let currentUser = null, currentScenario = null, currentStepId = null;
-        let stepHistory = [], accumulatedStepDurations = {};
-        let currentStepIndexForProgressBar = 0, callSessionId = null, callStartTimeISO = null;
-        let stepTimerInterval = null, stepStartTime = 0;
-        const SESSION_STATE_KEY = 'elevoCoreActiveCallState_v3.2_styling'; // Updated version
+        let currentUser = null; 
+        let currentScenario = null; 
+        let currentStepId = null;   
+        let stepHistory = [];       
+        let currentStepIndexForProgressBar = 0; 
+
+        let callSessionId = null;    
+        let callStartTimeISO = null; 
+        let stepTimerInterval = null;
+        let stepStartTime = 0;      
+        let accumulatedStepDurations = {}; 
+
+        const SESSION_STATE_KEY = 'elevoCoreActiveCallState_v3'; 
 
         // --- UI Helper Functions ---
         function updateSystemStatus(statusText, statusClass = 'status-waiting') {
@@ -398,6 +331,7 @@
                 systemStatusDiv.className = `status-indicator ${statusClass}`;
             }
         }
+
         function animateView(viewElement) {
             if (viewElement) {
                 viewElement.classList.remove('fade-in');
@@ -406,19 +340,26 @@
                 viewElement.style.display = 'block';
             }
         }
-        let assistantTimeout = null, typingInterval = null;
+        
+        let assistantTimeout = null;
+        let typingInterval = null;
+
         function typeWriterEffect(element, message, speed = 30, callback) {
             if (typingInterval) clearInterval(typingInterval);
-            element.textContent = ''; let i = 0;
+            element.textContent = '';
+            let i = 0;
             typingInterval = setInterval(() => {
                 if (i < message.length) { element.textContent += message.charAt(i); i++; }
                 else { clearInterval(typingInterval); typingInterval = null; if (callback) callback(); }
             }, speed);
         }
+        
         function showAssistantMessage(message, isInitial = false, duration = 5000, onHideCallback = null) {
             if (!assistantBox || !assistantMessageElement) return;
-            clearTimeout(assistantTimeout); if (typingInterval) clearInterval(typingInterval);
-            assistantBox.classList.remove('show', 'assistant-initial-position'); void assistantBox.offsetWidth; 
+            clearTimeout(assistantTimeout);
+            if (typingInterval) clearInterval(typingInterval);
+            assistantBox.classList.remove('show', 'assistant-initial-position'); 
+            void assistantBox.offsetWidth; 
             if (isInitial) assistantBox.classList.add('assistant-initial-position');
             else assistantBox.classList.add('show'); 
             assistantBox.style.display = 'flex';
@@ -431,6 +372,7 @@
                 }
             });
         }
+
         function hideAssistant(wasInitial = false) {
              if (!assistantBox) return;
              if (wasInitial) assistantBox.classList.remove('assistant-initial-position');
@@ -444,19 +386,42 @@
 
         // --- Authentication and Initialization ---
         async function initializeApp() {
+            console.log("initializeApp: Starting core-flow initialization..."); 
             if (!supabase) { 
-                 authLoadingDiv.innerHTML = '<p style="color:red; text-align:center;">Critical Error: Services unavailable.</p>'; return;
+                 authLoadingDiv.innerHTML = '<p style="color:red; text-align:center;">Critical Error: Services unavailable. Please try again later.</p>';
+                 return;
             }
             const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-            if (sessionError) { authLoadingDiv.innerHTML = '<p style="color:red;">Error verifying session.</p>'; return; }
-            if (!session) { window.location.replace('login.html'); return; }
-            
+            if (sessionError) {
+                console.error("initializeApp: Error fetching session:", sessionError);
+                authLoadingDiv.innerHTML = '<p style="color:red;">Error verifying session. Try refreshing.</p>';
+                return;
+            }
+            if (!session) {
+                console.log("initializeApp: No active session. Redirecting to login page.");
+                window.location.replace('login.html'); 
+                return;
+            }
             const storedUserData = JSON.parse(localStorage.getItem('elevoCoreUserData'));
-            if (storedUserData && storedUserData.id === session.user.id) currentUser = storedUserData;
-            else { 
-                const { data: profile, error: profileError } = await supabase.from('users').select('name, is_admin').eq('id', session.user.id).single();
-                if (profileError && profileError.code !== 'PGRST116') { authLoadingDiv.innerHTML = '<p style="color:red;">Could not load profile.</p>'; return; }
-                currentUser = { id: session.user.id, email: session.user.email, name: profile?.name || session.user.email.split('@')[0], isAdmin: profile?.is_admin || false };
+            if (storedUserData && storedUserData.id === session.user.id) {
+                currentUser = storedUserData;
+            } else { 
+                const { data: profile, error: profileError } = await supabase
+                    .from('users') 
+                    .select('name, is_admin')
+                    .eq('id', session.user.id)
+                    .single();
+                if (profileError && profileError.code !== 'PGRST116') { 
+                    console.error("initializeApp: Error fetching user profile:", profileError);
+                    authLoadingDiv.innerHTML = '<p style="color:red;">Could not load user profile.</p>';
+                    return;
+                }
+                currentUser = {
+                    id: session.user.id,
+                    email: session.user.email,
+                    name: profile?.name || session.user.user_metadata?.full_name || session.user.email.split('@')[0],
+                    isAdmin: profile?.is_admin || false
+                };
                 localStorage.setItem('elevoCoreUserData', JSON.stringify(currentUser));
             }
             if (userNameSpan) userNameSpan.textContent = currentUser.name;
@@ -466,12 +431,15 @@
             authLoadingDiv.style.display = 'none';
             
             if (restoreCallState()) { 
+                console.log("initializeApp: Restored active call session.");
                 switchToCallFlowView(false); 
                 scenarioTitleElement.textContent = currentScenario?.title || "Restored Scenario";
                 renderStep(); 
                 updateSystemStatus("🟢 In Call (Restored)", "status-in-call");
             } else {
-                switchToInitialView(); await loadActiveScenarios();
+                console.log("initializeApp: No active call state found or state invalid. Loading initial view.");
+                switchToInitialView();
+                await loadActiveScenarios();
                 showAssistantMessage("Welcome! Select a scenario to begin.", true, 7000, () => {
                      if (initialViewDiv && initialViewDiv.style.display === 'block') { 
                           showAssistantMessage("💡 Tip: Choose a scenario and click 'Receive Call'.", true, 0); 
@@ -482,35 +450,55 @@
 
         // --- View Switching Logic ---
         function switchToInitialView() {
-            callFlowViewDiv.style.display = 'none'; postCallSummaryDiv.style.display = 'none';
-            progressTrackerContainer.style.display = 'none'; callTimerDiv.style.display = 'none';
-            animateView(initialViewDiv); updateSystemStatus("🔴 Waiting for Call", "status-waiting"); hideAssistant(false); 
+            callFlowViewDiv.style.display = 'none';
+            postCallSummaryDiv.style.display = 'none';
+            progressTrackerContainer.style.display = 'none';
+            callTimerDiv.style.display = 'none';
+            animateView(initialViewDiv);
+            updateSystemStatus("🔴 Waiting for Call", "status-waiting");
+            hideAssistant(false); 
         }
+
         function switchToCallFlowView(animate = true) {
-            initialViewDiv.style.display = 'none'; postCallSummaryDiv.style.display = 'none';
-            if (animate) animateView(callFlowViewDiv); else callFlowViewDiv.style.display = 'block';
-            progressTrackerContainer.style.display = 'block'; updateSystemStatus("🟢 In Call", "status-in-call"); hideAssistant(true); 
+            initialViewDiv.style.display = 'none';
+            postCallSummaryDiv.style.display = 'none';
+            if (animate) animateView(callFlowViewDiv);
+            else callFlowViewDiv.style.display = 'block';
+            progressTrackerContainer.style.display = 'block'; 
+            updateSystemStatus("🟢 In Call", "status-in-call");
+            hideAssistant(true); 
         }
+
         function switchToSummaryView() {
-            initialViewDiv.style.display = 'none'; callFlowViewDiv.style.display = 'none';
-            progressTrackerContainer.style.display = 'none'; callTimerDiv.style.display = 'none';
-            animateView(postCallSummaryDiv); updateSystemStatus("📊 Review Call Summary", "status-summary"); hideAssistant(false); 
+            initialViewDiv.style.display = 'none';
+            callFlowViewDiv.style.display = 'none';
+            progressTrackerContainer.style.display = 'none';
+            callTimerDiv.style.display = 'none';
+            animateView(postCallSummaryDiv);
+            updateSystemStatus("📊 Review Call Summary", "status-summary");
+            hideAssistant(false); 
         }
 
         // --- Scenario and Steps Logic ---
         async function loadActiveScenarios() {
-            scenarioDropdown.disabled = true; receiveCallBtn.disabled = true;
+            scenarioDropdown.disabled = true;
+            receiveCallBtn.disabled = true;
             scenarioDropdown.innerHTML = '<option value="" disabled selected>Loading scenarios...</option>';
             try {
-                const { data: scenarios, error } = await supabase.from('call_scenarios_with_creator')
-                    .select('id, title').eq('is_active', true).order('created_at', { ascending: false }); 
+                const { data: scenarios, error } = await supabase
+                    .from('call_scenarios_with_creator') // Or 'call_scenarios' if view is problematic
+                    .select('id, title')                 
+                    .eq('is_active', true) 
+                    .order('created_at', { ascending: false }); 
                 if (error) throw error;
+
                 if (scenarios && scenarios.length > 0) {
                     scenarioDropdown.innerHTML = '<option value="">-- Select a Scenario --</option>'; 
                     scenarios.forEach(s => {
-                        const option = document.createElement('option'); option.value = s.id;
+                        const option = document.createElement('option');
+                        option.value = s.id;
                         const normalizedTitle = s.title.trim().toLowerCase();
-                        const compensationKeyword = "customer inquiry – compensation flow"; // Your specific title keyword
+                        const compensationKeyword = "customer inquiry – compensation flow";
                         option.textContent = s.title; 
                         if (normalizedTitle.includes(compensationKeyword.toLowerCase()) || normalizedTitle.startsWith('⭐')) {
                             option.classList.add('special-compensation-scenario');
@@ -531,41 +519,76 @@
         
         receiveCallBtn.addEventListener('click', async () => {
             const selectedScenarioId = scenarioDropdown.value;
-            if (!selectedScenarioId) { showAssistantMessage("⚠️ Please select a scenario first.", true, 5000); return; }
-            if(callStartSound && callStartSound.src) callStartSound.play().catch(e => console.warn("Call start audio play failed:", e));
-            resetCallState(); switchToCallFlowView(); updateSystemStatus("🟡 Loading Scenario...", "status-loading");
+            if (!selectedScenarioId) {
+                showAssistantMessage("⚠️ Please select a scenario first.", true, 5000);
+                return;
+            }
+            if(callStartSound && callStartSound.src) callStartSound.play().catch(e => console.warn("Call start audio play failed:", e.message, e));
+
+            resetCallState(); 
+            switchToCallFlowView();
+            updateSystemStatus("🟡 Loading Scenario...", "status-loading");
             stepsContainer.innerHTML = '<p class="placeholder-text">Loading scenario details...</p>';
-            decisionButtonsContainer.innerHTML = ''; scenarioTitleElement.textContent = 'Loading...';
+            decisionButtonsContainer.innerHTML = ''; 
+            scenarioTitleElement.textContent = 'Loading...';
             scenarioTitleElement.classList.remove('highlight-scenario-title-animation');
+
             try {
-                const { data: scenarioData, error: scenarioError } = await supabase.from('call_scenarios')
-                    .select('id, title, steps').eq('id', selectedScenarioId).single();
+                const { data: scenarioData, error: scenarioError } = await supabase
+                    .from('call_scenarios') 
+                    .select('id, title, steps') 
+                    .eq('id', selectedScenarioId)
+                    .single();
+
                 if (scenarioError) throw scenarioError;
-                if (!scenarioData || !Array.isArray(scenarioData.steps) || scenarioData.steps.length === 0 || 
-                    !scenarioData.steps[0] || typeof scenarioData.steps[0].id === 'undefined') {
-                    console.error("Scenario JSON invalid or missing 'id' in first step:", scenarioData?.steps);
-                    throw new Error("Scenario steps are invalid or not in the new format. Please update scenario JSON.");
+
+                if (!scenarioData || !Array.isArray(scenarioData.steps) || scenarioData.steps.length === 0) {
+                    throw new Error("Scenario data is invalid or has no steps.");
                 }
-                currentScenario = scenarioData; currentStepId = currentScenario.steps[0].id; stepHistory = [];
+                if (!scenarioData.steps[0] || typeof scenarioData.steps[0].id === 'undefined') { // VALIDATION
+                    console.error("Scenario steps are not in the new format (missing 'id' in first step). Scenario JSON:", scenarioData.steps);
+                    throw new Error("Scenario steps are not in the new format (missing 'id' in first step). Please update scenario JSON.");
+                }
+
+                currentScenario = scenarioData; 
+                currentStepId = currentScenario.steps[0].id; 
+                stepHistory = [];
                 accumulatedStepDurations = {}; 
-                currentScenario.steps.forEach(step => { if(step && typeof step.id !== 'undefined') accumulatedStepDurations[step.id] = 0;});
+                currentScenario.steps.forEach(step => { // Initialize durations for all step IDs
+                    if(step && typeof step.id !== 'undefined') { // Ensure step and step.id exist
+                        accumulatedStepDurations[step.id] = 0;
+                    } else {
+                        console.warn("Found a step without an ID during initialization of durations:", step);
+                    }
+                });
+
+
                 callStartTimeISO = new Date().toISOString(); 
-                const { data: newSession, error: sessionInsertError } = await supabase.from('call_sessions')
+                const { data: newSession, error: sessionInsertError } = await supabase
+                    .from('call_sessions')
                     .insert({ user_id: currentUser.id, scenario_id: currentScenario.id, start_time: callStartTimeISO, agent_name: currentUser.name, agent_email: currentUser.email })
-                    .select('id').single();
-                if (sessionInsertError) { callStartTimeISO = null; throw sessionInsertError; }
+                    .select('id') 
+                    .single();
+                if (sessionInsertError) {
+                    callStartTimeISO = null; 
+                    throw sessionInsertError;
+                }
                 callSessionId = newSession.id;
+                
                 scenarioTitleElement.textContent = currentScenario.title; 
                 const normalizedCurrentTitle = currentScenario.title.trim().toLowerCase();
                 const compensationKeyword = "customer inquiry – compensation flow";
                 if (normalizedCurrentTitle.includes(compensationKeyword.toLowerCase()) || normalizedCurrentTitle.startsWith('⭐')) {
-                    if (compensationScenarioSound && compensationScenarioSound.src) compensationScenarioSound.play().catch(e => console.warn("Compensation sound failed:", e));
+                    if (compensationScenarioSound && compensationScenarioSound.src) compensationScenarioSound.play().catch(e => console.warn("Compensation sound play failed:", e));
                     scenarioTitleElement.classList.add('highlight-scenario-title-animation');
                     setTimeout(() => scenarioTitleElement.classList.remove('highlight-scenario-title-animation'), 1200);
                 }
-                updateSystemStatus("🟢 In Call", "status-in-call"); renderStep(); 
+                updateSystemStatus("🟢 In Call", "status-in-call");
+                renderStep(); 
             } catch (err) {
-                console.error("Error starting call:", err); resetCallState(); switchToInitialView();
+                console.error("Error starting call:", err);
+                resetCallState(); 
+                switchToInitialView();
                 showAssistantMessage(`⚠️ Error starting call: ${err.message}. Please try again.`, true, 7000);
                 await loadActiveScenarios(); 
             }
@@ -573,118 +596,190 @@
 
         function renderStep() {
             if (!currentScenario || !currentStepId) {
-                stepsContainer.innerHTML = '<p class="placeholder-text">Error: Invalid scenario/step ID.</p>';
-                decisionButtonsContainer.innerHTML = ''; console.error("Render step error:", currentScenario, currentStepId); return;
+                stepsContainer.innerHTML = '<p class="placeholder-text">Error: Invalid scenario or step ID.</p>';
+                decisionButtonsContainer.innerHTML = '';
+                console.error("Render step error: Invalid scenario or currentStepId.", currentScenario, currentStepId);
+                return;
             }
-            const stepObject = currentScenario.steps.find(s => s && s.id === currentStepId);
+
+            const stepObject = currentScenario.steps.find(s => s && s.id === currentStepId); // Added check for s
+
             if (!stepObject) {
-                stepsContainer.innerHTML = `<p class="placeholder-text">Error: Step ID "${currentStepId}" not found.</p>`;
-                decisionButtonsContainer.innerHTML = ''; console.error(`Step ID "${currentStepId}" not found. Steps:`, currentScenario.steps);
-                finishCall(false, `Error: Step ${currentStepId} not found`); return;
+                stepsContainer.innerHTML = `<p class="placeholder-text">Error: Step with ID "${currentStepId}" not found in scenario.</p>`;
+                decisionButtonsContainer.innerHTML = '';
+                console.error(`Render step error: Step ID "${currentStepId}" not found. Scenario steps:`, currentScenario.steps);
+                finishCall(false, `Error: Step ${currentStepId} not found`);
+                return;
             }
-            currentStepIndexForProgressBar = currentScenario.steps.findIndex(s => s && s.id === currentStepId);
+            
+            currentStepIndexForProgressBar = currentScenario.steps.findIndex(s => s && s.id === currentStepId); // Added check for s
             if (currentStepIndexForProgressBar === -1) currentStepIndexForProgressBar = 0; 
+
             stepsContainer.innerHTML = `<p>${stepObject.text.replace(/\n/g, '<br>')}</p>`; 
-            decisionButtonsContainer.innerHTML = ''; decisionButtonsContainer.classList.remove('two-options'); // Reset class
+            decisionButtonsContainer.innerHTML = ''; 
+
             renderProgressTracker(); 
+
             prevStepBtn.style.display = stepHistory.length > 0 ? 'inline-flex' : 'none';
             endCallBtn.style.display = 'inline-flex';
 
             if (stepObject.type === 'decision' && stepObject.options && Array.isArray(stepObject.options) && stepObject.options.length > 0) {
                 nextStepBtn.style.display = 'none'; 
-                if (stepObject.options.length === 2) decisionButtonsContainer.classList.add('two-options');
                 stepObject.options.forEach(option => {
                     if (!option || typeof option.label === 'undefined' || typeof option.next_id === 'undefined') {
-                        console.warn("Invalid option in decision step:", option, "Step:", stepObject); return;
+                        console.warn("Invalid option found in decision step:", option, "Step:", stepObject);
+                        return; // Skip this invalid option
                     }
-                    const button = document.createElement('button'); button.textContent = option.label; button.className = 'decision-button';
-                    const labelLower = option.label.toLowerCase();
-                    if (labelLower.includes('yes') || labelLower.includes('confirm') || labelLower.includes('proceed') || labelLower.includes('accept')) button.classList.add('positive-action');
-                    else if (labelLower.includes('no') || labelLower.includes('cancel') || labelLower.includes('decline') || labelLower.includes('reject')) button.classList.add('negative-action');
-                    else button.classList.add('neutral-action'); // Default to neutral if not clearly positive/negative
+                    const button = document.createElement('button');
+                    button.textContent = option.label;
+                    button.className = 'decision-button'; 
                     button.addEventListener('click', () => navigateToStep(option.next_id));
                     decisionButtonsContainer.appendChild(button);
                 });
             } else { 
+                decisionButtonsContainer.innerHTML = ''; 
                 if (stepObject.next_id) {
                     nextStepBtn.innerHTML = `<span>Next Step</span><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>`;
                     nextStepBtn.style.display = 'inline-flex';
                 } else { 
-                    nextStepBtn.innerHTML = `<span>Finish Scenario</span>`; nextStepBtn.style.display = 'inline-flex';
+                    nextStepBtn.innerHTML = `<span>Finish Scenario</span>`;
+                    nextStepBtn.style.display = 'inline-flex';
                 }
             }
-            startStepTimer(); saveCallState();  
+
+            startStepTimer(); 
+            saveCallState();  
+
             const assistantStepPreview = stepObject.text.length > 45 ? stepObject.text.substring(0, 42) + "..." : stepObject.text;
-            let finalAssistantMessage = stepHistory.length === 0 && currentScenario && currentScenario.title ? 
-                `🚀 Scenario "${currentScenario.title.length > 30 ? currentScenario.title.substring(0,27) + "..." : currentScenario.title}"! First: ${assistantStepPreview}` :
-                `📌 Step (${currentStepIndexForProgressBar + 1}/${currentScenario.steps.length}): ${assistantStepPreview}`;
+            let finalAssistantMessage;
+            if (stepHistory.length === 0 && currentScenario && currentScenario.title) { 
+                const scenarioTitlePreview = currentScenario.title.length > 30 ? currentScenario.title.substring(0,27) + "..." : currentScenario.title;
+                finalAssistantMessage = `🚀 Scenario "${scenarioTitlePreview}"! First: ${assistantStepPreview}`;
+            } else {
+                finalAssistantMessage = `📌 Step (${currentStepIndexForProgressBar + 1}/${currentScenario.steps.length}): ${assistantStepPreview}`;
+            }
             showAssistantMessage(finalAssistantMessage, false, 0); 
         }
         
         function navigateToStep(nextId) {
             stopAndRecordStepTimer();
-            if (nextId === null || typeof nextId === 'undefined' || nextId === "") {
-                finishCall(true, "Reached end of defined scenario path."); return;
+            if (nextId === null || typeof nextId === 'undefined' || nextId === "") { // Consider empty string as end too
+                console.log("navigateToStep: No valid nextId provided or end of path. Finishing call as completed.");
+                finishCall(true, "Reached end of defined scenario path."); 
+                return;
             }
-            const targetStep = currentScenario.steps.find(s => s && s.id === nextId);
+
+            const targetStep = currentScenario.steps.find(s => s && s.id === nextId); // Added check for s
             if (!targetStep) {
-                console.error(`Target step ID "${nextId}" not found. Steps:`, currentScenario.steps);
+                console.error(`navigateToStep: Target step ID "${nextId}" not found in scenario. Current scenario steps:`, currentScenario.steps);
                 showAssistantMessage(`⚠️ Error: Could not find next step ("${nextId}"). Ending call.`, false, 7000);
-                finishCall(false, `Error: Path broken, step ${nextId} not found.`); return;
+                finishCall(false, `Error: Path broken, step ${nextId} not found.`);
+                return;
             }
+
             if (currentStepId) stepHistory.push(currentStepId); 
-            currentStepId = nextId; renderStep();
+            currentStepId = nextId;
+            renderStep();
         }
+
 
         function renderProgressTracker() {
             if (!progressTrackerContainer || !currentScenario || !currentScenario.steps || currentScenario.steps.length === 0) {
-                if(progressTrackerContainer) progressTrackerContainer.style.display = 'none'; return;
+                if(progressTrackerContainer) progressTrackerContainer.style.display = 'none';
+                return;
             }
             const stepperWrapper = progressTrackerContainer.querySelector('.stepper-wrapper');
-            if (!stepperWrapper) { console.error("Stepper-wrapper not found."); return; }
-            stepperWrapper.innerHTML = ''; const stepperUl = document.createElement('ul'); stepperUl.className = 'stepper';
+            if (!stepperWrapper) {
+                console.error("Progress tracker's stepper-wrapper not found.");
+                return;
+            }
+            
+            stepperWrapper.innerHTML = ''; 
+            const stepperUl = document.createElement('ul');
+            stepperUl.className = 'stepper';
+
             currentScenario.steps.forEach((step, index) => {
-                if(!step || typeof step.id === 'undefined') return;
-                const stepLi = document.createElement('li'); stepLi.className = 'step';
-                if (stepHistory.includes(step.id)) stepLi.classList.add('completed');
-                else if (step.id === currentStepId) stepLi.classList.add('active');
-                const stepNumber = document.createElement('span'); stepNumber.className = 'step-number';
+                if(!step || typeof step.id === 'undefined') { // Skip invalid steps in progress tracker
+                    console.warn("Skipping invalid step in progress tracker rendering:", step);
+                    return;
+                }
+                const stepLi = document.createElement('li');
+                stepLi.className = 'step';
+                
+                if (stepHistory.includes(step.id)) {
+                    stepLi.classList.add('completed');
+                } else if (step.id === currentStepId) {
+                    stepLi.classList.add('active');
+                }
+
+                const stepNumber = document.createElement('span');
+                stepNumber.className = 'step-number';
                 stepNumber.textContent = stepHistory.includes(step.id) ? '✓' : index + 1;
-                stepLi.appendChild(stepNumber); stepperUl.appendChild(stepLi);
+                stepLi.appendChild(stepNumber);
+                stepperUl.appendChild(stepLi);
+
                 if (index < currentScenario.steps.length - 1) { 
-                    const separator = document.createElement('li'); separator.className = 'step-separator';
-                     if (stepHistory.includes(step.id) && currentStepId !== step.id) separator.style.backgroundColor = 'var(--success-color)'; 
+                    const separator = document.createElement('li');
+                    separator.className = 'step-separator';
+                    if (stepHistory.includes(step.id) && currentStepId !== step.id) {
+                        separator.style.backgroundColor = 'var(--success-color)';
+                    }
                     stepperUl.appendChild(separator);
                 }
             });
-            stepperWrapper.appendChild(stepperUl); progressTrackerContainer.style.display = 'block';
+            stepperWrapper.appendChild(stepperUl);
+            progressTrackerContainer.style.display = 'block';
         }
 
+
         nextStepBtn.addEventListener('click', () => {
-            const stepObject = currentScenario.steps.find(s => s && s.id === currentStepId);
-            if (!stepObject) { console.error("Next button: current step not found for ID:", currentStepId); return; }
-            if (stepObject.next_id) navigateToStep(stepObject.next_id);
-            else { stopAndRecordStepTimer(); finishCall(true, "Scenario finished via 'Finish Scenario' button."); }
+            const stepObject = currentScenario.steps.find(s => s && s.id === currentStepId); // Added check for s
+            if (!stepObject) {
+                console.error("Next button clicked, but current step object not found for ID:", currentStepId);
+                return;
+            }
+
+            if (stepObject.next_id) { 
+                navigateToStep(stepObject.next_id);
+            } else { 
+                stopAndRecordStepTimer(); 
+                finishCall(true, "Scenario finished via 'Finish Scenario' button."); 
+            }
         });
+
         prevStepBtn.addEventListener('click', () => {
             stopAndRecordStepTimer(); 
-            if (stepHistory.length > 0) { currentStepId = stepHistory.pop(); renderStep(); }
+            if (stepHistory.length > 0) {
+                currentStepId = stepHistory.pop(); 
+                renderStep();
+            }
         });
-        endCallBtn.addEventListener('click', () => { stopAndRecordStepTimer(); finishCall(false, "Call ended by agent"); });
+        
+        endCallBtn.addEventListener('click', () => {
+            stopAndRecordStepTimer(); 
+            finishCall(false, "Call ended by agent"); 
+        });
 
         function startStepTimer() {
-            callTimerDiv.style.display = 'inline-block'; if (stepTimerInterval) clearInterval(stepTimerInterval);
+            callTimerDiv.style.display = 'inline-block';
+            if (stepTimerInterval) clearInterval(stepTimerInterval);
             if (stepStartTime === 0) stepStartTime = Date.now(); 
+            
             function updateTimerDisplay() {
-                const elapsed = Date.now() - stepStartTime; const totalSeconds = Math.floor(elapsed / 1000);
+                const elapsedMilliseconds = Date.now() - stepStartTime;
+                const totalSeconds = Math.floor(elapsedMilliseconds / 1000);
                 const minutes = String(Math.floor(totalSeconds / 60)).padStart(2, '0');
                 const seconds = String(totalSeconds % 60).padStart(2, '0');
                 callTimerDiv.textContent = `${minutes}:${seconds}`;
             }
-            updateTimerDisplay(); stepTimerInterval = setInterval(updateTimerDisplay, 1000);
+            updateTimerDisplay(); 
+            stepTimerInterval = setInterval(updateTimerDisplay, 1000);
         }
+
         function stopAndRecordStepTimer() {
-            if (stepTimerInterval) clearInterval(stepTimerInterval); stepTimerInterval = null;
+            if (stepTimerInterval) clearInterval(stepTimerInterval);
+            stepTimerInterval = null;
+
             if (stepStartTime > 0 && currentScenario && currentStepId && accumulatedStepDurations.hasOwnProperty(currentStepId)) {
                 const durationSeconds = Math.floor((Date.now() - stepStartTime) / 1000);
                 accumulatedStepDurations[currentStepId] = (accumulatedStepDurations[currentStepId] || 0) + durationSeconds;
@@ -694,98 +789,205 @@
         
         async function finishCall(completedAllSteps, reasonText) { 
             stopAndRecordStepTimer(); 
+            
             const endTimeISO = new Date().toISOString();
-            let durationInSecondsForSummary = callStartTimeISO ? Math.max(0, Math.floor((new Date(endTimeISO).getTime() - new Date(callStartTimeISO).getTime()) / 1000)) :
-                                                               Object.values(accumulatedStepDurations).reduce((s, d) => s + (d || 0), 0);
+            let durationInSecondsForSummary = 0; 
+
+            if (callStartTimeISO) {
+                durationInSecondsForSummary = Math.floor((new Date(endTimeISO).getTime() - new Date(callStartTimeISO).getTime()) / 1000);
+                if (durationInSecondsForSummary < 0) durationInSecondsForSummary = 0;
+            } else {
+                durationInSecondsForSummary = Object.values(accumulatedStepDurations).reduce((sum, dur) => sum + (dur || 0), 0);
+            }
+            
             const quality = completedAllSteps ? 'Good' : (durationInSecondsForSummary > 0 ? 'Bad' : 'N/A'); 
-            const reason = reasonText || (completedAllSteps ? 'Scenario path completed.' : 'Call ended prematurely.');
-            updateSystemStatus(completedAllSteps ? "✅ Call Completed" : "⚪ Call Ended", completedAllSteps ? "status-completed" : "status-ended");
+            const reason = reasonText || (completedAllSteps ? 'Scenario path completed successfully.' : 'Call ended prematurely or path incomplete.');
+            
+            updateSystemStatus(completedAllSteps ? "✅ Call Completed" : "⚪ Call Ended", 
+                               completedAllSteps ? "status-completed" : "status-ended");
+
             if (callSessionId) {
-                const { error: updateError } = await supabase.from('call_sessions')
-                    .update({ end_time: endTimeISO, duration: durationInSecondsForSummary, completed: completedAllSteps, call_quality: quality, quality_reason: reason })
+                const updatePayload = {
+                    end_time: endTimeISO,
+                   duration: durationInSecondsForSummary,
+                    completed: completedAllSteps, 
+                    call_quality: quality,
+                    quality_reason: reason,
+                };
+                
+                const { error: updateError } = await supabase
+                    .from('call_sessions')
+                    .update(updatePayload)
                     .eq('id', callSessionId);
-                if (updateError) { console.error("Failed to update call session:", updateError); showAssistantMessage(`⚠️ Error saving summary: ${updateError.message}.`, false, 8000); }
-            } else { showAssistantMessage("⚠️ Could not save summary: No session ID.", false, 8000); }
-            displayPostCallSummary(quality, reason, durationInSecondsForSummary); clearCallState(); 
+
+                if (updateError) {
+                    console.error("Failed to update call session in Supabase. ID:", callSessionId, "Error:", JSON.stringify(updateError, null, 2));
+                    showAssistantMessage(`⚠️ Error saving call summary: ${updateError.message}. Check console.`, false, 8000);
+                } else {
+                    console.log("Call session (ID: " + callSessionId + ") updated successfully in Supabase.");
+                }
+            } else {
+                console.warn("callSessionId is null. Cannot update call session.");
+                showAssistantMessage("⚠️ Could not save call summary: No active session ID.", false, 8000);
+            }
+            
+            displayPostCallSummary(quality, reason, durationInSecondsForSummary);
+            clearCallState(); 
         }
+
         function displayPostCallSummary(quality, reason, totalDurationSeconds) {
-            let summaryHTML = `<p><strong>Call Quality:</strong> <span class="quality-text quality-${quality?.toLowerCase() || 'na'}">${quality || 'N/A'}</span></p>
+            let summaryHTML = `
+                <p><strong>Call Quality:</strong> <span class="quality-text quality-${quality?.toLowerCase() || 'na'}">${quality || 'N/A'}</span></p>
                 <p><strong>Reason:</strong> ${reason || "N/A"}</p>
                 <p><strong>Total Call Duration:</strong> ${Math.floor(totalDurationSeconds / 60)}m ${totalDurationSeconds % 60}s</p>
-                <hr style="margin: 1rem 0; border-color: var(--border-color-offset);"><p><strong>Time Spent on Steps (visited):</strong></p>
+                <hr style="margin: 1rem 0; border-color: var(--border-color);">
+                <p><strong>Time Spent on Steps (visited):</strong></p>
                 <ul style="list-style: none; padding-left: 0; max-height: 150px; overflow-y: auto;">`;
+
             if (currentScenario && currentScenario.steps && Object.keys(accumulatedStepDurations).length > 0) {
                 let visitedStepsInOrder = [...stepHistory];
-                if(currentStepId && !visitedStepsInOrder.includes(currentStepId)) visitedStepsInOrder.push(currentStepId);
+                if(currentStepId && !visitedStepsInOrder.includes(currentStepId)) visitedStepsInOrder.push(currentStepId); // Add current if not already (e.g. first step)
+                
                 let uniqueVisitedSteps = [...new Set(visitedStepsInOrder)].filter(id => id != null); 
+                
                 uniqueVisitedSteps.forEach(stepId => {
-                    const stepObject = currentScenario.steps.find(s => s && s.id === stepId);
+                    const stepObject = currentScenario.steps.find(s => s && s.id === stepId); // Added check for s
                     const duration = accumulatedStepDurations[stepId] || 0;
-                    if (stepObject && (duration > 0 || stepHistory.includes(stepId) || stepId === currentStepId) ) {
+                    if (stepObject && (duration > 0 || stepHistory.includes(stepId) || stepId === currentStepId) ) { // Show if visited or has duration
                         const stepShortText = stepObject.text.length > 30 ? stepObject.text.substring(0, 27) + "..." : stepObject.text;
-                        summaryHTML += `<li style="margin-bottom: 0.3rem;">"${stepShortText}": ${Math.floor(duration / 60)}m ${duration % 60}s</li>`;
+                        const timeStr = `${Math.floor(duration / 60)}m ${duration % 60}s`;
+                        summaryHTML += `<li style="margin-bottom: 0.3rem;">"${stepShortText}": ${timeStr}</li>`;
                     }
                 });
-                 const totalAccumulatedDuration = Object.values(accumulatedStepDurations).reduce((s, d) => s + (d || 0), 0);
+
+                 const totalAccumulatedDuration = Object.values(accumulatedStepDurations).reduce((sum, dur) => sum + (dur || 0), 0);
                  summaryHTML += `<li style="margin-top: 0.5rem; font-weight: bold;">Total Active Step Time: ${Math.floor(totalAccumulatedDuration / 60)}m ${totalAccumulatedDuration % 60}s</li>`;
-            } else summaryHTML += `<li>No step duration data available.</li>`;
-            summaryHTML += `</ul>`; callSummaryContentDiv.innerHTML = summaryHTML; switchToSummaryView();
+
+            } else {
+                summaryHTML += `<li>No step duration data available.</li>`;
+            }
+            summaryHTML += `</ul>`;
+            callSummaryContentDiv.innerHTML = summaryHTML;
+            switchToSummaryView();
         }
         
         returnToInitialViewBtn.addEventListener('click', async () => {
-            resetCallState(true); await loadActiveScenarios();
+            resetCallState(true); 
+            await loadActiveScenarios();
             showAssistantMessage("💡 Ready for the next call! Select a scenario.", true, 7000);
         });
 
         function saveCallState() {
-            if (!callSessionId || !currentScenario || !callStartTimeISO || !currentStepId) return;
-            const state = { callSessionId, currentScenario, currentStepId, stepHistory: [...stepHistory], 
-                            accumulatedStepDurations: {...accumulatedStepDurations}, stepStartTime, callStartTimeISO, timestamp: Date.now() };
-            try { sessionStorage.setItem(SESSION_STATE_KEY, JSON.stringify(state)); } 
-            catch (e) { console.error("Error saving call state:", e); }
+            if (!callSessionId || !currentScenario || !callStartTimeISO || !currentStepId) {
+                console.warn("Attempted to save call state, but critical data missing. Skipping save.");
+                return;
+            }
+            const state = {
+                callSessionId,
+                currentScenario, 
+                currentStepId, 
+                stepHistory: [...stepHistory], 
+                accumulatedStepDurations: {...accumulatedStepDurations}, 
+                stepStartTime: stepStartTime, 
+                callStartTimeISO: callStartTimeISO, 
+                timestamp: Date.now()
+            };
+            try {
+                sessionStorage.setItem(SESSION_STATE_KEY, JSON.stringify(state));
+                console.log("Call state saved to sessionStorage.");
+            } catch (e) { console.error("Error saving call state to sessionStorage:", e); }
         }
+
         function restoreCallState() {
             try {
-                const savedStateJSON = sessionStorage.getItem(SESSION_STATE_KEY); if (!savedStateJSON) return false;
+                const savedStateJSON = sessionStorage.getItem(SESSION_STATE_KEY);
+                if (!savedStateJSON) return false;
                 const savedState = JSON.parse(savedStateJSON);
+                
                 if (!savedState.callSessionId || !savedState.currentScenario || !savedState.currentScenario.steps ||
                     !savedState.currentStepId || !savedState.callStartTimeISO || !Array.isArray(savedState.stepHistory) ||
-                    typeof savedState.accumulatedStepDurations !== 'object') { clearCallState(); return false; }
-                callSessionId = savedState.callSessionId; currentScenario = savedState.currentScenario; 
-                currentStepId = savedState.currentStepId; stepHistory = savedState.stepHistory;
+                    typeof savedState.accumulatedStepDurations !== 'object') { 
+                    console.warn("Invalid or incomplete call state (v3) found. Clearing it.", savedState);
+                    clearCallState();
+                    return false;
+                }
+                
+                callSessionId = savedState.callSessionId;
+                currentScenario = savedState.currentScenario; 
+                currentStepId = savedState.currentStepId;
+                stepHistory = savedState.stepHistory;
                 accumulatedStepDurations = savedState.accumulatedStepDurations;
-                stepStartTime = savedState.stepStartTime || 0; callStartTimeISO = savedState.callStartTimeISO; 
+                stepStartTime = savedState.stepStartTime || 0; 
+                callStartTimeISO = savedState.callStartTimeISO; 
+                
+                console.log("Call state (v3) restored from sessionStorage:", savedState);
                 return true;
-            } catch (e) { console.error("Error restoring call state:", e); clearCallState(); return false; }
+            } catch (e) {
+                console.error("Error restoring call state (v3) from sessionStorage:", e);
+                clearCallState(); 
+                return false;
+            }
         }
+
         function clearCallState() {
-            sessionStorage.removeItem(SESSION_STATE_KEY); callStartTimeISO = null; callSessionId = null; 
-            currentStepId = null; stepHistory = [];
+            sessionStorage.removeItem(SESSION_STATE_KEY);
+            callStartTimeISO = null; 
+            callSessionId = null; 
+            currentStepId = null;
+            stepHistory = [];
+            console.log("Cleared call state from sessionStorage and reset related state variables.");
         }
+
         function resetCallState(switchToInitial = false) {
-            stopAndRecordStepTimer(); clearCallState();         
-            currentScenario = null; currentStepId = null; stepHistory = [];
-            accumulatedStepDurations = {}; stepStartTime = 0; currentStepIndexForProgressBar = 0;
-            if (switchToInitial) switchToInitialView();
+            stopAndRecordStepTimer(); 
+            clearCallState();         
+
+            currentScenario = null;
+            currentStepId = null;
+            stepHistory = [];
+            accumulatedStepDurations = {};
+            stepStartTime = 0;
+            currentStepIndexForProgressBar = 0;
+            
+            if (switchToInitial) {
+                switchToInitialView();
+            }
+            console.log("Full call state reset.");
         }
 
         logoutButton.addEventListener('click', async () => {
-            resetCallState(); localStorage.removeItem('elevoCoreUserData'); 
-            if (supabase) { const { error } = await supabase.auth.signOut(); if (error) console.error("Logout error:", error); }
+            resetCallState(); 
+            localStorage.removeItem('elevoCoreUserData'); 
+            if (supabase) {
+                const { error } = await supabase.auth.signOut();
+                if (error) console.error("Logout error:", error);
+            }
             window.location.replace("login.html");
         });
+
         scenarioDropdown.addEventListener('change', () => {
             const isValidSelection = scenarioDropdown.value && scenarioDropdown.value !== "" &&
                                      scenarioDropdown.options[scenarioDropdown.selectedIndex] &&
                                      !scenarioDropdown.options[scenarioDropdown.selectedIndex].disabled;
             receiveCallBtn.disabled = !isValidSelection;
         });
-        window.addEventListener('error', (event) => console.error('Global error:', event.error, event.filename, event.lineno));
-        window.addEventListener('beforeunload', () => { if (callSessionId) saveCallState(); });
+
+        window.addEventListener('error', function(event) {
+            console.error('Global error caught:', event.error, 'at', event.filename, ':', event.lineno);
+        });
+
+        window.addEventListener('beforeunload', () => {
+            if (callSessionId && currentScenario && callStartTimeISO && currentStepId) { 
+                saveCallState(); 
+            }
+        });
         
-        if (supabase) initializeApp();
-        else authLoadingDiv.innerHTML = '<p style="color:red; text-align:center;">Core services could not be initialized.</p>';
-        console.log(`Elevo Core Flow script (${SESSION_STATE_KEY}) loaded.`);
+        if (supabase) { 
+            initializeApp();
+        } else {
+            authLoadingDiv.innerHTML = '<p style="color:red; text-align:center;">Core services could not be initialized. Application cannot start.</p>';
+        }
+        console.log("Elevo Core Flow script (v.with_decision_steps_v3.1_robustness) loaded and initialized execution.");
     </script>
 </body>
 </html>
