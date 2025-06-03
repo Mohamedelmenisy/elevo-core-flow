@@ -3,1058 +3,1791 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>InfiniBase - Knowledge Base</title>
-    <link rel="icon" type="image/x-icon" href="https://cdn-icons-png.flaticon.com/512/919/919820.png"> <!-- Favicon لقاعدة المعرفة -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
-    <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
-    <script src="https://cdn.quilljs.com/1.3.6/quill.min.js"></script>
+    <title>Admin Dashboard - Elevo Core</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2317a2b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M3 12h18M3 6h12M3 18h15'/><path d='M17 9l4 3l-4 3'/></svg>">
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
-        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-        html { scroll-behavior: smooth; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
-        body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
-            transition: background-color 0.3s ease, color 0.3s ease;
-        }
-        .dark body { background-color: #111827; color: #d1d5db; }
-        body:not(.dark) { background-color: #f3f4f6; color: #1f2937; }
+        /* Styles from dash.txt <style> block are here */
+        :root { /* Define shared color variables */
+            --primary-color: #17a2b8; /* Example, adjust as needed */
+            --danger-color: #dc3545;
+            --success-color: #28a745;
+            --warning-color: #ffc107;
+            --text-color: #333;
+            --text-color-light: #6c757d;
+            --text-color-subtle: #868e96;
+            --card-bg-color: #fff;
+            --bg-color: #f8f9fa;
+            --border-color: #e2e8f0;
+            --border-radius-md: 6px;
+            --border-radius-lg: 8px;
+            --shadow-md: 0 2px 10px rgba(0,0,0,0.05);
+            --button-secondary-bg: #e9ecef; /* Example */
+            --secondary-hover-color: #ced4da; /* Example */
 
-        .sidebar {
-            width: 260px;
-            position: fixed;
-            top: 0;
-            left: 0;
-            height: 100vh;
+
+            /* Dark mode variables - these are placeholders, adjust as needed */
+            --text-color-dark: #f7fafc;
+            --text-secondary-dark: #a0aec0;
+            --card-bg-dark: #2d3748;
+            --bg-dark-accent: #1a202c; /* For nested cards or distinct sections in dark mode */
+            --border-color-dark: #4a5568;
+            --shadow-lg: 0 2px 10px rgba(0,0,0,0.2);
+
+        }
+        .dark {
+            --text-color: var(--text-color-dark);
+            --text-color-light: var(--text-secondary-dark);
+            --text-color-subtle: var(--text-secondary-dark); /* Can be same as light or a bit more muted */
+            --card-bg-color: var(--card-bg-dark);
+            --bg-color: var(--bg-dark-accent); /* Main background for dark mode can be darker */
+            --border-color: var(--border-color-dark);
+            --shadow-md: var(--shadow-lg);
+            --button-secondary-bg: #3f4a5f; /* Example for dark */
+            --secondary-hover-color: #525f7f; /* Example for dark */
+        }
+
+
+        #accessDeniedModal {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(0, 0, 0, 0.7); display: none; 
+            justify-content: center; align-items: center; z-index: 1000; color: #333;
+        }
+        .access-denied-content {
+            background-color: var(--card-bg-color, #fff); 
+            padding: 2rem 3rem; border-radius: 8px; text-align: center;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2); max-width: 450px;
+        }
+        .dark .access-denied-content { 
+             background-color: var(--card-bg-dark, #2d3748);
+             color: var(--text-color-dark, #f7fafc);
+        }
+        .access-denied-content svg {
+            margin-bottom: 1rem; stroke: var(--danger-color, #dc3545); 
+            width: 56px; height: 56px;
+        }
+        .access-denied-content h3 {
+            margin-top: 0; margin-bottom: 0.75rem; font-size: 1.5rem;
+            color: var(--text-color, #333); 
+        }
+        .dark .access-denied-content h3 { color: var(--text-color-dark, #f7fafc); }
+         .access-denied-content p {
+            margin-bottom: 1.5rem; color: var(--text-color-light, #6c757d); 
+         }
+        .dark .access-denied-content p { color: var(--text-secondary-dark, #a0aec0); }
+        #returnToAppBtn { padding: 0.75rem 1.5rem; font-size: 1rem; cursor: pointer; }
+
+        .filter-grid > div > label {
+            display: block; margin-bottom: 0.25rem; font-size: 0.875rem;
+            color: var(--text-color-light, #6c757d); 
+        }
+        .dark .filter-grid > div > label { color: var(--text-secondary-dark, #a0aec0); }
+        .filter-grid > div > input[type="date"] {
+            display: block; width: 100%; box-sizing: border-box;
+        }
+
+        #liveCallsContainerWrapper {
+            background-color: var(--card-bg-color, #fff); 
+            padding: 1rem 1.5rem;
+            border-radius: var(--border-radius-lg, 8px); 
+            box-shadow: var(--shadow-md, 0 2px 10px rgba(0,0,0,0.05)); 
+        }
+        .dark #liveCallsContainerWrapper {
+            background-color: var(--card-bg-dark, #1a202c);
+            box-shadow: var(--shadow-lg, 0 2px 10px rgba(0,0,0,0.2)); 
+        }
+        #liveCallsContainerWrapper h2 {
+            font-size: 1.15rem; font-weight: 600; margin-bottom: 1rem;
+            color: var(--text-color); 
+            border-bottom: 1px solid var(--border-color, #e2e8f0); 
+            padding-bottom: 0.75rem; display: flex; align-items: center; gap: 0.5rem;
+        }
+        .dark #liveCallsContainerWrapper h2 {
+            color: var(--text-color-dark);
+            border-bottom-color: var(--border-color-dark, #4a5568);
+        }
+        #liveCallsContainerWrapper h2 svg {
+            stroke: var(--primary-color); 
+            animation: pulseIconLive 2s infinite ease-in-out; 
+        }
+        @keyframes pulseIconLive { 
+            0% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.7; transform: scale(1.1); }
+            100% { opacity: 1; transform: scale(1); }
+        }
+        .live-calls-list { max-height: 250px; overflow-y: auto; padding-right: 0.5rem; }
+        .live-call-item {
+            background-color: var(--bg-color); 
+            border: 1px solid var(--border-color, #e2e8f0); 
+            padding: 0.75rem 1rem; border-radius: 6px; margin-bottom: 0.75rem;
+            font-size: 0.9rem; transition: background-color 0.2s ease;
+        }
+        .dark .live-call-item {
+            background-color: var(--bg-dark-accent); /* Dark mode accent, distinct from card background */
+            border-color: var(--border-color-dark, #4a5568);
+        }
+        .live-call-item:last-child { margin-bottom: 0; }
+        .live-call-item:hover { background-color: var(--button-secondary-bg); } 
+        .dark .live-call-item:hover { background-color: var(--secondary-hover-color); } 
+        .live-call-item-agent {
+            font-weight: 600; color: var(--primary-color); margin-bottom: 0.25rem;
+        }
+        .live-call-item-scenario, .live-call-item-time {
+            font-size: 0.85rem; color: var(--text-color-light); margin-bottom: 0.125rem; 
+        }
+        .dark .live-call-item-scenario, .dark .live-call-item-time {
+            color: var(--text-secondary-dark);
+        }
+        #noLiveCallsMessage {
+            padding: 1rem; text-align: center; color: var(--text-color-subtle); font-style: italic; 
+        }
+        .dark #noLiveCallsMessage { color: var(--text-color-subtle); }
+
+        .live-call-item.long-call-alert {
+            border-left: 4px solid var(--danger-color, #dc3545);
+        }
+        .dark .live-call-item.long-call-alert {
+            background-color: rgba(220, 53, 69, 0.15); 
+        }
+        .long-call-indicator { 
+            color: var(--danger-color, #dc3545);
+            font-weight: bold;
+            font-size: 0.8em;
+            margin-left: 0.5em;
+        }
+
+        /* MODIFICATION: Styles for Analytics Section Enhancements */
+        .analytics-section.card {
+            background-color: var(--card-bg-color);
             padding: 1.5rem;
-            overflow-y: auto;
-            transition: transform 0.3s ease-in-out;
-            z-index: 40;
-        }
-        .dark .sidebar { background-color: #1f2937; color: #9ca3af; border-right: 1px solid #374151; }
-        body:not(.dark) .sidebar { background-color: #ffffff; color: #4b5563; border-right: 1px solid #e5e7eb; }
-
-        .sidebar-header {
-            font-size: 1.5rem;
-            font-weight: 700;
+            border-radius: var(--border-radius-lg);
+            box-shadow: var(--shadow-md);
             margin-bottom: 1.5rem;
+        }
+        .dark .analytics-section.card {
+            background-color: var(--card-bg-dark);
+            box-shadow: var(--shadow-lg);
+        }
+        .analytics-section h2 {
+            margin-top:0; 
+            margin-bottom: 1.5rem; 
+            border-bottom: 1px solid var(--border-color); 
+            padding-bottom: 0.75rem;
+            font-size: 1.25rem;
+            color: var(--text-color);
+        }
+        .dark .analytics-section h2 {
+            border-bottom-color: var(--border-color-dark);
+            color: var(--text-color-dark);
+        }
+
+        /* NEW: Analytics Summary Row Styles */
+        .analytics-summary-row {
             display: flex;
-            align-items: center;
+            flex-wrap: wrap;
+            gap: 1.5rem; /* Increased gap for better separation */
+            margin-bottom: 1.5rem;
+            padding: 1rem;
+            background-color: var(--bg-color);
+            border-radius: var(--border-radius-md);
+            border: 1px solid var(--border-color);
         }
-        .dark .sidebar-header { color: #ffffff; }
-        body:not(.dark) .sidebar-header { color: #1f2937; }
-
-        .sidebar-link {
-            display: flex;
-            align-items: center;
-            padding: 0.75rem;
-            border-radius: 0.5rem;
-            transition: background-color 0.2s ease, color 0.2s ease;
-            font-weight: 500;
+        .dark .analytics-summary-row {
+            background-color: var(--bg-dark-accent);
+            border-color: var(--border-color-dark);
         }
-        .dark .sidebar-link { color: #9ca3af; }
-        body:not(.dark) .sidebar-link { color: #4b5563; }
-
-        .dark .sidebar-link:hover { background-color: #374151; color: #ffffff; }
-        body:not(.dark) .sidebar-link:hover { background-color: #e5e7eb; color: #1f2937; }
-
-        .sidebar-link.active {
-            font-weight: 600;
-            background-color: #2563eb;
-            color: #ffffff;
+        .summary-item {
+            flex: 1;
+            min-width: 220px; /* Adjusted min-width */
+            padding: 0.75rem; /* Added padding inside items */
         }
-
-        .sidebar-link i { margin-right: 0.75rem; width: 1.25rem; text-align: center; }
-
-        .sidebar-section-title {
-            padding-left: 0.75rem;
-            font-size: 0.75rem;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            margin-top: 1.5rem;
+        .summary-item h4 { /* For titles within summary items */
+            font-size: 0.9rem;
+            color: var(--text-color-light);
+            margin-top: 0;
             margin-bottom: 0.5rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
-        .dark .sidebar-section-title { color: #6b7280; }
-        body:not(.dark) .sidebar-section-title { color: #9ca3af; }
-
-        .content-wrapper {
-            margin-left: 260px;
-            height: 100vh;
-            overflow-y: auto;
-            transition: margin-left 0.3s ease-in-out;
+        .dark .summary-item h4 {
+             color: var(--text-secondary-dark);
+        }
+        .quality-tip {
+            font-style: italic;
+            color: var(--text-color-subtle);
+            font-size: 0.9rem;
+            line-height: 1.4;
+        }
+        #generalQualityIndicator p { margin-bottom: 0.25rem; font-size: 1rem;}
+        #generalQualityIndicator .status-icon { margin-right: 0.5rem; }
+        #generalQualityIndicator .status-good { color: var(--success-color, #28a745); font-weight: 500;}
+        #generalQualityIndicator .status-warning { color: var(--warning-color, #ffc107); font-weight: 500;}
+        #generalQualityIndicator .status-danger { color: var(--danger-color, #dc3545); font-weight: 500;}
+        
+        #averageQualityScoreDisplay .score-value { 
+            font-size: 1.8rem; /* Larger score */
+            font-weight: 700; 
+            color: var(--primary-color); 
+            margin-right: 0.25rem;
+        }
+        #averageQualityScoreDisplay .score-max {
+            font-size: 1rem;
+            color: var(--text-color-light);
+        }
+        .dark #averageQualityScoreDisplay .score-max {
+            color: var(--text-secondary-dark);
         }
 
-        .content-header {
-            position: sticky;
-            top: 0;
-            padding: 1.25rem 2rem;
-            z-index: 20;
-            backdrop-filter: blur(8px);
-        }
-        .dark .content-header { background-color: rgba(17, 24, 39, 0.9); border-bottom: 1px solid #374151; }
-        body:not(.dark) .content-header { background-color: rgba(243, 244, 246, 0.9); border-bottom: 1px solid #e5e7eb; }
 
-        .card {
-            border-radius: 0.75rem; /* Default rounded-lg */
-            padding: 1.5rem;
-            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06);
-            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        /* NEW: Chart Filters Row Styles */
+        .chart-filters-row {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--border-color);
         }
-        .dark .card { background-color: #1f2937; }
-        body:not(.dark) .card { background-color: #ffffff; }
-        .card:hover { transform: translateY(-4px); box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05); }
+        .dark .chart-filters-row {
+            border-bottom-color: var(--border-color-dark);
+        }
+        .duration-filters, .chart-options {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem; /* Gap between label and buttons/checkbox */
+        }
+        .duration-filters .action-button, .chart-options .action-button { /* Style for buttons in this row */
+            padding: 0.4rem 0.8rem;
+            font-size: 0.85rem;
+        }
+        .duration-filters label, .chart-options label {
+            font-size: 0.9rem;
+            font-weight: 500;
+            color: var(--text-color-light);
+        }
+        .dark .duration-filters label, .dark .chart-options label {
+            color: var(--text-secondary-dark);
+        }
+        .chart-options input[type="checkbox"] {
+            transform: scale(1.2); /* Slightly larger checkbox */
+            margin-left: 0.25rem; /* Space from label */
+            cursor: pointer;
+        }
+        /* Active chart period button style */
+        .duration-filters .action-button.active-period {
+            background-color: var(--primary-color);
+            color: white;
+            border-color: var(--primary-color);
+        }
+        .dark .duration-filters .action-button.active-period {
+            background-color: var(--primary-color); /* Or a slightly lighter shade for dark mode */
+        }
 
-        .modal-overlay {
-            position: fixed;
-            inset: 0;
-            background-color: rgba(0, 0, 0, 0.75);
+
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); 
+            gap: 1.5rem;
+        }
+        .chart-container {
+            padding: 1rem;
+            border: 1px solid var(--border-color);
+            border-radius: var(--border-radius-md);
+            background-color: var(--bg-color); 
+            min-height: 300px; 
+            display: flex;
+            flex-direction: column;
+        }
+        .dark .chart-container {
+            border-color: var(--border-color-dark);
+            background-color: var(--bg-dark-accent); 
+        }
+        .chart-container h3 { /* Also applies to #qualityEvolutionChartTitle */
+            font-size: 1.05rem; 
+            margin-bottom: 1rem;
+            color: var(--text-color);
+            text-align: center;
+        }
+        .dark .chart-container h3 {
+            color: var(--text-color-dark);
+        }
+        .chart-container canvas {
+            flex-grow: 1; 
+            max-height: 350px; 
+        }
+        #noBadReasonsMessage {
+            text-align:center; 
+            padding: 2rem; 
+            color: var(--text-color-subtle); 
+            font-style: italic;
+            flex-grow: 1; 
             display: flex;
             align-items: center;
             justify-content: center;
-            z-index: 50;
-            padding: 1rem;
         }
-        .modal-content {
-            padding: 1.5rem;
-            border-radius: 0.75rem;
-            box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1);
-            width: 100%;
-            max-width: 48rem;
-            transform: scale(0.95);
-            opacity: 0;
-            transition: transform 0.2s ease-out, opacity 0.2s ease-out;
-        }
-        .dark .modal-content { background-color: #1f2937; }
-        body:not(.dark) .modal-content { background-color: #ffffff; }
-        .modal-overlay:not(.hidden) .modal-content {
-            transform: scale(1);
-            opacity: 1;
-        }
-
-        .quill-editor-container { height: 200px; margin-bottom: 1rem; border-radius: 0.375rem; overflow: hidden; }
-        .dark .quill-editor-container .ql-toolbar { background: #374151; border-color: #4b5563 !important; }
-        .dark .quill-editor-container .ql-container { background: #2d3748; border-color: #4b5563 !important; color: #d1d5db; }
-        body:not(.dark) .quill-editor-container .ql-toolbar { background: #f9fafb; border-color: #d1d5db !important; }
-        body:not(.dark) .quill-editor-container .ql-container { background: #ffffff; border-color: #d1d5db !important; color: #1f2937; }
-
-        .chart-container {
-            position: relative;
-            padding: 1rem; /* Default padding, card class also has padding */
-            border-radius: 0.75rem; /* Default, overridden by rounded-xl if applied */
-        }
-        .dark .chart-container { background-color: #1f2937; } /* Matches .dark .card */
-        body:not(.dark) .chart-container { background-color: #ffffff; } /* Matches body:not(.dark) .card */
-
-        @media (max-width: 768px) {
-            .sidebar { transform: translateX(-100%); }
-            .sidebar.open { transform: translateX(0); }
-            .content-wrapper { margin-left: 0; }
-            .sidebar-toggle-button { display: block; }
-        }
-
-        .hidden { display: none !important; }
-
-        input:focus, button:focus, select:focus, textarea:focus, a:focus {
-            outline: 2px solid transparent;
-            outline-offset: 2px;
-            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.5);
-        }
-        .dark input:focus, .dark button:focus, .dark select:focus, .dark textarea:focus, .dark a:focus {
-            box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.6);
-        }
-
-        mark { padding: 0.1em 0.2em; border-radius: 0.2em; font-weight: bold; }
-        .dark mark { background-color: #78350f; color: #f3f4f6; }
-        body:not(.dark) mark { background-color: #fde047; color: #1f2937; }
-
-        /* Custom Animations */
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        .animate-fade-in-slow {
-            animation: fadeIn 0.7s ease-out forwards;
-            opacity: 0; /* Start hidden, animation will make it visible */
-        }
-        .animate-fade-in-delay-1 { animation-delay: 0.1s; }
-        .animate-fade-in-delay-2 { animation-delay: 0.2s; }
-        .animate-fade-in-delay-3 { animation-delay: 0.3s; }
-        .animate-fade-in-delay-4 { animation-delay: 0.4s; }
-
-
-        .wave {
-            animation-name: wave-animation;
-            animation-duration: 2.5s;
-            animation-iteration-count: infinite;
-            transform-origin: 70% 70%;
+        /* NEW: Trend arrow styles */
+        .trend-arrow {
+            font-size: 0.9em;
+            margin-left: 5px; /* Space from legend text */
             display: inline-block;
         }
-        @keyframes wave-animation {
-            0% { transform: rotate(0.0deg) }
-            10% { transform: rotate(14.0deg) }
-            20% { transform: rotate(-8.0deg) }
-            30% { transform: rotate(14.0deg) }
-            40% { transform: rotate(-4.0deg) }
-            50% { transform: rotate(10.0deg) }
-            60% { transform: rotate(0.0deg) }
-            100% { transform: rotate(0.0deg) }
-        }
+        .trend-arrow.up::before { content: "↑"; color: var(--success-color, #28a745); }
+        .trend-arrow.down::before { content: "↓"; color: var(--danger-color, #dc3545); }
+        .trend-arrow.neutral::before { content: "→"; color: var(--text-color-subtle, #6c757d); } /* Or use a different icon */
+
 
     </style>
 </head>
 <body>
-    <!-- Add New Content Modal -->
-    <div id="addContentModalOverlay" class="modal-overlay hidden">
-        <div class="modal-content">
-            <div class="flex justify-between items-center mb-6">
-                <h2 class="text-2xl font-bold">Add New Content</h2>
-                <button id="closeAddContentModalBtn" class="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700">
-                    <i class="fas fa-times text-xl"></i>
-                </button>
-            </div>
-            <form id="addContentForm">
-                <div class="mb-4">
-                    <label for="contentType" class="block text-sm font-medium mb-1">Content Type</label>
-                    <select id="contentType" class="p-2.5 w-full border rounded-md bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600">
-                        <option value="case">Case</option>
-                        <option value="sheet">Sheet</option>
-                        <option value="form">Form</option>
-                        <option value="video">Video</option>
-                        <option value="design">Design</option>
-                    </select>
-                </div>
-                <div class="mb-4">
-                    <label for="contentTitle" class="block text-sm font-medium mb-1">Title</label>
-                    <input type="text" id="contentTitle" class="p-2.5 w-full border rounded-md bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600" required>
-                </div>
-                <div class="mb-4">
-                    <label for="contentSummary" class="block text-sm font-medium mb-1">Summary</label>
-                    <textarea id="contentSummary" class="p-2.5 w-full border rounded-md bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600" rows="3" required></textarea>
-                </div>
-                <div class="mb-4 hidden" id="contentUrlContainer">
-                    <label for="contentUrl" class="block text-sm font-medium mb-1">URL (for Sheet/Form/Video/Design)</label>
-                    <input type="url" id="contentUrl" class="p-2.5 w-full border rounded-md bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600">
-                </div>
-                <div class="mb-6 hidden" id="resolutionStepsContainer">
-                    <label class="block text-sm font-medium mb-1">Resolution Steps (for Case)</label>
-                    <div id="quillEditor" class="quill-editor-container"></div>
-                </div>
-                <div class="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
-                    <button type="button" id="cancelAddContentBtn" class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700">Cancel</button>
-                    <button type="submit" id="saveContentBtn" class="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700">Save</button>
-                </div>
-            </form>
-        </div>
+    <div id="accessDeniedModal">
+         <div class="access-denied-content">
+             <svg xmlns="http://www.w3.org/2000/svg" width="56" height="56" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                 <circle cx="12" cy="12" r="10"></circle>
+                 <line x1="12" y1="8" x2="12" y2="12"></line>
+                 <line x1="12" y1="16" x2="12.01" y2="16"></line>
+             </svg>
+             <h3>Access Denied</h3>
+             <p>You do not have permission to view this page. This section is restricted to administrators.</p>
+             <button id="returnToAppBtn" class="action-button primary-button">Return to Agent App</button>
+         </div>
     </div>
 
-    <div class="flex h-screen">
-        <!-- Sidebar -->
-        <aside class="sidebar" id="sidebar">
-            <div class="sidebar-header">
-                <i class="fas fa-database mr-3 text-indigo-400"></i> InfiniBase
+    <div class="app-container" id="appContainerContent" style="display: none; flex-direction: column;">
+        <header class="app-header">
+            <div class="logo-container">
+                 <svg class="company-logo" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M6 17L10 17M6 12L12 12M6 7L14 7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    <path d="M15 6L19 10L15 14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <rect x="3" y="3" width="18" height="18" rx="3" stroke="currentColor" stroke-width="1.5" fill="transparent" opacity="0.6"/>
+                </svg>
+                <span class="app-title">Admin Dashboard - Elevo Core</span>
             </div>
-            <nav id="navigationMenu">
-                <div class="sidebar-section-title">Main</div>
-                <a href="#home" class="sidebar-link" data-section="home"><i class="fas fa-home text-gray-400"></i>Home</a>
-
-                <div class="sidebar-section-title">Knowledge Areas</div>
-                <a href="#support" class="sidebar-link" data-section="support"><i class="fas fa-headset text-blue-400"></i>Support</a>
-                <a href="#partner_care" class="sidebar-link" data-section="partner_care"><i class="fas fa-handshake text-teal-400"></i>Partner Care</a>
-                <a href="#logistics" class="sidebar-link" data-section="logistics"><i class="fas fa-truck text-green-400"></i>Logistics</a>
-                <a href="#customer_care" class="sidebar-link" data-section="customer_care"><i class="fas fa-users text-indigo-400"></i>Customer Care</a>
-                <a href="#dist_follow_up" class="sidebar-link" data-section="dist_follow_up"><i class="fas fa-people-carry text-cyan-400"></i>Distribution & Follow-up</a>
-                <a href="#logistics_driver" class="sidebar-link" data-section="logistics_driver"><i class="fas fa-shipping-fast text-lime-400"></i>Logistics (Driver Complaints)</a>
-                <a href="#logistics_3pl" class="sidebar-link" data-section="logistics_3pl"><i class="fas fa-boxes text-yellow-400"></i>Logistics-3PL</a>
-                <a href="#order_at_store" class="sidebar-link" data-section="order_at_store"><i class="fas fa-store text-pink-400"></i>Order at Store (Mac)</a>
-                <a href="#logistics_admin" class="sidebar-link" data-section="logistics_admin"><i class="fas fa-user-shield text-red-400"></i>Logistics-Admin</a>
-                <a href="#os" class="sidebar-link" data-section="os"><i class="fab fa-windows text-sky-400"></i>Operating Systems</a>
-
-                <div class="sidebar-section-title">Resources & Policies</div>
-                <a href="#compensation" class="sidebar-link" data-section="compensation"><i class="fas fa-hand-holding-usd text-amber-400"></i>Compensation Policies</a>
-                <a href="#op_instructions" class="sidebar-link" data-section="op_instructions"><i class="fas fa-clipboard-list text-slate-400"></i>Operational Instructions</a>
-                <a href="#forms_templates" class="sidebar-link" data-section="forms_templates"><i class="fas fa-file-alt text-purple-400"></i>Forms/Templates</a>
-            </nav>
-            <div class="absolute bottom-6 left-0 right-0 px-6">
-                <button id="themeSwitcher" class="w-full flex items-center justify-center py-2.5 px-4 text-sm font-medium rounded-lg transition shadow-sm border border-gray-600 hover:bg-gray-700">
-                    <i id="themeIcon" class="fas fa-moon mr-2"></i> <span id="themeText">Dark Mode</span>
-                </button>
-                <button id="logoutButton" class="w-full mt-3 flex items-center justify-center py-2.5 px-4 text-sm font-medium rounded-lg transition shadow-sm bg-red-600 hover:bg-red-700 text-white">
-                    <i class="fas fa-sign-out-alt mr-2"></i> Logout
-                </button>
+            <div class="header-controls">
+                 <a href="core-flow.html" class="nav-link">Core Flow</a>
+                 <div class="user-info" id="userInfo" style="display: none;">
+                    <span id="userNameDisplay" class="user-name-display"></span>
+                     <button id="logoutButton" class="logout-btn">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+                        <span>Logout</span>
+                    </button>
+                 </div>
             </div>
-        </aside>
+        </header>
 
-        <!-- Mobile Sidebar Toggle -->
-        <button id="mobileSidebarToggle" class="sidebar-toggle-button p-2 rounded-md bg-gray-700 text-white md:hidden fixed top-4 left-4 z-50">
-            <i class="fas fa-bars text-xl"></i>
-        </button>
-
-        <div class="content-wrapper" id="contentWrapper">
-            <header class="content-header">
-                <div class="flex justify-between items-center w-full">
-                    <div>
-                        <h1 id="currentSectionTitle" class="text-2xl md:text-3xl font-bold">Welcome</h1>
-                        <div id="breadcrumbs" class="text-sm mt-1 text-gray-500 dark:text-gray-400">Home</div>
-                    </div>
-                    <div class="flex items-center space-x-4">
-                        <div class="relative">
-                            <input type="search" id="globalSearchInput" placeholder="Search KB..." class="py-2.5 pl-10 pr-4 w-64 md:w-96 border rounded-full bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 focus:border-indigo-500 focus:ring-indigo-500">
-                            <span class="absolute inset-y-0 left-0 flex items-center pl-3"><i class="fas fa-search text-gray-400"></i></span>
-                            <div id="searchResultsContainer" class="hidden absolute mt-1 w-full max-h-80 overflow-y-auto rounded-md shadow-lg bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 z-10"></div>
-                        </div>
-                        <div id="userProfileContainer" class="flex items-center space-x-2">
-                            <img id="userAvatar" src="https://ui-avatars.com/api/?name=U&size=36&background=4f46e5&color=fff&rounded=true" alt="User" class="w-9 h-9 rounded-full">
-                            <span id="userNameDisplayHeader" class="font-medium hidden sm:block">User</span>
+        <main class="app-main dashboard-main">
+            <div id="authLoadingMessage" class="loading-container" style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 70vh;">
+                <div class="spinner"></div>
+                <p>Verifying access and loading dashboard...</p>
+            </div>
+            
+            <div id="dashboardContent" style="display:none; width:100%;">
+                <div class="dashboard-header">
+                    <div class="greeting-section">
+                        <div id="userAvatarCharacter" class="user-avatar-char-dashboard"></div>
+                        <div>
+                            <h1 id="dashboardUserGreeting">Welcome, Admin!</h1>
+                            <p id="dashboardUserSubtext">Overview of all agent activities.</p>
                         </div>
                     </div>
                 </div>
-            </header>
 
-            <main class="p-6 md:p-8" id="pageContentArea">
-                <div id="dashboardOverviewContainer" class="hidden space-y-8">
-                    <div class="card bg-gradient-to-r from-indigo-500 to-purple-500 text-white animate-fade-in-slow">
-                        <h2 class="text-3xl font-bold mb-2 tracking-wide" id="welcomeUserNameDashboard">Welcome, User!</h2>
-                        <p class="text-indigo-200"><span class="wave">👋</span> Here's a quick snapshot of your knowledge base performance.</p>
-                        <p class="text-sm text-indigo-300 mt-1">InfiniBase v<span id="kbVersionDashboard"></span> | Last Update: <span id="lastKbUpdateDashboard"></span></p>
+                <div class="stats-grid" id="statsGrid">
+                     <div class="stat-card"><h3>Total Calls (Filtered)</h3><p id="totalCalls">0</p><span class="stat-period" id="statsPeriod">All Agents</span></div>
+                     <div class="stat-card"><h3>Avg. Call Duration</h3><p id="avgCallDuration">0m 0s</p><span class="stat-period" id="statsPeriodDuration">All Agents</span></div>
+                     <div class="stat-card"><h3>Completion Rate</h3><p id="completionRate">0%</p><span class="stat-period" id="statsPeriodCompletion">All Agents</span></div>
+                     <div class="stat-card"><h3>Avg. Call Quality</h3><div class="quality-gauge"><div class="gauge-bar-container"><div id="gaugeGood" class="gauge-segment good"></div><div id="gaugeNormal" class="gauge-segment normal"></div><div id="gaugeBad" class="gauge-segment bad"></div></div><span id="avgQualityText">N/A</span></div></div>
+                </div>
+
+                <div id="liveCallsContainerWrapper" class="card" style="margin-bottom: 1.5rem;">
+                    <h2>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1.5"></circle><circle cx="12" cy="12" r="5.5"></circle><circle cx="12" cy="12" r="9.5"></circle></svg>
+                        Live Call Monitoring
+                    </h2>
+                    <div id="liveCallsContainer" class="live-calls-list">
+                        <p id="noLiveCallsMessage" style="display:block;">Loading live calls...</p>
                     </div>
+                </div>
 
-                    <div class="animate-fade-in-slow animate-fade-in-delay-1">
-                        <h3 class="text-xl font-semibold mb-4 tracking-wide text-gray-800 dark:text-gray-200">Quick Stats</h3>
-                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
-                            <div class="p-4 rounded-lg bg-gray-50 dark:bg-gray-800 shadow-md">
-                                <p class="font-bold text-lg text-gray-900 dark:text-white">12</p>
-                                <p class="text-gray-600 dark:text-gray-400">New Cases</p>
-                            </div>
-                            <div class="p-4 rounded-lg bg-gray-50 dark:bg-gray-800 shadow-md">
-                                <p class="font-bold text-lg text-gray-900 dark:text-white">48</p>
-                                <p class="text-gray-600 dark:text-gray-400">Article Views</p>
-                            </div>
-                            <div class="p-4 rounded-lg bg-gray-50 dark:bg-gray-800 shadow-md">
-                                <p class="font-bold text-lg text-gray-900 dark:text-white">3</p>
-                                <p class="text-gray-600 dark:text-gray-400">New Users</p>
-                            </div>
+                <div class="analytics-section card" id="analyticsSection">
+                    <h2>Call Analytics</h2>
+
+                    <div class="analytics-summary-row">
+                        <div id="generalQualityIndicator" class="summary-item">
+                            <h4>Overall Quality Trend</h4>
+                            <p><span class="status-icon"></span><span class="status-text">Loading...</span></p>
+                            <small class="comparison-text"></small>
+                        </div>
+                        <div id="averageQualityScoreDisplay" class="summary-item">
+                            <h4>Avg. Quality Score</h4>
+                            <p><span class="score-value">N/A</span> <span class="score-max">/ 100</span></p>
+                        </div>
+                        <div class="summary-item"> 
+                           <h4>💡 Pro Tip</h4>
+                           <p id="qualityTipText" class="quality-tip">Analyzing call data for insights...</p>
                         </div>
                     </div>
 
-                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-10 animate-fade-in-slow animate-fade-in-delay-2">
-                        <div class="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div class="card chart-container h-72 md:h-80 rounded-xl shadow-md border border-gray-300 dark:border-gray-600">
-                                <h3 class="text-lg font-semibold mb-2 text-center tracking-wide">User Activity</h3>
-                                <canvas id="usersChart"></canvas>
-                            </div>
-                            <div class="card chart-container h-72 md:h-80 rounded-xl shadow-md border border-gray-300 dark:border-gray-600">
-                                <h3 class="text-lg font-semibold mb-2 text-center tracking-wide">Case Views</h3>
-                                <canvas id="casesChart"></canvas>
-                            </div>
+                    <div class="chart-filters-row">
+                        <div class="duration-filters">
+                            <label>Chart Period:</label>
+                            <button class="action-button secondary-button" data-period="7">Last 7 Days</button>
+                            <button class="action-button secondary-button" data-period="30">Last 30 Days</button>
+                            <button class="action-button secondary-button" data-period="90">Last 90 Days</button>
+                            <button id="clearChartPeriodBtn" class="action-button secondary-button">Custom</button>
                         </div>
-                        <div class="card animate-fade-in-slow animate-fade-in-delay-3">
-                            <h3 class="text-lg font-semibold mb-3 tracking-wide">Recent Updates</h3>
-                            <ul id="recentUpdatesList" class="space-y-2 text-sm"></ul>
+                        <div class="chart-options">
+                            <label for="groupQualityByScenarioToggle">Group Quality by Scenario:</label>
+                            <input type="checkbox" id="groupQualityByScenarioToggle">
                         </div>
                     </div>
-                    <div class="card animate-fade-in-slow animate-fade-in-delay-4">
-                        <h3 class="text-xl font-semibold mb-4 tracking-wide">Advanced Data Filters</h3>
-                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
-                            <div>
-                                <label for="filterDate" class="block text-sm font-medium mb-1">Date</label>
-                                <input type="date" id="filterDate" class="p-2 w-full border rounded-md bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600">
-                            </div>
-                            <div>
-                                <label for="filterUser" class="block text-sm font-medium mb-1">User</label>
-                                <select id="filterUser" class="p-2 w-full border rounded-md bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600">
-                                    <option value="">All Users</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label for="filterInteraction" class="block text-sm font-medium mb-1">Interaction Type</label>
-                                <select id="filterInteraction" class="p-2 w-full border rounded-md bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600">
-                                    <option value="">All Types</option>
-                                    <option value="article_view">Article View</option>
-                                    <option value="case_created">Case Created</option>
-                                    <option value="navigation">Navigation</option>
-                                </select>
-                            </div>
-                            <button id="applyFilterBtn" class="px-6 py-2.5 bg-indigo-600 text-white rounded-full border border-indigo-500 hover:bg-indigo-700">Apply Filters</button>
+
+                    <div class="charts-grid">
+                        <div class="chart-container">
+                            <h3 id="qualityEvolutionChartTitle">Quality Evolution Over Time</h3>
+                            <canvas id="qualityEvolutionChart"></canvas>
+                        </div>
+                        <div class="chart-container">
+                            <h3>Bad Call Reasons</h3>
+                            <canvas id="badQualityReasonsChart"></canvas>
+                            <p id="noBadReasonsMessage" style="display:none;"> 
+                                No bad call reasons available for the current selection.
+                            </p>
                         </div>
                     </div>
                 </div>
-                <div id="standardSectionContentPlaceholder" class="space-y-8">
-                    <!-- Section content will be injected here -->
-                </div>
-            </main>
 
-            <footer class="mt-auto p-6 text-center text-sm text-gray-500 dark:text-gray-400 border-t border-gray-200 dark:border-gray-700">
-                <span>© <script>document.write(new Date().getFullYear())</script> InfiniBase. v<span id="footerKbVersion"></span></span>
-                <button id="reportErrorBtn" class="ml-4 text-xs text-red-500 hover:underline">Report an Issue</button>
-            </footer>
-        </div>
+                <div class="filter-controls card" id="filterControlsCard">
+                    <h3>Filter Call Sessions</h3>
+                    <div class="filter-grid">
+                        <div><label for="userFilterDropdown">Agent:</label><select id="userFilterDropdown"><option value="">All Agents</option></select></div>
+                        <div><label for="searchInput">Search (Scenario, Reason, Agent):</label><input type="text" id="searchInput" placeholder="Type and wait..."></div>
+                        <div><label for="qualityFilter">Call Quality:</label><select id="qualityFilter"><option value="">All</option><option value="Good">Good</option><option value="Normal">Normal</option><option value="Bad">Bad</option><option value="N/A">N/A</option></select></div>
+                        <div> 
+                            <label for="startDateFilter">Start Date:</label>
+                            <input type="date" id="startDateFilter" title="Start date for filtering calls" style="margin-bottom: 0.5rem;">
+                            <label for="endDateFilter">End Date:</label>
+                            <input type="date" id="endDateFilter" title="End date for filtering calls">
+                        </div>
+                        <div class="filter-buttons-group">
+                             <button id="resetFiltersBtn" class="action-button secondary-button">Reset Filters</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="recent-activity-section card" id="recentActivitySection">
+                    <h2 id="recentCallsTitle">Recent Call Sessions</h2>
+                    <div class="table-responsive">
+                        <table id="recentCallsTable">
+                            <thead>
+                                <tr>
+                                    <th>Agent Name</th><th>Agent Email</th><th>Scenario</th><th>Start Time</th><th>Duration</th><th>Completed</th><th>Quality</th><th>Reason</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div id="paginationControls" class="pagination-container"></div>
+                    <div class="export-buttons-container" style="margin-top: 1.5rem; display: flex; gap: 0.75rem; flex-wrap: wrap;">
+                        <button id="exportDataBtn" class="action-button secondary-button">Export Filtered Data (CSV)</button>
+                        <button id="exportDataXLSXBtn" class="action-button primary-button">Export to Excel (XLSX)</button>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <footer class="app-footer">
+            <p>© <span id="currentYear"></span> Mohamed Elmenisy - Elevo Core. All rights reserved.</p>
+        </footer>
     </div>
 
     <script type="module">
-        // Simulated Supabase
-        const supabase = {
-            from: (table) => ({
-                select: async (columns = '*') => {
-                    console.log(`Simulated Supabase: SELECT ${columns} FROM ${table}`);
-                    if (table === 'views_log') {
-                        return { data: [
-                            { id: 1, item_id: 'case001', item_type: 'case_created', user_identifier: 'user1@sim.com', viewed_at: '2025-05-25T10:00:00Z' },
-                            { id: 2, item_id: 'sup001', item_type: 'article_view', user_identifier: 'user2@sim.com', viewed_at: '2025-05-25T11:00:00Z' }
-                        ], error: null };
-                    }
-                    if (table === 'cases') return { data: [], error: null };
-                    return { data: [], error: null };
-                },
-                insert: async (records) => {
-                    console.log(`Simulated Supabase: INSERT INTO ${table}`, records);
-                    const newId = Math.floor(Math.random() * 10000);
-                    return { data: [{ id: newId, ...records[0] }], error: null };
-                },
-                rpc: async (fnName, params) => {
-                    if (fnName === 'get_distinct_viewers') {
-                        return { data: [
-                            { user_identifier: 'user1@sim.com' },
-                            { user_identifier: 'user2@sim.com' },
-                            { user_identifier: 'test@sim.com' }
-                        ], error: null };
-                    }
-                    return { data: null, error: { message: "RPC not found" } };
-                }
-            })
-        };
-
-        // Simulated Auth
-        const Auth = {
-            isAuthenticated: () => true,
-            getCurrentUser: () => ({ email: 'testuser@example.com', fullName: 'Test User', role: 'admin' }),
-            logout: () => { alert('Logged out'); window.location.reload(); },
-            protectPage: () => { if (!Auth.isAuthenticated()) { alert('Not Authorized'); window.location.href = '/login.html'; throw 'Stop Execution'; } }
-        };
-
-        // Simulated KB Data
-        const kbSystemData = {
-            meta: { version: '0.1.2', lastGlobalUpdate: '2023-11-28T12:00:00Z' },
-            sections: [
-                { id: 'support', name: 'Support', icon: 'fas fa-headset', themeColor: 'blue', description: 'Support resources.', articles: [{ id: 'sup001', title: 'High Priority Ticket', summary: 'Handling P1s.', tags: ['p1'], contentPath: '#' }], cases: [{ id: 'case001', title: 'User Alpha Disconnects', summary: 'Frequent disconnects.', status: 'Pending', tags: ['connectivity'] }], subCategories: [{ id: 'tools', name: 'Tools' }], glossary: [{ term: 'SLA', definition: 'Service Level Agreement' }] },
-                { id: 'partner_care', name: 'Partner Care', icon: 'fas fa-handshake', themeColor: 'teal', description: 'Partner support.', articles: [], cases: [], subCategories: [] },
-                { id: 'logistics', name: 'Logistics', icon: 'fas fa-truck', themeColor: 'green', description: 'Logistics info.', articles: [], cases: [], subCategories: [] },
-                { id: 'customer_care', name: 'Customer Care', icon: 'fas fa-users', themeColor: 'indigo', description: 'Customer support.', articles: [], cases: [], subCategories: [] },
-                { id: 'dist_follow_up', name: 'Distribution & Follow-up', icon: 'fas fa-people-carry', themeColor: 'cyan', description: 'Follow-up resources.', articles: [], cases: [], subCategories: [] },
-                { id: 'logistics_driver', name: 'Logistics (Driver Complaints)', icon: 'fas fa-shipping-fast', themeColor: 'lime', description: 'Driver issues.', articles: [], cases: [], subCategories: [] },
-                { id: 'logistics_3pl', name: 'Logistics-3PL', icon: 'fas fa-boxes', themeColor: 'yellow', description: 'Third-party logistics.', articles: [], cases: [], subCategories: [] },
-                { id: 'order_at_store', name: 'Order at Store (Mac)', icon: 'fas fa-store', themeColor: 'pink', description: 'Store orders.', articles: [], cases: [], subCategories: [] },
-                { id: 'logistics_admin', name: 'Logistics-Admin', icon: 'fas fa-user-shield', themeColor: 'red', description: 'Admin logistics.', articles: [], cases: [], subCategories: [] },
-                { id: 'os', name: 'Operating Systems', icon: 'fab fa-windows', themeColor: 'sky', description: 'OS support.', articles: [], cases: [], subCategories: [] },
-                { id: 'compensation', name: 'Compensation Policies', icon: 'fas fa-hand-holding-usd', themeColor: 'amber', description: 'Compensation info.', articles: [], cases: [], subCategories: [], items: [] },
-                { id: 'op_instructions', name: 'Operational Instructions', icon: 'fas fa-clipboard-list', themeColor: 'slate', description: 'Instructions.', articles: [], cases: [], subCategories: [], items: [] },
-                { id: 'forms_templates', name: 'Forms/Templates', icon: 'fas fa-file-alt', themeColor: 'purple', description: 'Forms and templates.', articles: [], cases: [], subCategories: [], items: [] }
-            ]
-        };
-
-        let contentEditorQuill;
-        let usersChartInstance, casesChartInstance;
-        const TABLES = { CASES: 'cases', VIEWS_LOG: 'views_log' };
-        let currentSectionId = 'home';
-
+        // Supabase Client Setup
+        const SUPABASE_URL = 'https://aefiigottnlcmjzilqnh.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFlZmlpZ290dG5sY21qemlscW5oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcxNzY2MDQsImV4cCI6MjA2Mjc1MjYwNH0.FypB02v3tGMnxXV9ZmZMdMC0oQpREKOJWgHMPxUzwX4';
+        
+        let supabase;
+        try {
+            supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+            console.log('Supabase client initialized for dashboard.html');
+        } catch (error) {
+            console.error("Supabase client initialization failed:", error);
+            const authLoading = document.getElementById('authLoadingMessage');
+            if(authLoading) authLoading.innerHTML = '<p style="color:red; text-align:center;">Critical Error: Services unavailable. Dashboard cannot be loaded.</p>';
+        }
+        
         // DOM Elements
-        const sidebar = document.getElementById('sidebar');
-        const mobileSidebarToggle = document.getElementById('mobileSidebarToggle');
-        const contentWrapper = document.getElementById('contentWrapper');
-        const pageContentArea = document.getElementById('pageContentArea');
-        const dashboardOverviewContainer = document.getElementById('dashboardOverviewContainer');
-        const standardSectionContentPlaceholder = document.getElementById('standardSectionContentPlaceholder');
-        const currentSectionTitleEl = document.getElementById('currentSectionTitle');
-        const breadcrumbsContainer = document.getElementById('breadcrumbs');
-        const userNameDisplayHeader = document.getElementById('userNameDisplayHeader');
-        const userAvatar = document.getElementById('userAvatar');
-        const welcomeUserNameDashboard = document.getElementById('welcomeUserNameDashboard');
-        const kbVersionDashboard = document.getElementById('kbVersionDashboard');
-        const lastKbUpdateDashboard = document.getElementById('lastKbUpdateDashboard');
-        const footerKbVersion = document.getElementById('footerKbVersion');
-        const recentUpdatesList = document.getElementById('recentUpdatesList');
+        const appContainerContent = document.getElementById('appContainerContent');
+        const authLoadingMessageDiv = document.getElementById('authLoadingMessage');
+        const dashboardContentDiv = document.getElementById('dashboardContent');
+        const accessDeniedModal = document.getElementById('accessDeniedModal');
+        const returnToAppBtn = document.getElementById('returnToAppBtn');
+        
+        const userNameDisplayHeader = document.getElementById('userNameDisplay');
+        const dashboardUserGreeting = document.getElementById('dashboardUserGreeting');
+        const dashboardUserSubtext = document.getElementById('dashboardUserSubtext');
+        const userAvatarCharEl = document.getElementById('userAvatarCharacter');
+        const userInfoDivHeader = document.getElementById('userInfo');
+        const logoutButton = document.getElementById('logoutButton');
+        document.getElementById('currentYear').textContent = new Date().getFullYear();
 
-        // Initial Setup
-        Auth.protectPage();
-        const currentUser = Auth.getCurrentUser();
+        // Stats elements
+        const totalCallsEl = document.getElementById('totalCalls');
+        const avgCallDurationEl = document.getElementById('avgCallDuration');
+        const completionRateEl = document.getElementById('completionRate');
+        const gaugeGoodEl = document.getElementById('gaugeGood');
+        const gaugeNormalEl = document.getElementById('gaugeNormal');
+        const gaugeBadEl = document.getElementById('gaugeBad');
+        const avgQualityTextEl = document.getElementById('avgQualityText');
+        const statsPeriodEl = document.getElementById('statsPeriod');
+        const statsPeriodDurationEl = document.getElementById('statsPeriodDuration');
+        const statsPeriodCompletionEl = document.getElementById('statsPeriodCompletion');
 
-        if (currentUser) {
-            const displayName = currentUser.fullName || currentUser.email || 'User';
-            userNameDisplayHeader.textContent = displayName;
-            welcomeUserNameDashboard.textContent = `Welcome, ${displayName}!`;
-            userAvatar.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&size=36&background=4f46e5&color=fff&rounded=true`;
+        // Filter elements
+        const userFilterDropdown = document.getElementById('userFilterDropdown');
+        const searchInput = document.getElementById('searchInput');
+        const qualityFilter = document.getElementById('qualityFilter');
+        const startDateFilter = document.getElementById('startDateFilter');
+        const endDateFilter = document.getElementById('endDateFilter');
+        const resetFiltersBtn = document.getElementById('resetFiltersBtn');
+        
+        // Table and Pagination elements
+        const recentCallsTableBody = document.querySelector('#recentCallsTable tbody');
+        const recentCallsTitleEl = document.getElementById('recentCallsTitle');
+        const paginationControlsContainer = document.getElementById('paginationControls');
+        const exportDataBtn = document.getElementById('exportDataBtn');
+        const exportDataXLSXBtn = document.getElementById('exportDataXLSXBtn');
+
+        // Live Calls elements
+        const liveCallsContainerWrapper = document.getElementById('liveCallsContainerWrapper');
+        const liveCallsContainer = document.getElementById('liveCallsContainer');
+        const noLiveCallsMessage = document.getElementById('noLiveCallsMessage');
+
+        // --- MODIFICATION: Analytics Section DOM Elements ---
+        const generalQualityIndicatorEl = document.getElementById('generalQualityIndicator');
+        const averageQualityScoreDisplayEl = document.getElementById('averageQualityScoreDisplay');
+        const qualityTipTextEl = document.getElementById('qualityTipText');
+        const durationFilterButtons = document.querySelectorAll('.duration-filters .action-button[data-period]');
+        const clearChartPeriodBtn = document.getElementById('clearChartPeriodBtn');
+        const groupQualityByScenarioToggle = document.getElementById('groupQualityByScenarioToggle');
+        const qualityEvolutionChartCanvas = document.getElementById('qualityEvolutionChart');
+        const qualityEvolutionChartTitleEl = document.getElementById('qualityEvolutionChartTitle');
+        const badQualityReasonsChartCanvas = document.getElementById('badQualityReasonsChart');
+        const noBadReasonsMessageEl = document.getElementById('noBadReasonsMessage');
+
+
+        // State Variables
+        let currentUser = null; // {id, email, name, isAdmin}
+        let allCallSessions = [];
+        let filteredCallSessions = [];
+        let allAgents = []; // {id, name, email}
+        let currentPage = 1;
+        const ROWS_PER_PAGE = 10;
+        let filterTimeoutId = null;
+        let liveCallsChannel = null;
+        const FILTER_STORAGE_KEY = 'elevoCoreAdminFilters_v3'; // Incremented version for new analytics filters
+
+        // --- MODIFICATION: Analytics State Variables ---
+        let activeChartPeriod = null; // e.g., 7, 30, 90 days, or null for custom
+        let groupQualityByScenario = false;
+        let qualityEvolutionChartInstance = null;
+        let badQualityReasonsChartInstance = null;
+
+        // --- MODIFICATION: Chart Theming and Configuration ---
+        const chartColorsDark = {
+            line: {
+                good: 'rgba(52, 152, 219, 1)',     // Sky Blue
+                goodBg: 'rgba(52, 152, 219, 0.3)',
+                normal: 'rgba(241, 196, 15, 1)',   // Bright Yellow
+                normalBg: 'rgba(241, 196, 15, 0.3)',
+                bad: 'rgba(231, 76, 60, 1)',       // Light Red
+                badBg: 'rgba(231, 76, 60, 0.3)',
+            },
+            pie: { // More distinct colors for pie/bar charts
+                backgrounds: [
+                    'rgba(52, 152, 219, 0.8)', 'rgba(231, 76, 60, 0.8)', 'rgba(241, 196, 15, 0.8)', // Blue, Red, Yellow
+                    'rgba(46, 204, 113, 0.8)', 'rgba(155, 89, 182, 0.8)', 'rgba(26, 188, 156, 0.8)', // Green, Purple, Teal
+                    'rgba(230, 126, 34, 0.8)', 'rgba(149, 165, 166, 0.8)', 'rgba(211, 84, 0, 0.8)' // Orange, Grey, Darker Orange
+                ],
+                borders: [ // Derived or explicit for contrast
+                    'rgba(52, 152, 219, 1)', 'rgba(231, 76, 60, 1)', 'rgba(241, 196, 15, 1)',
+                    'rgba(46, 204, 113, 1)', 'rgba(155, 89, 182, 1)', 'rgba(26, 188, 156, 1)',
+                    'rgba(230, 126, 34, 1)', 'rgba(149, 165, 166, 1)', 'rgba(211, 84, 0, 1)'
+                ]
+            },
+            defaultText: 'rgba(247, 250, 252, 0.9)', 
+            defaultBorder: 'rgba(74, 85, 104, 0.6)'  
+        };
+
+        const chartColorsLight = { 
+            line: {
+                good: 'rgba(75, 192, 192, 1)',
+                goodBg: 'rgba(75, 192, 192, 0.2)',
+                normal: 'rgba(255, 206, 86, 1)',
+                normalBg: 'rgba(255, 206, 86, 0.2)',
+                bad: 'rgba(255, 99, 132, 1)',
+                badBg: 'rgba(255, 99, 132, 0.2)',
+            },
+            pie: { // More distinct colors for pie/bar charts
+                 backgrounds: [
+                    'rgba(75, 192, 192, 0.7)', 'rgba(255, 99, 132, 0.7)', 'rgba(255, 206, 86, 0.7)', // Teal, Pink, Yellow
+                    'rgba(54, 162, 235, 0.7)', 'rgba(153, 102, 255, 0.7)', 'rgba(255, 159, 64, 0.7)', // Blue, Purple, Orange
+                    'rgba(199, 199, 199, 0.7)', 'rgba(83, 102, 255, 0.7)', 'rgba(46, 204, 113, 0.7)' // Grey, Indigo, Green
+                ],
+                borders: [ 
+                    'rgba(75, 192, 192, 1)', 'rgba(255, 99, 132, 1)', 'rgba(255, 206, 86, 1)',
+                    'rgba(54, 162, 235, 1)', 'rgba(153, 102, 255, 1)', 'rgba(255, 159, 64, 1)',
+                    'rgba(199, 199, 199, 1)', 'rgba(83, 102, 255, 1)', 'rgba(46, 204, 113, 1)'
+                ]
+            },
+            defaultText: 'rgba(51, 51, 51, 0.9)',    
+            defaultBorder: 'rgba(226, 232, 240, 0.9)' 
+        };
+
+        function getChartUiConfig() {
+            const isDarkMode = document.documentElement.classList.contains('dark');
+            const colors = isDarkMode ? chartColorsDark : chartColorsLight;
+            return {
+                colors: colors,
+                font: {
+                    size: 13, 
+                    family: "'Poppins', sans-serif"
+                },
+                layoutPadding: { top: 15, right: 15, bottom: 10, left: 10 } 
+            };
         }
-        if (kbSystemData.meta) {
-            kbVersionDashboard.textContent = kbSystemData.meta.version;
-            lastKbUpdateDashboard.textContent = new Date(kbSystemData.meta.lastGlobalUpdate).toLocaleDateString();
-            footerKbVersion.textContent = kbSystemData.meta.version;
+
+        function setChartJsDefaults() {
+            if (typeof Chart === 'undefined') return;
+            const uiConfig = getChartUiConfig();
+
+            Chart.defaults.color = uiConfig.colors.defaultText;
+            Chart.defaults.borderColor = uiConfig.colors.defaultBorder;
+            Chart.defaults.font.family = uiConfig.font.family;
+        }
+        // --- End of Chart Theming ---
+
+        // --- Date Formatting Helper for Egypt Time ---
+        const EGYPT_TIMEZONE = 'Africa/Cairo';
+
+        function formatDateTimeEgypt(dateString, options = {}) {
+            if (!dateString) return 'N/A';
+            const date = new Date(dateString);
+            const defaultOptions = {
+                timeZone: EGYPT_TIMEZONE,
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: true
+            };
+            return date.toLocaleString('en-GB', { ...defaultOptions, ...options }); 
         }
 
-        // Theme Switcher
-        const themeSwitcher = document.getElementById('themeSwitcher');
-        const themeIcon = document.getElementById('themeIcon');
-        const themeText = document.getElementById('themeText');
-        const htmlElement = document.documentElement;
-
-        function applyTheme(theme) {
-            if (theme === 'dark') {
-                htmlElement.classList.add('dark');
-                themeIcon.classList.replace('fa-moon', 'fa-sun');
-                themeText.textContent = 'Light Mode';
-            } else {
-                htmlElement.classList.remove('dark');
-                themeIcon.classList.replace('fa-sun', 'fa-moon');
-                themeText.textContent = 'Dark Mode';
-            }
-            // Update chart colors
-            const isDark = theme === 'dark';
-            const legendColor = isDark ? '#e2e8f0' : '#1a202c';
-            const ticksColor = isDark ? '#94a3b8' : '#4a5568';
-            const gridColor = isDark ? '#374151' : '#e5e7eb';
-
-            const barChartBgColor = isDark ? 'rgba(75, 192, 192, 0.6)' : 'rgba(59, 130, 246, 0.7)';
-            const pieChartBgColors = isDark
-                ? ['#A0AEC0', '#4299E1', '#4FD1C5'] // Gray, Blue, Teal
-                : ['#63b3ed', '#48bb78', '#f6ad55']; // Light Blue, Green, Orange
-
-            if (usersChartInstance) {
-                usersChartInstance.options.plugins.legend.labels.color = legendColor;
-                usersChartInstance.options.scales.y.ticks.color = ticksColor;
-                usersChartInstance.options.scales.y.grid.color = gridColor;
-                usersChartInstance.options.scales.x.ticks.color = ticksColor;
-                usersChartInstance.options.scales.x.grid.color = gridColor;
-                usersChartInstance.data.datasets[0].backgroundColor = barChartBgColor;
-                usersChartInstance.update();
-            }
-            if (casesChartInstance) {
-                casesChartInstance.options.plugins.legend.labels.color = legendColor;
-                casesChartInstance.data.datasets[0].backgroundColor = pieChartBgColors;
-                casesChartInstance.update();
-            }
-        }
-        function loadTheme() {
-            const savedTheme = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-            applyTheme(savedTheme);
-        }
-        themeSwitcher.addEventListener('click', () => {
-            const newTheme = htmlElement.classList.contains('dark') ? 'light' : 'dark';
-            localStorage.setItem('theme', newTheme);
-            applyTheme(newTheme);
-        });
-        loadTheme(); // Call loadTheme which internally calls applyTheme
-
-        // Mobile Sidebar Toggle
-        mobileSidebarToggle.addEventListener('click', () => sidebar.classList.toggle('open'));
-        sidebar.querySelectorAll('.sidebar-link').forEach(link => {
-            link.addEventListener('click', () => {
-                if (window.innerWidth < 768) sidebar.classList.remove('open');
+        function formatTimeEgypt(dateString) {
+            if (!dateString) return 'N/A';
+            const date = new Date(dateString);
+            return date.toLocaleTimeString('en-GB', { 
+                timeZone: EGYPT_TIMEZONE,
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: true
             });
+        }
+        
+        function formatDateForCSVEgypt(dateString) {
+            if (!dateString) return 'N/A';
+            const date = new Date(dateString);
+            const year = date.toLocaleDateString('en-CA', { year: 'numeric', timeZone: EGYPT_TIMEZONE }); 
+            const month = date.toLocaleDateString('en-CA', { month: '2-digit', timeZone: EGYPT_TIMEZONE }); 
+            const day = date.toLocaleDateString('en-CA', { day: '2-digit', timeZone: EGYPT_TIMEZONE }); 
+            const time = date.toLocaleTimeString('en-GB', { 
+                hour: '2-digit', 
+                minute: '2-digit', 
+                second: '2-digit', 
+                hour12: false, 
+                timeZone: EGYPT_TIMEZONE 
+            });
+            return `${year}-${month.padStart(2,'0')}-${day.padStart(2,'0')} ${time}`;
+        }
+        
+        function getLocalDateInputString(date) { // Helper for date inputs
+            const year = date.getFullYear();
+            const month = (date.getMonth() + 1).toString().padStart(2, '0');
+            const day = date.getDate().toString().padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        }
+
+
+        // --- Auth and Admin Check ---
+        async function initializeDashboard() {
+            if (!supabase) return; 
+
+            if (typeof Chart !== 'undefined') {
+                setChartJsDefaults();
+            } else {
+                console.warn("Chart.js not yet loaded when initializeDashboard was called.");
+            }
+
+            const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+
+            if (sessionError || !session) {
+                window.location.replace('login.html');
+                return;
+            }
+
+            const storedUserData = JSON.parse(localStorage.getItem('elevoCoreUserData'));
+            if (storedUserData && storedUserData.id === session.user.id) {
+                currentUser = storedUserData;
+            } else { 
+                const { data: profile, error: profileError } = await supabase
+                    .from('users')
+                    .select('name, is_admin')
+                    .eq('id', session.user.id)
+                    .single();
+                
+                if (profileError && profileError.code !== 'PGRST116') {
+                    showAccessDenied("Could not verify your user profile.");
+                    return;
+                }
+                currentUser = {
+                    id: session.user.id,
+                    email: session.user.email,
+                    name: profile?.name || session.user.user_metadata?.full_name || session.user.email.split('@')[0],
+                    isAdmin: profile?.is_admin || false
+                };
+                localStorage.setItem('elevoCoreUserData', JSON.stringify(currentUser));
+            }
+            
+            if (!currentUser.isAdmin) {
+                try {
+                    const { data: adminStatus, error: functionError } = await supabase.functions.invoke('check-admin-access');
+                    if (functionError) throw functionError;
+                    
+                    if (!adminStatus || !adminStatus.isAdmin) {
+                        showAccessDenied();
+                        return;
+                    }
+                    currentUser.isAdmin = true; 
+                    localStorage.setItem('elevoCoreUserData', JSON.stringify(currentUser)); 
+                } catch (err) {
+                    showAccessDenied("Could not verify administrator privileges.");
+                    return;
+                }
+            }
+            
+            appContainerContent.style.display = 'flex'; 
+            authLoadingMessageDiv.style.display = 'none';
+            dashboardContentDiv.style.display = 'block'; 
+
+            setupAdminUI();
+            await loadInitialData();
+            loadPersistedFilters(); // Loads main filters and analytics filters
+            applyFiltersAndRender(); 
+            setupEventListeners(); // Sets up all event listeners including new analytics ones
+            setupLiveCallMonitoring();
+        }
+
+        function showAccessDenied(message = "You do not have permission to view this page. This section is restricted to administrators.") {
+            authLoadingMessageDiv.style.display = 'none';
+            dashboardContentDiv.style.display = 'none';
+            appContainerContent.style.display = 'flex'; 
+            
+            accessDeniedModal.querySelector('p').textContent = message;
+            accessDeniedModal.style.display = 'flex';
+            if (liveCallsChannel) { 
+                supabase.removeChannel(liveCallsChannel);
+                liveCallsChannel = null;
+            }
+        }
+        
+        returnToAppBtn.addEventListener('click', () => {
+            window.location.href = 'core-flow.html';
         });
 
-        // Logout
-        document.getElementById('logoutButton').addEventListener('click', () => Auth.logout());
-        document.getElementById('reportErrorBtn').addEventListener('click', () => alert('Report Error (Placeholder)'));
+        function setupAdminUI() {
+            userNameDisplayHeader.textContent = currentUser.name;
+            dashboardUserGreeting.textContent = `Welcome, ${currentUser.name}!`;
+            userAvatarCharEl.textContent = currentUser.name.charAt(0).toUpperCase();
+            userInfoDivHeader.style.display = 'flex';
+        }
 
-        // Add Content Modal
-        const addContentModalOverlay = document.getElementById('addContentModalOverlay');
-        const closeAddContentModalBtn = document.getElementById('closeAddContentModalBtn');
-        const addContentForm = document.getElementById('addContentForm');
-        const cancelAddContentBtn = document.getElementById('cancelAddContentBtn');
-        const contentTypeSelect = document.getElementById('contentType');
-        const contentUrlContainer = document.getElementById('contentUrlContainer');
-        const resolutionStepsContainer = document.getElementById('resolutionStepsContainer');
+        // --- Data Loading ---
+        async function loadInitialData() {
+            try {
+                const { data: agentsData, error: agentsError } = await supabase
+                    .from('users')
+                    .select('id, name, email')
+                    .order('name', { ascending: true });
+                if (agentsError) throw agentsError;
+                allAgents = agentsData || [];
+                populateAgentFilter();
 
-        function openAddContentModal(sectionId) {
-            currentSectionId = sectionId;
-            addContentModalOverlay.classList.remove('hidden');
-            if (!contentEditorQuill) {
-                contentEditorQuill = new Quill('#quillEditor', {
-                    theme: 'snow',
-                    modules: { toolbar: [[{ 'header': [1, 2, false] }], ['bold', 'italic', 'underline'], [{ 'list': 'ordered' }, { 'list': 'bullet' }]] },
-                    placeholder: 'Resolution steps...'
+                const { data: sessionsData, error: sessionsError } = await supabase
+                    .from('call_sessions')
+                    .select(`
+                        *,
+                        call_sessions_scenario_id_fkey(id, title) 
+                    `) 
+                    .order('start_time', { ascending: false });
+                if (sessionsError) throw sessionsError;
+                allCallSessions = sessionsData || [];
+                
+            } catch (error) {
+                console.error("Error loading initial dashboard data:", error);
+                recentCallsTableBody.innerHTML = `<tr><td colspan="8" style="text-align:center; color:var(--danger-color);">Failed to load data: ${error.message}</td></tr>`;
+            }
+        }
+        
+        function populateAgentFilter() {
+            userFilterDropdown.innerHTML = '<option value="">All Agents</option>';
+            allAgents.forEach(agent => {
+                const option = document.createElement('option');
+                option.value = agent.id;
+                option.textContent = agent.name ? `${agent.name} (${agent.email})` : agent.email;
+                userFilterDropdown.appendChild(option);
+            });
+        }
+
+        // --- Filtering and Rendering ---
+        function applyFiltersAndRender() {
+            if (typeof Chart !== 'undefined' && Chart.defaults.color !== getChartUiConfig().colors.defaultText) {
+                 setChartJsDefaults(); 
+            }
+            saveFiltersToLocalStorage(); 
+            
+            let tempFiltered = [...allCallSessions];
+            const searchTerm = searchInput.value.toLowerCase().trim();
+            const selectedAgentId = userFilterDropdown.value;
+            const selectedQuality = qualityFilter.value;
+            
+            // Apply main filters
+            if (selectedAgentId) {
+                tempFiltered = tempFiltered.filter(s => s.user_id === selectedAgentId);
+            }
+            if (searchTerm) {
+                tempFiltered = tempFiltered.filter(s => {
+                    const agent = allAgents.find(a => a.id === s.user_id);
+                    return (
+                        (s.call_sessions_scenario_id_fkey?.title || '').toLowerCase().includes(searchTerm) || 
+                        (s.quality_reason || '').toLowerCase().includes(searchTerm) ||
+                        (agent?.name || '').toLowerCase().includes(searchTerm) ||
+                        (agent?.email || '').toLowerCase().includes(searchTerm)
+                    );
                 });
             }
-            addContentForm.reset();
-            contentEditorQuill.setText('');
-            contentUrlContainer.classList.add('hidden');
-            resolutionStepsContainer.classList.remove('hidden'); // Default to case
-            contentTypeSelect.value = 'case'; // Ensure it matches the default visible fields
-            document.getElementById('contentTitle').focus();
-        }
-        function closeAddContentModal() {
-            addContentModalOverlay.classList.add('hidden');
-        }
-
-        contentTypeSelect.addEventListener('change', () => {
-            const type = contentTypeSelect.value;
-            if (type === 'case') {
-                contentUrlContainer.classList.add('hidden');
-                resolutionStepsContainer.classList.remove('hidden');
-            } else {
-                contentUrlContainer.classList.remove('hidden');
-                resolutionStepsContainer.classList.add('hidden');
+            if (selectedQuality) {
+                tempFiltered = tempFiltered.filter(s => (selectedQuality === "N/A" ? !s.call_quality : s.call_quality === selectedQuality));
             }
-        });
 
-        closeAddContentModalBtn.addEventListener('click', closeAddContentModal);
-        cancelAddContentBtn.addEventListener('click', closeAddContentModal);
-        addContentForm.addEventListener('submit', async e => {
-            e.preventDefault();
-            await saveContentToSupabase();
-        });
+            // Date filtering logic: Prioritize activeChartPeriod, then main date filters
+            let effectiveStartDate = startDateFilter.value;
+            let effectiveEndDate = endDateFilter.value;
 
-        async function saveContentToSupabase() {
-            const type = contentTypeSelect.value;
-            const title = document.getElementById('contentTitle').value.trim();
-            const summary = document.getElementById('contentSummary').value.trim();
-            let contentData = { title, summary, type };
+            if (activeChartPeriod) {
+                const today = new Date();
+                const endDateForChartPeriod = new Date(today); // end is today
+                const startDateForChartPeriod = new Date(today);
+                startDateForChartPeriod.setDate(today.getDate() - activeChartPeriod + 1); // +1 to include today in N days
 
-            if (type === 'case') {
-                contentData.resolution_steps = contentEditorQuill.root.innerHTML;
-                contentData.status = 'New';
+                effectiveStartDate = getLocalDateInputString(startDateForChartPeriod);
+                effectiveEndDate = getLocalDateInputString(endDateForChartPeriod);
+                
+                // Visually update and disable main date pickers
+                startDateFilter.value = effectiveStartDate;
+                endDateFilter.value = effectiveEndDate;
+                startDateFilter.disabled = true;
+                endDateFilter.disabled = true;
             } else {
-                contentData.url = document.getElementById('contentUrl').value.trim();
-                if (!contentData.url) {
-                    alert('URL is required for this content type.');
-                    return;
+                // Re-enable main date pickers if no chart period is active
+                startDateFilter.disabled = false;
+                endDateFilter.disabled = false;
+            }
+            
+            // Apply date filters to tempFiltered
+            if (effectiveStartDate) {
+                tempFiltered = tempFiltered.filter(s => s.start_time && new Date(s.start_time) >= new Date(effectiveStartDate + "T00:00:00.000Z"));
+            }
+            if (effectiveEndDate) {
+                 // Include the whole end day
+                const endOfDay = new Date(effectiveEndDate + "T23:59:59.999Z");
+                tempFiltered = tempFiltered.filter(s => s.start_time && new Date(s.start_time) <= endOfDay);
+            }
+            
+            filteredCallSessions = tempFiltered;
+            currentPage = 1; 
+            renderTable();
+            updateStats(); // Updates main dashboard stats
+            renderPagination();
+            
+            // --- MODIFICATION: Call new function for analytics summary and charts ---
+            updateAnalyticsSummaryAndCharts(filteredCallSessions);
+        }
+        
+        function renderTable() {
+            recentCallsTableBody.innerHTML = '';
+            if (filteredCallSessions.length === 0) {
+                recentCallsTableBody.innerHTML = `<tr class="placeholder-row"><td colspan="8">No call sessions match your filters.</td></tr>`;
+                return;
+            }
+
+            const paginatedSessions = filteredCallSessions.slice((currentPage - 1) * ROWS_PER_PAGE, currentPage * ROWS_PER_PAGE);
+            paginatedSessions.forEach(session => {
+                const agent = allAgents.find(a => a.id === session.user_id);
+                const row = recentCallsTableBody.insertRow();
+                row.insertCell().textContent = agent?.name || 'Unknown Agent';
+                row.insertCell().textContent = agent?.email || 'N/A';
+                row.insertCell().textContent = session.call_sessions_scenario_id_fkey?.title || 'N/A'; 
+                row.insertCell().textContent = formatDateTimeEgypt(session.start_time); 
+                const duration = session.duration || 0; 
+                row.insertCell().textContent = `${Math.floor(duration / 60)}m ${duration % 60}s`;
+                row.insertCell().textContent = session.completed ? 'Yes' : 'No'; 
+                
+                const qualityCell = row.insertCell();
+                qualityCell.classList.add('quality-cell');
+                // ... (rest of quality cell rendering, unchanged)
+                const qualityIcon = document.createElement('span');
+                qualityIcon.classList.add('quality-icon');
+                let iconSvg = '', qualityClass = 'na';
+                switch (session.call_quality?.toLowerCase()) {
+                    case 'good': iconSvg = `<svg viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>`; qualityClass = 'good'; break;
+                    case 'normal': iconSvg = `<svg viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>`; qualityClass = 'normal'; break;
+                    case 'bad': iconSvg = `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>`; qualityClass = 'bad'; break;
+                    default: iconSvg = `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="8" y1="12" x2="16" y2="12"></line></svg>`;
                 }
-            }
-
-            const user = Auth.getCurrentUser();
-            contentData.created_by_email = user.email;
-            contentData.created_by_name = user.fullName;
-
-            const section = kbSystemData.sections.find(s => s.id === currentSectionId);
-            if (type === 'case') {
-                const { data, error } = await supabase.from(TABLES.CASES).insert([contentData]).select();
-                if (error) {
-                    alert(`Error saving case: ${error.message}`);
-                    console.error(error);
-                    return;
-                }
-                section.cases.push({ ...data[0], id: data[0].id.toString() });
-                logUserView(data[0].id, 'case_created');
-            } else {
-                if (!section.items) section.items = [];
-                const newId = `item_${Date.now()}`;
-                section.items.push({ ...contentData, id: newId });
-                logUserView(newId, 'item_added');
-            }
-
-            alert('Content saved!');
-            closeAddContentModal();
-            displaySectionContent(currentSectionId);
-        }
-
-        // Chart Initialization
-        async function initCharts(viewData = []) {
-            const isDark = htmlElement.classList.contains('dark');
-            const legendColor = isDark ? '#e2e8f0' : '#1a202c';
-            const ticksColor = isDark ? '#94a3b8' : '#4a5568';
-            const gridColor = isDark ? '#374151' : '#e5e7eb';
-
-            const barChartBgColor = isDark ? 'rgba(75, 192, 192, 0.6)' : 'rgba(59, 130, 246, 0.7)'; // Teal for dark, Blue for light
-            const pieChartBgColors = isDark
-                ? ['#A0AEC0', '#4299E1', '#4FD1C5'] // Dark: Gray, Blue, Teal
-                : ['#63b3ed', '#48bb78', '#f6ad55']; // Light: Light Blue, Green, Orange
-
-
-            const chartBaseOptions = (type) => ({
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: { legend: { labels: { color: legendColor } } },
-                scales: type === 'bar' ? {
-                    y: { ticks: { color: ticksColor, beginAtZero: true }, grid: { color: gridColor } },
-                    x: { ticks: { color: ticksColor }, grid: { color: gridColor } }
-                } : {}
+                qualityIcon.innerHTML = iconSvg.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"');
+                qualityIcon.classList.add(qualityClass);
+                qualityCell.appendChild(qualityIcon);
+                qualityCell.appendChild(document.createTextNode(` ${session.call_quality || 'N/A'}`));
+                
+                row.insertCell().textContent = session.quality_reason || '-';
             });
+        }
+        
+        function updateStats() { // This updates the main dashboard stat cards
+            const count = filteredCallSessions.length;
+            totalCallsEl.textContent = count;
 
-            const userCounts = viewData.reduce((acc, view) => {
-                acc[view.user_identifier] = (acc[view.user_identifier] || 0) + 1;
-                return acc;
-            }, {});
+            const selectedAgentId = userFilterDropdown.value;
+            const agent = allAgents.find(a => a.id === selectedAgentId);
+            const agentName = agent?.name || agent?.email || 'Selected Agent';
+            const statsPeriodText = selectedAgentId ? agentName : 'All Agents';
+            [statsPeriodEl, statsPeriodDurationEl, statsPeriodCompletionEl].forEach(el => el.textContent = statsPeriodText);
+            recentCallsTitleEl.textContent = selectedAgentId ? `Call Sessions for ${agentName}` : 'All Recent Call Sessions';
 
-            if (usersChartInstance) usersChartInstance.destroy();
-            const usersCtx = document.getElementById('usersChart')?.getContext('2d');
-            if (usersCtx) {
-                usersChartInstance = new Chart(usersCtx, {
+
+            if (count > 0) {
+                const totalDuration = filteredCallSessions.reduce((sum, s) => sum + (s.duration || 0), 0); 
+                const avgDuration = Math.round(totalDuration / count);
+                avgCallDurationEl.textContent = `${Math.floor(avgDuration / 60)}m ${avgDuration % 60}s`;
+
+                const completedCount = filteredCallSessions.filter(s => s.completed).length; 
+                completionRateEl.textContent = `${Math.round((completedCount / count) * 100)}%`;
+
+                const qualityCounts = { good: 0, normal: 0, bad: 0, rated: 0 };
+                filteredCallSessions.forEach(s => {
+                    if (s.call_quality === 'Good') { qualityCounts.good++; qualityCounts.rated++; }
+                    else if (s.call_quality === 'Normal') { qualityCounts.normal++; qualityCounts.rated++; }
+                    else if (s.call_quality === 'Bad') { qualityCounts.bad++; qualityCounts.rated++; }
+                });
+                if (qualityCounts.rated > 0) {
+                    gaugeGoodEl.style.width = `${(qualityCounts.good / qualityCounts.rated) * 100}%`;
+                    gaugeNormalEl.style.width = `${(qualityCounts.normal / qualityCounts.rated) * 100}%`;
+                    gaugeBadEl.style.width = `${(qualityCounts.bad / qualityCounts.rated) * 100}%`;
+                    if (qualityCounts.bad / qualityCounts.rated > 0.3) avgQualityTextEl.textContent = "Improvement Needed";
+                    else if (qualityCounts.good / qualityCounts.rated >= 0.5) avgQualityTextEl.textContent = "Mostly Good";
+                    else avgQualityTextEl.textContent = "Mixed Quality";
+                } else {
+                    [gaugeGoodEl, gaugeNormalEl, gaugeBadEl].forEach(el => el.style.width = '0%');
+                    avgQualityTextEl.textContent = 'No Rated Calls';
+                }
+            } else {
+                avgCallDurationEl.textContent = '0m 0s';
+                completionRateEl.textContent = '0%';
+                [gaugeGoodEl, gaugeNormalEl, gaugeBadEl].forEach(el => el.style.width = '0%');
+                avgQualityTextEl.textContent = 'No Calls';
+            }
+        }
+        
+        function renderPagination() {
+            paginationControlsContainer.innerHTML = '';
+            const totalPages = Math.ceil(filteredCallSessions.length / ROWS_PER_PAGE);
+            if (totalPages <= 1) return;
+
+            const prevBtn = document.createElement('button');
+            prevBtn.textContent = 'Previous';
+            prevBtn.disabled = currentPage === 1;
+            prevBtn.addEventListener('click', () => { currentPage--; renderTable(); renderPagination(); });
+            paginationControlsContainer.appendChild(prevBtn);
+
+            const pageInfo = document.createElement('span');
+            pageInfo.textContent = ` Page ${currentPage} of ${totalPages} `;
+            pageInfo.style.margin = "0 10px";
+            paginationControlsContainer.appendChild(pageInfo);
+
+            const nextBtn = document.createElement('button');
+            nextBtn.textContent = 'Next';
+            nextBtn.disabled = currentPage === totalPages;
+            nextBtn.addEventListener('click', () => { currentPage++; renderTable(); renderPagination(); });
+            paginationControlsContainer.appendChild(nextBtn);
+        }
+        
+        function saveFiltersToLocalStorage() {
+            const filters = {
+                agentId: userFilterDropdown.value,
+                searchTerm: searchInput.value,
+                quality: qualityFilter.value,
+                startDate: startDateFilter.value,
+                endDate: endDateFilter.value,
+                // MODIFICATION: Save analytics filter states
+                activeChartPeriod: activeChartPeriod,
+                groupQualityByScenario: groupQualityByScenario
+            };
+            localStorage.setItem(FILTER_STORAGE_KEY, JSON.stringify(filters));
+        }
+
+        function loadPersistedFilters() {
+            const savedFilters = localStorage.getItem(FILTER_STORAGE_KEY);
+            if (savedFilters) {
+                try {
+                    const filters = JSON.parse(savedFilters);
+                    userFilterDropdown.value = filters.agentId || '';
+                    searchInput.value = filters.searchTerm || '';
+                    qualityFilter.value = filters.quality || '';
+                    startDateFilter.value = filters.startDate || '';
+                    endDateFilter.value = filters.endDate || '';
+                    
+                    // MODIFICATION: Load analytics filter states
+                    activeChartPeriod = filters.activeChartPeriod !== undefined ? filters.activeChartPeriod : null;
+                    groupQualityByScenario = filters.groupQualityByScenario !== undefined ? filters.groupQualityByScenario : false;
+                    
+                    // Apply UI state for analytics filters
+                    durationFilterButtons.forEach(btn => {
+                        btn.classList.toggle('active-period', parseInt(btn.dataset.period) === activeChartPeriod);
+                    });
+                    if (!activeChartPeriod) { // If custom is active, highlight it (implicitly)
+                        clearChartPeriodBtn.classList.add('active-period'); // Or a different style for "custom"
+                    } else {
+                        clearChartPeriodBtn.classList.remove('active-period');
+                    }
+
+                    groupQualityByScenarioToggle.checked = groupQualityByScenario;
+
+                } catch (e) {
+                    console.error("Error parsing saved filters:", e);
+                    localStorage.removeItem(FILTER_STORAGE_KEY);
+                }
+            }
+        }
+
+        // --- MODIFICATION: Analytics Summary and Chart Rendering Functions ---
+        
+        function getPeriodStats(sessions) {
+            const stats = { good: 0, normal: 0, bad: 0, total: sessions.length, rated: 0, completed: 0 };
+            sessions.forEach(s => {
+                if (s.call_quality === 'Good') { stats.good++; stats.rated++; }
+                else if (s.call_quality === 'Normal') { stats.normal++; stats.rated++; }
+                else if (s.call_quality === 'Bad') { stats.bad++; stats.rated++; }
+                if (s.completed) stats.completed++;
+            });
+            return stats;
+        }
+
+        // Helper to get data for current and previous periods for trends
+        function getTrendData(currentSessions, periodDays, agentId) {
+            const currentStats = getPeriodStats(currentSessions);
+            
+            let previousSessions = [];
+            if (periodDays && currentSessions.length > 0) {
+                // Determine the start date of the current period from filtered data if available,
+                // otherwise from the activeChartPeriod setting.
+                let currentPeriodStartDate;
+                if (startDateFilter.value && !activeChartPeriod) { // Using custom date range
+                    currentPeriodStartDate = new Date(startDateFilter.value + "T00:00:00.000Z");
+                } else if (activeChartPeriod) { // Using a preset period button
+                    const today = new Date();
+                    currentPeriodStartDate = new Date(today);
+                    currentPeriodStartDate.setDate(today.getDate() - periodDays + 1);
+                }
+
+
+                if (currentPeriodStartDate) {
+                    const prevPeriodEndDate = new Date(currentPeriodStartDate);
+                    prevPeriodEndDate.setDate(currentPeriodStartDate.getDate() - 1); // Day before current period starts
+                    
+                    const prevPeriodStartDate = new Date(prevPeriodEndDate);
+                    prevPeriodStartDate.setDate(prevPeriodEndDate.getDate() - periodDays + 1);
+
+                    previousSessions = allCallSessions.filter(s => {
+                        const sessionDate = new Date(s.start_time);
+                        const matchesAgent = agentId ? s.user_id === agentId : true;
+                        return matchesAgent && sessionDate >= prevPeriodStartDate && sessionDate <= prevPeriodEndDate;
+                    });
+                }
+            }
+            const previousStats = getPeriodStats(previousSessions);
+            return { current: currentStats, previous: previousStats };
+        }
+
+
+        function updateAnalyticsSummaryAndCharts(currentFilteredSessions) {
+            const selectedAgentId = userFilterDropdown.value;
+            
+            // 1. General Quality Indicator
+            const today = new Date();
+            const sevenDaysAgo = new Date(today);
+            sevenDaysAgo.setDate(today.getDate() - 7 + 1);
+
+            const last7DaysGlobalSessions = allCallSessions.filter(s => {
+                const sessionDate = new Date(s.start_time);
+                const matchesAgent = selectedAgentId ? s.user_id === selectedAgentId : true;
+                return matchesAgent && sessionDate >= sevenDaysAgo && sessionDate <= today;
+            });
+            
+            const currentStatsForIndicator = getPeriodStats(currentFilteredSessions);
+            const last7DaysGlobalStats = getPeriodStats(last7DaysGlobalSessions);
+
+            const genQualityStatusEl = generalQualityIndicatorEl.querySelector('.status-text');
+            const genQualityIconEl = generalQualityIndicatorEl.querySelector('.status-icon');
+            const genQualityComparisonEl = generalQualityIndicatorEl.querySelector('.comparison-text');
+
+            let statusText = "Stable quality levels.";
+            let statusClass = "status-good"; 
+            let icon = "✅";
+            let comparisonDetails = "";
+
+            if (currentStatsForIndicator.total > 0 && last7DaysGlobalStats.total > 0) {
+                const currentBadRate = currentStatsForIndicator.rated > 0 ? (currentStatsForIndicator.bad / currentStatsForIndicator.rated) * 100 : 0;
+                const historicBadRate7Days = last7DaysGlobalStats.rated > 0 ? (last7DaysGlobalStats.bad / last7DaysGlobalStats.rated) * 100 : 0;
+                
+                const diff = currentBadRate - historicBadRate7Days;
+                if (currentBadRate > 0 && diff > 5) { // More than 5% absolute increase in bad calls
+                    statusText = `Increased bad calls.`;
+                    statusClass = "status-danger";
+                    icon = "⚠️";
+                    comparisonDetails = `(${currentBadRate.toFixed(1)}% vs ${historicBadRate7Days.toFixed(1)}% in last 7 days)`;
+                } else if (diff < -5) { // More than 5% absolute decrease
+                    statusText = "Improved call quality!";
+                    statusClass = "status-success";
+                    icon = "🎉";
+                    comparisonDetails = `(${currentBadRate.toFixed(1)}% vs ${historicBadRate7Days.toFixed(1)}% in last 7 days)`;
+                } else if (currentBadRate > 20) { // High bad call rate
+                    statusText = "High bad call rate.";
+                    statusClass = "status-warning";
+                    icon = "🟠";
+                    comparisonDetails = `(${currentBadRate.toFixed(1)}% currently)`;
+                } else {
+                     statusText = "Good quality maintained.";
+                     statusClass = "status-good";
+                     icon = "✅";
+                     comparisonDetails = `(Bad call rate: ${currentBadRate.toFixed(1)}%)`;
+                }
+            } else if (currentStatsForIndicator.total > 0) {
+                statusText = "Data available for current period.";
+                statusClass = "status-good"; // Neutral
+                icon = "📊";
+                const currentBadRate = currentStatsForIndicator.rated > 0 ? (currentStatsForIndicator.bad / currentStatsForIndicator.rated) * 100 : 0;
+                comparisonDetails = `(Current bad call rate: ${currentBadRate.toFixed(1)}%)`;
+
+            } else {
+                statusText = "Not enough data for trend.";
+                statusClass = "status-warning"; // Neutral/warning
+                icon = "📊";
+                 comparisonDetails = "";
+            }
+            genQualityStatusEl.textContent = statusText;
+            genQualityStatusEl.className = `status-text ${statusClass}`;
+            genQualityIconEl.textContent = icon;
+            genQualityComparisonEl.textContent = comparisonDetails;
+
+
+            // 2. Average Quality Score
+            const scoreValueEl = averageQualityScoreDisplayEl.querySelector('.score-value');
+            if (currentStatsForIndicator.total > 0) {
+                let qualityPoints = 0;
+                if (currentStatsForIndicator.rated > 0) {
+                    qualityPoints = ((currentStatsForIndicator.good * 2 + currentStatsForIndicator.normal * 1 - currentStatsForIndicator.bad * 1.5) / (currentStatsForIndicator.rated * 2)) * 70;
+                }
+                const completionPoints = (currentStatsForIndicator.completed / currentStatsForIndicator.total) * 30;
+                let totalScore = Math.max(0, Math.min(100, qualityPoints + completionPoints));
+                scoreValueEl.textContent = totalScore.toFixed(0);
+            } else {
+                scoreValueEl.textContent = "N/A";
+            }
+
+            // Trend data for Quality Evolution Chart (only if not grouped by scenario and a period is active)
+            let trendDataForChart = null;
+            if (!groupQualityByScenario && activeChartPeriod) {
+                 trendDataForChart = getTrendData(currentFilteredSessions, activeChartPeriod, selectedAgentId);
+            }
+
+
+            // Render Charts
+            renderQualityEvolutionChart(currentFilteredSessions, trendDataForChart);
+            renderBadQualityReasonsChart(currentFilteredSessions); // This also updates the qualityTipText
+        }
+
+
+        function renderQualityEvolutionChart(sessions, trendData) { // trendData is {current, previous}
+            if (!qualityEvolutionChartCanvas || typeof Chart === 'undefined') return;
+            const ctx = qualityEvolutionChartCanvas.getContext('2d');
+            const uiConfig = getChartUiConfig();
+
+            if (qualityEvolutionChartInstance) {
+                qualityEvolutionChartInstance.destroy();
+            }
+            
+            qualityEvolutionChartTitleEl.textContent = groupQualityByScenario ? "Call Quality by Scenario" : "Quality Evolution Over Time";
+
+            if (groupQualityByScenario) {
+                // --- Group by Scenario: Bar Chart ---
+                const scenarioQuality = {}; // { scenarioId: { title, good, normal, bad, total } }
+                sessions.forEach(s => {
+                    const scenario = s.call_sessions_scenario_id_fkey;
+                    if (!scenario || !scenario.id) return;
+                    if (!scenarioQuality[scenario.id]) {
+                        scenarioQuality[scenario.id] = { title: scenario.title, good: 0, normal: 0, bad: 0, total: 0 };
+                    }
+                    if (s.call_quality === 'Good') scenarioQuality[scenario.id].good++;
+                    else if (s.call_quality === 'Normal') scenarioQuality[scenario.id].normal++;
+                    else if (s.call_quality === 'Bad') scenarioQuality[scenario.id].bad++;
+                    scenarioQuality[scenario.id].total++;
+                });
+
+                const labels = Object.values(scenarioQuality).map(s => s.title.length > 20 ? s.title.substring(0, 18) + '...' : s.title);
+                const goodData = Object.values(scenarioQuality).map(s => s.good);
+                const normalData = Object.values(scenarioQuality).map(s => s.normal);
+                const badData = Object.values(scenarioQuality).map(s => s.bad);
+
+                qualityEvolutionChartInstance = new Chart(ctx, {
                     type: 'bar',
                     data: {
-                        labels: Object.keys(userCounts),
-                        datasets: [{ label: 'User Views', data: Object.values(userCounts), backgroundColor: barChartBgColor }]
+                        labels: labels,
+                        datasets: [
+                            { label: 'Good', data: goodData, backgroundColor: uiConfig.colors.line.good },
+                            { label: 'Normal', data: normalData, backgroundColor: uiConfig.colors.line.normal },
+                            { label: 'Bad', data: badData, backgroundColor: uiConfig.colors.line.bad }
+                        ]
                     },
-                    options: chartBaseOptions('bar')
-                });
-            }
+                    options: {
+                        responsive: true, maintainAspectRatio: false,
+                        layout: { padding: uiConfig.layoutPadding },
+                        scales: { 
+                            y: { beginAtZero: true, stacked: true, ticks: { font: { size: uiConfig.font.size -1 } } },
+                            x: { stacked: true, ticks: { font: { size: uiConfig.font.size -1 } } }
+                        },
+                        plugins: { 
+                            legend: { position: 'top', labels: { font: { size: uiConfig.font.size } } },
+                            tooltip: { 
+                                titleFont: { size: uiConfig.font.size }, 
+                                bodyFont: { size: uiConfig.font.size -1 },
+                                callbacks: {
+                                    label: function(context) { // For each segment in the stacked bar
+                                        let datasetLabel = context.dataset.label || ''; // 'Good', 'Normal', 'Bad'
+                                        let value = context.raw;
+                                        
+                                        // Calculate total for this bar (scenario)
+                                        let totalForBar = 0;
+                                        context.chart.data.datasets.forEach(dataset => {
+                                            // Ensure data exists at this index for the dataset
+                                            if (dataset.data && dataset.data.length > context.dataIndex) {
+                                                totalForBar += dataset.data[context.dataIndex];
+                                            }
+                                        });
 
-            if (casesChartInstance) casesChartInstance.destroy();
-            const casesCtx = document.getElementById('casesChart')?.getContext('2d');
-            if (casesCtx) {
-                const caseViews = viewData.filter(v => v.item_type === 'case_created').reduce((acc, view) => {
-                    acc[view.item_id] = (acc[view.item_id] || 0) + 1;
-                    return acc;
-                }, {});
-                casesChartInstance = new Chart(casesCtx, {
-                    type: 'pie',
+                                        let label = `${datasetLabel}: ${value}`;
+                                        if (totalForBar > 0) {
+                                            const percentage = (value / totalForBar * 100).toFixed(1);
+                                            label += ` (${percentage}% of scenario total)`;
+                                        }
+                                        return label;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+
+            } else {
+                // --- Evolution Over Time: Line Chart ---
+                const dataByDate = {}; 
+                sessions.forEach(session => {
+                    if (!session.start_time) return;
+                    const sessionDateEgypt = new Date(session.start_time).toLocaleDateString('en-CA', { timeZone: EGYPT_TIMEZONE });
+
+                    if (!dataByDate[sessionDateEgypt]) {
+                        dataByDate[sessionDateEgypt] = { Good: 0, Normal: 0, Bad: 0, total: 0, dateObj: new Date(sessionDateEgypt + "T00:00:00") };
+                    }
+                    if (session.call_quality === 'Good') dataByDate[sessionDateEgypt].Good++;
+                    else if (session.call_quality === 'Normal') dataByDate[sessionDateEgypt].Normal++;
+                    else if (session.call_quality === 'Bad') dataByDate[sessionDateEgypt].Bad++;
+                    dataByDate[sessionDateEgypt].total++;
+                });
+
+                const sortedDates = Object.keys(dataByDate).sort((a, b) => dataByDate[a].dateObj - dataByDate[b].dateObj);
+                
+                const labels = sortedDates.map(date => formatDateTimeEgypt(dataByDate[date].dateObj, { day: '2-digit', month: 'short' }));
+                const goodData = sortedDates.map(date => dataByDate[date].Good);
+                const normalData = sortedDates.map(date => dataByDate[date].Normal);
+                const badData = sortedDates.map(date => dataByDate[date].Bad);
+
+                // Trend arrow logic
+                const legendLabels = { good: 'Good Calls', normal: 'Normal Calls', bad: 'Bad Calls'};
+                if (trendData && trendData.previous.total > 0 && trendData.current.total > 0) { // Only show trends if previous data exists
+                    ['good', 'normal', 'bad'].forEach(qType => {
+                        const currentVal = trendData.current[qType];
+                        const prevVal = trendData.previous[qType];
+                        let trendClass = 'neutral';
+                        let percentageChange = 0;
+                        if (prevVal > 0) {
+                            percentageChange = ((currentVal - prevVal) / prevVal) * 100;
+                            if (qType === 'bad') { // Inverse logic for bad calls
+                                if (percentageChange > 5) trendClass = 'down'; // Bad calls increased, so arrow "down" in terms of good performance
+                                else if (percentageChange < -5) trendClass = 'up'; // Bad calls decreased
+                            } else {
+                                if (percentageChange > 5) trendClass = 'up';
+                                else if (percentageChange < -5) trendClass = 'down';
+                            }
+                        } else if (currentVal > 0) { // No previous, but current exists
+                             trendClass = (qType === 'bad') ? 'down' : 'up'; // Treat as increase from zero
+                             percentageChange = 100; // Effectively
+                        }
+
+                        if (trendClass !== 'neutral') {
+                           legendLabels[qType] += ` <span class="trend-arrow ${trendClass}">${percentageChange.toFixed(0)}%</span>`;
+                        } else {
+                           legendLabels[qType] += ` <span class="trend-arrow neutral"></span>`; // Neutral arrow
+                        }
+                    });
+                }
+
+
+                qualityEvolutionChartInstance = new Chart(ctx, {
+                    type: 'line',
                     data: {
-                        labels: Object.keys(caseViews),
-                        datasets: [{ data: Object.values(caseViews), backgroundColor: pieChartBgColors }]
+                        labels: labels,
+                        datasets: [
+                            { label: legendLabels.good, data: goodData, borderColor: uiConfig.colors.line.good, backgroundColor: uiConfig.colors.line.goodBg, tension: 0.1, fill: false, borderWidth: 2 },
+                            { label: legendLabels.normal, data: normalData, borderColor: uiConfig.colors.line.normal, backgroundColor: uiConfig.colors.line.normalBg, tension: 0.1, fill: false, borderWidth: 2 },
+                            { label: legendLabels.bad, data: badData, borderColor: uiConfig.colors.line.bad, backgroundColor: uiConfig.colors.line.badBg, tension: 0.1, fill: false, borderWidth: 2 }
+                        ]
                     },
-                    options: chartBaseOptions('pie')
-                });
-            }
+                    options: {
+                        responsive: true, maintainAspectRatio: false,
+                        layout: { padding: uiConfig.layoutPadding },
+                        scales: { 
+                            y: { beginAtZero: true, suggestedMax: Math.max(...goodData, ...normalData, ...badData, 5) + 1, ticks: { font: { size: uiConfig.font.size -1 } } },
+                            x: { ticks: { font: { size: uiConfig.font.size -1 } } }
+                        },
+                        plugins: { 
+                            legend: { 
+                                position: 'top',
+                                labels: { 
+                                    font: { size: uiConfig.font.size },
+                                    usePointStyle: true, 
+                                    generateLabels: function(chart) {
+                                        const original = Chart.defaults.plugins.legend.labels.generateLabels;
+                                        const labels = original.call(this, chart);
+                                        labels.forEach(label => {
+                                            let cleanLabelKey = chart.data.datasets[label.datasetIndex].label.split(" <span")[0].toLowerCase().replace(' calls','');
+                                            if(legendLabels[cleanLabelKey]){
+                                                label.text = legendLabels[cleanLabelKey]; 
+                                            }
+                                        });
+                                        return labels;
+                                    }
+                                }
+                            },
+                            tooltip: {
+                                titleFont: { size: uiConfig.font.size },
+                                bodyFont: { size: uiConfig.font.size -1 },
+                                callbacks: {
+                                    label: function(context) {
+                                        let label = context.dataset.label || '';
+                                        if (label.includes("<span")) { // Clean up label if it has HTML from legend
+                                            label = label.substring(0, label.indexOf("<span")).trim();
+                                        }
+                                        if (label) { label += ': '; }
+                                        const count = context.raw;
+                                        label += count;
 
-            // Update Recent Updates
-            recentUpdatesList.innerHTML = viewData.slice(0, 5).map(v => `
-                <li class="text-gray-500 dark:text-gray-400">
-                    ${v.user_identifier} ${v.item_type === 'case_created' ? 'created a case' : 'viewed'} ${v.item_id} on ${new Date(v.viewed_at).toLocaleDateString()}
-                </li>
-            `).join('') || '<li class="text-gray-500 dark:text-gray-400">No recent activity.</li>';
-        }
+                                        let totalForPoint = 0;
+                                        context.chart.data.datasets.forEach(dataset => {
+                                            // Ensure data exists at this index for the dataset
+                                            if (dataset.data && dataset.data.length > context.dataIndex) {
+                                                 totalForPoint += dataset.data[context.dataIndex];
+                                            }
+                                        });
 
-        // Filters
-        const filterUserSelect = document.getElementById('filterUser');
-        async function populateUserFilter() {
-            const { data, error } = await supabase.rpc('get_distinct_viewers');
-            if (error) {
-                console.error('Error fetching distinct viewers:', error);
-                return;
-            }
-            if (data && filterUserSelect) {
-                filterUserSelect.innerHTML = '<option value="">All Users</option>';
-                data.forEach(u => filterUserSelect.add(new Option(u.user_identifier, u.user_identifier)));
-            }
-        }
-        document.getElementById('applyFilterBtn').addEventListener('click', async () => {
-            const date = document.getElementById('filterDate').value;
-            const user = filterUserSelect.value;
-            const interaction = document.getElementById('filterInteraction').value;
-            let query = supabase.from(TABLES.VIEWS_LOG).select('*');
-            if (date) query = query.gte('viewed_at', `${date}T00:00:00Z`).lte('viewed_at', `${date}T23:59:59Z`);
-            if (user) query = query.eq('user_identifier', user);
-            if (interaction) query = query.eq('item_type', interaction);
-            const { data: filteredData, error } = await query;
-            if (error) console.error('Error fetching filtered data:', error);
-            else initCharts(filteredData || []);
-        });
-
-        // Helper Functions
-        function escapeHTML(str) {
-            if (typeof str !== 'string') return '';
-            return str.replace(/[&<>"']/g, m => ({ '&': '&', '<': '<', '>': '>', '"': '"', "'": ''' }[m]));
-        }
-        function highlightText(text, query) {
-            if (!text) return '';
-            const safeText = escapeHTML(text);
-            if (!query) return safeText;
-            try {
-                const rgx = new RegExp(`(${query.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')})`, 'gi');
-                return safeText.replace(rgx, '<mark>$1</mark>');
-            } catch (e) {
-                return safeText;
-            }
-        }
-        function truncateText(text, len) {
-            if (!text || text.length <= len) return text;
-            return text.substring(0, len) + '...';
-        }
-        function stripHtml(html) {
-            const tmp = document.createElement('DIV');
-            tmp.innerHTML = html;
-            return tmp.textContent || tmp.innerText || '';
-        }
-        function getThemeColors(themeColor = 'gray') {
-            const colorMap = {
-                blue: { bg: 'bg-blue-100 dark:bg-blue-900', text: 'text-blue-600 dark:text-blue-400', iconContainer: 'bg-blue-100 dark:bg-blue-800/50', icon: 'text-blue-500 dark:text-blue-400', cta: 'text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300', border: 'border-blue-500', tagBg: 'bg-blue-100 dark:bg-blue-500/20', tagText: 'text-blue-700 dark:text-blue-300', statusBg: 'bg-blue-100 dark:bg-blue-500/20', statusText: 'text-blue-700 dark:text-blue-400' },
-                teal: { bg: 'bg-teal-100 dark:bg-teal-900', text: 'text-teal-600 dark:text-teal-400', iconContainer: 'bg-teal-100 dark:bg-teal-800/50', icon: 'text-teal-500 dark:text-teal-400', cta: 'text-teal-600 hover:text-teal-700 dark:text-teal-400 dark:hover:text-teal-300', border: 'border-teal-500', tagBg: 'bg-teal-100 dark:bg-teal-500/20', tagText: 'text-teal-700 dark:text-teal-300', statusBg: 'bg-teal-100 dark:bg-teal-500/20', statusText: 'text-teal-700 dark:text-teal-400' },
-                green: { bg: 'bg-green-100 dark:bg-green-900', text: 'text-green-600 dark:text-green-400', iconContainer: 'bg-green-100 dark:bg-green-800/50', icon: 'text-green-500 dark:text-green-400', cta: 'text-green-600 hover:text-green-700 dark:text-green-400 dark:hover:text-green-300', border: 'border-green-500', tagBg: 'bg-green-100 dark:bg-green-500/20', tagText: 'text-green-700 dark:text-green-300', statusBg: 'bg-green-100 dark:bg-green-500/20', statusText: 'text-green-700 dark:text-green-400' },
-                indigo: { bg: 'bg-indigo-100 dark:bg-indigo-900', text: 'text-indigo-600 dark:text-indigo-400', iconContainer: 'bg-indigo-100 dark:bg-indigo-800/50', icon: 'text-indigo-500 dark:text-indigo-400', cta: 'text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300', border: 'border-indigo-500', tagBg: 'bg-indigo-100 dark:bg-indigo-500/20', tagText: 'text-indigo-700 dark:text-indigo-300', statusBg: 'bg-indigo-100 dark:bg-indigo-500/20', statusText: 'text-indigo-700 dark:text-indigo-400' },
-                cyan: { bg: 'bg-cyan-100 dark:bg-cyan-900', text: 'text-cyan-600 dark:text-cyan-400', iconContainer: 'bg-cyan-100 dark:bg-cyan-800/50', icon: 'text-cyan-500 dark:text-cyan-400', cta: 'text-cyan-600 hover:text-cyan-700 dark:text-cyan-400 dark:hover:text-cyan-300', border: 'border-cyan-500', tagBg: 'bg-cyan-100 dark:bg-cyan-500/20', tagText: 'text-cyan-700 dark:text-cyan-300', statusBg: 'bg-cyan-100 dark:bg-cyan-500/20', statusText: 'text-cyan-700 dark:text-cyan-400' },
-                lime: { bg: 'bg-lime-100 dark:bg-lime-900', text: 'text-lime-600 dark:text-lime-400', iconContainer: 'bg-lime-100 dark:bg-lime-800/50', icon: 'text-lime-500 dark:text-lime-400', cta: 'text-lime-600 hover:text-lime-700 dark:text-lime-400 dark:hover:text-lime-300', border: 'border-lime-500', tagBg: 'bg-lime-100 dark:bg-lime-500/20', tagText: 'text-lime-700 dark:text-lime-300', statusBg: 'bg-lime-100 dark:bg-lime-500/20', statusText: 'text-lime-700 dark:text-lime-400' },
-                yellow: { bg: 'bg-yellow-100 dark:bg-yellow-900', text: 'text-yellow-600 dark:text-yellow-400', iconContainer: 'bg-yellow-100 dark:bg-yellow-800/50', icon: 'text-yellow-500 dark:text-yellow-400', cta: 'text-yellow-600 hover:text-yellow-700 dark:text-yellow-400 dark:hover:text-yellow-300', border: 'border-yellow-500', tagBg: 'bg-yellow-100 dark:bg-yellow-500/20', tagText: 'text-yellow-700 dark:text-yellow-300', statusBg: 'bg-yellow-100 dark:bg-yellow-500/20', statusText: 'text-yellow-700 dark:text-yellow-400' },
-                pink: { bg: 'bg-pink-100 dark:bg-pink-900', text: 'text-pink-600 dark:text-pink-400', iconContainer: 'bg-pink-100 dark:bg-pink-800/50', icon: 'text-pink-500 dark:text-pink-400', cta: 'text-pink-600 hover:text-pink-700 dark:text-pink-400 dark:hover:text-pink-300', border: 'border-pink-500', tagBg: 'bg-pink-100 dark:bg-pink-500/20', tagText: 'text-pink-700 dark:text-pink-300', statusBg: 'bg-pink-100 dark:bg-pink-500/20', statusText: 'text-pink-700 dark:text-pink-400' },
-                red: { bg: 'bg-red-100 dark:bg-red-900', text: 'text-red-600 dark:text-red-400', iconContainer: 'bg-red-100 dark:bg-red-800/50', icon: 'text-red-500 dark:text-red-400', cta: 'text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300', border: 'border-red-500', tagBg: 'bg-red-100 dark:bg-red-500/20', tagText: 'text-red-700 dark:text-red-300', statusBg: 'bg-red-100 dark:bg-red-500/20', statusText: 'text-red-700 dark:text-red-400' },
-                sky: { bg: 'bg-sky-100 dark:bg-sky-900', text: 'text-sky-600 dark:text-sky-400', iconContainer: 'bg-sky-100 dark:bg-sky-800/50', icon: 'text-sky-500 dark:text-sky-400', cta: 'text-sky-600 hover:text-sky-700 dark:text-sky-400 dark:hover:text-sky-300', border: 'border-sky-500', tagBg: 'bg-sky-100 dark:bg-sky-500/20', tagText: 'text-sky-700 dark:text-sky-300', statusBg: 'bg-sky-100 dark:bg-sky-500/20', statusText: 'text-sky-700 dark:text-sky-400' },
-                amber: { bg: 'bg-amber-100 dark:bg-amber-900', text: 'text-amber-600 dark:text-amber-400', iconContainer: 'bg-amber-100 dark:bg-amber-800/50', icon: 'text-amber-500 dark:text-amber-400', cta: 'text-amber-600 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300', border: 'border-amber-500', tagBg: 'bg-amber-100 dark:bg-amber-500/20', tagText: 'text-amber-700 dark:text-amber-300', statusBg: 'bg-amber-100 dark:bg-amber-500/20', statusText: 'text-amber-700 dark:text-amber-400' },
-                slate: { bg: 'bg-slate-100 dark:bg-slate-900', text: 'text-slate-600 dark:text-slate-400', iconContainer: 'bg-slate-100 dark:bg-slate-800/50', icon: 'text-slate-500 dark:text-slate-400', cta: 'text-slate-600 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300', border: 'border-slate-500', tagBg: 'bg-slate-100 dark:bg-slate-500/20', tagText: 'text-slate-700 dark:text-slate-300', statusBg: 'bg-slate-100 dark:bg-slate-500/20', statusText: 'text-slate-700 dark:text-slate-400' },
-                purple: { bg: 'bg-purple-100 dark:bg-purple-900', text: 'text-purple-600 dark:text-purple-400', iconContainer: 'bg-purple-100 dark:bg-purple-800/50', icon: 'text-purple-500 dark:text-purple-400', cta: 'text-purple-600 hover:text-purple-700 dark:text-purple-400 dark:hover:text-purple-300', border: 'border-purple-500', tagBg: 'bg-purple-100 dark:bg-purple-500/20', tagText: 'text-purple-700 dark:text-purple-300', statusBg: 'bg-purple-100 dark:bg-purple-500/20', statusText: 'text-purple-700 dark:text-purple-400' },
-                gray: { bg: 'bg-gray-100 dark:bg-gray-800', text: 'text-gray-600 dark:text-gray-400', iconContainer: 'bg-gray-100 dark:bg-gray-700/50', icon: 'text-gray-500 dark:text-gray-400', cta: 'text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300', border: 'border-gray-500', tagBg: 'bg-gray-200 dark:bg-gray-700', tagText: 'text-gray-700 dark:text-gray-300', statusBg: 'bg-gray-200 dark:bg-gray-600', statusText: 'text-gray-700 dark:text-gray-300' }
-            };
-            return colorMap[themeColor.toLowerCase()] || colorMap.gray;
-        }
-
-        // Card Rendering
-        function renderArticleCard(article, sectionData) {
-            const theme = getThemeColors(sectionData.themeColor);
-            const cardIconClass = sectionData.icon || 'fas fa-file-alt';
-            return `
-            <div class="card border-t-4 ${theme.border}" data-item-id="${article.id}" data-item-type="article">
-                <div class="flex items-center mb-3">
-                    <div class="p-3 rounded-full ${theme.iconContainer} mr-4"><i class="${cardIconClass} text-xl ${theme.icon}"></i></div>
-                    <h3 class="font-semibold text-lg leading-tight">${escapeHTML(article.title)}</h3>
-                </div>
-                <p class="text-sm mb-4 flex-grow text-gray-600 dark:text-gray-400">${escapeHTML(article.summary) || 'No summary.'}</p>
-                ${article.tags && article.tags.length ? `<div class="mb-4">${article.tags.map(tag => `<span class="text-xs ${theme.tagBg} ${theme.tagText} px-2 py-1 rounded-full mr-1 mb-1 font-medium">${escapeHTML(tag)}</span>`).join('')}</div>` : ''}
-                <div class="mt-auto flex justify-between items-center pt-3 border-t border-gray-200 dark:border-gray-700">
-                    <div></div>
-                    <a href="${escapeHTML(article.contentPath || '#')}" target="_blank" class="text-sm font-medium ${theme.cta}">Read More <i class="fas fa-arrow-right ml-1 text-xs"></i></a>
-                </div>
-            </div>`;
-        }
-        function renderCaseCard(caseItem, sectionData) {
-            const theme = getThemeColors(sectionData.themeColor);
-            return `
-            <div class="card border-t-4 ${theme.border}" data-item-id="${caseItem.id}" data-item-type="case">
-                <div class="flex items-center mb-3">
-                    <div class="p-3 rounded-full ${theme.iconContainer} mr-4"><i class="fas fa-briefcase text-xl ${theme.icon}"></i></div>
-                    <h3 class="font-semibold text-lg leading-tight">${escapeHTML(caseItem.title)}</h3>
-                </div>
-                <p class="text-sm mb-2 flex-grow text-gray-600 dark:text-gray-400">${escapeHTML(caseItem.summary) || 'No summary.'}</p>
-                ${caseItem.resolution_steps ? `<p class="text-xs italic mb-3 text-gray-500 dark:text-gray-500">Preview: ${escapeHTML(truncateText(stripHtml(caseItem.resolution_steps), 100))}</p>` : ''}
-                <div class="mt-auto flex justify-between items-center pt-3 border-t border-gray-200 dark:border-gray-700">
-                    <span class="text-sm font-medium px-3 py-1 rounded-full ${theme.statusBg} ${theme.statusText}">${escapeHTML(caseItem.status)}</span>
-                    <a href="#${sectionData.id}/${caseItem.id}" class="text-sm font-medium ${theme.cta}">Details <i class="fas fa-arrow-right ml-1 text-xs"></i></a>
-                </div>
-            </div>`;
-        }
-        function renderItemCard(item, sectionData) {
-            const theme = getThemeColors(sectionData.themeColor);
-            return `
-            <div class="card border-t-4 ${theme.border}" data-item-id="${item.id}" data-item-type="item">
-                <div class="flex items-center mb-3">
-                    <div class="p-3 rounded-full ${theme.iconContainer} mr-4"><i class="${sectionData.icon || 'fas fa-archive'} text-xl ${theme.icon}"></i></div>
-                    <h3 class="font-semibold text-lg leading-tight">${escapeHTML(item.title)}</h3>
-                </div>
-                <p class="text-sm mb-4 flex-grow text-gray-600 dark:text-gray-400">${escapeHTML(item.summary) || 'No description.'}</p>
-                <div class="mt-auto flex justify-between items-center pt-3 border-t border-gray-200 dark:border-gray-700">
-                    <span class="text-xs ${theme.tagBg} ${theme.tagText} px-3 py-1 rounded-full uppercase font-semibold">${escapeHTML(item.type)}</span>
-                    <a href="${escapeHTML(item.url)}" target="_blank" class="text-sm font-medium ${theme.cta}">Open <i class="fas fa-external-link-alt ml-1 text-xs"></i></a>
-                </div>
-            </div>`;
-        }
-
-        // Role-Based Permissions
-        function checkUserRoleAccess(sectionId) {
-            const user = Auth.getCurrentUser();
-            const section = kbSystemData.sections.find(s => s.id === sectionId);
-            if (!section) return true; // Default to allow if section not found
-            if (user.role === 'super_admin') return true;
-            if (user.role === 'admin' && !['logistics_admin'].includes(sectionId)) return true;
-            if (user.role === 'viewer' && ['support', 'partner_care', 'customer_care'].includes(sectionId)) return true;
-            // For other roles or sections, default to restricted if not explicitly allowed above
-            // This part can be expanded based on more granular role needs
-            if (!['super_admin', 'admin', 'viewer'].includes(user.role)) return false; // Unknown role
-            return false; // Default deny if not matched
-        }
-
-        // Content Display
-        async function displaySectionContent(sectionId, itemIdToFocus = null, subCategoryFilter = null) {
-            // Temporarily allow all access for full testing, original checkUserRoleAccess can be restored
-            // if (!checkUserRoleAccess(sectionId)) {
-            //     standardSectionContentPlaceholder.innerHTML = `<div class="p-6 text-center"><h2 class="text-xl font-semibold text-red-500">Access Denied</h2><p>You do not have permission to view this section.</p></div>`;
-            //     dashboardOverviewContainer.classList.add('hidden');
-            //     standardSectionContentPlaceholder.classList.remove('hidden');
-            //     currentSectionTitleEl.textContent = 'Access Denied';
-            //     breadcrumbsContainer.innerHTML = `<span class="font-medium">Access Denied</span>`;
-            //     return;
-            // }
-
-            dashboardOverviewContainer.classList.add('hidden');
-            standardSectionContentPlaceholder.classList.remove('hidden');
-            standardSectionContentPlaceholder.innerHTML = '';
-
-            if (sectionId === 'home') {
-                dashboardOverviewContainer.classList.remove('hidden');
-                standardSectionContentPlaceholder.classList.add('hidden');
-                currentSectionTitleEl.textContent = 'Dashboard Overview';
-                breadcrumbsContainer.innerHTML = `<span class="font-medium">Home</span>`;
-                const { data: viewData } = await supabase.from(TABLES.VIEWS_LOG).select('*');
-                initCharts(viewData || []);
-                populateUserFilter();
-                return;
-            }
-
-            const sectionData = kbSystemData.sections.find(s => s.id === sectionId);
-            if (!sectionData) {
-                standardSectionContentPlaceholder.innerHTML = `<div class="p-6 text-center"><h2 class="text-xl font-semibold">Section Not Found: ${escapeHTML(sectionId)}</h2></div>`;
-                currentSectionTitleEl.textContent = 'Not Found';
-                return;
-            }
-
-            currentSectionTitleEl.textContent = sectionData.name;
-            let bcHTML = `<a href="#home" class="hover:underline">Home</a> <span class="mx-1">></span> <span class="font-medium">${escapeHTML(sectionData.name)}</span>`;
-            if (subCategoryFilter) {
-                const subCatName = sectionData.subCategories?.find(sc => sc.id === subCategoryFilter)?.name || subCategoryFilter;
-                bcHTML = `<a href="#home" class="hover:underline">Home</a> <span class="mx-1">></span> <a href="#${sectionData.id}" class="hover:underline">${escapeHTML(sectionData.name)}</a> <span class="mx-1">></span> <span class="font-medium">${escapeHTML(subCatName)}</span>`;
-            }
-            breadcrumbsContainer.innerHTML = bcHTML;
-
-            let contentHTML = `<div class="space-y-8">`;
-            const theme = getThemeColors(sectionData.themeColor);
-
-            // Add Content Button (for admin and super_admin)
-            if (['admin', 'super_admin'].includes(currentUser.role)) {
-                contentHTML += `
-                <div class="flex justify-end">
-                    <button onclick="openAddContentModal('${sectionData.id}')" class="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 flex items-center">
-                        <i class="fas fa-plus-circle mr-2"></i> Add Content
-                    </button>
-                </div>`;
-            }
-
-            const articles = (sectionData.articles || []).filter(a => !subCategoryFilter || a.tags?.includes(subCategoryFilter));
-            const cases = (sectionData.cases || []).filter(c => !subCategoryFilter || c.tags?.includes(subCategoryFilter));
-            const items = (sectionData.items || []).filter(i => !subCategoryFilter || i.type === subCategoryFilter); // Example: if subCategoryFilter is used for item types
-
-            if (articles.length) {
-                contentHTML += `<h3 class="text-2xl font-semibold mb-4 border-b pb-2 border-gray-300 dark:border-gray-700">Articles</h3><div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">`;
-                articles.forEach(article => contentHTML += renderArticleCard(article, sectionData));
-                contentHTML += `</div>`;
-            }
-            if (cases.length) {
-                contentHTML += `<h3 class="text-2xl font-semibold mt-8 mb-4 border-b pb-2 border-gray-300 dark:border-gray-700">Cases</h3><div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">`;
-                cases.forEach(caseItem => contentHTML += renderCaseCard(caseItem, sectionData));
-                contentHTML += `</div>`;
-            }
-            if (items.length) {
-                contentHTML += `<h3 class="text-2xl font-semibold mt-8 mb-4 border-b pb-2 border-gray-300 dark:border-gray-700">Resources</h3><div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">`;
-                items.forEach(item => contentHTML += renderItemCard(item, sectionData));
-                contentHTML += `</div>`;
-            }
-            if (!subCategoryFilter && sectionData.subCategories && sectionData.subCategories.length > 0) {
-                contentHTML += `<h3 class="text-2xl font-semibold mt-8 mb-4 border-b pb-2 border-gray-300 dark:border-gray-700">Sub-Categories</h3><div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">`;
-                sectionData.subCategories.forEach(subCat => {
-                    contentHTML += `<a href="#${sectionData.id}/${subCat.id}" class="card text-center hover:border-indigo-500 border-transparent border-2">
-                        <i class="${sectionData.icon || 'fas fa-folder-open'} text-3xl mb-2 ${theme.icon}"></i>
-                        <h4 class="font-medium">${escapeHTML(subCat.name)}</h4>
-                    </a>`;
-                });
-                contentHTML += `</div>`;
-            }
-
-            if (!articles.length && !cases.length && !items.length && (!sectionData.subCategories || sectionData.subCategories.length === 0 || subCategoryFilter)) {
-                 contentHTML += `<div class="text-center py-10"><p class="text-xl text-gray-500">No content found for this section${subCategoryFilter ? '/filter' : ''}.</p></div>`;
-            }
-
-            contentHTML += `</div>`;
-            standardSectionContentPlaceholder.innerHTML = contentHTML;
-
-            if (itemIdToFocus) {
-                setTimeout(() => {
-                    const targetCard = standardSectionContentPlaceholder.querySelector(`[data-item-id="${itemIdToFocus}"]`);
-                    if (targetCard) {
-                        targetCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                        targetCard.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.5)';
-                        setTimeout(() => targetCard.style.boxShadow = '', 3000);
+                                        if (totalForPoint > 0) {
+                                            const percentage = (count / totalForPoint * 100).toFixed(1);
+                                            label += ` (${percentage}% of day's total)`;
+                                        }
+                                        return label;
+                                    }
+                                }
+                            },
+                            htmlLegend: { 
+                            }
+                        }
                     }
-                }, 300);
+                });
             }
         }
 
-        // Navigation and Routing
-        function highlightSidebarLink(sectionId) {
-            document.querySelectorAll('.sidebar-link').forEach(l => l.classList.remove('active'));
-            const activeLink = document.querySelector(`.sidebar-link[data-section="${sectionId}"]`);
-            if (activeLink) activeLink.classList.add('active');
-        }
+        function renderBadQualityReasonsChart(sessions) {
+            if (!badQualityReasonsChartCanvas || typeof Chart === 'undefined') return;
+            const ctx = badQualityReasonsChartCanvas.getContext('2d');
+            const uiConfig = getChartUiConfig();
 
-        async function handleNavigation() {
-            const hash = window.location.hash.substring(1) || 'home';
-            const parts = hash.split('/');
-            const sectionId = parts[0] || 'home';
+            if (badQualityReasonsChartInstance) {
+                badQualityReasonsChartInstance.destroy();
+            }
+
+            const badSessions = sessions.filter(s => s.call_quality === 'Bad' && s.quality_reason);
+            const reasonCounts = {};
+            badSessions.forEach(session => {
+                const reason = (session.quality_reason || "Unspecified").trim();
+                reasonCounts[reason] = (reasonCounts[reason] || 0) + 1;
+            });
+
+            const labels = Object.keys(reasonCounts);
+            const data = Object.values(reasonCounts);
             
-            // Determine if the second part is a sub-category ID or an item ID
-            let subCategoryFilter = null;
-            let itemIdToFocus = null;
+            if (labels.length === 0) {
+                badQualityReasonsChartCanvas.style.display = 'none';
+                noBadReasonsMessageEl.style.display = 'flex'; 
+                qualityTipTextEl.textContent = "No specific bad call reasons identified in the current selection.";
+                return;
+            } else {
+                badQualityReasonsChartCanvas.style.display = 'block';
+                noBadReasonsMessageEl.style.display = 'none';
 
-            const sectionData = kbSystemData.sections.find(s => s.id === sectionId);
-            if (parts.length > 1) {
-                if (sectionData && sectionData.subCategories && sectionData.subCategories.find(sc => sc.id === parts[1])) {
-                    subCategoryFilter = parts[1];
-                    if (parts.length > 2) {
-                        itemIdToFocus = parts[2];
-                    }
+                // Update quality tip
+                const sortedReasons = Object.entries(reasonCounts).sort(([,a],[,b]) => b-a);
+                if (sortedReasons.length > 0) {
+                    const topReason = sortedReasons[0][0];
+                    qualityTipTextEl.textContent = `Most common bad call reason is "${topReason}". Consider reviewing processes or training related to this.`;
                 } else {
-                    itemIdToFocus = parts[1];
+                    qualityTipTextEl.textContent = "Review call details for improvement areas.";
                 }
             }
             
-            currentSectionId = sectionId; // Update global currentSectionId for modal context
-            highlightSidebarLink(sectionId);
-            await displaySectionContent(sectionId, itemIdToFocus, subCategoryFilter);
-            logUserView(sectionId, 'navigation', subCategoryFilter || itemIdToFocus);
-        }
+            const backgroundColors = uiConfig.colors.pie.backgrounds;
+            const borderColors = uiConfig.colors.pie.borders;
 
-        // Global Search
-        const globalSearchInput = document.getElementById('globalSearchInput');
-        const searchResultsContainer = document.getElementById('searchResultsContainer');
-        globalSearchInput.addEventListener('input', () => {
-            const query = globalSearchInput.value.trim().toLowerCase();
-            if (query.length < 2) {
-                searchResultsContainer.classList.add('hidden');
-                return;
-            }
-            const results = [];
-            kbSystemData.sections.forEach(s => {
-                s.articles?.forEach(a => {
-                    if (a.title.toLowerCase().includes(query) || a.summary?.toLowerCase().includes(query))
-                        results.push({ ...a, type: 'article', sectionId: s.id, sectionName: s.name });
-                });
-                s.cases?.forEach(c => {
-                    if (c.title.toLowerCase().includes(query) || c.summary?.toLowerCase().includes(query) || (c.resolution_steps && stripHtml(c.resolution_steps).toLowerCase().includes(query)))
-                        results.push({ ...c, type: 'case', sectionId: s.id, sectionName: s.name });
-                });
-                s.items?.forEach(i => {
-                    if (i.title.toLowerCase().includes(query) || i.summary?.toLowerCase().includes(query))
-                        results.push({ ...i, type: 'item', sectionId: s.id, sectionName: s.name });
+            badQualityReasonsChartInstance = new Chart(ctx, {
+                type: 'pie',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Bad Call Reasons', data: data,
+                        backgroundColor: backgroundColors,
+                        borderColor: borderColors, borderWidth: 1.5
+                    }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    layout: { padding: uiConfig.layoutPadding },
+                    plugins: {
+                        legend: { 
+                            position: 'right', 
+                            labels: { boxWidth: 15, padding: 15, font: { size: uiConfig.font.size } } 
+                        },
+                        tooltip: {
+                            titleFont: { size: uiConfig.font.size },
+                            bodyFont: { size: uiConfig.font.size -1 },
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.label || '';
+                                    if (label) { label += ': '; }
+                                    if (context.parsed !== null) {
+                                        const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                        const percentage = total > 0 ? (context.raw / total * 100).toFixed(1) + '%' : '0%';
+                                        label += context.raw + ' (' + percentage + ')';
+                                    }
+                                    return label;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        // --- End of Analytics Functions ---
+
+        function setupEventListeners() {
+            logoutButton.addEventListener('click', async () => {
+                // ... (logout logic, unchanged)
+                if (liveCallsChannel) {
+                    supabase.removeChannel(liveCallsChannel);
+                    liveCallsChannel = null;
+                }
+                localStorage.removeItem('elevoCoreUserData');
+                localStorage.removeItem(FILTER_STORAGE_KEY); // Clear admin filters on logout
+                const { error } = await supabase.auth.signOut();
+                if (error) console.error("Logout error:", error);
+                window.location.replace("login.html");
+            });
+
+            [userFilterDropdown, qualityFilter, startDateFilter, endDateFilter].forEach(el => {
+                el.addEventListener('change', () => {
+                    if (!activeChartPeriod) { // Only trigger if not overridden by chart period buttons
+                         applyFiltersAndRender();
+                    }
                 });
             });
-            searchResultsContainer.innerHTML = '';
-            if (results.length) {
-                results.slice(0, 10).forEach(r => { // Show up to 10 results
-                    const li = document.createElement('a');
-                    // Link to item detail for cases, articles. For items, it's an external link.
-                    let itemPath = `#${r.sectionId}/${r.id}`;
-                    if (r.type === 'item' && r.url) { // If item and has URL, link directly (or could still go to section)
-                       // itemPath = r.url; // Option: link directly
-                    }
+            searchInput.addEventListener('input', () => {
+                clearTimeout(filterTimeoutId);
+                filterTimeoutId = setTimeout(applyFiltersAndRender, 500); 
+            });
+            resetFiltersBtn.addEventListener('click', () => {
+                userFilterDropdown.value = '';
+                searchInput.value = '';
+                qualityFilter.value = '';
+                startDateFilter.value = '';
+                endDateFilter.value = '';
+                
+                // Reset analytics filters too
+                activeChartPeriod = null;
+                groupQualityByScenario = false;
+                groupQualityByScenarioToggle.checked = false;
+                durationFilterButtons.forEach(btn => btn.classList.remove('active-period'));
+                clearChartPeriodBtn.classList.add('active-period'); // Mark custom as active
+                startDateFilter.disabled = false;
+                endDateFilter.disabled = false;
 
-                    li.href = itemPath;
-                    li.className = 'block p-3 hover:bg-gray-100 dark:hover:bg-gray-600';
-                    let summaryText = r.summary || (r.type === 'case' && r.resolution_steps ? stripHtml(r.resolution_steps) : '');
 
-                    li.innerHTML = `<div class="font-medium">${highlightText(r.title, query)} <span class="text-xs text-gray-500 dark:text-gray-400">(${r.type} in ${r.sectionName})</span></div><p class="text-sm text-gray-600 dark:text-gray-400">${highlightText(truncateText(summaryText, 70), query)}</p>`;
-                    searchResultsContainer.appendChild(li);
+                localStorage.removeItem(FILTER_STORAGE_KEY);
+                applyFiltersAndRender();
+            });
+            exportDataBtn.addEventListener('click', exportFilteredDataToCSV);
+            exportDataXLSXBtn.addEventListener('click', exportFilteredDataToXLSX);
+
+            // --- MODIFICATION: Event listeners for new analytics controls ---
+            durationFilterButtons.forEach(button => {
+                button.addEventListener('click', () => {
+                    activeChartPeriod = parseInt(button.dataset.period);
+                    durationFilterButtons.forEach(btn => btn.classList.remove('active-period'));
+                    button.classList.add('active-period');
+                    clearChartPeriodBtn.classList.remove('active-period');
+                    applyFiltersAndRender();
                 });
-                searchResultsContainer.classList.remove('hidden');
-            } else {
-                searchResultsContainer.innerHTML = `<div class="p-3 text-sm text-gray-500 dark:text-gray-400">No results found.</div>`;
-                searchResultsContainer.classList.remove('hidden');
-            }
-        });
-        document.addEventListener('click', e => {
-            if (!globalSearchInput.contains(e.target) && !searchResultsContainer.contains(e.target)) {
-                searchResultsContainer.classList.add('hidden');
-            }
-        });
+            });
 
-        // Log User Views
-        async function logUserView(itemId, itemType, details = null) {
-            const user = Auth.getCurrentUser();
-            const viewData = {
-                item_id: itemId,
-                item_type: itemType,
-                user_identifier: user.email,
-                details_text: details,
-                viewed_at: new Date().toISOString()
-            };
-            await supabase.from(TABLES.VIEWS_LOG).insert([viewData]);
+            clearChartPeriodBtn.addEventListener('click', () => {
+                activeChartPeriod = null;
+                durationFilterButtons.forEach(btn => btn.classList.remove('active-period'));
+                clearChartPeriodBtn.classList.add('active-period'); // Or some other indication
+                startDateFilter.disabled = false;
+                endDateFilter.disabled = false;
+                // Optional: you might want to clear startDateFilter/endDateFilter here or let user manage them
+                applyFiltersAndRender();
+            });
+
+            groupQualityByScenarioToggle.addEventListener('change', (e) => {
+                groupQualityByScenario = e.target.checked;
+                applyFiltersAndRender(); // Re-render charts with new grouping
+            });
+
+             // Update chart defaults on theme change (if a theme toggle exists and emits an event)
+            // This is a placeholder, actual theme toggle mechanism might be different
+            document.addEventListener('themeChanged', () => { // Assuming a custom event 'themeChanged'
+                setChartJsDefaults();
+                applyFiltersAndRender(); // Re-render charts with new theme
+            });
         }
 
-        window.addEventListener('hashchange', handleNavigation);
-        handleNavigation(); // Initial call
+        function exportFilteredDataToCSV() {
+            // ... (CSV export logic, unchanged)
+            if (filteredCallSessions.length === 0) {
+                alert("No data to export based on current filters.");
+                return;
+            }
+            const headers = ["Agent Name", "Agent Email", "Scenario", "Start Time (Egypt)", "Duration (s)", "Completed", "Quality", "Reason"]; 
+            const rows = filteredCallSessions.map(session => {
+                const agent = allAgents.find(a => a.id === session.user_id);
+                return [
+                    agent?.name || 'Unknown',
+                    agent?.email || 'N/A',
+                    session.call_sessions_scenario_id_fkey?.title || 'N/A', 
+                    formatDateForCSVEgypt(session.start_time), 
+                    session.duration || 0, 
+                    session.completed ? 'Yes' : 'No', 
+                    session.call_quality || 'N/A',
+                    session.quality_reason || '-'
+                ].map(field => `"${String(field).replace(/"/g, '""')}"`); 
+            });
 
-        console.log('InfiniBase App Initialized with UI enhancements.');
+            const csvContent = [headers.join(','), ...rows.map(row => row.join(','))].join('\n');
+            const blob = new Blob(["\uFEFF"+csvContent], { type: 'text/csv;charset=utf-8;' }); 
+            const link = document.createElement("a");
+            const url = URL.createObjectURL(blob);
+            link.setAttribute("href", url);
+            link.setAttribute("download", `elevo_dashboard_export_${new Date().toISOString().slice(0,10)}.csv`);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        }
+
+        function exportFilteredDataToXLSX() {
+            // ... (XLSX export logic, unchanged)
+            if (typeof XLSX === 'undefined') {
+                alert("Excel export library (SheetJS) could not be loaded. Please check your internet connection or try refreshing the page.");
+                console.error("XLSX (SheetJS) is not defined. Ensure the library is loaded.");
+                return;
+            }
+            if (filteredCallSessions.length === 0) {
+                alert("No data to export based on current filters.");
+                return;
+            }
+
+            const headers = ["Agent Name", "Agent Email", "Scenario", "Start Time (Egypt)", "Duration (s)", "Completed", "Quality", "Reason"];
+            const dataForExport = filteredCallSessions.map(session => {
+                const agent = allAgents.find(a => a.id === session.user_id);
+                return { 
+                    "Agent Name": agent?.name || 'Unknown',
+                    "Agent Email": agent?.email || 'N/A',
+                    "Scenario": session.call_sessions_scenario_id_fkey?.title || 'N/A',
+                    "Start Time (Egypt)": formatDateForCSVEgypt(session.start_time), 
+                    "Duration (s)": session.duration || 0,
+                    "Completed": session.completed ? 'Yes' : 'No',
+                    "Quality": session.call_quality || 'N/A',
+                    "Reason": session.quality_reason || '-'
+                };
+            });
+
+            const worksheet = XLSX.utils.json_to_sheet(dataForExport); 
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "CallSessions");
+
+            const colWidths = headers.map(header => {
+                 const maxLength = Math.max(
+                    header.length, 
+                    ...dataForExport.map(row => String(row[header] === null || typeof row[header] === 'undefined' ? '' : row[header]).length)
+                );
+                return { wch: maxLength + 2 }; 
+            });
+            worksheet['!cols'] = colWidths;
+
+            XLSX.writeFile(workbook, `elevo_dashboard_export_${new Date().toISOString().slice(0,10)}.xlsx`);
+        }
+        
+        async function setupLiveCallMonitoring() {
+            // ... (Live call monitoring logic, unchanged)
+            if (!supabase) return;
+            await fetchAndRenderLiveCalls(); 
+
+            if (liveCallsChannel) { 
+                supabase.removeChannel(liveCallsChannel);
+            }
+
+            liveCallsChannel = supabase
+                .channel('public:call_sessions:live')
+                .on('postgres_changes', 
+                    { event: '*', schema: 'public', table: 'call_sessions' },
+                    async (payload) => { 
+                        console.log('Realtime: Call session change detected', payload);
+                        await fetchAndRenderLiveCalls(); 
+                        
+                        const { data: sessionsData, error: sessionsError } = await supabase
+                            .from('call_sessions')
+                            .select(`
+                                *,
+                                call_sessions_scenario_id_fkey(id, title)
+                            `) 
+                            .order('start_time', { ascending: false });
+                        if (!sessionsError) {
+                            allCallSessions = sessionsData || [];
+                            applyFiltersAndRender(); 
+                        } else {
+                            console.error("Error reloading all sessions after live update:", sessionsError);
+                        }
+                    }
+                )
+                .subscribe((status, err) => {
+                    if (status === 'SUBSCRIBED') {
+                        console.log('Subscribed to live call updates!');
+                    } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+                        console.error('Live call subscription error:', status, err);
+                        noLiveCallsMessage.textContent = "Error connecting to live updates.";
+                        noLiveCallsMessage.style.display = 'block';
+                    } else if (status === 'CLOSED') {
+                        console.log('Live call subscription closed.');
+                    }
+                });
+        }
+
+        async function fetchAndRenderLiveCalls() {
+            // ... (Fetch and render live calls logic, unchanged)
+             try {
+                const { data: liveSessions, error } = await supabase
+                    .from('call_sessions')
+                    .select('id, user_id, scenario_id, start_time, agent_name, agent_email, call_sessions_scenario_id_fkey(title)') 
+                    .is('end_time', null) 
+                    .order('start_time', { ascending: true });
+
+                if (error) {
+                    console.error("❌ Live call fetch error:", error.message); 
+                    throw error; 
+                }
+
+                liveCallsContainer.innerHTML = ''; 
+                const LONG_CALL_THRESHOLD = 10 * 60 * 1000; // 10 minutes
+
+                if (liveSessions && liveSessions.length > 0) {
+                    noLiveCallsMessage.style.display = 'none';
+                    liveSessions.forEach(call => {
+                        const agentName = call.agent_name || call.agent_email || `Agent ID: ${call.user_id.substring(0,8)}`;
+                        const scenarioName = call.call_sessions_scenario_id_fkey?.title || 'Loading scenario...';
+                        const startTimeFormatted = formatTimeEgypt(call.start_time);
+
+                        const callDiv = document.createElement('div');
+                        callDiv.className = 'live-call-item';
+
+                        const callDurationMs = Date.now() - new Date(call.start_time).getTime();
+                        let longCallIndicatorHTML = '';
+                        if (callDurationMs > LONG_CALL_THRESHOLD) {
+                            callDiv.classList.add('long-call-alert');
+                            longCallIndicatorHTML = `<span class="long-call-indicator">(Long Call!)</span>`;
+                        }
+                        
+                        const durationMinutes = Math.floor(callDurationMs / 60000);
+                        const durationSeconds = Math.floor((callDurationMs % 60000) / 1000);
+                        const liveDurationStr = `${durationMinutes}m ${durationSeconds}s`;
+
+                        callDiv.innerHTML = `
+                            <div class="live-call-item-agent">${agentName} ${longCallIndicatorHTML}</div>
+                            <div class="live-call-item-scenario">Scenario: ${scenarioName}</div>
+                            <div class="live-call-item-time">Started: ${startTimeFormatted} (Now: ${liveDurationStr})</div>
+                        `;
+                        liveCallsContainer.appendChild(callDiv);
+                    });
+                } else {
+                    noLiveCallsMessage.textContent = "No active calls at the moment.";
+                    noLiveCallsMessage.style.display = 'block';
+                }
+            } catch (error) {
+                console.error("Error fetching live calls:", error); 
+                noLiveCallsMessage.textContent = "Failed to load live calls data.";
+                noLiveCallsMessage.style.display = 'block';
+                liveCallsContainer.innerHTML = ''; 
+            }
+        }
+
+        initializeDashboard();
+        console.log("Dashboard.html script (vNext with Enhanced Analytics - Final + Tooltip Update) loaded and initialized.");
     </script>
 </body>
 </html>
