@@ -694,65 +694,59 @@
                 return;
             }
 
-            // --- START: MODIFIED USER PROFILE HANDLING ---
+            // --- START: Resilient User Profile Handling ---
             const storedUserData = JSON.parse(localStorage.getItem('elevoCoreUserData'));
-            if (storedUserData && storedUserData.id === session.user.id) {
+            if (storedUserData && storedUserData.id === session.user.id && !storedUserData.profileError) {
                 currentUser = storedUserData;
             } else {
-                let { data: profile, error: profileError } = await supabase
-                    .from('users')
-                    .select('name, is_admin, role') // Fetch role as well
-                    .eq('id', session.user.id)
-                    .single();
+                try {
+                    let { data: profile, error: profileError } = await supabase
+                        .from('users')
+                        .select('name, is_admin, role')
+                        .eq('id', session.user.id)
+                        .single();
 
-                // If user not found in 'users' table, create them.
-                if (profileError && profileError.code === 'PGRST116') {
-                    console.log(`User ${session.user.id} not found in public 'users' table. Creating new profile.`);
-                    const newUserProfileData = {
+                    if (profileError && profileError.code === 'PGRST116') { // User not found in 'users' table
+                        console.log(`User ${session.user.id} not in 'users' table. Creating profile.`);
+                        const newUserProfile = {
+                            id: session.user.id,
+                            email: session.user.email,
+                            name: session.user.user_metadata?.full_name || session.user.email.split('@')[0],
+                            role: 'agent', // ✅ KEY FIX: Default role
+                            is_admin: false
+                        };
+                        const { error: insertError } = await supabase.from('users').insert(newUserProfile);
+                        if (insertError) throw insertError; // Throw error to be caught by the outer catch block
+                        profile = newUserProfile; // Use the newly created profile data
+                    } else if (profileError) {
+                        throw profileError; // Throw other DB errors
+                    }
+
+                    currentUser = {
                         id: session.user.id,
                         email: session.user.email,
-                        name: session.user.user_metadata?.full_name || session.user.email.split('@')[0],
-                        role: 'agent', // ✅ KEY FIX: Set a default role to satisfy DB constraint
-                        is_admin: false // Default to non-admin
+                        name: profile.name,
+                        isAdmin: profile.is_admin,
+                        role: profile.role
                     };
+                    localStorage.setItem('elevoCoreUserData', JSON.stringify(currentUser));
+                    console.log("Successfully fetched or created user profile.");
 
-                    const { error: insertError } = await supabase
-                        .from('users')
-                        .insert(newUserProfileData);
-
-                    if (insertError) {
-                        console.error("initializeApp: CRITICAL - Failed to create user profile after login:", insertError);
-                        authLoadingDiv.innerHTML = `<p style="color:var(--danger-color);">Error creating user profile: ${insertError.message}. Please contact support.</p>`;
-                        return; // Stop execution
-                    }
-                    
-                    console.log("Successfully created new user profile in public.users.");
-                    // After inserting, the 'profile' variable now represents our newly created profile
-                    profile = { 
-                        name: newUserProfileData.name, 
-                        is_admin: newUserProfileData.is_admin,
-                        role: newUserProfileData.role
+                } catch (error) {
+                    console.error("CRITICAL: Failed to fetch or create user profile. Proceeding with basic info.", error);
+                    // Graceful Degradation: Don't block the app. Proceed with minimal data.
+                    currentUser = {
+                        id: session.user.id,
+                        email: session.user.email,
+                        name: (session.user.user_metadata?.full_name || session.user.email.split('@')[0]) + " (Profile Error)",
+                        isAdmin: false,
+                        role: 'agent', // Fallback role
+                        profileError: true // Flag to indicate something went wrong
                     };
-                    profileError = null; // Reset the error since we've handled it.
-
-                } else if (profileError) {
-                    // Handle other, unexpected errors during profile fetch
-                    console.error("initializeApp: Error fetching user profile:", profileError);
-                    authLoadingDiv.innerHTML = '<p style="color:var(--danger-color);">Could not load user profile.</p>';
-                    return;
+                    // Do not save this partial/error state to localStorage
                 }
-
-                // This part now executes with a guaranteed valid 'profile' object
-                currentUser = {
-                    id: session.user.id,
-                    email: session.user.email,
-                    name: profile?.name || session.user.user_metadata?.full_name || session.user.email.split('@')[0],
-                    isAdmin: profile?.is_admin || false,
-                    role: profile?.role || 'agent' // Store role in currentUser object
-                };
-                localStorage.setItem('elevoCoreUserData', JSON.stringify(currentUser));
             }
-            // --- END: MODIFIED USER PROFILE HANDLING ---
+            // --- END: Resilient User Profile Handling ---
 
             if (userNameSpan) userNameSpan.textContent = currentUser.name;
             if (userInfoDiv) userInfoDiv.style.display = 'flex';
@@ -858,6 +852,10 @@
             if (!selectedScenarioId) {
                 showAssistantMessage("⚠️ Please select a scenario first.", true, 5000);
                 return;
+            }
+            if (currentUser.profileError) {
+                 showAssistantMessage("⚠️ Cannot start call due to a profile loading error. Please refresh or contact support.", true, 7000);
+                 return;
             }
             setButtonLoadingState(receiveCallBtn, true, "Receive Call", "Starting...");
 
