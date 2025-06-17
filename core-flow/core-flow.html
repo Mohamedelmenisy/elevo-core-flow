@@ -701,7 +701,7 @@
             } else {
                 let { data: profile, error: profileError } = await supabase
                     .from('users')
-                    .select('name, is_admin')
+                    .select('name, is_admin, role') // Fetch role as well
                     .eq('id', session.user.id)
                     .single();
 
@@ -712,6 +712,7 @@
                         id: session.user.id,
                         email: session.user.email,
                         name: session.user.user_metadata?.full_name || session.user.email.split('@')[0],
+                        role: 'agent', // ✅ KEY FIX: Set a default role to satisfy DB constraint
                         is_admin: false // Default to non-admin
                     };
 
@@ -721,13 +722,17 @@
 
                     if (insertError) {
                         console.error("initializeApp: CRITICAL - Failed to create user profile after login:", insertError);
-                        authLoadingDiv.innerHTML = '<p style="color:var(--danger-color);">Error creating user profile. Please contact support.</p>';
+                        authLoadingDiv.innerHTML = `<p style="color:var(--danger-color);">Error creating user profile: ${insertError.message}. Please contact support.</p>`;
                         return; // Stop execution
                     }
                     
                     console.log("Successfully created new user profile in public.users.");
                     // After inserting, the 'profile' variable now represents our newly created profile
-                    profile = { name: newUserProfileData.name, is_admin: newUserProfileData.is_admin };
+                    profile = { 
+                        name: newUserProfileData.name, 
+                        is_admin: newUserProfileData.is_admin,
+                        role: newUserProfileData.role
+                    };
                     profileError = null; // Reset the error since we've handled it.
 
                 } else if (profileError) {
@@ -742,7 +747,8 @@
                     id: session.user.id,
                     email: session.user.email,
                     name: profile?.name || session.user.user_metadata?.full_name || session.user.email.split('@')[0],
-                    isAdmin: profile?.is_admin || false
+                    isAdmin: profile?.is_admin || false,
+                    role: profile?.role || 'agent' // Store role in currentUser object
                 };
                 localStorage.setItem('elevoCoreUserData', JSON.stringify(currentUser));
             }
