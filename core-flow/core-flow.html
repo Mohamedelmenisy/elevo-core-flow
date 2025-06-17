@@ -693,20 +693,51 @@
                 window.location.replace('login.html'); 
                 return;
             }
+
+            // --- START: MODIFIED USER PROFILE HANDLING ---
             const storedUserData = JSON.parse(localStorage.getItem('elevoCoreUserData'));
             if (storedUserData && storedUserData.id === session.user.id) {
                 currentUser = storedUserData;
-            } else { 
-                const { data: profile, error: profileError } = await supabase
-                    .from('users') 
+            } else {
+                let { data: profile, error: profileError } = await supabase
+                    .from('users')
                     .select('name, is_admin')
                     .eq('id', session.user.id)
                     .single();
-                if (profileError && profileError.code !== 'PGRST116') { 
+
+                // If user not found in 'users' table, create them.
+                if (profileError && profileError.code === 'PGRST116') {
+                    console.log(`User ${session.user.id} not found in public 'users' table. Creating new profile.`);
+                    const newUserProfileData = {
+                        id: session.user.id,
+                        email: session.user.email,
+                        name: session.user.user_metadata?.full_name || session.user.email.split('@')[0],
+                        is_admin: false // Default to non-admin
+                    };
+
+                    const { error: insertError } = await supabase
+                        .from('users')
+                        .insert(newUserProfileData);
+
+                    if (insertError) {
+                        console.error("initializeApp: CRITICAL - Failed to create user profile after login:", insertError);
+                        authLoadingDiv.innerHTML = '<p style="color:var(--danger-color);">Error creating user profile. Please contact support.</p>';
+                        return; // Stop execution
+                    }
+                    
+                    console.log("Successfully created new user profile in public.users.");
+                    // After inserting, the 'profile' variable now represents our newly created profile
+                    profile = { name: newUserProfileData.name, is_admin: newUserProfileData.is_admin };
+                    profileError = null; // Reset the error since we've handled it.
+
+                } else if (profileError) {
+                    // Handle other, unexpected errors during profile fetch
                     console.error("initializeApp: Error fetching user profile:", profileError);
                     authLoadingDiv.innerHTML = '<p style="color:var(--danger-color);">Could not load user profile.</p>';
                     return;
                 }
+
+                // This part now executes with a guaranteed valid 'profile' object
                 currentUser = {
                     id: session.user.id,
                     email: session.user.email,
@@ -715,6 +746,8 @@
                 };
                 localStorage.setItem('elevoCoreUserData', JSON.stringify(currentUser));
             }
+            // --- END: MODIFIED USER PROFILE HANDLING ---
+
             if (userNameSpan) userNameSpan.textContent = currentUser.name;
             if (userInfoDiv) userInfoDiv.style.display = 'flex';
             if (dashboardLink) dashboardLink.style.display = currentUser.isAdmin ? 'inline-block' : 'none';
@@ -936,26 +969,6 @@
             endCallBtn.style.display = 'inline-flex';
 
             if (stepObject.type === 'decision' && stepObject.options && Array.isArray(stepObject.options) && stepObject.options.length > 0) {
-                /**
-                 * ✅ This block handles steps where the agent needs to make a choice.
-                 * It dynamically creates a button for each option defined in the scenario's JSON.
-                 * This is the exact logic needed to consolidate multiple linear steps (like order delays)
-                 * into a single, user-friendly decision point.
-                 *
-                 * To implement the requested delay options, the scenario step in Supabase should be structured like this:
-                 * {
-                 *   "id": "delay_options_decision",
-                 *   "type": "decision",
-                 *   "text": "⏳ Select the delay duration for compensation:",
-                 *   "options": [
-                 *     { "label": "1–15 min ➜ Apologize only", "next_id": "apologize_only_step" },
-                 *     { "label": "16–30 min ➜ Compensate delivery fees", "next_id": "compensate_fees_step" },
-                 *     { "label": "31–45 min ➜ Fees + 25% from Chef", "next_id": "compensate_fees_chef_step" },
-                 *     { "label": "45+ min ➜ Full compensation", "next_id": "full_compensation_step" }
-                 *   ]
-                 * }
-                 * Each button will navigate to the specified `next_id`.
-                 */
                 nextStepBtn.style.display = 'none'; 
                 stepObject.options.forEach(option => {
                     if (!option || typeof option.label === 'undefined' || typeof option.next_id === 'undefined') {
