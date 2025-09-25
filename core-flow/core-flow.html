@@ -208,6 +208,7 @@
             color: var(--button-text-color);
         }
 
+        /* ✅✅✅ START OF MODIFICATION (CSS) ✅✅✅ */
         .scenario-dropdown .special-compensation-scenario {
             font-weight: bold;
             color: var(--success-color); 
@@ -216,29 +217,23 @@
             content: "⭐ ";
             color: var(--warning-color); 
         }
+
+        .scenario-dropdown .partner-scenario {
+            font-weight: bold;
+            color: #FF9800; /* Custom Orange color for better visibility */
+        }
+        .scenario-dropdown .partner-scenario::before {
+            content: "📦 ";
+        }
         
-        /* --- START: Style for Alert Scenarios (Updated) --- */
-        .scenario-dropdown .special-alert-scenario {
+        .scenario-dropdown .manual-intervention-scenario {
             font-weight: bold;
-            color: #60A5FA; /* A professional light blue */
+            color: #2196F3; /* Custom Blue color for better visibility */
         }
-        .scenario-dropdown .special-alert-scenario::before {
-            content: "🚨 ";
-            color: var(--danger-color); /* Red icon for attention */
+        .scenario-dropdown .manual-intervention-scenario::before {
+            content: "🔧 ";
         }
-        /* --- END: Style for Alert Scenarios (Updated) --- */
-
-        /* --- START: New Style for Marketing Scenarios --- */
-        .scenario-dropdown .special-marketing-scenario {
-            font-weight: bold;
-            color: #A78BFA; /* A professional purple */
-        }
-        .scenario-dropdown .special-marketing-scenario::before {
-            content: "📣 ";
-            color: #A78BFA;
-        }
-        /* --- END: New Style for Marketing Scenarios --- */
-
+        /* ✅✅✅ END OF MODIFICATION (CSS) ✅✅✅ */
 
         .highlight-scenario-title-animation {
             animation: pulse-title 0.6s 2 ease-in-out;
@@ -839,37 +834,28 @@
 
                 if (scenarios && scenarios.length > 0) {
                     scenarioDropdown.innerHTML = '<option value="">-- Select a Scenario --</option>'; 
-                    
-                    // <<--- START: FINAL UPDATED CODE FOR SCENARIO STYLING ---<<
                     scenarios.forEach(s => {
                         const option = document.createElement('option');
                         option.value = s.id;
-                        const normalizedTitle = s.title.trim().toLowerCase();
-                        
-                        // Remove the icon from the displayed text for a cleaner look
-                        option.textContent = s.title.replace(/^⭐\s*|^🚨\s*|^📣\s*/, ''); 
+                        option.textContent = s.title; 
+                        const normalizedTitle = s.title.trim();
 
-                        // Condition 1: For Compensation scenarios
-                        if (normalizedTitle.startsWith('⭐')) {
+                        // ✅✅✅ START OF MODIFICATION (JavaScript) ✅✅✅
+                        // This block now checks for different symbols to apply different classes
+                        if (normalizedTitle.includes('⭐') || normalizedTitle.toLowerCase().includes('compensation')) {
                             option.classList.add('special-compensation-scenario');
-                        } 
-                        // Condition 2: For Declined Order scenarios
-                        else if (normalizedTitle.startsWith('🚨')) {
-                            option.classList.add('special-alert-scenario');
+                        } else if (normalizedTitle.includes('📦')) {
+                            option.classList.add('partner-scenario');
+                        } else if (normalizedTitle.includes('🔧')) {
+                            option.classList.add('manual-intervention-scenario');
                         }
-                        // Condition 3: For Marketing scenarios
-                        else if (normalizedTitle.startsWith('📣')) {
-                            option.classList.add('special-marketing-scenario');
-                        }
+                        // ✅✅✅ END OF MODIFICATION (JavaScript) ✅✅✅
                         
                         scenarioDropdown.appendChild(option);
                     });
-                    // <<--- END: FINAL UPDATED CODE FOR SCENARIO STYLING ---<<
-
                     scenarioDropdown.disabled = false;
-                    // Button remains disabled until selection, re-enable text
                     setButtonLoadingState(receiveCallBtn, false, "Receive Call");
-                    receiveCallBtn.disabled = true; // Keep disabled until selection
+                    receiveCallBtn.disabled = true;
                 } else {
                     scenarioDropdown.innerHTML = '<option value="" disabled>No scenarios available.</option>';
                     showAssistantMessage("⚠️ No active call scenarios available.", true, 0); 
@@ -949,23 +935,22 @@
                 }
                 callSessionId = newSession.id;
                 
-                const normalizedCurrentTitle = currentScenario.title.trim().toLowerCase();
-                const compensationKeyword = "customer inquiry – compensation flow";
-                if (normalizedCurrentTitle.includes(compensationKeyword.toLowerCase()) || normalizedCurrentTitle.startsWith('⭐')) {
+                const normalizedCurrentTitle = currentScenario.title.trim();
+                if (normalizedCurrentTitle.includes('⭐') || normalizedCurrentTitle.toLowerCase().includes('compensation')) {
                     if (compensationScenarioSound && compensationScenarioSound.src) compensationScenarioSound.play().catch(e => console.warn("Compensation sound play failed:", e));
                     scenarioTitleElement.classList.add('highlight-scenario-title-animation');
                     setTimeout(() => scenarioTitleElement.classList.remove('highlight-scenario-title-animation'), 1200);
                 }
                 updateSystemStatus("🟢 In Call", "status-in-call");
                 renderStep(); 
-                setButtonLoadingState(receiveCallBtn, false, "Receive Call"); // Reset button state
-                receiveCallBtn.disabled = true; // Keep disabled as we are in call view
+                setButtonLoadingState(receiveCallBtn, false, "Receive Call");
+                receiveCallBtn.disabled = true;
             } catch (err) {
                 console.error("Error starting call:", err);
                 resetCallState(); 
                 switchToInitialView();
                 showAssistantMessage(`⚠️ Error starting call: ${err.message}. Please try again.`, true, 7000);
-                await loadActiveScenarios(); // Reload scenarios and button state will be handled by it
+                await loadActiveScenarios();
             }
         });
 
@@ -1246,7 +1231,7 @@
                 showAssistantMessage("⚠️ Could not save call summary: No active session ID.", false, 8000);
             }
             
-            displayPostCallSummary(quality, reason, durationInSecondsForSummary);
+            displayPostCallSummary(quality, reason, totalDurationSeconds);
             clearCallState(); 
         }
 
