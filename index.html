@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Redirecting - Elevo Core</title>
+    <link rel="icon" href="core-flow/favicon.ico" type="image/x-icon">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #1c1c28;
+            color: #f0f0f0;
+            text-align: center;
+        }
+        .container p {
+            font-size: 1.2rem;
+        }
+        .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.2);
+            border-left-color: #4e8cff;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <p>Initializing Elevo Core...</p>
+        <div class="spinner"></div>
+    </div>
+
+    <script type="module">
+        // ===================================================================================
+        // !!! تنبيه هام: الرجاء استبدال القيم التالية بالبيانات الصحيحة من مشروعك في Supabase !!!
+        // ===================================================================================
+        const SUPABASE_URL = 'https://aefiigottnlcmjzilqnh.supabase.co';      // <-- ضع هنا عنوان URL الخاص بمشروعك
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzIJIiLCJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFlZmlpZ290dG5sY21qemlscW5oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcxNzY2MDQsImV4cCI6MjA2Mjc1MjYwNH0.FypB02v3tGMnxXV9ZmZMdMC0oQpREKOJWgHMPxUzwX4'; // <-- ضع هنا مفتاح ANON KEY العام
+
+        try {
+            const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+            const { data: { session } } = await supabase.auth.getSession();
+
+            if (!session) {
+                // لا يوجد مستخدم مسجل، قم بالتوجيه إلى صفحة تسجيل الدخول
+                window.location.replace('login.html');
+            } else {
+                // المستخدم مسجل، تحقق من صلاحياته (هل هو admin؟)
+                const { data: profile, error } = await supabase
+                    .from('users')
+                    .select('is_admin')
+                    .eq('id', session.user.id)
+                    .single();
+
+                if (error && error.code !== 'PGRST116') {
+                    console.error("Error fetching user profile on redirect:", error);
+                    // في حالة حدوث خطأ، قم بالتوجيه إلى الواجهة الأساسية كإجراء احتياطي
+                    window.location.replace('core-flow.html');
+                } else if (profile && profile.is_admin) {
+                    // المستخدم هو admin، قم بالتوجيه إلى لوحة تحكم المدير
+                    window.location.replace('dashboard.html');
+                } else {
+                    // المستخدم هو موظف عادي (agent)
+                    window.location.replace('core-flow.html');
+                }
+            }
+        } catch (e) {
+            console.error("Initialization failed. Redirecting to login as a fallback.", e);
+            // توجيه احتياطي إلى صفحة تسجيل الدخول في حالة فشل أي جزء من الكود
+            window.location.replace('login.html');
+        }
+    </script>
+</body>
+</html>
