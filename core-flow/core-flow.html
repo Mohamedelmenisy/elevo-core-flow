@@ -5,25 +5,27 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Elevo Core Assistant</title>
     <link rel="icon" href="data:image/svg+xml,...">
-    <!-- ✅ الربط بملف CSS الموحد -->
-    <link rel="stylesheet" href="style.css"> 
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
-        /* === START: Custom styles to restore original look === */
         .app-main {
             display: flex;
             justify-content: center;
             align-items: center;
             flex-grow: 1;
+            padding: 1.5rem;
         }
         .initial-card, .call-flow-card, .post-call-summary-card {
             width: 100%;
-            max-width: 700px; /* Restored original max-width */
+            max-width: 700px;
             margin: 1rem auto;
+            animation: fadeIn 0.5s ease-in-out;
         }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        
         .status-bar {
-            background-color: #242436; 
+            background-color: #242436;
             color: var(--text-color);
             padding: 0.5rem 1.5rem;
             font-size: 0.9rem;
@@ -35,6 +37,7 @@
         .status-indicator.status-completed { color: var(--success-color); }
         .status-indicator.status-ended { color: #aaa; }
         .status-indicator.status-summary { color: var(--primary-color); }
+
         #timer-container {
             text-align: center;
             margin-top: 1rem;
@@ -52,13 +55,14 @@
             text-align: center;
             border: 1px solid var(--border-color);
         }
+
         .update-toast {
             position: fixed;
             top: 80px;
             left: 50%;
             transform: translateX(-50%);
             background-color: var(--warning-color);
-            color: #111827; /* Dark text for contrast */
+            color: #111827;
             padding: 0.75rem 1.5rem;
             border-radius: 8px;
             box-shadow: 0 4px 12px rgba(0,0,0,0.2);
@@ -71,10 +75,10 @@
             from { opacity: 0; transform: translate(-50%, -20px); }
             to { opacity: 1; transform: translate(-50%, 0); }
         }
+
         .quality-text.quality-good { color: var(--success-color); font-weight: bold; }
         .quality-text.quality-bad { color: var(--danger-color); font-weight: bold; }
         .quality-text.quality-na { color: var(--text-color-secondary); font-style: italic; }
-        /* === END: Custom styles === */
     </style>
 </head>
 <body>
@@ -83,13 +87,23 @@
     </div>
     <div class="app-container">
         <header class="app-header">
-            <!-- ... Header from your original file ... -->
+            <div class="logo">
+                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"></polygon></svg>
+                <h2>Elevo Core</h2>
+            </div>
+            <div class="header-controls">
+                <a href="dashboard.html" class="nav-link" id="dashboardLink" style="display: none;">Dashboard</a>
+                <div class="user-info" id="userInfo" style="display: none;">
+                    <span id="userName" class="user-name-display"></span>
+                    <button id="logoutButton" class="primary-button" style="background-color: var(--danger-color);">Logout</button>
+                </div>
+            </div>
         </header>
         <div class="status-bar">
             <div id="systemStatus" class="status-indicator status-waiting">🔴 Waiting for Call</div>
         </div>
         <div id="progressTracker" class="progress-tracker-container" style="display: none;">
-             <!-- Stepper will be generated here -->
+             <div class="stepper-wrapper"></div>
         </div>
          <div id="timer-container">
              <div id="callTimer" style="display: none;">00:00</div>
@@ -100,50 +114,55 @@
                 <p>Initializing Assistant...</p>
             </div>
             <div id="initial-view" class="card initial-card" style="display: none;">
-                <!-- ... Initial view from your original file ... -->
+                <h2 class="card-title" style="text-align: center;">Core Flow Assistant</h2>
+                <p class="card-subtitle" style="text-align: center;">Select a scenario and receive the call.</p>
+                <div class="scenario-selector" style="margin: 1.5rem 0;">
+                    <select id="scenarioDropdown" class="input-wrapper" style="width: 100%; padding: 0.75rem;">
+                        <option value="">Loading scenarios...</option>
+                    </select>
+                </div>
+                <button id="receive-call-btn" class="primary-button" disabled>Receive Call</button>
             </div>
             <div id="call-flow-view" class="card call-flow-card" style="display: none;">
-                <!-- ... Call flow view from your original file ... -->
+                <h3 id="scenario-title" class="card-title">Call Scenario</h3>
+                <div id="steps-container" class="steps-area" style="margin-bottom: 1.5rem;">
+                    <p class="placeholder-text">Loading call steps...</p>
+                </div>
+                <div id="decision-buttons-container"></div>
+                <div class="navigation-buttons" style="margin-top: 1rem; display: flex; gap: 1rem;">
+                    <button id="prev-step-btn" class="primary-button" style="background-color: var(--button-secondary-bg); color: var(--text-color); flex-grow: 1;">Previous</button>
+                    <button id="next-step-btn" class="primary-button" style="flex-grow: 1;">Next Step</button>
+                </div>
+                 <button id="end-call-btn" class="primary-button" style="background-color: var(--danger-color); width: 100%; margin-top: 1rem;">End Call</button>
             </div>
-            <!-- ✅ This is the restored summary view -->
             <div id="postCallSummary" class="card post-call-summary-card" style="display: none;">
                 <h3 class="card-title">Call Summary</h3>
-                <div id="callSummaryContent" style="color: var(--text-color-secondary); line-height: 1.8;">
-                    {/* Content will be injected by JS */}
-                </div>
-                <button id="returnToInitialViewBtn" class="primary-button" style="margin-top: 1.5rem; width: 100%;">
-                    New Call
-                </button>
+                <div id="callSummaryContent" style="color: var(--text-color-secondary); line-height: 1.8;"></div>
+                <button id="returnToInitialViewBtn" class="primary-button" style="margin-top: 1.5rem; width: 100%;">New Call</button>
             </div>
         </main>
         <footer class="app-footer">
-            <!-- ... Footer from your original file ... -->
+            <p>© <span id="currentYear"></span> Mohamed Elmenisy - Elevo Core. All rights reserved.</p>
         </footer>
     </div>
 
-    <!-- This is the FULL JavaScript from your original file, with my modifications INTEGRATED, not replacing -->
     <script type="module">
-        // --- Supabase Client Setup ---
         const SUPABASE_URL = 'https://aefiigottnlcmjzilqnh.supabase.co';
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFlZmlpZ290dG5sY21qemlscW5oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcxNzY2MDQsImV4cCI6MjA2Mjc1MjYwNH0.FypB02v3tGMnxXV9ZmZMdMC0oQpREKOJWgHMPxUzwX4';
         
         let supabase;
         try {
-            // ✅ Using the global object created by the CDN script
             supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-            console.log('Supabase client initialized for core-flow.html');
         } catch (error) {
             console.error("Supabase client initialization failed:", error);
-            const authLoading = document.getElementById('auth-loading');
-            if(authLoading) authLoading.innerHTML = '<p style="color:var(--danger-color); text-align:center;">Error connecting to services. Core Flow is unavailable.</p>';
+            document.getElementById('auth-loading').innerHTML = '<p style="color:red;">Critical Error: Services unavailable.</p>';
         }
 
-        // --- DOM Elements ---
+        // DOM Elements
         const authLoadingDiv = document.getElementById('auth-loading');
         const initialViewDiv = document.getElementById('initial-view');
         const callFlowViewDiv = document.getElementById('call-flow-view');
         const postCallSummaryDiv = document.getElementById('postCallSummary');
-        
         const scenarioDropdown = document.getElementById('scenarioDropdown');
         const receiveCallBtn = document.getElementById('receive-call-btn');
         const scenarioTitleElement = document.getElementById('scenario-title');
@@ -152,20 +171,18 @@
         const prevStepBtn = document.getElementById('prev-step-btn');
         const nextStepBtn = document.getElementById('next-step-btn'); 
         const endCallBtn = document.getElementById('end-call-btn');
-        
         const userInfoDiv = document.getElementById('userInfo');
         const userNameSpan = document.getElementById('userName');
         const logoutButton = document.getElementById('logoutButton');
         const dashboardLink = document.getElementById('dashboardLink');
-        
         const systemStatusDiv = document.getElementById('systemStatus');
         const callTimerDiv = document.getElementById('callTimer');
         const progressTrackerContainer = document.getElementById('progressTracker');
-        
         const callSummaryContentDiv = document.getElementById('callSummaryContent');
         const returnToInitialViewBtn = document.getElementById('returnToInitialViewBtn');
-
-        // --- State Variables ---
+        document.getElementById('currentYear').textContent = new Date().getFullYear();
+        
+        // State Variables
         let currentUser = null; 
         let currentScenario = null; 
         let currentStepId = null;   
@@ -175,22 +192,16 @@
         let stepTimerInterval = null;
         let stepStartTime = 0;      
         let accumulatedStepDurations = {}; 
-        let realtimeChannel = null; // ✅ For KB integration
+        let realtimeChannel = null;
 
         // --- UI Helper Functions ---
-        function updateSystemStatus(statusText, statusClass = 'status-waiting') {
-            if (systemStatusDiv) {
-                systemStatusDiv.textContent = statusText;
-                systemStatusDiv.className = `status-indicator ${statusClass}`;
-            }
+        function updateSystemStatus(statusText, statusClass) {
+            systemStatusDiv.textContent = statusText;
+            systemStatusDiv.className = `status-indicator ${statusClass}`;
         }
         function animateView(viewElement) {
-            if (viewElement) {
-                viewElement.classList.remove('fade-in');
-                void viewElement.offsetWidth; 
-                viewElement.classList.add('fade-in');
-                viewElement.style.display = 'block';
-            }
+            viewElement.style.display = 'block';
+            viewElement.classList.add('fade-in');
         }
         function showUpdateToast() {
             const toast = document.getElementById('updateToast');
@@ -210,9 +221,9 @@
             const { data: profile } = await supabase.from('users').select('name, is_admin').eq('id', session.user.id).single();
             currentUser = { id: session.user.id, email: session.user.email, name: profile?.name || session.user.email, isAdmin: profile?.is_admin || false };
             
-            if (userNameSpan) userNameSpan.textContent = currentUser.name;
-            if (userInfoDiv) userInfoDiv.style.display = 'flex';
-            if (dashboardLink) dashboardLink.style.display = currentUser.isAdmin ? 'inline-block' : 'none';
+            userNameSpan.textContent = currentUser.name;
+            userInfoDiv.style.display = 'flex';
+            dashboardLink.style.display = currentUser.isAdmin ? 'inline-block' : 'none';
             
             authLoadingDiv.style.display = 'none';
             switchToInitialView();
@@ -255,8 +266,18 @@
                     (payload) => {
                         console.log('Realtime update received!', payload);
                         const updatedCase = payload.new;
-                        if (currentScenario && currentScenario.id === updatedCase.id) {
-                            currentScenario.steps = updatedCase.steps_json; // Assuming column is steps_json
+                        if (currentScenario && currentScenario.id == updatedCase.id) { // Use == for safety
+                            // IMPORTANT: Match your new DB schema
+                            const newSteps = updatedCase.steps_json; // Or whatever you named the steps column
+                            // Check for both languages
+                            const contentChanged = currentLanguage === 'en' ? 
+                                currentScenario.content_en !== updatedCase.content_en : 
+                                currentScenario.content_ar !== updatedCase.content_ar;
+                            
+                            if (newSteps) currentScenario.steps = newSteps;
+                            currentScenario.content_en = updatedCase.content_en;
+                            currentScenario.content_ar = updatedCase.content_ar;
+                            
                             showUpdateToast();
                             renderStep(); 
                         }
@@ -270,62 +291,134 @@
             }
         }
 
-        // --- Scenario and Steps Logic ---
-        async function loadActiveScenarios() { /* ... same as your original ... */ }
+        async function loadActiveScenarios() {
+            receiveCallBtn.disabled = true;
+            scenarioDropdown.innerHTML = '<option value="">Loading scenarios...</option>';
+            try {
+                const { data, error } = await supabase.from('call_scenarios').select('id, title').eq('is_active', true);
+                if (error) throw error;
+                scenarioDropdown.innerHTML = '<option value="">-- Select a Scenario --</option>';
+                data.forEach(s => {
+                    const option = document.createElement('option');
+                    option.value = s.id;
+                    option.textContent = s.title;
+                    scenarioDropdown.appendChild(option);
+                });
+            } catch(e) {
+                scenarioDropdown.innerHTML = '<option value="">Error loading scenarios</option>';
+            }
+        }
         
+        scenarioDropdown.addEventListener('change', () => {
+            receiveCallBtn.disabled = !scenarioDropdown.value;
+        });
+
         receiveCallBtn.addEventListener('click', async () => {
             const selectedScenarioId = scenarioDropdown.value;
             if (!selectedScenarioId) return;
             
-            resetCallState(); 
+            resetCallState();
             switchToCallFlowView();
             updateSystemStatus("🟡 Loading Scenario...", "status-loading");
 
             try {
-                const { data: scenarioData, error } = await supabase.from('call_scenarios').select('id, title, steps_json').eq('id', selectedScenarioId).single();
-                if (error || !scenarioData || !scenarioData.steps_json) throw new Error("Failed to load scenario.");
+                // IMPORTANT: Ensure your table name and column names are correct here
+                const { data, error } = await supabase.from('call_scenarios').select('id, title, steps_json').eq('id', selectedScenarioId).single();
+                if (error || !data || !data.steps_json) throw new Error("Failed to load scenario steps.");
 
-                currentScenario = { id: scenarioData.id, title: scenarioData.title, steps: scenarioData.steps_json };
+                currentScenario = { id: data.id, title: data.title, steps: data.steps_json };
                 currentStepId = currentScenario.steps[0].id; 
                 
                 callStartTimeISO = new Date().toISOString(); 
                 const { data: newSession } = await supabase.from('call_sessions').insert({ user_id: currentUser.id, scenario_id: currentScenario.id, start_time: callStartTimeISO }).select('id').single();
                 callSessionId = newSession.id;
                 
-                setupRealtimeListener(currentScenario.id); // ✅ Start listening
+                setupRealtimeListener(currentScenario.id);
                 updateSystemStatus("🟢 In Call", "status-in-call");
                 renderStep(); 
             } catch (err) {
                 console.error("Error starting call:", err);
-                resetCallState(); 
-                switchToInitialView();
+                resetCallState(true);
             }
         });
 
-        function renderStep() { /* ... same as your original, but with restored UI logic ... */ }
-        function navigateToStep(nextId) { /* ... same as your original ... */ }
-        function renderProgressTracker() { /* ... same as your original ... */ }
-        
+        function renderStep() {
+            const stepObject = currentScenario.steps.find(s => s.id === currentStepId);
+            if (!stepObject) { finishCall(false, `Error: Step ${currentStepId} not found`); return; }
+
+            scenarioTitleElement.textContent = `${currentScenario.title} - Step ${stepHistory.length + 1}`;
+            stepsContainer.innerHTML = `<p>${stepObject.text.replace(/\n/g, '<br>')}</p>`;
+            decisionButtonsContainer.innerHTML = '';
+            
+            prevStepBtn.style.display = stepHistory.length > 0 ? 'inline-flex' : 'none';
+
+            if (stepObject.type === 'decision' && stepObject.options) {
+                nextStepBtn.style.display = 'none';
+                stepObject.options.forEach(option => {
+                    const button = document.createElement('button');
+                    button.className = 'primary-button';
+                    button.textContent = option.label;
+                    button.onclick = () => navigateToStep(option.next_id);
+                    decisionButtonsContainer.appendChild(button);
+                });
+            } else {
+                nextStepBtn.style.display = 'inline-flex';
+                nextStepBtn.textContent = stepObject.next_id ? "Next Step" : "Finish Scenario";
+            }
+            startStepTimer();
+        }
+
+        function navigateToStep(nextId) {
+            stopAndRecordStepTimer();
+            if (nextId === null || typeof nextId === 'undefined') {
+                finishCall(true, "Reached end of scenario path.");
+                return;
+            }
+            stepHistory.push(currentStepId);
+            currentStepId = nextId;
+            renderStep();
+        }
+
         nextStepBtn.addEventListener('click', () => {
             const stepObject = currentScenario.steps.find(s => s.id === currentStepId);
-            if (stepObject.next_id) { 
-                navigateToStep(stepObject.next_id);
-            } else { 
-                stopAndRecordStepTimer(); 
-                finishCall(true, "Scenario finished successfully."); 
-            }
-        });
-        prevStepBtn.addEventListener('click', () => { /* ... same as your original ... */ });
-        endCallBtn.addEventListener('click', () => {
-            stopAndRecordStepTimer(); 
-            finishCall(false, "Call ended by agent"); 
+            navigateToStep(stepObject.next_id);
         });
 
-        function startStepTimer() { /* ... same as your original ... */ }
-        function stopAndRecordStepTimer() { /* ... same as your original ... */ }
+        prevStepBtn.addEventListener('click', () => {
+            stopAndRecordStepTimer();
+            if (stepHistory.length > 0) {
+                currentStepId = stepHistory.pop();
+                renderStep();
+            }
+        });
+        
+        endCallBtn.addEventListener('click', () => {
+            stopAndRecordStepTimer(); 
+            finishCall(false, "Call ended manually by agent."); 
+        });
+
+        function startStepTimer() {
+            callTimerDiv.style.display = 'inline-block';
+            if(stepTimerInterval) clearInterval(stepTimerInterval);
+            stepStartTime = Date.now();
+            stepTimerInterval = setInterval(() => {
+                const elapsed = Math.floor((Date.now() - new Date(callStartTimeISO).getTime()) / 1000);
+                const minutes = String(Math.floor(elapsed / 60)).padStart(2, '0');
+                const seconds = String(elapsed % 60).padStart(2, '0');
+                callTimerDiv.textContent = `${minutes}:${seconds}`;
+            }, 1000);
+        }
+
+        function stopAndRecordStepTimer() {
+            if (!stepStartTime) return;
+            const duration = Math.round((Date.now() - stepStartTime) / 1000);
+            accumulatedStepDurations[currentStepId] = (accumulatedStepDurations[currentStepId] || 0) + duration;
+            stepStartTime = 0;
+        }
         
         async function finishCall(completed, reason) {
-            unsubscribeFromRealtime(); // ✅ Stop listening
+            unsubscribeFromRealtime();
+            if(stepTimerInterval) clearInterval(stepTimerInterval);
             stopAndRecordStepTimer();
             const endTimeISO = new Date().toISOString();
             const duration = Math.floor((new Date(endTimeISO) - new Date(callStartTimeISO)) / 1000);
@@ -334,27 +427,24 @@
             if (callSessionId) {
                 await supabase.from('call_sessions').update({ end_time: endTimeISO, duration, completed, call_quality: quality, quality_reason: reason }).eq('id', callSessionId);
             }
-            
-            // ✅ RESTORED SUMMARY LOGIC
             displayPostCallSummary(quality, reason, duration);
         }
 
-        // ✅ RESTORED SUMMARY DISPLAY FUNCTION
         function displayPostCallSummary(quality, reason, totalDurationSeconds) {
             let summaryHTML = `
                 <p><strong>Call Quality:</strong> <span class="quality-text quality-${quality?.toLowerCase() || 'na'}">${quality || 'N/A'}</span></p>
                 <p><strong>End Reason:</strong> ${reason || "N/A"}</p>
                 <p><strong>Total Duration:</strong> ${Math.floor(totalDurationSeconds / 60)}m ${totalDurationSeconds % 60}s</p>
                 <hr style="margin: 1rem 0; border-color: var(--border-color);">
-                <h4>Path Taken:</h4>
-                <ul style="list-style: decimal; padding-left: 1.5rem;">`;
+                <h4>Path Taken (Time per step):</h4>
+                <ul style="list-style-type: none; padding-left: 0;">`;
             
             const path = [...stepHistory, currentStepId];
             path.forEach(stepId => {
                 const step = currentScenario.steps.find(s => s.id === stepId);
                 const duration = accumulatedStepDurations[stepId] || 0;
                 if (step) {
-                    summaryHTML += `<li>${step.text.split('.')[0]}... <em>(${duration}s)</em></li>`;
+                    summaryHTML += `<li><strong>${step.text.substring(0, 40)}...</strong>: <em>${duration} seconds</em></li>`;
                 }
             });
 
@@ -365,13 +455,18 @@
         
         returnToInitialViewBtn.addEventListener('click', async () => {
             resetCallState(true); 
-            await loadActiveScenarios();
         });
 
         function resetCallState(switchToInitial = false) {
             stopAndRecordStepTimer();
             unsubscribeFromRealtime();
-            // ... reset other state variables ...
+            currentScenario = null;
+            currentStepId = null;
+            stepHistory = [];
+            accumulatedStepDurations = {};
+            callSessionId = null;
+            callStartTimeISO = null;
+            if (stepTimerInterval) clearInterval(stepTimerInterval);
             if (switchToInitial) switchToInitialView();
         }
 
