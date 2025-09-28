@@ -6,7 +6,6 @@
     <title>Login - Elevo Core</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%233b82f6' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M3 12h18M3 6h12M3 18h15'/><path d='M17 9l4 3l-4 3'/></svg>">
     <link rel="stylesheet" href="style.css">
-    <!-- تم حذف script src=httpscdn.jsdelivr.netnpm@supabasesupabase-js@2script من هنا -->
 </head>
 <body>
     <div class="login-container">
@@ -22,6 +21,8 @@
         <div id="supabaseErrorMessage" class="form-message error-message" style="display: none;">
             Error: Could not initialize authentication service.
         </div>
+        
+        <!-- ✅ NEW: Message for already logged-in users -->
         <div id="alreadyLoggedInMessage" class="form-message success-message" style="display: none;">
             You are already logged in. <a href="core-flow.html" style="color: var(--success-color); font-weight: bold; text-decoration: underline;">Go to App</a>
         </div>
@@ -72,15 +73,12 @@
     <script type="module">
         import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
         
-        // Supabase Client Setup
-        // !!! استبدل القيم التالية ببيانات مشروعك الجديدة من Supabase !!!
-        const SUPABASE_URL = 'https://aefiigottnlcmjzilqnh.supabase.co'; // <-- Project URL الخاص بك
-        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFlZmlpZ290dG5sY21qemlscW5oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcxNzY2MDQsImV4cCI6MjA2Mjc1MjYwNH0.FypB02v3tGMnxXV9ZmZMdMC0oQpREKOJWgHMPxUzwX4'; // <--- استبدل هذا بمفتاحك الفعلي
+        const SUPABASE_URL = 'https://aefiigottnlcmjzilqnh.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFlZmlpZ290dG5sY21qemlscW5oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcxNzY2MDQsImV4cCI6MjA2Mjc1MjYwNH0.FypB02v3tGMnxXV9ZmZMdMC0oQpREKOJWgHMPxUzwX4';
         
         let supabase;
         try {
             supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-            console.log('Supabase client initialized for login.html using ES Modules');
         } catch (error) {
             console.error("Supabase client initialization failed:", error);
             const supabaseErrorDiv = document.getElementById('supabaseErrorMessage');
@@ -88,15 +86,11 @@
                 supabaseErrorDiv.textContent = error.message || "Error: Could not initialize authentication service.";
                 supabaseErrorDiv.style.display = 'block';
             }
-            const loginFrm = document.getElementById('loginForm');
-            if(loginFrm) loginFrm.style.display = 'none';
-            const linksDiv = document.querySelector('.links');
-            if(linksDiv) linksDiv.style.display = 'none';
-             const loginHeader = document.querySelector('.login-header');
-            if(loginHeader) loginHeader.style.display = 'none';
+            document.getElementById('loginForm').style.display = 'none';
+            document.querySelector('.links').style.display = 'none';
+            document.querySelector('.login-header').style.display = 'none';
         }
 
-        // DOM Elements
         const loginForm = document.getElementById('loginForm');
         const emailInput = document.getElementById('email');
         const passwordInput = document.getElementById('password');
@@ -114,25 +108,9 @@
         const REMEMBERED_EMAIL_KEY = 'elevoCoreRememberedEmail';
         const USER_DATA_KEY = 'elevoCoreUserData';
 
-        // Utility Functions
-        function displayError(element, message) {
-            if(element) {
-                element.textContent = message;
-                element.style.display = 'block';
-            }
-        }
-        function clearError(element) {
-            if(element) {
-                element.textContent = '';
-                element.style.display = 'none';
-            }
-        }
-         function displaySuccess(element, message) {
-            if(element) {
-                element.textContent = message;
-                element.style.display = 'block';
-            }
-        }
+        function displayError(element, message) { if(element) { element.textContent = message; element.style.display = 'block'; } }
+        function clearError(element) { if(element) { element.textContent = ''; element.style.display = 'none'; } }
+        function displaySuccess(element, message) { if(element) { element.textContent = message; element.style.display = 'block'; } }
         function setButtonLoading(isLoading) {
             if (!loginButton) return;
             loginButton.disabled = isLoading;
@@ -157,9 +135,7 @@
                     .eq('id', user.id)
                     .single();
 
-                if (error && error.code !== 'PGRST116') { // PGRST116 = 0 rows
-                    console.warn('Error fetching user profile:', error.message);
-                }
+                if (error && error.code !== 'PGRST116') { console.warn('Error fetching user profile:', error.message); }
                 
                 const userData = {
                     id: user.id,
@@ -168,33 +144,31 @@
                     isAdmin: profile?.is_admin || false, 
                 };
                 localStorage.setItem(USER_DATA_KEY, JSON.stringify(userData));
-                console.log('User details stored in localStorage:', userData);
             } catch (e) {
                 console.error('Failed to store user details:', e);
             }
         }
 
-        // Initial Page Load Logic
         async function initializePage() {
-            if (!supabase) return; // Supabase not initialized
+            if (!supabase) return;
 
             const urlParams = new URLSearchParams(window.location.search);
             const signedUp = urlParams.get('signedup') === 'true';
-            const redirectTo = urlParams.get('redirectTo') || 'core-flow.html';
-
+            
+            // ✅ MODIFICATION: Check for session but DON'T redirect automatically
             const { data: { session } } = await supabase.auth.getSession();
 
             if (session && !signedUp) { 
-                console.log('User already logged in. Redirecting to:', redirectTo);
-                window.location.replace(redirectTo);
-                return; 
+                console.log('User already logged in. Showing message instead of redirecting.');
+                // Hide the form and show the "already logged in" message
+                if(loginForm) loginForm.style.display = 'none';
+                if(alreadyLoggedInMessageDiv) alreadyLoggedInMessageDiv.style.display = 'block';
+                return; // Stop further execution
             }
 
-            if(loginForm) loginForm.style.display = 'block'; // Should be block or flex depending on CSS
-            const linksDiv = document.querySelector('.links');
-            if(linksDiv) linksDiv.style.display = 'block'; // Should be block or flex
+            // Show the form if the user is not logged in
+            if(loginForm) loginForm.style.display = 'block';
             if(alreadyLoggedInMessageDiv) alreadyLoggedInMessageDiv.style.display = 'none';
-
 
             if (signedUp) {
                 displaySuccess(loginSuccessMessage, 'Signup successful! Please log in. ✅');
@@ -202,6 +176,7 @@
                 if (emailFromParam && emailInput) {
                     emailInput.value = emailFromParam;
                 }
+                // Clean the URL
                 window.history.replaceState({}, document.title, window.location.pathname);
             } else {
                 const rememberedEmail = localStorage.getItem(REMEMBERED_EMAIL_KEY);
@@ -211,16 +186,9 @@
                 }
             }
             
-            if (emailInput && passwordInput) {
-                if (emailInput.value === '') {
-                    emailInput.focus();
-                } else {
-                    passwordInput.focus();
-                }
-            }
+            if (emailInput) emailInput.focus();
         }
         
-        // Event Listeners
         if (passwordToggle && passwordInput) {
             passwordToggle.addEventListener('click', () => togglePasswordVisibility(passwordToggle, passwordInput));
             passwordToggle.addEventListener('keydown', (e) => {
@@ -234,10 +202,7 @@
         if (loginForm && supabase) {
             loginForm.addEventListener('submit', async function(event) {
                 event.preventDefault();
-                clearError(emailError);
-                clearError(passwordError);
-                clearError(loginGeneralError);
-                clearError(loginSuccessMessage);
+                [emailError, passwordError, loginGeneralError, loginSuccessMessage].forEach(clearError);
                 setButtonLoading(true);
 
                 const email = emailInput.value.trim().toLowerCase();
@@ -266,25 +231,20 @@
                 }
 
                 try { 
-                    const { data, error } = await supabase.auth.signInWithPassword({
-                        email: email,
-                        password: password,
-                    });
-
-                    if (error) {
-                        throw error; 
-                    }
+                    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+                    if (error) throw error; 
 
                     if (data && data.user) { 
                         await storeUserDetails(data.user); 
+                        
+                        // ✅ MODIFICATION: Show success message before redirect
                         displaySuccess(loginSuccessMessage, 'Login successful! Redirecting...');
                         
-                        const urlParams = new URLSearchParams(window.location.search);
-                        const redirectToTarget = urlParams.get('redirectTo') || 'core-flow.html'; 
+                        const redirectToTarget = new URLSearchParams(window.location.search).get('redirectTo') || 'core-flow.html'; 
 
                         setTimeout(() => {
                             window.location.replace(redirectToTarget); 
-                        }, 1000);
+                        }, 1000); // Wait 1 second before redirecting
                     } else {
                          throw new Error('Login successful but no user data returned.'); 
                     }
@@ -301,12 +261,7 @@
                         }
                     }
                     displayError(loginGeneralError, errorMessage);
-                } finally { // Ensure button loading state is always reset unless redirecting immediately
-                    // If not redirecting (i.e. error occurred), reset button.
-                    // Success case has its own timeout before redirect, so button remains loading.
-                    if (!loginSuccessMessage.style.display || loginSuccessMessage.style.display === 'none') {
-                         setButtonLoading(false);
-                    }
+                    setButtonLoading(false); // Only stop loading on error
                 }
             });
         }
@@ -315,11 +270,7 @@
             forgotPasswordLink.addEventListener('click', async (e) => {
                 e.preventDefault();
                 const email = emailInput.value.trim();
-                
-                clearError(loginGeneralError); // Clear previous general errors
-                clearError(emailError); // Clear email field error specifically for this action
-                clearError(loginSuccessMessage); // Clear previous success messages
-
+                [loginGeneralError, emailError, loginSuccessMessage].forEach(clearError);
 
                 if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
                     displayError(loginGeneralError, 'Please enter your email address above to request a password reset.');
@@ -328,39 +279,28 @@
                 }
                 
                 displaySuccess(loginSuccessMessage, 'Sending reset instructions if the email exists...');
-                setButtonLoading(true); // Optional: disable form/show loading during this async op
+                setButtonLoading(true);
 
                 try {
                     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-                        // Ensure this path is correct and you have a reset-password.html page
-                        redirectTo: window.location.origin + window.location.pathname.replace('login.html', 'reset-password.html').replace('looogin.html', 'reset-password.html') 
+                        redirectTo: window.location.origin + window.location.pathname.replace('login.html', 'reset-password.html') 
                     });
                     if (error) throw error;
-                    displaySuccess(loginSuccessMessage, 'Password reset instructions sent to your email (if your account exists). Please check your inbox and spam folder.');
+                    displaySuccess(loginSuccessMessage, 'Password reset instructions sent. Please check your inbox and spam folder.');
                 } catch (error) {
                     console.error('Password reset error:', error);
-                    displaySuccess(loginSuccessMessage, 'If your email is registered, you will receive reset instructions. Please also check your spam folder.');
+                    // Show a generic success message for security reasons (don't reveal if an email exists)
+                    displaySuccess(loginSuccessMessage, 'If your email is registered, you will receive reset instructions.');
                 } finally {
-                    setButtonLoading(false); // Re-enable form elements
+                    setButtonLoading(false);
                 }
             });
         }
 
-        // Run initialization
         if (supabase) {
             initializePage();
-        } else {
-            // If supabase failed to initialize, ensure the main form is hidden if not already.
-            const loginFrm = document.getElementById('loginForm');
-            if(loginFrm) loginFrm.style.display = 'none';
-            const linksDiv = document.querySelector('.links');
-            if(linksDiv) linksDiv.style.display = 'none';
-            const loginHeader = document.querySelector('.login-header');
-            if(loginHeader && document.getElementById('supabaseErrorMessage')?.style.display === 'block') {
-                loginHeader.style.display = 'none';
-            }
         }
-        console.log('Login page script loaded and initialized.');
     </script>
 </body>
 </html>
+التالي: سأرسل لك كود core-flow.html الذي طلبته مع التحسينات.
