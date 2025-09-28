@@ -1,0 +1,1839 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard - Elevo Core</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2317a2b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M3 12h18M3 6h12M3 18h15'/><path d='M17 9l4 3l-4 3'/></svg>">
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        /* Styles from dash.txt <style> block are here */
+        :root { /* Define shared color variables */
+            --primary-color: #17a2b8;
+            --primary-color-rgb: 23, 162, 184; /* ADDED for focus shadow */
+            --danger-color: #dc3545;
+            --danger-color-rgb: 220, 53, 69; /* ADDED for logout button border opacity */
+            --success-color: #28a745;
+            --warning-color: #ffc107;
+            --text-color: #333;
+            --text-color-light: #6c757d;
+            --text-color-subtle: #868e96;
+            --card-bg-color: #fff;
+            --bg-color: #f8f9fa;
+            --border-color: #e2e8f0;
+            --border-radius-md: 8px; /* MODIFIED from 6px */
+            --border-radius-lg: 12px; /* MODIFIED from 8px */
+            --shadow-md: 0 4px 10px rgba(0,0,0,0.1); /* MODIFIED from 0 2px 10px rgba(0,0,0,0.05) */
+            --button-secondary-bg: #e9ecef;
+            --secondary-hover-color: #ced4da;
+            --logout-hover-bg: rgba(220, 53, 69, 0.08); /* ADDED for light mode logout */
+
+
+            /* Dark mode variables */
+            --text-color-dark: #f7fafc;
+            --text-secondary-dark: #a0aec0;
+            --card-bg-dark: #2e3241;    /* MODIFIED from #2d3748 as per feedback */
+            --bg-dark-accent: #1a1d26;  /* MODIFIED from #1a202c as per feedback. This will be main page bg and nested items bg */
+            --border-color-dark: #4a5568;
+            --shadow-lg: 0 4px 12px rgba(0,0,0,0.25); /* MODIFIED from 0 2px 10px rgba(0,0,0,0.2) */
+        }
+        .dark {
+            --text-color: var(--text-color-dark);
+            --text-color-light: var(--text-secondary-dark);
+            --text-color-subtle: var(--text-secondary-dark);
+            --card-bg-color: var(--card-bg-dark); /* Uses new #2e3241 */
+            --bg-color: var(--bg-dark-accent);    /* Uses new #1a1d26 for main background */
+            --border-color: var(--border-color-dark);
+            --shadow-md: var(--shadow-lg); /* Dark mode uses the stronger shadow */
+            --button-secondary-bg: #3f4a5f;
+            --secondary-hover-color: #525f7f;
+        }
+
+        @keyframes fadeInUp { /* ADDED Animation */
+          0% { opacity: 0; transform: translateY(20px); }
+          100% { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Applying animation to major layout cards */
+        #statsGrid > .stat-card,
+        #liveCallsContainerWrapper,
+        #analyticsSection,
+        #filterControlsCard,
+        #recentActivitySection {
+            animation: fadeInUp 0.5s ease-out both;
+        }
+
+
+        #accessDeniedModal {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(0, 0, 0, 0.7); display: none;
+            justify-content: center; align-items: center; z-index: 1000; color: #333;
+        }
+        .access-denied-content {
+            background-color: var(--card-bg-color, #fff);
+            padding: 2rem 3rem; border-radius: var(--border-radius-lg); text-align: center; /* MODIFIED border-radius */
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2); max-width: 450px;
+        }
+        .dark .access-denied-content {
+             background-color: var(--card-bg-dark, #2d3748);
+             color: var(--text-color-dark, #f7fafc);
+        }
+        .access-denied-content svg {
+            margin-bottom: 1rem; stroke: var(--danger-color, #dc3545);
+            width: 56px; height: 56px;
+        }
+        .access-denied-content h3 {
+            margin-top: 0; margin-bottom: 0.75rem; font-size: 1.5rem;
+            color: var(--text-color, #333);
+        }
+        .dark .access-denied-content h3 { color: var(--text-color-dark, #f7fafc); }
+         .access-denied-content p {
+            margin-bottom: 1.5rem; color: var(--text-color-light, #6c757d);
+         }
+        .dark .access-denied-content p { color: var(--text-secondary-dark, #a0aec0); }
+        #returnToAppBtn { padding: 0.75rem 1.5rem; font-size: 1rem; cursor: pointer; }
+
+        .filter-grid {
+             gap: 1.5rem; /* ADDED */
+        }
+        .filter-grid > div > label {
+            display: block; margin-bottom: 0.25rem; font-size: 0.875rem;
+            color: var(--text-color-light, #6c757d);
+        }
+        .dark .filter-grid > div > label { color: var(--text-secondary-dark, #a0aec0); }
+        .filter-grid > div > input[type="date"] {
+            display: block; width: 100%; box-sizing: border-box;
+        }
+
+        /* ADDED: Hover/Focus for filter inputs/selects */
+        .filter-grid input[type="text"],
+        .filter-grid input[type="date"],
+        .filter-grid select {
+            transition: border-color 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+        }
+        .filter-grid input[type="text"]:hover,
+        .filter-grid input[type="date"]:hover,
+        .filter-grid select:hover {
+            border-color: var(--primary-color);
+        }
+        .filter-grid input[type="text"]:focus,
+        .filter-grid input[type="date"]:focus,
+        .filter-grid select:focus {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(var(--primary-color-rgb), 0.25); /* Using primary-color-rgb */
+        }
+
+        /* MODIFIED Reset button styles */
+        #resetFiltersBtn {
+            border-radius: 9999px; /* Pill shape */
+            padding: 0.4rem 1rem;  /* Adjusted padding */
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem; /* Space between icon and text */
+        }
+        #resetFiltersBtn svg {
+            width: 14px;
+            height: 14px;
+            flex-shrink: 0;
+        }
+
+
+        #liveCallsContainerWrapper {
+            background-color: var(--card-bg-color, #fff);
+            padding: 1rem 1.5rem;
+            border-radius: var(--border-radius-lg, 8px);
+            box-shadow: var(--shadow-md, 0 2px 10px rgba(0,0,0,0.05));
+        }
+        .dark #liveCallsContainerWrapper {
+            background-color: var(--card-bg-dark); /* Uses updated card bg */
+            box-shadow: var(--shadow-lg); /* Uses updated shadow */
+        }
+        #liveCallsContainerWrapper h2 {
+            font-size: 1.15rem; font-weight: 600; margin-bottom: 1rem;
+            color: var(--text-color);
+            border-bottom: 1px solid var(--border-color, #e2e8f0);
+            padding-bottom: 0.75rem; display: flex; align-items: center; gap: 0.5rem;
+        }
+        .dark #liveCallsContainerWrapper h2 {
+            color: var(--text-color-dark);
+            border-bottom-color: var(--border-color-dark, #4a5568);
+        }
+        #liveCallsContainerWrapper h2 svg {
+            stroke: var(--primary-color);
+            animation: pulseIconLive 2s infinite ease-in-out;
+        }
+        @keyframes pulseIconLive {
+            0% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.7; transform: scale(1.1); }
+            100% { opacity: 1; transform: scale(1); }
+        }
+        .live-calls-list { max-height: 250px; overflow-y: auto; padding-right: 0.5rem; }
+        .live-call-item {
+            background-color: var(--bg-color); /* Light mode: uses page bg. */
+            border: 1px solid var(--border-color, #e2e8f0);
+            padding: 0.75rem 1rem; border-radius: var(--border-radius-md); margin-bottom: 0.75rem; /* MODIFIED border-radius */
+            font-size: 0.9rem; transition: background-color 0.2s ease;
+        }
+        .dark .live-call-item {
+            background-color: var(--bg-dark-accent); /* Will be #1a1d26 (main page bg color) */
+            border-color: var(--border-color-dark);
+        }
+        .live-call-item:last-child { margin-bottom: 0; }
+        .live-call-item:hover { background-color: var(--button-secondary-bg); }
+        .dark .live-call-item:hover { background-color: var(--secondary-hover-color); }
+        .live-call-item-agent {
+            font-weight: 600; color: var(--primary-color); margin-bottom: 0.25rem;
+        }
+        .live-call-item-scenario, .live-call-item-time {
+            font-size: 0.85rem; color: var(--text-color-light); margin-bottom: 0.125rem;
+        }
+        .dark .live-call-item-scenario, .dark .live-call-item-time {
+            color: var(--text-secondary-dark);
+        }
+        #noLiveCallsMessage {
+            padding: 1rem; text-align: center; color: var(--text-color-subtle); font-style: italic;
+        }
+        .dark #noLiveCallsMessage { color: var(--text-color-subtle); }
+
+        /* NEW: Styles for Long Call Alert */
+        .live-call-item.long-call-alert {
+            border-left: 4px solid var(--danger-color, #dc3545);
+            animation: pulse-border 1.5s infinite;
+        }
+        .dark .live-call-item.long-call-alert {
+            background-color: rgba(220, 53, 69, 0.15);
+        }
+        .long-call-indicator {
+            color: var(--danger-color, #dc3545);
+            font-weight: bold;
+            font-size: 0.8em;
+            margin-left: 0.5em;
+        }
+        @keyframes pulse-border {
+            0% { border-left-color: var(--danger-color); }
+            50% { border-left-color: rgba(var(--danger-color-rgb), 0.5); }
+            100% { border-left-color: var(--danger-color); }
+        }
+
+
+        /* MODIFICATION: Styles for Analytics Section Enhancements */
+        .analytics-section.card { /* Uses general .card styles which are updated */ }
+        .dark .analytics-section.card { /* Uses general .card styles which are updated */ }
+        .analytics-section h2 {
+            margin-top:0;
+            margin-bottom: 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 0.75rem;
+            font-size: 1.25rem;
+            color: var(--text-color);
+        }
+        .dark .analytics-section h2 {
+            border-bottom-color: var(--border-color-dark);
+            color: var(--text-color-dark);
+        }
+
+        /* NEW: Analytics Summary Row Styles */
+        .analytics-summary-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1.5rem;
+            margin-bottom: 1.5rem;
+            padding: 1rem;
+            background-color: var(--bg-color); /* Light mode */
+            border-radius: var(--border-radius-md); /* MODIFIED */
+            border: 1px solid var(--border-color);
+        }
+        .dark .analytics-summary-row {
+            background-color: var(--bg-dark-accent); /* Will be #1a1d26 (main page bg color) */
+            border-color: var(--border-color-dark);
+        }
+        .summary-item {
+            flex: 1;
+            min-width: 220px;
+            padding: 0.75rem;
+        }
+        .summary-item h4 {
+            font-size: 0.9rem;
+            color: var(--text-color-light);
+            margin-top: 0;
+            margin-bottom: 0.5rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .dark .summary-item h4 {
+             color: var(--text-secondary-dark);
+        }
+        .quality-tip {
+            font-style: italic;
+            color: var(--text-color-subtle);
+            font-size: 0.9rem;
+            line-height: 1.4;
+        }
+        #generalQualityIndicator p { margin-bottom: 0.25rem; font-size: 1rem;}
+        #generalQualityIndicator .status-icon { margin-right: 0.5rem; }
+        #generalQualityIndicator .status-good { color: var(--success-color, #28a745); font-weight: 500;}
+        #generalQualityIndicator .status-warning { color: var(--warning-color, #ffc107); font-weight: 500;}
+        #generalQualityIndicator .status-danger { color: var(--danger-color, #dc3545); font-weight: 500;}
+
+        #averageQualityScoreDisplay .score-value {
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: var(--primary-color);
+            margin-right: 0.25rem;
+        }
+        #averageQualityScoreDisplay .score-max {
+            font-size: 1rem;
+            color: var(--text-color-light);
+        }
+        .dark #averageQualityScoreDisplay .score-max {
+            color: var(--text-secondary-dark);
+        }
+
+
+        /* NEW: Chart Filters Row Styles */
+        .chart-filters-row {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .dark .chart-filters-row {
+            border-bottom-color: var(--border-color-dark);
+        }
+        .duration-filters, .chart-options {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .duration-filters .action-button, .chart-options .action-button {
+            padding: 0.4rem 0.8rem;
+            font-size: 0.85rem;
+        }
+        .duration-filters label, .chart-options label {
+            font-size: 0.9rem;
+            font-weight: 500;
+            color: var(--text-color-light);
+        }
+        .dark .duration-filters label, .dark .chart-options label {
+            color: var(--text-secondary-dark);
+        }
+        .chart-options input[type="checkbox"] {
+            transform: scale(1.2);
+            margin-left: 0.25rem;
+            cursor: pointer;
+        }
+        .duration-filters .action-button.active-period {
+            background-color: var(--primary-color);
+            color: white;
+            border-color: var(--primary-color);
+        }
+        .dark .duration-filters .action-button.active-period {
+            background-color: var(--primary-color);
+        }
+
+
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 1.5rem;
+        }
+        .chart-container {
+            padding: 1rem;
+            border: 1px solid var(--border-color);
+            border-radius: var(--border-radius-md); /* MODIFIED */
+            background-color: var(--bg-color); /* Light mode */
+            min-height: 300px;
+            display: flex;
+            flex-direction: column;
+        }
+        .dark .chart-container {
+            border-color: var(--border-color-dark);
+            background-color: var(--bg-dark-accent); /* Will be #1a1d26 (main page bg color) */
+        }
+        .chart-container h3 { /* Also applies to #qualityEvolutionChartTitle */
+            font-size: 1.05rem;
+            margin-bottom: 1rem;
+            color: var(--text-color);
+            text-align: center;
+            display: flex; /* ADDED for icon alignment */
+            align-items: center; /* ADDED */
+            justify-content: center; /* ADDED */
+            gap: 0.5rem; /* ADDED for space between icon and text */
+        }
+        .chart-title-icon { /* ADDED */
+            flex-shrink: 0;
+        }
+        .dark .chart-container h3 {
+            color: var(--text-color-dark);
+        }
+        .chart-container canvas {
+            flex-grow: 1;
+            max-height: 350px;
+        }
+        #noBadReasonsMessage {
+            text-align:center;
+            padding: 2rem;
+            color: var(--text-color-subtle);
+            font-style: italic;
+            flex-grow: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .trend-arrow {
+            font-size: 0.9em;
+            margin-left: 5px;
+            display: inline-block;
+        }
+        .trend-arrow.up::before { content: "↑"; color: var(--success-color, #28a745); }
+        .trend-arrow.down::before { content: "↓"; color: var(--danger-color, #dc3545); }
+        .trend-arrow.neutral::before { content: "→"; color: var(--text-color-subtle, #6c757d); }
+
+        /* ADDED: Greeting section name emphasis */
+        .greeting-section .user-name-emphasis {
+            font-weight: 600;
+        }
+
+        /* ADDED: Logout button hover */
+        .logout-btn {
+            transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+            border: 1px solid transparent;
+        }
+        .logout-btn:hover {
+            background-color: var(--logout-hover-bg);
+            color: var(--danger-color);
+            border-color: rgba(var(--danger-color-rgb), 0.3);
+        }
+        .dark .logout-btn:hover {
+            background-color: rgba(var(--danger-color-rgb), 0.15);
+            color: var(--danger-color);
+            border-color: rgba(var(--danger-color-rgb), 0.4);
+        }
+
+    </style>
+</head>
+<body>
+    <div id="accessDeniedModal">
+         <div class="access-denied-content">
+             <svg xmlns="http://www.w3.org/2000/svg" width="56" height="56" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                 <circle cx="12" cy="12" r="10"></circle>
+                 <line x1="12" y1="8" x2="12" y2="12"></line>
+                 <line x1="12" y1="16" x2="12.01" y2="16"></line>
+             </svg>
+             <h3>Access Denied</h3>
+             <p>You do not have permission to view this page. This section is restricted to administrators.</p>
+             <button id="returnToAppBtn" class="action-button primary-button">Return to Agent App</button>
+         </div>
+    </div>
+
+    <div class="app-container" id="appContainerContent" style="display: none; flex-direction: column;">
+        <header class="app-header">
+            <div class="logo-container">
+                 <svg class="company-logo" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M6 17L10 17M6 12L12 12M6 7L14 7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    <path d="M15 6L19 10L15 14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <rect x="3" y="3" width="18" height="18" rx="3" stroke="currentColor" stroke-width="1.5" fill="transparent" opacity="0.6"/>
+                </svg>
+                <span class="app-title">Admin Dashboard - Elevo Core</span>
+            </div>
+            <div class="header-controls">
+                 <a href="core-flow.html" class="nav-link">Core Flow</a>
+                 <div class="user-info" id="userInfo" style="display: none;">
+                    <span id="userNameDisplay" class="user-name-display"></span>
+                     <button id="logoutButton" class="logout-btn">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+                        <span>Logout</span>
+                    </button>
+                 </div>
+            </div>
+        </header>
+
+        <main class="app-main dashboard-main">
+            <div id="authLoadingMessage" class="loading-container" style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 70vh;">
+                <div class="spinner"></div>
+                <p>Verifying access and loading dashboard...</p>
+            </div>
+
+            <div id="dashboardContent" style="display:none; width:100%;">
+                <div class="dashboard-header">
+                    <div class="greeting-section">
+                        <div id="userAvatarCharacter" class="user-avatar-char-dashboard"></div>
+                        <div>
+                            <h1 id="dashboardUserGreeting">Welcome, Admin!</h1> <!-- Will be updated by JS -->
+                            <p id="dashboardUserSubtext">Overview of all agent activities.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="stats-grid" id="statsGrid">
+                     <div class="stat-card"><h3>Total Calls (Filtered)</h3><p id="totalCalls">0</p><span class="stat-period" id="statsPeriod">All Agents</span></div>
+                     <div class="stat-card"><h3>Avg. Call Duration</h3><p id="avgCallDuration">0m 0s</p><span class="stat-period" id="statsPeriodDuration">All Agents</span></div>
+                     <div class="stat-card"><h3>Completion Rate</h3><p id="completionRate">0%</p><span class="stat-period" id="statsPeriodCompletion">All Agents</span></div>
+                     <div class="stat-card"><h3>Avg. Call Quality</h3><div class="quality-gauge"><div class="gauge-bar-container"><div id="gaugeGood" class="gauge-segment good"></div><div id="gaugeNormal" class="gauge-segment normal"></div><div id="gaugeBad" class="gauge-segment bad"></div></div><span id="avgQualityText">N/A</span></div></div>
+                </div>
+
+                <div id="liveCallsContainerWrapper" class="card" style="margin-bottom: 1.5rem;">
+                    <h2>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1.5"></circle><circle cx="12" cy="12" r="5.5"></circle><circle cx="12" cy="12" r="9.5"></circle></svg>
+                        Live Call Monitoring
+                    </h2>
+                    <div id="liveCallsContainer" class="live-calls-list">
+                        <p id="noLiveCallsMessage" style="display:block;">Loading live calls...</p> <!-- Will be updated by JS -->
+                    </div>
+                </div>
+
+                <div class="analytics-section card" id="analyticsSection">
+                    <h2>Call Analytics</h2>
+
+                    <div class="analytics-summary-row">
+                        <div id="generalQualityIndicator" class="summary-item">
+                            <h4>Overall Quality Trend</h4>
+                            <p><span class="status-icon"></span><span class="status-text">Loading...</span></p>
+                            <small class="comparison-text"></small>
+                        </div>
+                        <div id="averageQualityScoreDisplay" class="summary-item">
+                            <h4>Avg. Quality Score</h4>
+                            <p><span class="score-value">N/A</span> <span class="score-max">/ 100</span></p>
+                        </div>
+                        <div class="summary-item">
+                           <h4>💡 Pro Tip</h4>
+                           <p id="qualityTipText" class="quality-tip">Analyzing call data for insights...</p> <!-- Will be updated by JS -->
+                        </div>
+                    </div>
+
+                    <div class="chart-filters-row">
+                        <div class="duration-filters">
+                            <label>Chart Period:</label>
+                            <button class="action-button secondary-button" data-period="7">Last 7 Days</button>
+                            <button class="action-button secondary-button" data-period="30">Last 30 Days</button>
+                            <button class="action-button secondary-button" data-period="90">Last 90 Days</button>
+                            <button id="clearChartPeriodBtn" class="action-button secondary-button">Custom</button>
+                        </div>
+                        <div class="chart-options">
+                            <label for="groupQualityByScenarioToggle">Group Quality by Scenario:</label>
+                            <input type="checkbox" id="groupQualityByScenarioToggle">
+                        </div>
+                    </div>
+
+                    <div class="charts-grid">
+                        <div class="chart-container">
+                            <h3 id="qualityEvolutionChartTitle">
+                                <svg class="chart-title-icon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+                                <span>Quality Evolution Over Time</span> <!-- Span will be updated by JS -->
+                            </h3>
+                            <canvas id="qualityEvolutionChart"></canvas>
+                        </div>
+                        <div class="chart-container">
+                            <h3>
+                                <svg class="chart-title-icon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"></path><path d="M22 12A10 10 0 0 0 12 2v10z"></path></svg>
+                                <span>Bad Call Reasons</span>
+                            </h3>
+                            <canvas id="badQualityReasonsChart"></canvas>
+                            <p id="noBadReasonsMessage" style="display:none;">
+                                No bad call reasons available for the current selection. <!-- Will be updated by JS -->
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="filter-controls card" id="filterControlsCard">
+                    <h3>🔍 Filter Call Sessions</h3> <!-- MODIFIED: Added emoji -->
+                    <div class="filter-grid">
+                        <div><label for="userFilterDropdown">Agent:</label><select id="userFilterDropdown"><option value="">All Agents</option></select></div>
+                        <div><label for="searchInput">Search (Scenario, Reason, Agent):</label><input type="text" id="searchInput" placeholder="Type and wait..."></div>
+                        <div><label for="qualityFilter">Call Quality:</label><select id="qualityFilter"><option value="">All</option><option value="Good">Good</option><option value="Normal">Normal</option><option value="Bad">Bad</option><option value="N/A">N/A</option></select></div>
+                        <div>
+                            <label for="startDateFilter">Start Date:</label>
+                            <input type="date" id="startDateFilter" title="Start date for filtering calls" style="margin-bottom: 0.5rem;">
+                            <label for="endDateFilter">End Date:</label>
+                            <input type="date" id="endDateFilter" title="End date for filtering calls">
+                        </div>
+                        <div class="filter-buttons-group">
+                             <button id="resetFiltersBtn" class="action-button secondary-button">
+                                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+                                 <span>Reset Filters</span>
+                             </button> <!-- MODIFIED: Added icon and span -->
+                        </div>
+                    </div>
+                </div>
+
+                <div class="recent-activity-section card" id="recentActivitySection">
+                    <h2 id="recentCallsTitle">Recent Call Sessions</h2>
+                    <div class="table-responsive">
+                        <table id="recentCallsTable">
+                            <thead>
+                                <tr>
+                                    <th>Agent Name</th><th>Agent Email</th><th>Scenario</th><th>Start Time</th><th>Duration</th><th>Completed</th><th>Quality</th><th>Reason</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div id="paginationControls" class="pagination-container"></div>
+                    <div class="export-buttons-container" style="margin-top: 1.5rem; display: flex; gap: 0.75rem; flex-wrap: wrap;">
+                        <button id="exportDataBtn" class="action-button secondary-button">Export Filtered Data (CSV)</button>
+                        <button id="exportDataXLSXBtn" class="action-button primary-button">Export to Excel (XLSX)</button>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <footer class="app-footer">
+            <p>© <span id="currentYear"></span> Mohamed Elmenisy - Elevo Core. All rights reserved.</p>
+        </footer>
+    </div>
+
+    <script type="module">
+        // Supabase Client Setup
+        const SUPABASE_URL = 'https://aefiigottnlcmjzilqnh.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFlZmlpZ290dG5sY21qemlscW5oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcxNzY2MDQsImV4cCI6MjA2Mjc1MjYwNH0.FypB02v3tGMnxXV9ZmZMdMC-oQpREKOJWgHMPxUzwX4';
+
+        let supabase;
+        try {
+            supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+            console.log('Supabase client initialized for dashboard.html');
+        } catch (error) {
+            console.error("Supabase client initialization failed:", error);
+            const authLoading = document.getElementById('authLoadingMessage');
+            if(authLoading) authLoading.innerHTML = '<p style="color:red; text-align:center;">Critical Error: Services unavailable. Dashboard cannot be loaded.</p>';
+        }
+
+        // DOM Elements
+        const appContainerContent = document.getElementById('appContainerContent');
+        const authLoadingMessageDiv = document.getElementById('authLoadingMessage');
+        const dashboardContentDiv = document.getElementById('dashboardContent');
+        const accessDeniedModal = document.getElementById('accessDeniedModal');
+        const returnToAppBtn = document.getElementById('returnToAppBtn');
+
+        const userNameDisplayHeader = document.getElementById('userNameDisplay');
+        const dashboardUserGreeting = document.getElementById('dashboardUserGreeting');
+        const dashboardUserSubtext = document.getElementById('dashboardUserSubtext');
+        const userAvatarCharEl = document.getElementById('userAvatarCharacter');
+        const userInfoDivHeader = document.getElementById('userInfo');
+        const logoutButton = document.getElementById('logoutButton');
+        document.getElementById('currentYear').textContent = new Date().getFullYear();
+
+        // Stats elements
+        const totalCallsEl = document.getElementById('totalCalls');
+        const avgCallDurationEl = document.getElementById('avgCallDuration');
+        const completionRateEl = document.getElementById('completionRate');
+        const gaugeGoodEl = document.getElementById('gaugeGood');
+        const gaugeNormalEl = document.getElementById('gaugeNormal');
+        const gaugeBadEl = document.getElementById('gaugeBad');
+        const avgQualityTextEl = document.getElementById('avgQualityText');
+        const statsPeriodEl = document.getElementById('statsPeriod');
+        const statsPeriodDurationEl = document.getElementById('statsPeriodDuration');
+        const statsPeriodCompletionEl = document.getElementById('statsPeriodCompletion');
+
+        // Filter elements
+        const userFilterDropdown = document.getElementById('userFilterDropdown');
+        const searchInput = document.getElementById('searchInput');
+        const qualityFilter = document.getElementById('qualityFilter');
+        const startDateFilter = document.getElementById('startDateFilter');
+        const endDateFilter = document.getElementById('endDateFilter');
+        const resetFiltersBtn = document.getElementById('resetFiltersBtn');
+
+        // Table and Pagination elements
+        const recentCallsTableBody = document.querySelector('#recentCallsTable tbody');
+        const recentCallsTitleEl = document.getElementById('recentCallsTitle');
+        const paginationControlsContainer = document.getElementById('paginationControls');
+        const exportDataBtn = document.getElementById('exportDataBtn');
+        const exportDataXLSXBtn = document.getElementById('exportDataXLSXBtn');
+
+        // Live Calls elements
+        const liveCallsContainerWrapper = document.getElementById('liveCallsContainerWrapper');
+        const liveCallsContainer = document.getElementById('liveCallsContainer');
+        const noLiveCallsMessage = document.getElementById('noLiveCallsMessage');
+
+        // --- MODIFICATION: Analytics Section DOM Elements ---
+        const generalQualityIndicatorEl = document.getElementById('generalQualityIndicator');
+        const averageQualityScoreDisplayEl = document.getElementById('averageQualityScoreDisplay');
+        const qualityTipTextEl = document.getElementById('qualityTipText');
+        const durationFilterButtons = document.querySelectorAll('.duration-filters .action-button[data-period]');
+        const clearChartPeriodBtn = document.getElementById('clearChartPeriodBtn');
+        const groupQualityByScenarioToggle = document.getElementById('groupQualityByScenarioToggle');
+        const qualityEvolutionChartCanvas = document.getElementById('qualityEvolutionChart');
+        const qualityEvolutionChartTitleEl = document.getElementById('qualityEvolutionChartTitle'); // This is the H3
+        const badQualityReasonsChartCanvas = document.getElementById('badQualityReasonsChart');
+        const noBadReasonsMessageEl = document.getElementById('noBadReasonsMessage');
+
+
+        // State Variables
+        let currentUser = null; // {id, email, name, isAdmin}
+        let allCallSessions = [];
+        let filteredCallSessions = [];
+        let allAgents = []; // {id, name, email}
+        let currentPage = 1;
+        const ROWS_PER_PAGE = 10;
+        let filterTimeoutId = null;
+        let liveCallsChannel = null;
+        const FILTER_STORAGE_KEY = 'elevoCoreAdminFilters_v3';
+
+        // --- MODIFICATION: Analytics State Variables ---
+        let activeChartPeriod = null;
+        let groupQualityByScenario = false;
+        let qualityEvolutionChartInstance = null;
+        let badQualityReasonsChartInstance = null;
+
+        // --- MODIFICATION: Chart Theming and Configuration ---
+        const chartColorsDark = { // MODIFIED Colors
+            line: {
+                good: 'rgba(60, 140, 200, 1)',
+                goodBg: 'rgba(60, 140, 200, 0.3)',
+                normal: 'rgba(220, 180, 45, 1)',
+                normalBg: 'rgba(220, 180, 45, 0.3)',
+                bad: 'rgba(200, 70, 55, 1)',
+                badBg: 'rgba(200, 70, 55, 0.3)',
+            },
+            pie: {
+                backgrounds: [
+                    'rgba(60, 140, 200, 0.75)',  'rgba(200, 70, 55, 0.75)',   'rgba(220, 180, 45, 0.75)',
+                    'rgba(40, 180, 90, 0.75)',   'rgba(140, 80, 160, 0.75)',  'rgba(20, 160, 140, 0.75)',
+                    'rgba(210, 110, 30, 0.75)',  'rgba(130, 145, 150, 0.75)', 'rgba(190, 70, 0, 0.75)'
+                ],
+                borders: [
+                    'rgba(60, 140, 200, 1)',  'rgba(200, 70, 55, 1)',   'rgba(220, 180, 45, 1)',
+                    'rgba(40, 180, 90, 1)',   'rgba(140, 80, 160, 1)',  'rgba(20, 160, 140, 1)',
+                    'rgba(210, 110, 30, 1)',  'rgba(130, 145, 150, 1)', 'rgba(190, 70, 0, 1)'
+                ]
+            },
+            defaultText: 'rgba(247, 250, 252, 0.9)',
+            defaultBorder: 'rgba(74, 85, 104, 0.6)'
+        };
+
+        const chartColorsLight = {
+            line: {
+                good: 'rgba(75, 192, 192, 1)',
+                goodBg: 'rgba(75, 192, 192, 0.2)',
+                normal: 'rgba(255, 206, 86, 1)',
+                normalBg: 'rgba(255, 206, 86, 0.2)',
+                bad: 'rgba(255, 99, 132, 1)',
+                badBg: 'rgba(255, 99, 132, 0.2)',
+            },
+            pie: {
+                 backgrounds: [
+                    'rgba(75, 192, 192, 0.7)', 'rgba(255, 99, 132, 0.7)', 'rgba(255, 206, 86, 0.7)',
+                    'rgba(54, 162, 235, 0.7)', 'rgba(153, 102, 255, 0.7)', 'rgba(255, 159, 64, 0.7)',
+                    'rgba(199, 199, 199, 0.7)', 'rgba(83, 102, 255, 0.7)', 'rgba(46, 204, 113, 0.7)'
+                ],
+                borders: [
+                    'rgba(75, 192, 192, 1)', 'rgba(255, 99, 132, 1)', 'rgba(255, 206, 86, 1)',
+                    'rgba(54, 162, 235, 1)', 'rgba(153, 102, 255, 1)', 'rgba(255, 159, 64, 1)',
+                    'rgba(199, 199, 199, 1)', 'rgba(83, 102, 255, 1)', 'rgba(46, 204, 113, 1)'
+                ]
+            },
+            defaultText: 'rgba(51, 51, 51, 0.9)',
+            defaultBorder: 'rgba(226, 232, 240, 0.9)'
+        };
+
+        function getChartUiConfig() {
+            const isDarkMode = document.documentElement.classList.contains('dark');
+            const colors = isDarkMode ? chartColorsDark : chartColorsLight;
+            return {
+                colors: colors,
+                font: {
+                    size: 13,
+                    family: "'Poppins', sans-serif"
+                },
+                layoutPadding: { top: 15, right: 15, bottom: 10, left: 10 }
+            };
+        }
+
+        function setChartJsDefaults() {
+            if (typeof Chart === 'undefined') return;
+            const uiConfig = getChartUiConfig();
+
+            Chart.defaults.color = uiConfig.colors.defaultText;
+            Chart.defaults.borderColor = uiConfig.colors.defaultBorder;
+            Chart.defaults.font.family = uiConfig.font.family;
+        }
+        // --- End of Chart Theming ---
+
+        // --- Date Formatting Helper for Egypt Time ---
+        const EGYPT_TIMEZONE = 'Africa/Cairo';
+
+        function formatDateTimeEgypt(dateString, options = {}) {
+            if (!dateString) return 'N/A';
+            const date = new Date(dateString);
+            const defaultOptions = {
+                timeZone: EGYPT_TIMEZONE,
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: true
+            };
+            return date.toLocaleString('en-GB', { ...defaultOptions, ...options });
+        }
+
+        function formatTimeEgypt(dateString) {
+            if (!dateString) return 'N/A';
+            const date = new Date(dateString);
+            return date.toLocaleTimeString('en-GB', {
+                timeZone: EGYPT_TIMEZONE,
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: true
+            });
+        }
+
+        function formatDateForCSVEgypt(dateString) {
+            if (!dateString) return 'N/A';
+            const date = new Date(dateString);
+            const year = date.toLocaleDateString('en-CA', { year: 'numeric', timeZone: EGYPT_TIMEZONE });
+            const month = date.toLocaleDateString('en-CA', { month: '2-digit', timeZone: EGYPT_TIMEZONE });
+            const day = date.toLocaleDateString('en-CA', { day: '2-digit', timeZone: EGYPT_TIMEZONE });
+            const time = date.toLocaleTimeString('en-GB', {
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: false,
+                timeZone: EGYPT_TIMEZONE
+            });
+            return `${year}-${month.padStart(2,'0')}-${day.padStart(2,'0')} ${time}`;
+        }
+
+        function getLocalDateInputString(date) { // Helper for date inputs
+            const year = date.getFullYear();
+            const month = (date.getMonth() + 1).toString().padStart(2, '0');
+            const day = date.getDate().toString().padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        }
+
+
+        // --- Auth and Admin Check ---
+        async function initializeDashboard() {
+            if (!supabase) return;
+
+            if (typeof Chart !== 'undefined') {
+                setChartJsDefaults();
+            } else {
+                console.warn("Chart.js not yet loaded when initializeDashboard was called.");
+            }
+
+            const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+
+            if (sessionError || !session) {
+                window.location.replace('login.html');
+                return;
+            }
+
+            const storedUserData = JSON.parse(localStorage.getItem('elevoCoreUserData'));
+            if (storedUserData && storedUserData.id === session.user.id) {
+                currentUser = storedUserData;
+            } else {
+                const { data: profile, error: profileError } = await supabase
+                    .from('users')
+                    .select('name, is_admin')
+                    .eq('id', session.user.id)
+                    .single();
+
+                if (profileError && profileError.code !== 'PGRST116') { // PGRST116 means no rows found, which is ok if profile not set
+                    console.error("Profile fetch error:", profileError);
+                    showAccessDenied("Could not verify your user profile.");
+                    return;
+                }
+                currentUser = {
+                    id: session.user.id,
+                    email: session.user.email,
+                    name: profile?.name || session.user.user_metadata?.full_name || session.user.email.split('@')[0],
+                    isAdmin: profile?.is_admin || false
+                };
+                localStorage.setItem('elevoCoreUserData', JSON.stringify(currentUser));
+            }
+
+            if (!currentUser.isAdmin) {
+                showAccessDenied();
+                return;
+            }
+
+            appContainerContent.style.display = 'flex';
+            authLoadingMessageDiv.style.display = 'none';
+            dashboardContentDiv.style.display = 'block';
+
+            setupAdminUI();
+            await loadInitialData();
+            loadPersistedFilters();
+            applyFiltersAndRender();
+            setupEventListeners();
+            setupLiveCallMonitoring();
+        }
+
+        function showAccessDenied(message = "You do not have permission to view this page. This section is restricted to administrators.") {
+            authLoadingMessageDiv.style.display = 'none';
+            dashboardContentDiv.style.display = 'none';
+            appContainerContent.style.display = 'flex';
+
+            accessDeniedModal.querySelector('p').textContent = message;
+            accessDeniedModal.style.display = 'flex';
+            if (liveCallsChannel) {
+                supabase.removeChannel(liveCallsChannel);
+                liveCallsChannel = null;
+            }
+        }
+
+        returnToAppBtn.addEventListener('click', () => {
+            window.location.href = 'core-flow.html';
+        });
+
+        function setupAdminUI() { // MODIFIED Greeting
+            userNameDisplayHeader.textContent = currentUser.name;
+            dashboardUserGreeting.innerHTML = `👋 Welcome back, <span class="user-name-emphasis">${currentUser.name}</span>!`;
+            dashboardUserSubtext.textContent = "Overview of all agent activities."; // Keep this part
+            userAvatarCharEl.textContent = currentUser.name.charAt(0).toUpperCase();
+            userInfoDivHeader.style.display = 'flex';
+        }
+
+        // --- Data Loading ---
+        async function loadInitialData() {
+            try {
+                const { data: agentsData, error: agentsError } = await supabase
+                    .from('users')
+                    .select('id, name, email')
+                    .order('name', { ascending: true });
+                if (agentsError) throw agentsError;
+                allAgents = agentsData || [];
+                populateAgentFilter();
+
+                const { data: sessionsData, error: sessionsError } = await supabase
+                    .from('call_sessions')
+                    .select(`
+                        *,
+                        call_sessions_scenario_id_fkey(id, title)
+                    `)
+                    .order('start_time', { ascending: false });
+                if (sessionsError) throw sessionsError;
+                allCallSessions = sessionsData || [];
+
+            } catch (error) {
+                console.error("Error loading initial dashboard data:", error);
+                recentCallsTableBody.innerHTML = `<tr><td colspan="8" style="text-align:center; color:var(--danger-color);">Failed to load data: ${error.message}</td></tr>`;
+            }
+        }
+
+        function populateAgentFilter() {
+            userFilterDropdown.innerHTML = '<option value="">All Agents</option>';
+            allAgents.forEach(agent => {
+                const option = document.createElement('option');
+                option.value = agent.id;
+                option.textContent = agent.name ? `${agent.name} (${agent.email})` : agent.email;
+                userFilterDropdown.appendChild(option);
+            });
+        }
+
+        // --- Filtering and Rendering ---
+        function applyFiltersAndRender() {
+            if (typeof Chart !== 'undefined' && Chart.defaults.color !== getChartUiConfig().colors.defaultText) {
+                 setChartJsDefaults();
+            }
+            saveFiltersToLocalStorage();
+
+            let tempFiltered = [...allCallSessions];
+            const searchTerm = searchInput.value.toLowerCase().trim();
+            const selectedAgentId = userFilterDropdown.value;
+            const selectedQuality = qualityFilter.value;
+
+            if (selectedAgentId) {
+                tempFiltered = tempFiltered.filter(s => s.user_id === selectedAgentId);
+            }
+            if (searchTerm) {
+                tempFiltered = tempFiltered.filter(s => {
+                    const agent = allAgents.find(a => a.id === s.user_id);
+                    return (
+                        (s.call_sessions_scenario_id_fkey?.title || '').toLowerCase().includes(searchTerm) ||
+                        (s.quality_reason || '').toLowerCase().includes(searchTerm) ||
+                        (agent?.name || '').toLowerCase().includes(searchTerm) ||
+                        (agent?.email || '').toLowerCase().includes(searchTerm)
+                    );
+                });
+            }
+            if (selectedQuality) {
+                tempFiltered = tempFiltered.filter(s => (selectedQuality === "N/A" ? !s.call_quality : s.call_quality === selectedQuality));
+            }
+
+            let effectiveStartDate = startDateFilter.value;
+            let effectiveEndDate = endDateFilter.value;
+
+            if (activeChartPeriod) {
+                const today = new Date();
+                const endDateForChartPeriod = new Date(today);
+                const startDateForChartPeriod = new Date(today);
+                startDateForChartPeriod.setDate(today.getDate() - activeChartPeriod + 1);
+
+                effectiveStartDate = getLocalDateInputString(startDateForChartPeriod);
+                effectiveEndDate = getLocalDateInputString(endDateForChartPeriod);
+
+                startDateFilter.value = effectiveStartDate;
+                endDateFilter.value = effectiveEndDate;
+                startDateFilter.disabled = true;
+                endDateFilter.disabled = true;
+            } else {
+                startDateFilter.disabled = false;
+                endDateFilter.disabled = false;
+            }
+
+            if (effectiveStartDate) {
+                tempFiltered = tempFiltered.filter(s => s.start_time && new Date(s.start_time) >= new Date(effectiveStartDate + "T00:00:00.000Z"));
+            }
+            if (effectiveEndDate) {
+                const endOfDay = new Date(effectiveEndDate + "T23:59:59.999Z");
+                tempFiltered = tempFiltered.filter(s => s.start_time && new Date(s.start_time) <= endOfDay);
+            }
+
+            filteredCallSessions = tempFiltered;
+            currentPage = 1;
+            renderTable();
+            updateStats();
+            renderPagination();
+            updateAnalyticsSummaryAndCharts(filteredCallSessions);
+        }
+
+        function renderTable() { // MODIFIED "No data" message
+            recentCallsTableBody.innerHTML = '';
+            if (filteredCallSessions.length === 0) {
+                recentCallsTableBody.innerHTML = `<tr class="placeholder-row"><td colspan="8">📭 No call sessions match your filters.</td></tr>`;
+                return;
+            }
+
+            const paginatedSessions = filteredCallSessions.slice((currentPage - 1) * ROWS_PER_PAGE, currentPage * ROWS_PER_PAGE);
+            paginatedSessions.forEach(session => {
+                const agent = allAgents.find(a => a.id === session.user_id);
+                const row = recentCallsTableBody.insertRow();
+                row.insertCell().textContent = agent?.name || 'Unknown Agent';
+                row.insertCell().textContent = agent?.email || 'N/A';
+                row.insertCell().textContent = session.call_sessions_scenario_id_fkey?.title || 'N/A';
+                row.insertCell().textContent = formatDateTimeEgypt(session.start_time);
+                const duration = session.duration || 0;
+                row.insertCell().textContent = `${Math.floor(duration / 60)}m ${duration % 60}s`;
+                row.insertCell().textContent = session.completed ? 'Yes' : 'No';
+
+                const qualityCell = row.insertCell();
+                qualityCell.classList.add('quality-cell');
+                const qualityIcon = document.createElement('span');
+                qualityIcon.classList.add('quality-icon');
+                let iconSvg = '', qualityClass = 'na';
+                switch (session.call_quality?.toLowerCase()) {
+                    case 'good': iconSvg = `<svg viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>`; qualityClass = 'good'; break;
+                    case 'normal': iconSvg = `<svg viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>`; qualityClass = 'normal'; break;
+                    case 'bad': iconSvg = `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>`; qualityClass = 'bad'; break;
+                    default: iconSvg = `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="8" y1="12" x2="16" y2="12"></line></svg>`;
+                }
+                qualityIcon.innerHTML = iconSvg.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"');
+                qualityIcon.classList.add(qualityClass);
+                qualityCell.appendChild(qualityIcon);
+                qualityCell.appendChild(document.createTextNode(` ${session.call_quality || 'N/A'}`));
+
+                row.insertCell().textContent = session.quality_reason || '-';
+            });
+        }
+
+        function updateStats() {
+            const count = filteredCallSessions.length;
+            totalCallsEl.textContent = count;
+
+            const selectedAgentId = userFilterDropdown.value;
+            const agent = allAgents.find(a => a.id === selectedAgentId);
+            const agentName = agent?.name || agent?.email || 'Selected Agent';
+            const statsPeriodText = selectedAgentId ? agentName : 'All Agents';
+            [statsPeriodEl, statsPeriodDurationEl, statsPeriodCompletionEl].forEach(el => el.textContent = statsPeriodText);
+            recentCallsTitleEl.textContent = selectedAgentId ? `Call Sessions for ${agentName}` : 'All Recent Call Sessions';
+
+
+            if (count > 0) {
+                const totalDuration = filteredCallSessions.reduce((sum, s) => sum + (s.duration || 0), 0);
+                const avgDuration = Math.round(totalDuration / count);
+                avgCallDurationEl.textContent = `${Math.floor(avgDuration / 60)}m ${avgDuration % 60}s`;
+
+                const completedCount = filteredCallSessions.filter(s => s.completed).length;
+                completionRateEl.textContent = `${Math.round((completedCount / count) * 100)}%`;
+
+                const qualityCounts = { good: 0, normal: 0, bad: 0, rated: 0 };
+                filteredCallSessions.forEach(s => {
+                    if (s.call_quality === 'Good') { qualityCounts.good++; qualityCounts.rated++; }
+                    else if (s.call_quality === 'Normal') { qualityCounts.normal++; qualityCounts.rated++; }
+                    else if (s.call_quality === 'Bad') { qualityCounts.bad++; qualityCounts.rated++; }
+                });
+                if (qualityCounts.rated > 0) {
+                    gaugeGoodEl.style.width = `${(qualityCounts.good / qualityCounts.rated) * 100}%`;
+                    gaugeNormalEl.style.width = `${(qualityCounts.normal / qualityCounts.rated) * 100}%`;
+                    gaugeBadEl.style.width = `${(qualityCounts.bad / qualityCounts.rated) * 100}%`;
+                    if (qualityCounts.bad / qualityCounts.rated > 0.3) avgQualityTextEl.textContent = "Improvement Needed";
+                    else if (qualityCounts.good / qualityCounts.rated >= 0.5) avgQualityTextEl.textContent = "Mostly Good";
+                    else avgQualityTextEl.textContent = "Mixed Quality";
+                } else {
+                    [gaugeGoodEl, gaugeNormalEl, gaugeBadEl].forEach(el => el.style.width = '0%');
+                    avgQualityTextEl.textContent = 'No Rated Calls';
+                }
+            } else {
+                avgCallDurationEl.textContent = '0m 0s';
+                completionRateEl.textContent = '0%';
+                [gaugeGoodEl, gaugeNormalEl, gaugeBadEl].forEach(el => el.style.width = '0%');
+                avgQualityTextEl.textContent = 'No Calls';
+            }
+        }
+
+        function renderPagination() {
+            paginationControlsContainer.innerHTML = '';
+            const totalPages = Math.ceil(filteredCallSessions.length / ROWS_PER_PAGE);
+            if (totalPages <= 1) return;
+
+            const prevBtn = document.createElement('button');
+            prevBtn.textContent = 'Previous';
+            prevBtn.disabled = currentPage === 1;
+            prevBtn.addEventListener('click', () => { currentPage--; renderTable(); renderPagination(); });
+            paginationControlsContainer.appendChild(prevBtn);
+
+            const pageInfo = document.createElement('span');
+            pageInfo.textContent = ` Page ${currentPage} of ${totalPages} `;
+            pageInfo.style.margin = "0 10px";
+            paginationControlsContainer.appendChild(pageInfo);
+
+            const nextBtn = document.createElement('button');
+            nextBtn.textContent = 'Next';
+            nextBtn.disabled = currentPage === totalPages;
+            nextBtn.addEventListener('click', () => { currentPage++; renderTable(); renderPagination(); });
+            paginationControlsContainer.appendChild(nextBtn);
+        }
+
+        function saveFiltersToLocalStorage() {
+            const filters = {
+                agentId: userFilterDropdown.value,
+                searchTerm: searchInput.value,
+                quality: qualityFilter.value,
+                startDate: startDateFilter.value,
+                endDate: endDateFilter.value,
+                activeChartPeriod: activeChartPeriod,
+                groupQualityByScenario: groupQualityByScenario
+            };
+            localStorage.setItem(FILTER_STORAGE_KEY, JSON.stringify(filters));
+        }
+
+        function loadPersistedFilters() {
+            const savedFilters = localStorage.getItem(FILTER_STORAGE_KEY);
+            if (savedFilters) {
+                try {
+                    const filters = JSON.parse(savedFilters);
+                    userFilterDropdown.value = filters.agentId || '';
+                    searchInput.value = filters.searchTerm || '';
+                    qualityFilter.value = filters.quality || '';
+                    startDateFilter.value = filters.startDate || '';
+                    endDateFilter.value = filters.endDate || '';
+
+                    activeChartPeriod = filters.activeChartPeriod !== undefined ? filters.activeChartPeriod : null;
+                    groupQualityByScenario = filters.groupQualityByScenario !== undefined ? filters.groupQualityByScenario : false;
+
+                    durationFilterButtons.forEach(btn => {
+                        btn.classList.toggle('active-period', parseInt(btn.dataset.period) === activeChartPeriod);
+                    });
+                    if (!activeChartPeriod) {
+                        clearChartPeriodBtn.classList.add('active-period');
+                    } else {
+                        clearChartPeriodBtn.classList.remove('active-period');
+                    }
+
+                    groupQualityByScenarioToggle.checked = groupQualityByScenario;
+
+                } catch (e) {
+                    console.error("Error parsing saved filters:", e);
+                    localStorage.removeItem(FILTER_STORAGE_KEY);
+                }
+            }
+        }
+
+        // --- MODIFICATION: Analytics Summary and Chart Rendering Functions ---
+
+        function getPeriodStats(sessions) {
+            const stats = { good: 0, normal: 0, bad: 0, total: sessions.length, rated: 0, completed: 0 };
+            sessions.forEach(s => {
+                if (s.call_quality === 'Good') { stats.good++; stats.rated++; }
+                else if (s.call_quality === 'Normal') { stats.normal++; stats.rated++; }
+                else if (s.call_quality === 'Bad') { stats.bad++; stats.rated++; }
+                if (s.completed) stats.completed++;
+            });
+            return stats;
+        }
+
+        function getTrendData(currentSessions, periodDays, agentId) {
+            const currentStats = getPeriodStats(currentSessions);
+
+            let previousSessions = [];
+            if (periodDays && currentSessions.length > 0) {
+                let currentPeriodStartDate;
+                if (startDateFilter.value && !activeChartPeriod) {
+                    currentPeriodStartDate = new Date(startDateFilter.value + "T00:00:00.000Z");
+                } else if (activeChartPeriod) {
+                    const today = new Date();
+                    currentPeriodStartDate = new Date(today);
+                    currentPeriodStartDate.setDate(today.getDate() - periodDays + 1);
+                }
+
+
+                if (currentPeriodStartDate) {
+                    const prevPeriodEndDate = new Date(currentPeriodStartDate);
+                    prevPeriodEndDate.setDate(currentPeriodStartDate.getDate() - 1);
+
+                    const prevPeriodStartDate = new Date(prevPeriodEndDate);
+                    prevPeriodStartDate.setDate(prevPeriodEndDate.getDate() - periodDays + 1);
+
+                    previousSessions = allCallSessions.filter(s => {
+                        const sessionDate = new Date(s.start_time);
+                        const matchesAgent = agentId ? s.user_id === agentId : true;
+                        return matchesAgent && sessionDate >= prevPeriodStartDate && sessionDate <= prevPeriodEndDate;
+                    });
+                }
+            }
+            const previousStats = getPeriodStats(previousSessions);
+            return { current: currentStats, previous: previousStats };
+        }
+
+
+        function updateAnalyticsSummaryAndCharts(currentFilteredSessions) {
+            const selectedAgentId = userFilterDropdown.value;
+
+            const today = new Date();
+            const sevenDaysAgo = new Date(today);
+            sevenDaysAgo.setDate(today.getDate() - 7 + 1);
+
+            const last7DaysGlobalSessions = allCallSessions.filter(s => {
+                const sessionDate = new Date(s.start_time);
+                const matchesAgent = selectedAgentId ? s.user_id === selectedAgentId : true;
+                return matchesAgent && sessionDate >= sevenDaysAgo && sessionDate <= today;
+            });
+
+            const currentStatsForIndicator = getPeriodStats(currentFilteredSessions);
+            const last7DaysGlobalStats = getPeriodStats(last7DaysGlobalSessions);
+
+            const genQualityStatusEl = generalQualityIndicatorEl.querySelector('.status-text');
+            const genQualityIconEl = generalQualityIndicatorEl.querySelector('.status-icon');
+            const genQualityComparisonEl = generalQualityIndicatorEl.querySelector('.comparison-text');
+
+            let statusText = "Stable quality levels.";
+            let statusClass = "status-good";
+            let icon = "✅";
+            let comparisonDetails = "";
+
+            if (currentStatsForIndicator.total > 0 && last7DaysGlobalStats.total > 0) {
+                const currentBadRate = currentStatsForIndicator.rated > 0 ? (currentStatsForIndicator.bad / currentStatsForIndicator.rated) * 100 : 0;
+                const historicBadRate7Days = last7DaysGlobalStats.rated > 0 ? (last7DaysGlobalStats.bad / last7DaysGlobalStats.rated) * 100 : 0;
+
+                const diff = currentBadRate - historicBadRate7Days;
+                if (currentBadRate > 0 && diff > 5) {
+                    statusText = `Increased bad calls.`;
+                    statusClass = "status-danger";
+                    icon = "⚠️";
+                    comparisonDetails = `(${currentBadRate.toFixed(1)}% vs ${historicBadRate7Days.toFixed(1)}% in last 7 days)`;
+                } else if (diff < -5) {
+                    statusText = "Improved call quality!";
+                    statusClass = "status-success"; // This was status-good, changed to success
+                    icon = "🎉";
+                    comparisonDetails = `(${currentBadRate.toFixed(1)}% vs ${historicBadRate7Days.toFixed(1)}% in last 7 days)`;
+                } else if (currentBadRate > 20) {
+                    statusText = "High bad call rate.";
+                    statusClass = "status-warning";
+                    icon = "🟠";
+                    comparisonDetails = `(${currentBadRate.toFixed(1)}% currently)`;
+                } else {
+                     statusText = "Good quality maintained.";
+                     statusClass = "status-good";
+                     icon = "✅";
+                     comparisonDetails = `(Bad call rate: ${currentBadRate.toFixed(1)}%)`;
+                }
+            } else if (currentStatsForIndicator.total > 0) {
+                statusText = "Data available for current period.";
+                statusClass = "status-good";
+                icon = "📊";
+                const currentBadRate = currentStatsForIndicator.rated > 0 ? (currentStatsForIndicator.bad / currentStatsForIndicator.rated) * 100 : 0;
+                comparisonDetails = `(Current bad call rate: ${currentBadRate.toFixed(1)}%)`;
+
+            } else {
+                statusText = "Not enough data for trend.";
+                statusClass = "status-warning";
+                icon = "📊";
+                 comparisonDetails = "";
+            }
+            genQualityStatusEl.textContent = statusText;
+            genQualityStatusEl.className = `status-text ${statusClass}`;
+            genQualityIconEl.textContent = icon;
+            genQualityComparisonEl.textContent = comparisonDetails;
+
+
+            const scoreValueEl = averageQualityScoreDisplayEl.querySelector('.score-value');
+            if (currentStatsForIndicator.total > 0) {
+                let qualityPoints = 0;
+                if (currentStatsForIndicator.rated > 0) {
+                    qualityPoints = ((currentStatsForIndicator.good * 2 + currentStatsForIndicator.normal * 1 - currentStatsForIndicator.bad * 1.5) / (currentStatsForIndicator.rated * 2)) * 70;
+                }
+                const completionPoints = (currentStatsForIndicator.completed / currentStatsForIndicator.total) * 30;
+                let totalScore = Math.max(0, Math.min(100, qualityPoints + completionPoints));
+                scoreValueEl.textContent = totalScore.toFixed(0);
+            } else {
+                scoreValueEl.textContent = "N/A";
+            }
+
+            let trendDataForChart = null;
+            if (!groupQualityByScenario && activeChartPeriod) {
+                 trendDataForChart = getTrendData(currentFilteredSessions, activeChartPeriod, selectedAgentId);
+            }
+
+            renderQualityEvolutionChart(currentFilteredSessions, trendDataForChart);
+            renderBadQualityReasonsChart(currentFilteredSessions);
+        }
+
+
+        function renderQualityEvolutionChart(sessions, trendData) { // MODIFIED to update span in H3
+            if (!qualityEvolutionChartCanvas || typeof Chart === 'undefined') return;
+            const ctx = qualityEvolutionChartCanvas.getContext('2d');
+            const uiConfig = getChartUiConfig();
+
+            if (qualityEvolutionChartInstance) {
+                qualityEvolutionChartInstance.destroy();
+            }
+
+            const newTitle = groupQualityByScenario ? "Call Quality by Scenario" : "Quality Evolution Over Time";
+            const titleSpan = qualityEvolutionChartTitleEl.querySelector('span');
+            if (titleSpan) {
+                titleSpan.textContent = newTitle;
+            } else {
+                // Fallback if structure changed, though icon would be lost
+                qualityEvolutionChartTitleEl.textContent = newTitle;
+            }
+
+
+            if (groupQualityByScenario) {
+                const scenarioQuality = {};
+                sessions.forEach(s => {
+                    const scenario = s.call_sessions_scenario_id_fkey;
+                    if (!scenario || !scenario.id) return;
+                    if (!scenarioQuality[scenario.id]) {
+                        scenarioQuality[scenario.id] = { title: scenario.title, good: 0, normal: 0, bad: 0, total: 0 };
+                    }
+                    if (s.call_quality === 'Good') scenarioQuality[scenario.id].good++;
+                    else if (s.call_quality === 'Normal') scenarioQuality[scenario.id].normal++;
+                    else if (s.call_quality === 'Bad') scenarioQuality[scenario.id].bad++;
+                    scenarioQuality[scenario.id].total++;
+                });
+
+                const labels = Object.values(scenarioQuality).map(s => s.title.length > 20 ? s.title.substring(0, 18) + '...' : s.title);
+                const goodData = Object.values(scenarioQuality).map(s => s.good);
+                const normalData = Object.values(scenarioQuality).map(s => s.normal);
+                const badData = Object.values(scenarioQuality).map(s => s.bad);
+
+                qualityEvolutionChartInstance = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: labels,
+                        datasets: [
+                            { label: 'Good', data: goodData, backgroundColor: uiConfig.colors.line.good },
+                            { label: 'Normal', data: normalData, backgroundColor: uiConfig.colors.line.normal },
+                            { label: 'Bad', data: badData, backgroundColor: uiConfig.colors.line.bad }
+                        ]
+                    },
+                    options: {
+                        responsive: true, maintainAspectRatio: false,
+                        layout: { padding: uiConfig.layoutPadding },
+                        scales: {
+                            y: { beginAtZero: true, stacked: true, ticks: { font: { size: uiConfig.font.size -1 } } },
+                            x: { stacked: true, ticks: { font: { size: uiConfig.font.size -1 } } }
+                        },
+                        plugins: {
+                            legend: { position: 'top', labels: { font: { size: uiConfig.font.size } } },
+                            tooltip: {
+                                titleFont: { size: uiConfig.font.size },
+                                bodyFont: { size: uiConfig.font.size -1 },
+                                callbacks: {
+                                    label: function(context) {
+                                        let datasetLabel = context.dataset.label || '';
+                                        let value = context.raw;
+                                        let totalForBar = 0;
+                                        context.chart.data.datasets.forEach(dataset => {
+                                            if (dataset.data && dataset.data.length > context.dataIndex) {
+                                                totalForBar += dataset.data[context.dataIndex];
+                                            }
+                                        });
+                                        let label = `${datasetLabel}: ${value}`;
+                                        if (totalForBar > 0) {
+                                            const percentage = (value / totalForBar * 100).toFixed(1);
+                                            label += ` (${percentage}% of scenario total)`;
+                                        }
+                                        return label;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+
+            } else {
+                const dataByDate = {};
+                sessions.forEach(session => {
+                    if (!session.start_time) return;
+                    const sessionDateEgypt = new Date(session.start_time).toLocaleDateString('en-CA', { timeZone: EGYPT_TIMEZONE });
+
+                    if (!dataByDate[sessionDateEgypt]) {
+                        dataByDate[sessionDateEgypt] = { Good: 0, Normal: 0, Bad: 0, total: 0, dateObj: new Date(sessionDateEgypt + "T00:00:00") };
+                    }
+                    if (session.call_quality === 'Good') dataByDate[sessionDateEgypt].Good++;
+                    else if (session.call_quality === 'Normal') dataByDate[sessionDateEgypt].Normal++;
+                    else if (session.call_quality === 'Bad') dataByDate[sessionDateEgypt].Bad++;
+                    dataByDate[sessionDateEgypt].total++;
+                });
+
+                const sortedDates = Object.keys(dataByDate).sort((a, b) => dataByDate[a].dateObj - dataByDate[b].dateObj);
+
+                const labels = sortedDates.map(date => formatDateTimeEgypt(dataByDate[date].dateObj, { day: '2-digit', month: 'short' }));
+                const goodData = sortedDates.map(date => dataByDate[date].Good);
+                const normalData = sortedDates.map(date => dataByDate[date].Normal);
+                const badData = sortedDates.map(date => dataByDate[date].Bad);
+
+                const legendLabels = { good: 'Good Calls', normal: 'Normal Calls', bad: 'Bad Calls'};
+                if (trendData && trendData.previous.total > 0 && trendData.current.total > 0) {
+                    ['good', 'normal', 'bad'].forEach(qType => {
+                        const currentVal = trendData.current[qType];
+                        const prevVal = trendData.previous[qType];
+                        let trendClass = 'neutral';
+                        let percentageChange = 0;
+                        if (prevVal > 0) {
+                            percentageChange = ((currentVal - prevVal) / prevVal) * 100;
+                            if (qType === 'bad') {
+                                if (percentageChange > 5) trendClass = 'down';
+                                else if (percentageChange < -5) trendClass = 'up';
+                            } else {
+                                if (percentageChange > 5) trendClass = 'up';
+                                else if (percentageChange < -5) trendClass = 'down';
+                            }
+                        } else if (currentVal > 0) {
+                             trendClass = (qType === 'bad') ? 'down' : 'up';
+                             percentageChange = 100;
+                        }
+
+                        if (trendClass !== 'neutral') {
+                           legendLabels[qType] += ` <span class="trend-arrow ${trendClass}">${percentageChange.toFixed(0)}%</span>`;
+                        } else {
+                           legendLabels[qType] += ` <span class="trend-arrow neutral"></span>`;
+                        }
+                    });
+                }
+
+
+                qualityEvolutionChartInstance = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: labels,
+                        datasets: [
+                            { label: legendLabels.good, data: goodData, borderColor: uiConfig.colors.line.good, backgroundColor: uiConfig.colors.line.goodBg, tension: 0.1, fill: false, borderWidth: 2 },
+                            { label: legendLabels.normal, data: normalData, borderColor: uiConfig.colors.line.normal, backgroundColor: uiConfig.colors.line.normalBg, tension: 0.1, fill: false, borderWidth: 2 },
+                            { label: legendLabels.bad, data: badData, borderColor: uiConfig.colors.line.bad, backgroundColor: uiConfig.colors.line.badBg, tension: 0.1, fill: false, borderWidth: 2 }
+                        ]
+                    },
+                    options: {
+                        responsive: true, maintainAspectRatio: false,
+                        layout: { padding: uiConfig.layoutPadding },
+                        scales: {
+                            y: { beginAtZero: true, suggestedMax: Math.max(...goodData, ...normalData, ...badData, 5) + 1, ticks: { font: { size: uiConfig.font.size -1 } } },
+                            x: { ticks: { font: { size: uiConfig.font.size -1 } } }
+                        },
+                        plugins: {
+                            legend: {
+                                position: 'top',
+                                labels: {
+                                    font: { size: uiConfig.font.size },
+                                    usePointStyle: true,
+                                    generateLabels: function(chart) {
+                                        const original = Chart.defaults.plugins.legend.labels.generateLabels;
+                                        const labels = original.call(this, chart);
+                                        labels.forEach(label => {
+                                            let cleanLabelKey = chart.data.datasets[label.datasetIndex].label.split(" <span")[0].toLowerCase().replace(' calls','');
+                                            if(legendLabels[cleanLabelKey]){
+                                                label.text = legendLabels[cleanLabelKey];
+                                            }
+                                        });
+                                        return labels;
+                                    }
+                                }
+                            },
+                            tooltip: {
+                                titleFont: { size: uiConfig.font.size },
+                                bodyFont: { size: uiConfig.font.size -1 },
+                                callbacks: {
+                                    label: function(context) {
+                                        let label = context.dataset.label || '';
+                                        if (label.includes("<span")) {
+                                            label = label.substring(0, label.indexOf("<span")).trim();
+                                        }
+                                        if (label) { label += ': '; }
+                                        const count = context.raw;
+                                        label += count;
+                                        let totalForPoint = 0;
+                                        context.chart.data.datasets.forEach(dataset => {
+                                            if (dataset.data && dataset.data.length > context.dataIndex) {
+                                                 totalForPoint += dataset.data[context.dataIndex];
+                                            }
+                                        });
+                                        if (totalForPoint > 0) {
+                                            const percentage = (count / totalForPoint * 100).toFixed(1);
+                                            label += ` (${percentage}% of day's total)`;
+                                        }
+                                        return label;
+                                    }
+                                }
+                            },
+                            htmlLegend: {}
+                        }
+                    }
+                });
+            }
+        }
+
+        function renderBadQualityReasonsChart(sessions) { // MODIFIED "No data" and tip messages
+            if (!badQualityReasonsChartCanvas || typeof Chart === 'undefined') return;
+            const ctx = badQualityReasonsChartCanvas.getContext('2d');
+            const uiConfig = getChartUiConfig();
+
+            if (badQualityReasonsChartInstance) {
+                badQualityReasonsChartInstance.destroy();
+            }
+
+            const badSessions = sessions.filter(s => s.call_quality === 'Bad' && s.quality_reason);
+            const reasonCounts = {};
+            badSessions.forEach(session => {
+                const reason = (session.quality_reason || "Unspecified").trim();
+                reasonCounts[reason] = (reasonCounts[reason] || 0) + 1;
+            });
+
+            const labels = Object.keys(reasonCounts);
+            const data = Object.values(reasonCounts);
+
+            if (labels.length === 0) {
+                badQualityReasonsChartCanvas.style.display = 'none';
+                noBadReasonsMessageEl.style.display = 'flex';
+                noBadReasonsMessageEl.innerHTML = "📭 No bad call reasons available for the current selection.";
+                qualityTipTextEl.innerHTML = "📭 No specific bad call reasons identified in the current selection.";
+                return;
+            } else {
+                badQualityReasonsChartCanvas.style.display = 'block';
+                noBadReasonsMessageEl.style.display = 'none';
+
+                const sortedReasons = Object.entries(reasonCounts).sort(([,a],[,b]) => b-a);
+                if (sortedReasons.length > 0) {
+                    const topReason = sortedReasons[0][0];
+                    // Made tip text stronger/clearer with HTML
+                    qualityTipTextEl.innerHTML = `💡 Most common bad call reason is "<strong>${topReason}</strong>". Consider reviewing processes or training related to this.`;
+                } else {
+                    qualityTipTextEl.innerHTML = "💡 Review call details for improvement areas.";
+                }
+            }
+
+            const backgroundColors = uiConfig.colors.pie.backgrounds;
+            const borderColors = uiConfig.colors.pie.borders;
+
+            badQualityReasonsChartInstance = new Chart(ctx, {
+                type: 'pie',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Bad Call Reasons', data: data,
+                        backgroundColor: backgroundColors,
+                        borderColor: borderColors, borderWidth: 1.5
+                    }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    layout: { padding: uiConfig.layoutPadding },
+                    plugins: {
+                        legend: {
+                            position: 'right',
+                            labels: { boxWidth: 15, padding: 15, font: { size: uiConfig.font.size } }
+                        },
+                        tooltip: {
+                            titleFont: { size: uiConfig.font.size },
+                            bodyFont: { size: uiConfig.font.size -1 },
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.label || '';
+                                    if (label) { label += ': '; }
+                                    if (context.parsed !== null) {
+                                        const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                        const percentage = total > 0 ? (context.raw / total * 100).toFixed(1) + '%' : '0%';
+                                        label += context.raw + ' (' + percentage + ')';
+                                    }
+                                    return label;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        // --- End of Analytics Functions ---
+
+        function setupEventListeners() {
+            logoutButton.addEventListener('click', async () => {
+                if (liveCallsChannel) {
+                    supabase.removeChannel(liveCallsChannel);
+                    liveCallsChannel = null;
+                }
+                localStorage.removeItem('elevoCoreUserData');
+                localStorage.removeItem(FILTER_STORAGE_KEY);
+                const { error } = await supabase.auth.signOut();
+                if (error) console.error("Logout error:", error);
+                window.location.replace("login.html");
+            });
+
+            [userFilterDropdown, qualityFilter, startDateFilter, endDateFilter].forEach(el => {
+                el.addEventListener('change', () => {
+                    if (!activeChartPeriod) {
+                         applyFiltersAndRender();
+                    }
+                });
+            });
+            searchInput.addEventListener('input', () => {
+                clearTimeout(filterTimeoutId);
+                filterTimeoutId = setTimeout(applyFiltersAndRender, 500);
+            });
+            resetFiltersBtn.addEventListener('click', () => {
+                userFilterDropdown.value = '';
+                searchInput.value = '';
+                qualityFilter.value = '';
+                startDateFilter.value = '';
+                endDateFilter.value = '';
+
+                activeChartPeriod = null;
+                groupQualityByScenario = false;
+                groupQualityByScenarioToggle.checked = false;
+                durationFilterButtons.forEach(btn => btn.classList.remove('active-period'));
+                clearChartPeriodBtn.classList.add('active-period');
+                startDateFilter.disabled = false;
+                endDateFilter.disabled = false;
+
+                localStorage.removeItem(FILTER_STORAGE_KEY);
+                applyFiltersAndRender();
+            });
+            exportDataBtn.addEventListener('click', exportFilteredDataToCSV);
+            exportDataXLSXBtn.addEventListener('click', exportFilteredDataToXLSX);
+
+            durationFilterButtons.forEach(button => {
+                button.addEventListener('click', () => {
+                    activeChartPeriod = parseInt(button.dataset.period);
+                    durationFilterButtons.forEach(btn => btn.classList.remove('active-period'));
+                    button.classList.add('active-period');
+                    clearChartPeriodBtn.classList.remove('active-period');
+                    applyFiltersAndRender();
+                });
+            });
+
+            clearChartPeriodBtn.addEventListener('click', () => {
+                activeChartPeriod = null;
+                durationFilterButtons.forEach(btn => btn.classList.remove('active-period'));
+                clearChartPeriodBtn.classList.add('active-period');
+                startDateFilter.disabled = false;
+                endDateFilter.disabled = false;
+                applyFiltersAndRender();
+            });
+
+            groupQualityByScenarioToggle.addEventListener('change', (e) => {
+                groupQualityByScenario = e.target.checked;
+                applyFiltersAndRender();
+            });
+
+            document.addEventListener('themeChanged', () => {
+                setChartJsDefaults();
+                applyFiltersAndRender();
+            });
+        }
+
+        function exportFilteredDataToCSV() {
+            if (filteredCallSessions.length === 0) {
+                alert("No data to export based on current filters.");
+                return;
+            }
+            const headers = ["Agent Name", "Agent Email", "Scenario", "Start Time (Egypt)", "Duration (s)", "Completed", "Quality", "Reason"];
+            const rows = filteredCallSessions.map(session => {
+                const agent = allAgents.find(a => a.id === session.user_id);
+                return [
+                    agent?.name || 'Unknown',
+                    agent?.email || 'N/A',
+                    session.call_sessions_scenario_id_fkey?.title || 'N/A',
+                    formatDateForCSVEgypt(session.start_time),
+                    session.duration || 0,
+                    session.completed ? 'Yes' : 'No',
+                    session.call_quality || 'N/A',
+                    session.quality_reason || '-'
+                ].map(field => `"${String(field).replace(/"/g, '""')}"`);
+            });
+
+            const csvContent = [headers.join(','), ...rows.map(row => row.join(','))].join('\n');
+            const blob = new Blob(["\uFEFF"+csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            const url = URL.createObjectURL(blob);
+            link.setAttribute("href", url);
+            link.setAttribute("download", `elevo_dashboard_export_${new Date().toISOString().slice(0,10)}.csv`);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        }
+
+        function exportFilteredDataToXLSX() {
+            if (typeof XLSX === 'undefined') {
+                alert("Excel export library (SheetJS) could not be loaded. Please check your internet connection or try refreshing the page.");
+                console.error("XLSX (SheetJS) is not defined. Ensure the library is loaded.");
+                return;
+            }
+            if (filteredCallSessions.length === 0) {
+                alert("No data to export based on current filters.");
+                return;
+            }
+
+            const headers = ["Agent Name", "Agent Email", "Scenario", "Start Time (Egypt)", "Duration (s)", "Completed", "Quality", "Reason"];
+            const dataForExport = filteredCallSessions.map(session => {
+                const agent = allAgents.find(a => a.id === session.user_id);
+                return {
+                    "Agent Name": agent?.name || 'Unknown',
+                    "Agent Email": agent?.email || 'N/A',
+                    "Scenario": session.call_sessions_scenario_id_fkey?.title || 'N/A',
+                    "Start Time (Egypt)": formatDateForCSVEgypt(session.start_time),
+                    "Duration (s)": session.duration || 0,
+                    "Completed": session.completed ? 'Yes' : 'No',
+                    "Quality": session.call_quality || 'N/A',
+                    "Reason": session.quality_reason || '-'
+                };
+            });
+
+            const worksheet = XLSX.utils.json_to_sheet(dataForExport);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "CallSessions");
+
+            const colWidths = headers.map(header => {
+                 const maxLength = Math.max(
+                    header.length,
+                    ...dataForExport.map(row => String(row[header] === null || typeof row[header] === 'undefined' ? '' : row[header]).length)
+                );
+                return { wch: maxLength + 2 };
+            });
+            worksheet['!cols'] = colWidths;
+
+            XLSX.writeFile(workbook, `elevo_dashboard_export_${new Date().toISOString().slice(0,10)}.xlsx`);
+        }
+
+        async function setupLiveCallMonitoring() { 
+            if (!supabase) return;
+            await fetchAndRenderLiveCalls();
+
+            if (liveCallsChannel) {
+                supabase.removeChannel(liveCallsChannel);
+            }
+
+            liveCallsChannel = supabase
+                .channel('public:call_sessions:live')
+                .on('postgres_changes',
+                    { event: '*', schema: 'public', table: 'call_sessions' },
+                    async (payload) => {
+                        console.log('Realtime: Call session change detected', payload);
+                        await fetchAndRenderLiveCalls();
+
+                        const { data: sessionsData, error: sessionsError } = await supabase
+                            .from('call_sessions')
+                            .select(`
+                                *,
+                                call_sessions_scenario_id_fkey(id, title)
+                            `)
+                            .order('start_time', { ascending: false });
+                        if (!sessionsError) {
+                            allCallSessions = sessionsData || [];
+                            applyFiltersAndRender();
+                        } else {
+                            console.error("Error reloading all sessions after live update:", sessionsError);
+                        }
+                    }
+                )
+                .subscribe((status, err) => {
+                    if (status === 'SUBSCRIBED') {
+                        console.log('Subscribed to live call updates!');
+                    } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+                        console.error('Live call subscription error:', status, err);
+                        noLiveCallsMessage.innerHTML = "⚠️ Error connecting to live updates.";
+                        noLiveCallsMessage.style.display = 'block';
+                    } else if (status === 'CLOSED') {
+                        console.log('Live call subscription closed.');
+                    }
+                });
+        }
+
+        async function fetchAndRenderLiveCalls() {
+             try {
+                const { data: liveSessions, error } = await supabase
+                    .from('call_sessions')
+                    .select('id, user_id, scenario_id, start_time, agent_name, agent_email, call_sessions_scenario_id_fkey(title)')
+                    .is('end_time', null)
+                    .order('start_time', { ascending: true });
+
+                if (error) {
+                    console.error("❌ Live call fetch error:", error.message);
+                    throw error;
+                }
+
+                liveCallsContainer.innerHTML = '';
+                
+                // NEW: Threshold for long call alert (10 minutes in milliseconds)
+                const LONG_CALL_THRESHOLD = 10 * 60 * 1000;
+
+                if (liveSessions && liveSessions.length > 0) {
+                    noLiveCallsMessage.style.display = 'none';
+                    liveSessions.forEach(call => {
+                        const agentName = call.agent_name || call.agent_email || `Agent ID: ${call.user_id.substring(0,8)}`;
+                        const scenarioName = call.call_sessions_scenario_id_fkey?.title || 'Loading scenario...';
+                        const startTimeFormatted = formatTimeEgypt(call.start_time);
+
+                        const callDiv = document.createElement('div');
+                        callDiv.className = 'live-call-item';
+
+                        const callDurationMs = Date.now() - new Date(call.start_time).getTime();
+                        let longCallIndicatorHTML = '';
+                        
+                        // NEW: Check if the call duration exceeds the threshold
+                        if (callDurationMs > LONG_CALL_THRESHOLD) {
+                            callDiv.classList.add('long-call-alert');
+                            longCallIndicatorHTML = `<span class="long-call-indicator">(Long Call!)</span>`;
+                        }
+
+                        const durationMinutes = Math.floor(callDurationMs / 60000);
+                        const durationSeconds = Math.floor((callDurationMs % 60000) / 1000);
+                        const liveDurationStr = `${durationMinutes}m ${durationSeconds}s`;
+
+                        callDiv.innerHTML = `
+                            <div class="live-call-item-agent">${agentName} ${longCallIndicatorHTML}</div>
+                            <div class="live-call-item-scenario">Scenario: ${scenarioName}</div>
+                            <div class="live-call-item-time">Started: ${startTimeFormatted} (Now: ${liveDurationStr})</div>
+                        `;
+                        liveCallsContainer.appendChild(callDiv);
+                    });
+                } else {
+                    noLiveCallsMessage.innerHTML = "📭 No active calls at the moment.";
+                    noLiveCallsMessage.style.display = 'block';
+                }
+            } catch (error) {
+                console.error("Error fetching live calls:", error);
+                noLiveCallsMessage.innerHTML = "⚠️ Failed to load live calls data.";
+                noLiveCallsMessage.style.display = 'block';
+                liveCallsContainer.innerHTML = '';
+            }
+        }
+
+        initializeDashboard();
+        console.log("Dashboard.html script (User Feedback v1 Implemented) loaded and initialized.");
+    </script>
+</body>
+</html>

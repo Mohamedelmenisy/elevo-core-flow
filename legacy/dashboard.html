@@ -1,0 +1,1065 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Course Dashboard | Leadership & Coaching</title>
+    <!-- Favicon Links -->
+    <link rel="apple-touch-icon" sizes="180x180" href="https://cdn-icons-png.flaticon.com/512/3281/3281289.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="https://cdn-icons-png.flaticon.com/512/3281/3281289.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="https://cdn-icons-png.flaticon.com/512/3281/3281289.png">
+    <!-- Supabase JS Library -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- Chart.js Library -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <!-- Feather Icons -->
+     <script src="https://unpkg.com/feather-icons"></script>
+
+    <style>
+        /* --- Base Styles (Keep from previous files) --- */
+        :root {
+            --primary-color: #3b82f6; /* Blue-500 */
+            --primary-darker: #2563eb; /* Blue-600 */
+            --secondary-color: #10b981; /* Emerald-500 */
+            --secondary-darker: #059669; /* Emerald-600 */
+            --accent-color: #f59e0b; /* Amber-500 */
+            --accent-darker: #d97706; /* Amber-600 */
+            --text-dark: #1f2937;
+            --text-medium: #4b5563;
+            --text-light: #6b7280;
+            --bg-light: #f9fafb; /* Light Gray */
+            --bg-white: #ffffff;
+            --bg-dark: #111827; /* Dark Gray for Header/Footer */
+            --border-color: #e5e7eb;
+            --error-red: #ef4444;
+            --success-green: #22c55e;
+            --success-bg-light: #f0fdf4;
+            --success-border: #bbf7d0;
+            --warn-yellow: #f59e0b;
+            --info-blue: #3b82f6;
+            --info-bg-light: #eff6ff;
+            --info-border: #bfdbfe;
+            --admin-bg: #f1f5f9; /* Slightly different bg for admin */
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        html { scroll-behavior: smooth; }
+        body {
+            background-color: var(--bg-light);
+            margin: 0; padding: 0; line-height: 1.6; color: var(--text-medium);
+            display: flex; flex-direction: column; min-height: 100vh; font-size: 16px;
+        }
+        main { flex-grow: 1; }
+        .container { max-width: 72rem; margin: 2.5rem auto; padding: 0 1.5rem; }
+
+        /* --- Header, User Bar, Footer (Same Styles) --- */
+        .header { background-color: var(--bg-dark); color: white; padding: 1.125rem 0; text-align: center; font-size: 1.625rem; font-weight: 600; box-shadow: 0 3px 12px rgba(0, 0, 0, 0.1); }
+        .user-bar { background-color: #374151; padding: 0.625rem 1.875rem; display: flex; justify-content: space-between; align-items: center; color: #e5e7eb; font-size: 0.9375rem; }
+        .user-info { display: flex; align-items: center; gap: 0.9375rem; }
+        .user-info svg, .user-info i { opacity: 0.8; margin-right: 0.5rem; color: #9ca3af; width: 20px; height: 20px; }
+        .user-details { display: flex; flex-direction: column; text-align: left; }
+        .user-name { font-weight: 600; font-size: 0.9375rem; color: #f9fafb; }
+        .user-email { font-size: 0.8125rem; opacity: 0.8; }
+        .logout-button { background-color: var(--error-red); color: white; border: none; padding: 0.5rem 1rem; border-radius: 0.375rem; cursor: pointer; font-weight: 500; transition: all 0.3s; display: flex; align-items: center; gap: 0.375rem; font-size: 0.9375rem; }
+        .logout-button svg, .logout-button i { margin-right: 0.375rem; width: 16px; height: 16px;}
+        .logout-button:hover { background-color: #dc2626; transform: translateY(-1px); }
+        .logout-button:active { transform: translateY(0); }
+        .footer { text-align: center; padding: 1.5625rem 1.875rem; background: var(--bg-dark); color: rgba(229, 231, 235, 0.8); margin-top: 3.125rem; font-size: 0.875rem; display: flex; justify-content: center; align-items: center; flex-wrap: wrap; gap: 1.5625rem; border-top: 1px solid #374151; }
+        .footer-text { text-align: center; }
+        .social-icons { display: flex; gap: 1.25rem; align-items: center; }
+        .social-icons a { color: rgba(229, 231, 235, 0.8); text-decoration: none; display: inline-block; transition: transform 0.3s ease, color 0.3s ease; }
+        .social-icons a:hover { color: #ffffff; transform: translateY(-2px); }
+        .social-icons svg { width: 1.5rem; height: 1.5rem; fill: currentColor; vertical-align: middle; }
+
+        /* --- Dashboard Specific Styles --- */
+        h2 { color: var(--text-dark); font-weight: 700; margin-bottom: 1rem; font-size: 2rem; text-align: center; }
+        h3 { margin: 2rem 0 1rem; font-size: 1.5rem; color: var(--text-dark); border-bottom: 2px solid var(--primary-color); padding-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;}
+        h3 i { width: 24px; height: 24px; } /* Icon size for h3 */
+        .dashboard-intro { text-align: center; font-size: 1.1rem; color: var(--text-medium); margin-bottom: 2.5rem; max-width: 600px; margin-left: auto; margin-right: auto; }
+        .modules-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem; }
+        .module-card { background-color: var(--bg-white); border-radius: 0.75rem; padding: 1.5rem 1.75rem; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.07); border: 1px solid var(--border-color); display: flex; flex-direction: column; transition: transform 0.2s ease-out, box-shadow 0.2s ease-out; border-left: 5px solid var(--primary-color); }
+        .module-card:hover { transform: translateY(-3px); box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1); }
+        .module-card h4 { font-size: 1.25rem; color: var(--text-dark); margin-bottom: 0.75rem; font-weight: 600; display: flex; align-items: center; gap: 0.5rem; }
+        .module-card h4 i { color: var(--primary-color); width: 20px; height: 20px;}
+        .module-card p { font-size: 0.95rem; color: var(--text-medium); flex-grow: 1; margin-bottom: 1.25rem; }
+        .status-badge { display: inline-block; padding: 0.25rem 0.75rem; font-size: 0.75rem; font-weight: 600; border-radius: 999px; margin-bottom: 1rem; text-transform: uppercase; letter-spacing: 0.5px; align-self: flex-start; }
+        .status-badge.not-started { background-color: #e5e7eb; color: #4b5563; }
+        .status-badge.in-progress { background-color: var(--info-bg-light); color: var(--info-blue); border: 1px solid var(--info-border); }
+        .status-badge.completed { background-color: var(--success-bg-light); color: #166534; border: 1px solid var(--success-border); }
+        .module-action-button { background: linear-gradient(90deg, var(--secondary-color), var(--secondary-darker)); color: white; border: none; padding: 0.6rem 1.2rem; font-size: 0.9rem; font-weight: 500; border-radius: 0.5rem; cursor: pointer; transition: all 0.3s ease; text-decoration: none; text-align: center; display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; }
+        .module-action-button i { width: 16px; height: 16px; }
+        .module-action-button:hover:not(:disabled) { background: linear-gradient(90deg, var(--secondary-darker), #047857); box-shadow: 0 4px 10px rgba(16, 185, 129, 0.2); transform: translateY(-2px); }
+        .module-action-button:disabled { background: #d1d5db; color: #6b7280; cursor: not-allowed; opacity: 0.7; }
+        .module-card.locked { border-left-color: #d1d5db; opacity: 0.7; background-color: #f3f4f6; }
+        .module-card.locked:hover { transform: none; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.07); }
+
+        /* --- Admin Section Styles --- */
+        #adminDashboard { background-color: var(--admin-bg); padding: 2rem; margin-top: 3rem; border-radius: 0.75rem; border: 1px solid var(--border-color); }
+        #adminDashboard h3 { border-color: var(--accent-color); color: var(--text-dark); }
+        #adminDashboard h4 { margin: 1.5rem 0 0.8rem; font-size: 1.3rem; color: var(--text-dark); font-weight: 600; display: flex; align-items: center; gap: 0.5rem; flex-grow: 1;} /* Adjusted for flex */
+        #adminDashboard h4 i { color: var(--accent-color); width: 20px; height: 20px; flex-shrink: 0; }
+        .admin-section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; flex-wrap: wrap; gap: 1rem;} /* NEW WRAPPER */
+        .admin-section { margin-bottom: 2.5rem; }
+
+        .admin-controls { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem; }
+        .filters { display: flex; gap: 1rem; flex-wrap: wrap; align-items: center;}
+        .filters label { font-weight: 500; color: var(--text-medium); margin-right: 0.25rem;}
+        .filters select, .filters input[type="text"] { padding: 0.5rem 0.8rem; border: 1px solid #ccc; border-radius: 0.375rem; font-size: 0.9rem; height: 38px; }
+        .filters input[type="text"] { min-width: 180px; }
+        .filters button { background-color: var(--accent-color); color: white; border: none; padding: 0.5rem 1rem; border-radius: 0.375rem; cursor: pointer; transition: background-color 0.3s; font-weight: 500; height: 38px; display: inline-flex; align-items: center; gap: 0.3rem;}
+        .filters button:hover { background-color: var(--accent-darker); }
+        .filters button i { width: 14px; height: 14px;}
+
+        /* Styles for ALL Export Buttons */
+        .export-button { background-color: var(--primary-color); color: white; border: none; padding: 0.5rem 1rem; border-radius: 0.375rem; cursor: pointer; transition: background-color 0.3s; font-weight: 500; height: 38px; display: inline-flex; align-items: center; gap: 0.3rem; text-decoration: none; }
+        .export-button:hover { background-color: var(--primary-darker); }
+        .export-button i { width: 16px; height: 16px; }
+        .export-button.small { padding: 0.4rem 0.8rem; height: 34px; font-size: 0.85rem; gap: 0.25rem;} /* Optional smaller size */
+        .export-button.small i { width: 14px; height: 14px; }
+
+
+        /* Corrected Chart Layout CSS */
+        .charts-container { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 2rem; margin-bottom: 2rem; background-color: var(--bg-white); padding: 1.5rem; border-radius: 0.5rem; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+        .chart-box { position: relative; height: 260px; display: flex; flex-direction: column; }
+        .chart-box h5 { text-align: center; margin-bottom: 0.8rem; font-size: 1.05rem; color: var(--text-dark); padding-bottom: 5px; flex-shrink: 0; }
+        .chart-box canvas { width: 100%; flex-grow: 1; min-height: 0; }
+
+        .table-container { overflow-x: auto; background-color: var(--bg-white); border-radius: 0.5rem; box-shadow: 0 2px 10px rgba(0,0,0,0.05); padding: 0.5rem; }
+        .admin-table { width: 100%; border-collapse: collapse; margin-top: 1rem; font-size: 0.9rem; }
+        .admin-table th, .admin-table td { padding: 0.8rem 1rem; text-align: left; border-bottom: 1px solid var(--border-color); white-space: nowrap; }
+        .admin-table th { background-color: #f3f4f6; font-weight: 600; color: var(--text-dark); }
+        .admin-table tbody tr:hover { background-color: #f9fafb; }
+        .admin-table td { color: var(--text-medium); }
+        /* Styles for status badges in admin tables */
+        .admin-status-badge { padding: 0.2rem 0.6rem; border-radius: 0.25rem; font-weight: 500; font-size: 0.8rem; text-transform: capitalize; }
+        .admin-status-badge.completed, .admin-status-badge.passed, .admin-status-badge.true { background-color: var(--success-bg-light); color: #15803d; border: 1px solid var(--success-border);}
+        .admin-status-badge.failed, .admin-status-badge.needs-support, .admin-status-badge.false { background-color: #fef2f2; color: #b91c1c; border: 1px solid #fecaca;}
+        .admin-status-badge.in-progress { background-color: var(--info-bg-light); color: var(--info-blue); border: 1px solid var(--info-border); }
+        .admin-status-badge.pending, .admin-status-badge.null, .admin-status-badge.unknown { background-color: #fffbeb; color: #b45309; border: 1px solid #fde68a;}
+
+        /* Style for truncated content (like answers/feedback) */
+        .truncated-content { max-width: 250px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: inline-block; vertical-align: middle; }
+        .view-details-btn { background: none; border: none; color: var(--primary-color); cursor: pointer; padding: 2px; }
+        .view-details-btn:hover { color: var(--primary-darker); }
+        .view-details-btn i { width: 16px; height: 16px; vertical-align: middle;}
+
+        /* Pagination Styles */
+        .pagination-container { display: flex; justify-content: center; align-items: center; gap: 0.5rem; margin-top: 1.5rem; padding: 0.5rem; }
+        .pagination-button { background-color: var(--bg-white); border: 1px solid var(--border-color); color: var(--primary-color); padding: 0.4rem 0.8rem; border-radius: 0.375rem; cursor: pointer; transition: background-color 0.2s, color 0.2s; font-weight: 500; }
+        .pagination-button:hover:not(:disabled) { background-color: var(--info-bg-light); border-color: var(--info-border); }
+        .pagination-button:disabled { color: #9ca3af; cursor: not-allowed; background-color: #f3f4f6; }
+        .pagination-info { font-size: 0.9rem; color: var(--text-light); }
+
+        /* Modal Styles */
+        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.5); padding-top: 60px; animation: fadeInModal 0.3s ease-out; }
+         @keyframes fadeInModal { from { opacity: 0; } to { opacity: 1; } }
+        .modal-content { background-color: #fefefe; margin: 5% auto; padding: 25px 30px; border: 1px solid #888; width: 80%; max-width: 700px; border-radius: 0.5rem; box-shadow: 0 5px 15px rgba(0,0,0,0.2); position: relative; animation: slideInModal 0.4s ease-out; }
+          @keyframes slideInModal { from { transform: translateY(-30px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        .modal-close { color: #aaa; position: absolute; top: 10px; right: 20px; font-size: 28px; font-weight: bold; cursor: pointer; line-height: 1; }
+        .modal-close:hover, .modal-close:focus { color: black; text-decoration: none; }
+        .modal h4 { margin-bottom: 1.5rem; color: var(--text-dark); border-bottom: 1px solid var(--border-color); padding-bottom: 0.8rem; }
+        .detail-item { margin-bottom: 1rem; }
+        .detail-item strong { display: block; color: var(--text-dark); margin-bottom: 0.3rem; }
+        .detail-item span { color: var(--text-medium); font-size: 0.95rem; white-space: pre-wrap; word-wrap: break-word; }
+        .detail-item span.correct { color: var(--success-green); font-weight: bold; }
+        .detail-item span.incorrect { color: var(--error-red); font-weight: bold; }
+
+        #adminRestrictionMsg { background-color: var(--info-bg-light); color: var(--info-blue); border: 1px solid var(--info-border); padding: 1rem 1.5rem; border-radius: 0.5rem; margin-top: 2rem; text-align: center; font-weight: 500; display: none; align-items: center; justify-content: center; gap: 0.75rem; }
+        #adminRestrictionMsg i { width: 20px; height: 20px; }
+        .loading-indicator { text-align: center; padding: 2rem; font-size: 1.1rem; color: var(--text-medium); }
+        .loading-indicator-small { text-align: center; padding: 1rem; font-size: 0.9rem; color: var(--text-light); }
+
+        /* --- Course Timeline Styles (Keep as is) --- */
+        #courseTimeline { margin-top: 3rem; }
+        #courseTimeline h3 { border-color: var(--secondary-color); /* Different border color for distinction */ }
+        .timeline-container { max-width: 800px; margin: 2rem auto; position: relative; padding: 0 1rem; }
+        .timeline-list { list-style: none; padding: 0; margin: 0; position: relative; }
+        .timeline-list::before { content: ''; position: absolute; top: 0; bottom: 0; left: 20px; width: 3px; background-color: var(--border-color); border-radius: 2px; }
+        .timeline-item { margin-bottom: 2.5rem; position: relative; padding-left: 55px; }
+        .timeline-item:last-child { margin-bottom: 0; }
+        .timeline-marker { position: absolute; left: 12px; top: 4px; width: 18px; height: 18px; background-color: var(--bg-white); border: 3px solid var(--secondary-color); border-radius: 50%; z-index: 1; }
+        .timeline-content { background-color: var(--bg-white); padding: 1rem 1.5rem; border-radius: 0.5rem; border: 1px solid var(--border-color); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05); position: relative; }
+        .timeline-content h4 { font-size: 1.15rem; color: var(--text-dark); margin: 0 0 0.5rem 0; font-weight: 600; }
+        .timeline-content p { font-size: 0.95rem; color: var(--text-medium); margin: 0; line-height: 1.5; }
+        .timeline-week { position: absolute; top: -10px; left: -45px; background-color: var(--secondary-color); color: white; padding: 2px 8px; font-size: 0.75rem; font-weight: bold; border-radius: 4px; z-index: 2; }
+        .timeline-content::before { content: ""; position: absolute; top: 10px; left: -10px; width: 0; height: 0; border-style: solid; border-width: 8px 10px 8px 0; border-color: transparent var(--bg-white) transparent transparent; filter: drop-shadow(-1px 0px 0px var(--border-color)); }
+
+        /* --- Responsive Adjustments --- */
+        @media (max-width: 768px) {
+            h2 { font-size: 1.8rem; } h3 { font-size: 1.3rem; }
+            #adminDashboard h4 { font-size: 1.2rem; }
+            .container { padding: 0 1rem; } .user-bar { padding: 0.5rem 1rem; font-size: 0.85rem; }
+            .logout-button { padding: 0.4rem 0.8rem; font-size: 0.85rem;}
+             .admin-controls { flex-direction: column; align-items: stretch; }
+             .filters { flex-direction: column; align-items: stretch; width: 100%;}
+            .filters select, .filters input, .filters button { width: 100%; margin-bottom: 0.5rem;}
+             /* Adjust export button in admin controls for stacking */
+             #assessmentResultsSection .admin-controls .export-button { width: 100%; margin-top: 0.5rem; }
+             .admin-section-header { flex-direction: column; align-items: flex-start; gap: 0.5rem;} /* Stack header and button */
+             .admin-section-header .export-button { align-self: flex-start; } /* Align button left */
+
+            .charts-container { grid-template-columns: 1fr; }
+            .chart-box { height: 280px; }
+             .modal-content { width: 90%; margin: 10% auto; }
+             .truncated-content { max-width: 180px; }
+             /* Timeline responsive */
+             .timeline-list::before { left: 15px; }
+             .timeline-item { padding-left: 45px; }
+             .timeline-marker { left: 7px; width: 16px; height: 16px;}
+             .timeline-week { left: -40px; }
+        }
+        @media (max-width: 480px) {
+             body { font-size: 15px; } h2 { font-size: 1.6rem; } h3 { font-size: 1.2rem; } #adminDashboard h4 { font-size: 1.1rem; }
+             .dashboard-intro { font-size: 1rem; } .module-card { padding: 1.2rem; }
+             .module-card h4 { font-size: 1.1rem; } .module-card p { font-size: 0.9rem; }
+             .module-action-button { font-size: 0.85rem; padding: 0.5rem 1rem; }
+             .admin-table { font-size: 0.85rem; } .admin-table th, .admin-table td { padding: 0.6rem 0.8rem; white-space: normal; }
+             #adminDashboard { padding: 1.5rem; }
+             #adminRestrictionMsg { padding: 0.8rem 1rem; font-size: 0.9rem;}
+             .footer { flex-direction: column; gap: 1rem; padding: 1rem; font-size: 0.8rem; }
+             .pagination-button { padding: 0.3rem 0.6rem; font-size: 0.9rem; }
+             .pagination-info { font-size: 0.8rem; }
+             .truncated-content { max-width: 120px; }
+             .charts-container { gap: 1rem; }
+             .chart-box { height: 250px; }
+             /* Timeline responsive */
+             .timeline-list::before { left: 12px; }
+             .timeline-item { padding-left: 40px; margin-bottom: 2rem;}
+             .timeline-marker { left: 4px; width: 14px; height: 14px;}
+             .timeline-content { padding: 0.8rem 1rem; }
+             .timeline-content h4 { font-size: 1.05rem; }
+             .timeline-content p { font-size: 0.9rem; }
+             .timeline-week { left: -35px; font-size: 0.7rem; padding: 1px 6px; }
+             .timeline-content::before { display: none; /* Hide arrow on smallest screens */ }
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">Coaching & Leadership Course</header>
+
+    <!-- User Bar -->
+    <div class="user-bar">
+         <div class="user-info">
+             <i data-feather="user"></i>
+             <div class="user-details">
+                 <span class="user-name" id="userName">Loading...</span>
+                 <span class="user-email" id="userEmail"></span>
+             </div>
+         </div>
+         <button class="logout-button" onclick="logout()">
+             <i data-feather="log-out"></i>
+             <span>Logout</span>
+         </button>
+    </div>
+
+    <!-- Main Content -->
+    <main class="container" id="mainContainer" style="display: none;">
+        <h2>👋 Welcome to Your Dashboard!</h2>
+        <p class="dashboard-intro">
+            Track your progress through the Coaching & Leadership course modules. Complete each section to unlock the next step in your journey.
+        </p>
+
+        <!-- Course Modules Section (Visible to all users) -->
+        <section id="courseModules">
+            <h3><i data-feather="layers"></i>Course Modules</h3>
+            <div class="modules-grid">
+                <!-- Module Cards -->
+                 <div class="module-card" id="module-intro" data-module-id="intro" data-next-module="coaching-skills">
+                    <h4><i data-feather="play-circle"></i>Introduction to Coaching & Leadership</h4>
+                    <p>Understand the core concepts, differences, and importance of coaching and leadership...</p>
+                    <span class="status-badge not-started" id="status-intro">Not Started</span>
+                    <a href="introduction.html" class="module-action-button" id="action-intro">
+                        <i data-feather="arrow-right-circle"></i><span>Start Module</span>
+                    </a>
+                </div>
+                <div class="module-card locked" id="module-coaching-skills" data-module-id="coaching-skills" data-previous-module="intro" data-next-module="coaching-individuals">
+                     <h4><i data-feather="tool"></i>Coaching Skills</h4>
+                     <p>Develop essential coaching skills like active listening, powerful questioning...</p>
+                     <span class="status-badge not-started" id="status-coaching-skills">Not Started</span>
+                     <a href="coaching-skills.html" class="module-action-button" id="action-coaching-skills" disabled>
+                          <i data-feather="arrow-right-circle"></i><span>View Module</span>
+                     </a>
+                 </div>
+                 <div class="module-card locked" id="module-coaching-individuals" data-module-id="coaching-individuals" data-previous-module="coaching-skills" data-next-module="coaching-team">
+                      <h4><i data-feather="user-check"></i>Coaching Individuals</h4>
+                      <p>Learn strategies and models for coaching individual team members...</p>
+                      <span class="status-badge not-started" id="status-coaching-individuals">Not Started</span>
+                      <a href="coaching-individuals.html" class="module-action-button" id="action-coaching-individuals" disabled>
+                           <i data-feather="arrow-right-circle"></i><span>View Module</span>
+                      </a>
+                  </div>
+                  <div class="module-card locked" id="module-coaching-team" data-module-id="coaching-team" data-previous-module="coaching-individuals" data-next-module="coaching-yourself">
+                       <h4><i data-feather="users"></i>Coaching Teams</h4>
+                       <p>Explore dynamics of team coaching, fostering collaboration...</p>
+                       <span class="status-badge not-started" id="status-coaching-team">Not Started</span>
+                       <a href="coaching-team.html" class="module-action-button" id="action-coaching-team" disabled>
+                            <i data-feather="arrow-right-circle"></i><span>View Module</span>
+                       </a>
+                   </div>
+                   <div class="module-card locked" id="module-coaching-yourself" data-module-id="coaching-yourself" data-previous-module="coaching-team" data-next-module="action-plan">
+                        <h4><i data-feather="compass"></i>Coaching Yourself</h4>
+                        <p>Apply coaching principles to your own self-development, goal setting...</p>
+                        <span class="status-badge not-started" id="status-coaching-yourself">Not Started</span>
+                        <a href="coaching-yourself.html" class="module-action-button" id="action-coaching-yourself" disabled>
+                             <i data-feather="arrow-right-circle"></i><span>View Module</span>
+                        </a>
+                    </div>
+                    <div class="module-card locked" id="module-action-plan" data-module-id="action-plan" data-previous-module="coaching-yourself" data-next-module="post-assessment">
+                         <h4><i data-feather="clipboard"></i>Action Plan</h4>
+                         <p>Create a personal action plan to implement your learnings...</p>
+                         <span class="status-badge not-started" id="status-action-plan">Not Started</span>
+                         <a href="action-plan.html" class="module-action-button" id="action-action-plan" disabled>
+                              <i data-feather="arrow-right-circle"></i><span>View Module</span>
+                         </a>
+                     </div>
+            </div>
+        </section>
+
+         <!-- What's Next Section (Visible to all users) -->
+         <section id="whatsNext">
+             <h3><i data-feather="fast-forward"></i>What's Next?</h3>
+             <div class="modules-grid">
+                  <!-- What's Next Cards -->
+                 <div class="module-card locked" id="module-post-assessment" data-module-id="post-assessment" data-previous-module="action-plan" data-next-module="feedback">
+                     <h4><i data-feather="check-circle"></i>Final Assessment</h4>
+                     <p>Complete the final assessment to evaluate your overall understanding...</p>
+                     <span class="status-badge not-started" id="status-post-assessment">Not Started</span>
+                     <a href="final-assessment.html" class="module-action-button" id="action-post-assessment" disabled>
+                          <i data-feather="arrow-right-circle"></i><span>Take Assessment</span>
+                     </a>
+                 </div>
+                 <div class="module-card locked" id="module-feedback" data-module-id="feedback" data-previous-module="post-assessment">
+                     <!-- This card likely links to a feedback *form*, the results appear in the admin panel below -->
+                     <h4><i data-feather="message-square"></i>Course Feedback</h4>
+                     <p>Share your valuable feedback to help us improve the course...</p>
+                     <span class="status-badge not-started" id="status-feedback">Not Started</span>
+                     <a href="feedback.html" class="module-action-button" id="action-feedback" disabled>
+                          <i data-feather="arrow-right-circle"></i><span>Provide Feedback</span>
+                     </a>
+                 </div>
+             </div>
+         </section>
+
+        <!-- Admin Dashboard Section (Only visible to Admins) -->
+        <section id="adminDashboard" style="display: none;">
+            <h3><i data-feather="settings"></i>Admin Control Panel</h3>
+            <div id="adminLoadingIndicator" class="loading-indicator">
+                <p>Loading admin data...</p>
+            </div>
+
+            <div id="adminDataContainer" style="display: none;">
+
+                <!-- User Overview Section -->
+                <div class="admin-section" id="userOverviewSection">
+                    <div class="admin-section-header">
+                        <h4><i data-feather="users"></i>User Management</h4>
+                        <button id="exportUserCsvBtn" class="export-button small admin-export-button" data-export-type="users">
+                            <i data-feather="download"></i>Export Users
+                        </button>
+                    </div>
+                     <div class="table-container">
+                        <table class="admin-table" id="userOverviewTable">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Email</th>
+                                    <th>Registered At</th>
+                                    <th>Intro Assessment</th>
+                                    <th>Final Assessment</th>
+                                </tr>
+                            </thead>
+                            <tbody id="userOverviewTableBody">
+                                <!-- Populated by JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                     <div class="pagination-container" id="userOverviewPagination"></div>
+                </div>
+
+                <!-- Assessment Results Section -->
+                <div class="admin-section" id="assessmentResultsSection">
+                     <div class="admin-section-header">
+                        <h4><i data-feather="bar-chart-2"></i>Assessment Results</h4>
+                        <!-- Note: Export button moved inside admin-controls for this specific section -->
+                     </div>
+                    <div class="admin-controls">
+                         <div class="filters" id="assessmentFilters">
+                             <div>
+                                 <label for="statusFilter">Status:</label>
+                                 <select id="statusFilter">
+                                     <option value="all">All</option>
+                                     <option value="passed">Passed</option>
+                                     <option value="failed">Failed/Needs Support</option>
+                                     <option value="completed">Completed</option>
+                                     <option value="in-progress">In Progress</option>
+                                     <option value="unknown">Unknown/Pending</option>
+                                 </select>
+                             </div>
+                             <div>
+                                  <label for="typeFilter">Assessment:</label>
+                                  <select id="typeFilter">
+                                      <option value="all">All Types</option>
+                                      <option value="quiz_lc_main">Leadership Quiz</option>
+                                      <option value="post-assessment">Final Assessment</option>
+                                      <option value="action-plan">Action Plan</option>
+                                  </select>
+                              </div>
+                              <div>
+                                  <label for="searchFilter">Search:</label>
+                                  <input type="text" id="searchFilter" placeholder="Name or email...">
+                              </div>
+                             <button id="applyFiltersBtn"><i data-feather="filter"></i>Apply</button>
+                         </div>
+                          <button id="exportAssessmentCsvBtn" class="export-button admin-export-button" data-export-type="assessments">
+                              <i data-feather="download"></i>Export Filtered Results
+                          </button>
+                     </div>
+                    <div class="charts-container">
+                         <div class="chart-box">
+                             <h5>Assessment Status</h5>
+                             <canvas id="statusChart"></canvas>
+                         </div>
+                          <div class="chart-box">
+                             <h5>Score Distribution</h5>
+                             <canvas id="scoreChart"></canvas>
+                         </div>
+                    </div>
+                    <div class="table-container">
+                          <table class="admin-table" id="assessmentResultsTable">
+                              <thead>
+                                  <tr>
+                                      <th>User Name</th>
+                                      <th>Email</th>
+                                      <th>Assessment</th>
+                                      <th>Status</th>
+                                      <th>Score</th>
+                                      <th>Submitted At</th>
+                                      <th>Details</th>
+                                  </tr>
+                              </thead>
+                              <tbody id="assessmentResultsTableBody">
+                                   <!-- Populated by JS -->
+                              </tbody>
+                          </table>
+                    </div>
+                    <div class="pagination-container" id="assessmentPaginationContainer"></div>
+                 </div>
+
+                <!-- Section Progress Section -->
+                <div class="admin-section" id="sectionProgressSection">
+                    <div class="admin-section-header">
+                        <h4><i data-feather="check-square"></i>Section Progress Details</h4>
+                        <button id="exportProgressCsvBtn" class="export-button small admin-export-button" data-export-type="progress">
+                            <i data-feather="download"></i>Export Progress
+                        </button>
+                    </div>
+                    <div class="table-container">
+                        <table class="admin-table" id="sectionProgressTable">
+                            <thead>
+                                <tr>
+                                    <th>User Name</th>
+                                    <th>Email</th>
+                                    <th>Section ID</th>
+                                    <th>Question</th>
+                                    <th>Answer</th>
+                                    <th>Submitted At</th>
+                                    <th>Details</th>
+                                </tr>
+                            </thead>
+                            <tbody id="sectionProgressTableBody">
+                                 <!-- Populated by JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                     <div class="pagination-container" id="sectionProgressPagination"></div>
+                </div>
+
+                <!-- Feedback Section -->
+                <div class="admin-section" id="feedbackSection">
+                    <div class="admin-section-header">
+                        <h4><i data-feather="message-circle"></i>Feedback Responses</h4>
+                         <button id="exportFeedbackCsvBtn" class="export-button small admin-export-button" data-export-type="feedback">
+                            <i data-feather="download"></i>Export Feedback
+                        </button>
+                    </div>
+                    <div class="table-container">
+                        <table class="admin-table" id="feedbackTable">
+                            <thead>
+                                <tr>
+                                    <th>User Name</th>
+                                    <th>Email</th>
+                                    <th>Question</th>
+                                    <th>Answer Preview</th>
+                                    <th>Submitted At</th>
+                                    <th>Details</th>
+                                </tr>
+                            </thead>
+                            <tbody id="feedbackTableBody">
+                                 <!-- Populated by populateFeedbackRow function -->
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="pagination-container" id="feedbackPagination"></div>
+                </div>
+                <!-- End of Feedback Section -->
+
+            </div>
+        </section>
+
+        <!-- Message for Non-Admins -->
+         <p id="adminRestrictionMsg" style="display: none;">
+              <i data-feather="lock"></i>
+              <span>The admin control panel section is restricted to administrators.</span>
+         </p>
+
+         <!-- Course Timeline Section -->
+         <section id="courseTimeline">
+             <h3><i data-feather="calendar"></i>Course Timeline</h3>
+             <div class="timeline-container">
+                 <ul class="timeline-list">
+                     <li class="timeline-item">
+                         <div class="timeline-marker"></div>
+                         <div class="timeline-content">
+                             <span class="timeline-week">Wk 1</span>
+                             <h4>Foundations & Introduction</h4>
+                             <p>Understanding core concepts of leadership vs. coaching. Initial self-assessment (Leadership Quiz).</p>
+                         </div>
+                     </li>
+                     <li class="timeline-item">
+                         <div class="timeline-marker"></div>
+                         <div class="timeline-content">
+                             <span class="timeline-week">Wk 2</span>
+                             <h4>Essential Coaching Skills</h4>
+                             <p>Developing active listening, powerful questioning, and providing constructive feedback.</p>
+                         </div>
+                     </li>
+                     <li class="timeline-item">
+                         <div class="timeline-marker"></div>
+                         <div class="timeline-content">
+                             <span class="timeline-week">Wk 3</span>
+                             <h4>Coaching Individuals</h4>
+                             <p>Applying coaching models (e.g., GROW) for one-on-one development and performance enhancement.</p>
+                         </div>
+                     </li>
+                     <li class="timeline-item">
+                         <div class="timeline-marker"></div>
+                         <div class="timeline-content">
+                             <span class="timeline-week">Wk 4</span>
+                             <h4>Coaching Teams</h4>
+                             <p>Exploring team dynamics, fostering collaboration, and facilitating group coaching sessions.</p>
+                         </div>
+                     </li>
+                     <li class="timeline-item">
+                         <div class="timeline-marker"></div>
+                         <div class="timeline-content">
+                             <span class="timeline-week">Wk 5</span>
+                             <h4>Self-Coaching & Planning</h4>
+                             <p>Applying principles to personal development, goal setting, and creating a personal Action Plan.</p>
+                         </div>
+                     </li>
+                     <li class="timeline-item">
+                         <div class="timeline-marker"></div>
+                         <div class="timeline-content">
+                             <span class="timeline-week">Wk 6</span>
+                             <h4>Assessment & Feedback</h4>
+                             <p>Completing the Final Assessment to measure learning and providing Course Feedback for improvement.</p>
+                         </div>
+                     </li>
+                 </ul>
+             </div>
+         </section>
+         <!-- END: Course Timeline Section -->
+
+
+         <!-- Details Modal -->
+         <div id="detailsModal" class="modal">
+             <div class="modal-content">
+                 <span class="modal-close" onclick="closeDetailsModal()">×</span>
+                 <h4 id="modalTitle">Details</h4>
+                 <div id="modalBody">
+                     <!-- Populated by JS -->
+                 </div>
+             </div>
+         </div>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+          <span class="footer-text">© 2025 Elmenisy Leadership Coaching - All Rights Reserved</span>
+          <div class="social-icons">
+             <a href="https://www.linkedin.com/in/mohamedmenisy17/" target="_blank" rel="noopener noreferrer" aria-label="LinkedIn Profile"> <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/></svg> </a>
+             <a href="https://wa.me/201014527321" target="_blank" rel="noopener noreferrer" aria-label="WhatsApp Chat"> <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01s-.521.074-.792.372c-.272.296-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/></svg> </a>
+             <a href="https://www.instagram.com/mohamed_menisyy/profilecard/?igsh=d3ZwZDM4czRqMzB2" target="_blank" rel="noopener noreferrer" aria-label="Instagram Profile"> <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 1.172.053 1.905.33 2.46.538.7.268 1.192.64 1.64 1.092.45.447.83 1.004 1.093 1.64.208.555.485 1.288.538 2.46.058 1.265.07 1.646.07 4.85s-.012 3.584-.07 4.85c-.053 1.172-.33 1.905-.538 2.46-.268.7-.64 1.192-1.092 1.64-.447.45-.997.827-1.64 1.093-.555.208-1.288.485-2.46.538-1.265.058-1.646.07-4.85.07s-3.584-.012-4.85-.07c-1.172-.053-1.905-.33-2.46-.538-.697-.268-1.19-.64-1.64-1.093-.45-.447-.827-.997-1.093-1.64-.208-.555-.485-1.288-.538-2.46-.058-1.265-.07-1.646-.07-4.85s.012-3.584.07-4.85c.053-1.172.33-1.905.538-2.46.268-.697.64-1.19 1.093-1.64.45-.45.997.827 1.64-1.093.555-.208 1.288.485 2.46.538 1.265-.058 1.646-.07 4.85-.07zm0-2.163c-3.259 0-3.667.014-4.947.072-1.356.06-2.31.344-3.174.732-.884.396-1.627.96-2.377 1.71-.755.752-1.318 1.494-1.716 2.378-.386.863-.67 1.818-.73 3.172C.014 8.333 0 8.741 0 12s.014 3.667.072 4.947c.06 1.356.344 2.31.73 3.174.396.884.96 1.627 1.716 2.377.752.755 1.494 1.318 2.378 1.716.863.386 1.818.67 3.172.73 1.28.058 1.688.072 4.947.072s3.667-.014 4.947-.072c1.356-.06 2.31-.344 3.174-.73.884-.396 1.627.96 2.377-1.716.755-.752 1.318-1.494 1.716-2.378.386.863.67-1.818.73-3.172.058-1.28.072-1.688.072-4.947s-.014-3.667-.072-4.947c-.06-1.356-.344-2.31-.73-3.174-.396-.884-.96-1.627-1.716-2.377-.752-.755-1.494-1.318-2.378-1.716-.863-.386-1.818.67-3.172-.73C15.667.014 15.259 0 12 0zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.162 6.162 6.162 6.162-2.759 6.162-6.162S15.403 5.838 12 5.838zm0 10.333c-2.306 0-4.171-1.865-4.171-4.171s1.865-4.171 4.171-4.171 4.171 1.865 4.171 4.171-1.865 4.171-4.171 4.171zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg> </a>
+          </div>
+    </footer>
+
+    <script>
+        // --- Supabase Config ---
+        const SUPABASE_URL = 'https://lgcutmuspcaralydycmg.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxnY3V0bXVzcGNhcmFseWR5Y21nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU0NDY3MDEsImV4cCI6MjA2MTAyMjcwMX0.3u5Y7pkH2NNnnoGLMWVfAa5b8fq88o1itRYnG1K38tE';
+        let supabase = null;
+
+        // --- Unified Keys & Config ---
+        const LOGGED_IN_KEY = 'isUserLoggedIn';
+        const CURRENT_USER_KEY = 'currentUser';
+
+        // --- Module & Section IDs (Map for friendly names) ---
+        const MODULE_IDS = { INTRO: 'intro', SKILLS: 'coaching-skills', INDIVIDUALS: 'coaching-individuals', TEAM: 'coaching-team', YOURSELF: 'coaching-yourself', ACTION_PLAN: 'action-plan', POST_ASSESSMENT: 'post-assessment', FEEDBACK: 'feedback' };
+        const ASSESSMENT_ID_MAP = {
+             'intro': 'quiz_lc_main',
+             'post-assessment': 'post-assessment',
+        };
+        const SECTION_ID_FRIENDLY_NAMES = {
+            'introduction': 'Introduction',
+            'coaching-skills': 'Coaching Skills',
+            'coaching-individuals': 'Coaching Individuals',
+            'coaching-team': 'Coaching Teams',
+            'coaching-yourself': 'Coaching Yourself',
+            'action-plan': 'Action Plan',
+            'final-assessment': 'Final Assessment',
+            'feedback': 'Feedback',
+            'quiz_lc_main': 'Leadership Quiz',
+            'post-assessment': 'Final Assessment',
+            // Add more mappings as needed
+        };
+
+        // --- DOM Elements ---
+        let userNameDisplay, userEmailDisplay, mainContainer, adminDashboardSection,
+            adminRestrictionMsg, adminLoadingIndicator, adminDataContainer,
+            userOverviewTableBody, userOverviewPagination,
+            assessmentResultsTableBody, assessmentPaginationContainer, statusChartCanvas, scoreChartCanvas,
+            applyFiltersBtn, statusFilter, typeFilter, searchFilter, /*Removed exportCsvBtn*/
+            sectionProgressTableBody, sectionProgressPagination,
+            feedbackTableBody, feedbackPagination, // For the section now showing Q&A
+            detailsModal, modalBody, modalTitle;
+
+        // --- Chart Instances ---
+        let statusChartInstance = null;
+        let scoreChartInstance = null;
+
+        // --- State ---
+        let currentUser = null;
+        let isAdmin = false; // Will be determined by new logic
+        let allUserData = [];
+        let allAssessmentData = [];
+        let allProgressData = [];
+        let allFeedbackData = []; // Will hold data for the "Feedback Responses" section (now Q&A)
+        let filteredAssessmentData = [];
+        let userOverviewCurrentPage = 1;
+        let assessmentCurrentPage = 1;
+        let progressCurrentPage = 1;
+        let feedbackCurrentPage = 1; // Pagination for the "Feedback Responses" section
+        const rowsPerPage = 10;
+
+        // --- Initialization ---
+        try {
+            if (window.supabase && window.supabase.createClient) {
+                supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+                console.log("Supabase client initialized on Dashboard.");
+            } else { throw new Error("Supabase library not found."); }
+        } catch (error) { console.error("Supabase init error:", error); }
+
+        // --- Immediate Redirection Check ---
+         console.log("%cDashboard: Immediate redirection check...", "color: purple;");
+         function quickCheckCurrentUser() { const d=localStorage.getItem(CURRENT_USER_KEY); return d && d.startsWith('{') && d.endsWith('}'); }
+         if (!(localStorage.getItem(LOGGED_IN_KEY)==='true' && quickCheckCurrentUser())) {
+             const target = localStorage.getItem('hasSignedUpBefore')==='true' ? 'login.html' : 'signup.html';
+             console.error(`%cDashboard Redirect: Not logged in. To ${target}...`, "color: orange;");
+             window.location.replace(target); throw new Error("Redirect: Not logged in.");
+         } else { console.log("%cDashboard: User logged in. Proceeding.", "color: green;"); }
+         // --- End Redirection Check ---
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            console.log("%cDashboard: DOMContentLoaded.", "color: green;");
+            if (!supabase) { document.body.innerHTML = '<p>Error: Connection failed.</p>'; return; }
+             feather.replace(); // Initial icon rendering
+
+            try {
+                assignDOMElements();
+                currentUser = getCurrentUser();
+                if (!currentUser?.id || !currentUser?.email) { logout(); return; }
+
+                // --- START: MODIFIED ADMIN LOGIC ---
+                const dbAdminStatus = await fetchAdminStatus(currentUser.id);
+                isAdmin = (currentUser.email === "m.elsayed@thechefz.co") || dbAdminStatus;
+                console.log(`User: ${currentUser.email}, DB isAdmin: ${dbAdminStatus}, Final isAdmin: ${isAdmin}`);
+                // --- END: MODIFIED ADMIN LOGIC ---
+
+                displayUserInfo(currentUser);
+                mainContainer.style.display = 'block';
+
+                await initializeDashboard();
+
+                setupEventListeners(); // Setup listeners *after* potential admin content is added
+                console.log("Dashboard initialized.");
+
+            } catch (error) {
+                 console.error("Dashboard Init CRITICAL ERROR:", error);
+                 handleFatalError(`Dashboard loading failed: ${error.message}`);
+            }
+        });
+
+        function assignDOMElements() {
+             mainContainer = document.getElementById('mainContainer');
+             userNameDisplay = document.getElementById('userName');
+             userEmailDisplay = document.getElementById('userEmail');
+             adminDashboardSection = document.getElementById('adminDashboard');
+             adminRestrictionMsg = document.getElementById('adminRestrictionMsg');
+             adminLoadingIndicator = document.getElementById('adminLoadingIndicator');
+             adminDataContainer = document.getElementById('adminDataContainer');
+             userOverviewTableBody = document.getElementById('userOverviewTableBody');
+             userOverviewPagination = document.getElementById('userOverviewPagination');
+             assessmentResultsTableBody = document.getElementById('assessmentResultsTableBody');
+             assessmentPaginationContainer = document.getElementById('assessmentPaginationContainer');
+             statusChartCanvas = document.getElementById('statusChart');
+             scoreChartCanvas = document.getElementById('scoreChart');
+             applyFiltersBtn = document.getElementById('applyFiltersBtn');
+             statusFilter = document.getElementById('statusFilter');
+             typeFilter = document.getElementById('typeFilter');
+             searchFilter = document.getElementById('searchFilter');
+             sectionProgressTableBody = document.getElementById('sectionProgressTableBody');
+             sectionProgressPagination = document.getElementById('sectionProgressPagination');
+             feedbackTableBody = document.getElementById('feedbackTableBody'); // Table for Q&A
+             feedbackPagination = document.getElementById('feedbackPagination'); // Pagination for Q&A table
+             detailsModal = document.getElementById('detailsModal');
+             modalBody = document.getElementById('modalBody');
+             modalTitle = document.getElementById('modalTitle');
+
+             if (!mainContainer || !userNameDisplay || !adminDashboardSection || !detailsModal || !userOverviewTableBody || !assessmentResultsTableBody || !sectionProgressTableBody || !feedbackTableBody) {
+                 throw new Error("Essential dashboard DOM elements missing!");
+             }
+             if(isAdmin && (!statusChartCanvas || !scoreChartCanvas)) {
+                 console.warn("Admin Chart canvas elements missing!");
+             }
+         }
+
+        function setupEventListeners() {
+             if (applyFiltersBtn) applyFiltersBtn.addEventListener('click', applyAdminFilters);
+             if (searchFilter) searchFilter.addEventListener('keyup', (event) => {
+                 if (event.key === 'Enter' || searchFilter.value === '') { applyAdminFilters(); }
+             });
+
+             if (adminDataContainer) {
+                 adminDataContainer.addEventListener('click', handleAdminClicks);
+             }
+             window.addEventListener('click', (event) => {
+                 if (event.target == detailsModal) { closeDetailsModal(); }
+             });
+
+             if (isAdmin) {
+                 const exportButtons = document.querySelectorAll('.admin-export-button');
+                 if (exportButtons.length > 0) {
+                     console.log(`Found ${exportButtons.length} export buttons. Event listeners handled by delegation.`);
+                 } else {
+                     // This might still appear briefly if the error happens before full render
+                     console.warn("Could not find any admin export buttons immediately after DOM setup (may resolve after data load).");
+                 }
+             }
+         }
+
+
+        // --- Main Initialization Function ---
+        async function initializeDashboard() {
+            console.log("Initializing dashboard view...");
+            try {
+                const userProgress = await fetchUserProgress(currentUser.id);
+                updateModuleCards(userProgress);
+
+                if (isAdmin) {
+                    adminDashboardSection.style.display = 'block';
+                    adminRestrictionMsg.style.display = 'none';
+                    adminLoadingIndicator.style.display = 'block';
+                    adminDataContainer.style.display = 'none';
+
+                    console.log("Fetching all admin data...");
+                    allUserData = await fetchAllUsers();
+                     if (!allUserData) throw new Error("Failed to fetch user data.");
+
+                     const userMap = allUserData.reduce((map, user) => { map[user.id] = { name: user.name, email: user.email }; return map; }, {});
+
+                    const [assessments, progress, feedback] = await Promise.all([
+                        fetchAllAssessmentData(), fetchAllUserProgressData(), fetchAllFeedbackData()
+                    ]);
+
+                    allAssessmentData = assessments;
+                    allProgressData = progress;
+                    allFeedbackData = feedback;
+
+                    allProgressData.forEach(p => { const userInfo = userMap[p.user_id] || { name: 'Unknown User', email: 'N/A' }; p.user_name = userInfo.name; p.user_email = userInfo.email; });
+                    allAssessmentData.forEach(a => { if (!a.name || !a.user_email) { const userInfo = userMap[a.user_id] || { name: 'Unknown User', email: 'N/A' }; a.name = userInfo.name; a.user_email = userInfo.email; } });
+
+                    filteredAssessmentData = [...allAssessmentData];
+                    console.log(`Data fetched: ${allUserData.length} users, ${assessments.length} assessments, ${progress.length} progress entries, ${feedback.length} feedback/Q&A entries.`);
+
+                    userOverviewCurrentPage = 1; assessmentCurrentPage = 1; progressCurrentPage = 1; feedbackCurrentPage = 1;
+
+                    renderAdminSections(); // Renders all sections
+
+                    adminLoadingIndicator.style.display = 'none';
+                    adminDataContainer.style.display = 'block';
+
+                } else {
+                    adminDashboardSection.style.display = 'none';
+                    adminRestrictionMsg.style.display = 'flex';
+                    // feather.replace(); // Call below instead
+                }
+            } catch (error) {
+                console.error("Error initializing dashboard sections:", error);
+                // Specific check for the function missing error
+                 if (error instanceof ReferenceError && error.message.includes("renderAssessmentResults")) {
+                     showDashboardError(`Critical setup error: ${error.message}. Ensure the function is defined correctly.`);
+                     handleFatalError(`Failed to load admin data: ${error.message}`); // Show fatal error for this
+                 } else {
+                     showDashboardError(`Failed to load dashboard data: ${error.message}`);
+                 }
+
+                if (adminLoadingIndicator) adminLoadingIndicator.style.display = 'none';
+                if (isAdmin && adminDataContainer && !adminDataContainer.innerHTML.includes('Failed to load')) { // Avoid overwriting fatal error message
+                     adminDataContainer.innerHTML = `<p style="color: var(--error-red); text-align: center; padding: 2rem;">Failed to load admin data: ${error.message}</p>`;
+                     adminDataContainer.style.display = 'block';
+                } else if(isAdmin && !adminDashboardSection.innerHTML.includes('Failed to load')){
+                     adminDashboardSection.innerHTML = `<p style="color: var(--error-red); text-align: center; padding: 2rem;">Failed to load admin data: ${error.message}</p>`;
+                     adminDashboardSection.style.display = 'block';
+                }
+            }
+            // Ensure all icons are rendered *after* initialization attempt (success or fail)
+            feather.replace();
+        }
+
+        // --- Data Fetching Functions ---
+        // fetchAdminStatus, fetchUserProgress, fetchAllUsers, fetchAllAssessmentData,
+        // fetchAllUserProgressData, fetchAllFeedbackData, fetchUserDetailsForModal
+        // --- (Keep these functions exactly as they were in the previous version) ---
+        async function fetchAdminStatus(userId) {
+             if (!supabase || !userId) return false;
+             try { const { data, error, status } = await supabase.from('users').select('is_admin').eq('id', userId).single(); if (error && status !== 406) { console.error('Error fetching admin status:', error.message); return false; } return data?.is_admin === true; } catch (error) { console.error("Exception during fetchAdminStatus:", error); return false; }
+         }
+        async function fetchUserProgress(userId) {
+             if (!supabase || !userId) return {};
+             try { const { data, error } = await supabase.from('assessments').select('question_id, completion_status, is_correct').eq('user_id', userId); if (error) throw error; const progressMap = {}; data?.forEach(item => { let progressKey = Object.keys(ASSESSMENT_ID_MAP).find(key => ASSESSMENT_ID_MAP[key] === item.question_id) || item.question_id; let statusValue = item.completion_status; if (!statusValue && item.is_correct !== null) { statusValue = item.is_correct ? 'passed' : 'failed'; } progressMap[progressKey] = statusValue || 'unknown'; }); console.log("Current User Progress Map for Modules:", progressMap); return progressMap; } catch (error) { console.error("Error fetchUserProgress:", error); showDashboardError(error.message); return {}; }
+         }
+        async function fetchAllUsers() {
+            if (!supabase) return null;
+            try { console.log("Fetching all users..."); const { data, error } = await supabase.from('users').select('id, name, email, created_at, assessment_completed, final_assessment_completed').order('created_at', { ascending: false }); if (error) throw error; console.log(`Fetched ${data?.length || 0} user records.`); return (data || []).map(u => ({...u, name: u.name || u.email?.split('@')[0] || 'Unknown User'})); } catch (error) { console.error("CRITICAL Error fetchAllUsers:", error); showDashboardError(`Failed to fetch user list: ${error.message}. Check RLS.`); return null;}
+        }
+         async function fetchAllAssessmentData() {
+             if (!supabase) return [];
+             try { console.log("Fetching all assessment data..."); const { data, error } = await supabase.from('assessments').select('user_id, name, user_email, question_id, question_text, score, is_correct, completion_status, submitted_at').order('submitted_at', { ascending: false }); if (error) throw error; console.log(`Fetched ${data?.length || 0} assessment records.`); return data || []; } catch (error) { console.error("Error fetchAllAssessmentData:", error); showDashboardError(error.message); return []; }
+         }
+        async function fetchAllUserProgressData() {
+            if (!supabase) return [];
+            try { console.log("Fetching all user progress (Section Q&A)..."); const { data, error } = await supabase.from('user_progress').select('id, user_id, section_id, question_id, question_text, answer, is_passed, submitted_at').order('submitted_at', { ascending: false }); if (error) throw error; console.log(`Fetched ${data?.length || 0} user progress records.`); return data || []; } catch (error) { console.error("Error during fetchAllUserProgressData:", error); showDashboardError(`Failed to load section progress: ${error.message}. Check RLS.`); return []; }
+        }
+        async function fetchAllFeedbackData() {
+             if (!supabase) return [];
+             try { console.log("Fetching all feedback data (as Q&A)..."); const { data, error } = await supabase.from('feedback_responses').select('id, user_id, name, email, question, answer, submitted_at').order('submitted_at', { ascending: false }); if (error) { console.error("Error fetching feedback (Q&A) data:", error.message); if (error.message.includes('column') && error.message.includes('does not exist')) { console.error(`---> Potential Issue: A column requested in fetchAllFeedbackData (name, email, question, answer) might not exist in the 'feedback_responses' table. Please verify table structure in Supabase.`); } throw error; } console.log(`Fetched ${data?.length || 0} feedback/Q&A records.`); return data || []; } catch (error) { console.error("Error during fetchAllFeedbackData:", error); showDashboardError(`Failed to load feedback/Q&A data: ${error.message}. Check table/column names and RLS.`); return []; }
+         }
+        async function fetchUserDetailsForModal(userId, identifier, type = 'assessment') {
+             if (!supabase || !userId || !identifier) return null;
+             try { console.log(`Fetching modal details for User: ${userId}, Identifier: ${identifier}, Type: ${type}`); let query; if (type === 'assessment') { query = supabase.from('user_progress').select('question_text, answer, is_passed, score, submitted_at').eq('user_id', userId).eq('question_id', identifier).order('submitted_at', { ascending: true }); } else if (type === 'section') { query = supabase.from('user_progress').select('question_text, answer, is_passed, submitted_at').eq('user_id', userId).eq('section_id', identifier).order('submitted_at', { ascending: true }); } else if (type === 'feedback') { query = supabase.from('feedback_responses').select('question, answer, submitted_at').eq('id', identifier).single(); } else { throw new Error("Invalid detail type requested"); } const { data, error } = await query; if (error && !(type === 'feedback' && error.code === 'PGRST116')) { if (type === 'feedback' && error.message.includes('column') && error.message.includes('does not exist')) { console.error(`---> Potential Issue: Column 'question' or 'answer' might not exist in 'feedback_responses' table needed for the modal.`); } throw error; } console.log(`Fetched Modal Details (Type: ${type}):`, data); return (type === 'feedback' && data) ? [data] : (data || []); } catch (error) { console.error(`Error fetching user ${type} details:`, error); showDashboardError(`Could not load details: ${error.message}`); return null; }
+         }
+
+
+        // --- UI Update Functions ---
+        // updateModuleCards (Keep as is from previous version)
+        function updateModuleCards(progressMap) {
+             const moduleCards = document.querySelectorAll('.module-card');
+             moduleCards.forEach(card => {
+                 const moduleId = card.dataset.moduleId; const status = progressMap[moduleId] || 'not-started'; const statusBadge = card.querySelector('.status-badge'); const actionButton = card.querySelector('.module-action-button'); const cardIcon = card.querySelector('h4 i'); const previousModuleId = card.dataset.previousModule;
+                 const isCompleted = ['completed', 'passed'].includes(status);
+                 if (statusBadge) { statusBadge.textContent = status.replace(/[-_]/g, ' ').replace('unknown', 'Not Started'); statusBadge.className = 'status-badge'; if (isCompleted) statusBadge.classList.add('completed'); else if (status === 'in-progress') statusBadge.classList.add('in-progress'); else statusBadge.classList.add('not-started'); }
+                 const isPreviousCompleted = !previousModuleId || ['completed', 'passed'].includes(progressMap[previousModuleId]); let allowAccess = isAdmin || isPreviousCompleted;
+                 if (allowAccess) {
+                     card.classList.remove('locked');
+                     if (actionButton) {
+                         actionButton.disabled = false;
+                         if (isCompleted) { actionButton.innerHTML = `<i data-feather="eye"></i><span>View Module</span>`; if(cardIcon) cardIcon.setAttribute('data-feather', 'check-square'); }
+                         else if (status === 'in-progress') { actionButton.innerHTML = `<i data-feather="play-circle"></i><span>Continue Module</span>`; if(cardIcon) cardIcon.setAttribute('data-feather', 'play-circle'); }
+                         else { let buttonText = 'Start Module'; actionButton.innerHTML = `<i data-feather="arrow-right-circle"></i><span>${buttonText}</span>`; if(cardIcon) cardIcon.setAttribute('data-feather', 'play-circle'); }
+                     }
+                 } else {
+                     card.classList.add('locked');
+                     if (actionButton) { actionButton.disabled = true; actionButton.innerHTML = `<i data-feather="lock"></i><span>Locked</span>`; if(cardIcon) cardIcon.setAttribute('data-feather', 'lock'); }
+                 }
+             });
+             console.log("Module cards updated based on progress and admin status.");
+         }
+
+
+        // --- Admin Section Rendering ---
+
+        function renderAdminSections() {
+            if (!isAdmin) return;
+            console.log("Rendering all admin sections...");
+            renderPaginatedTable(allUserData, userOverviewTableBody, userOverviewPagination, userOverviewCurrentPage, populateUserOverviewRow, 5);
+            applyAdminFilters(); // Renders assessment table + charts via renderAssessmentResults
+            renderPaginatedTable(allProgressData, sectionProgressTableBody, sectionProgressPagination, progressCurrentPage, populateSectionProgressRow, 7);
+            renderPaginatedTable(allFeedbackData, feedbackTableBody, feedbackPagination, feedbackCurrentPage, populateFeedbackRow, 6);
+        }
+
+        // *** FUNCTION RESTORED ***
+        // Renders assessment table AND charts
+        function renderAssessmentResults() {
+             if (!isAdmin) return;
+             console.log(`Rendering assessment results - Page ${assessmentCurrentPage}`);
+             const totalAssessmentPages = Math.ceil(filteredAssessmentData.length / rowsPerPage) || 1;
+             assessmentCurrentPage = Math.max(1, Math.min(assessmentCurrentPage, totalAssessmentPages));
+             renderPaginatedTable(filteredAssessmentData, assessmentResultsTableBody, assessmentPaginationContainer, assessmentCurrentPage, populateAssessmentResultRow, 7);
+             renderCharts(filteredAssessmentData); // Update charts with filtered data
+             // feather.replace(); // No longer needed here, called once at end of initializeDashboard
+         }
+
+        function renderPaginatedTable(fullData, tableBody, paginationContainer, currentPage, rowRenderer, colSpan) {
+            if (!tableBody || !paginationContainer) { console.error("Missing table body or pagination container."); return; }
+            if (!fullData) { console.error("No data provided to renderPaginatedTable"); tableBody.innerHTML = `<tr><td colspan="${colSpan}">Error loading data.</td></tr>`; return; }
+            const totalItems = fullData.length; const totalPages = Math.ceil(totalItems / rowsPerPage) || 1; let validCurrentPage = Math.max(1, Math.min(currentPage, totalPages)); const startIndex = (validCurrentPage - 1) * rowsPerPage; const endIndex = startIndex + rowsPerPage; const paginatedData = fullData.slice(startIndex, endIndex);
+            tableBody.innerHTML = '';
+            if (paginatedData.length === 0) { const filterActive = (fullData === filteredAssessmentData && (statusFilter?.value !== 'all' || typeFilter?.value !== 'all' || searchFilter?.value !== '')); tableBody.innerHTML = `<tr><td colspan="${colSpan}" style="text-align:center;">No data available${filterActive ? ' matching filters' : ''}.</td></tr>`; }
+            else { paginatedData.forEach(item => rowRenderer(item, tableBody)); }
+            renderPaginationControls(paginationContainer, totalItems, validCurrentPage, rowsPerPage);
+        }
+
+        // populateUserOverviewRow, populateAssessmentResultRow, populateSectionProgressRow, populateFeedbackRow
+        // --- (Keep these functions exactly as they were in the previous version) ---
+         function populateUserOverviewRow(user, tableBody) {
+             const row = tableBody.insertRow();
+             const createStatusBadge = (status) => { let t='Pending', c='unknown'; if(status===true){t='Completed';c='true';} else if(status===false){t='Not Completed';c='false';} else if (status === null || typeof status === 'undefined') { t = 'Pending'; c='unknown'} return `<span class="admin-status-badge ${c}">${t}</span>`; };
+             row.innerHTML = `<td>${user.name||'N/A'}</td><td>${user.email||'N/A'}</td><td>${formatDateForDisplay(user.created_at)}</td><td>${createStatusBadge(user.assessment_completed)}</td><td>${createStatusBadge(user.final_assessment_completed)}</td>`;
+         }
+         function populateAssessmentResultRow(item, tableBody) {
+            const row = tableBody.insertRow(); let displayStatus = item.completion_status; let statusClass = item.completion_status?.toLowerCase().replace(/[\s_]+/g, '-'); if (!displayStatus && item.is_correct !== null && typeof item.is_correct !== 'undefined') { displayStatus = item.is_correct ? 'Passed' : 'Failed'; statusClass = item.is_correct ? 'passed' : 'failed'; } else if (displayStatus === 'completed') { statusClass = 'completed'; displayStatus = 'Completed'; } else if (displayStatus === 'in-progress') { statusClass = 'in-progress'; displayStatus = 'In Progress'; } else if (displayStatus === 'needs-support') { statusClass = 'failed'; displayStatus = 'Needs Support'; } else { displayStatus = 'Unknown'; statusClass = 'unknown'; } let assessmentName = SECTION_ID_FRIENDLY_NAMES[item.question_id] || item.question_text || item.question_id || 'N/A';
+            row.innerHTML = `<td>${item.name || 'N/A'}</td><td>${item.user_email || 'N/A'}</td><td>${assessmentName}</td><td><span class="admin-status-badge ${statusClass}">${displayStatus}</span></td><td>${item.score ?? 'N/A'}</td><td>${formatDateForDisplay(item.submitted_at)}</td><td><button class="view-details-btn" data-type="assessment" data-userid="${item.user_id}" data-identifier="${item.question_id}" data-username="${item.name || item.user_email}" title="View Assessment Details"><i data-feather="eye"></i></button></td>`;
+        }
+        function populateSectionProgressRow(item, tableBody) {
+            const row = tableBody.insertRow(); const sectionName = SECTION_ID_FRIENDLY_NAMES[item.section_id] || item.section_id || 'N/A'; const answerPreview = item.answer?.substring(0, 40) + (item.answer?.length > 40 ? '...' : '');
+            row.innerHTML = `<td>${item.user_name || 'N/A'}</td><td>${item.user_email || 'N/A'}</td><td>${sectionName}</td><td>${item.question_text || item.question_id || 'N/A'}</td><td class="truncated-content" title="${item.answer || ''}">${answerPreview || 'N/A'}</td><td>${formatDateForDisplay(item.submitted_at)}</td><td><button class="view-details-btn" data-type="section" data-userid="${item.user_id}" data-identifier="${item.section_id}" data-username="${item.user_name || item.user_email}" title="View All Section Answers"><i data-feather="list"></i></button></td>`;
+        }
+         function populateFeedbackRow(item, tableBody) {
+            const row = tableBody.insertRow(); const userName = item.name || 'N/A'; const userEmail = item.email || 'N/A'; const questionText = item.question || 'N/A'; const answerText = item.answer || 'N/A'; const answerPreview = answerText.substring(0, 40) + (answerText.length > 40 ? '...' : '');
+            row.innerHTML = `<td>${userName}</td><td>${userEmail}</td><td>${questionText}</td><td class="truncated-content" title="${answerText}">${answerPreview}</td><td>${formatDateForDisplay(item.submitted_at)}</td><td><button class="view-details-btn" data-type="feedback" data-userid="${item.user_id}" data-identifier="${item.id}" data-username="${userName || userEmail}" title="View Full Answer"><i data-feather="file-text"></i></button></td>`;
+        }
+
+
+        function renderPaginationControls(container, totalItems, currentPage, itemsPerPage) {
+             if (!container) return; container.innerHTML = ''; const totalPages = Math.ceil(totalItems / itemsPerPage) || 1; if (totalPages <= 1) return; const prevButton = document.createElement('button'); prevButton.innerHTML = '« Prev'; prevButton.classList.add('pagination-button'); prevButton.disabled = currentPage === 1; prevButton.dataset.page = currentPage - 1; container.appendChild(prevButton); const pageInfo = document.createElement('span'); pageInfo.classList.add('pagination-info'); pageInfo.textContent = `Page ${currentPage} of ${totalPages}`; container.appendChild(pageInfo); const nextButton = document.createElement('button'); nextButton.innerHTML = 'Next »'; nextButton.classList.add('pagination-button'); nextButton.disabled = currentPage === totalPages; nextButton.dataset.page = currentPage + 1; container.appendChild(nextButton);
+         }
+
+        // --- Event Handling ---
+
+         function handleAdminClicks(event) {
+             const target = event.target;
+
+             // Handle Pagination
+             const paginationButton = target.closest('.pagination-button');
+             if (paginationButton && !paginationButton.disabled) {
+                 const targetPage = parseInt(paginationButton.dataset.page, 10); const paginationContainer = target.closest('.pagination-container');
+                 if (targetPage && paginationContainer) {
+                     if (paginationContainer.id === 'userOverviewPagination') { userOverviewCurrentPage = targetPage; renderPaginatedTable(allUserData, userOverviewTableBody, userOverviewPagination, userOverviewCurrentPage, populateUserOverviewRow, 5); }
+                     else if (paginationContainer.id === 'assessmentPaginationContainer') { assessmentCurrentPage = targetPage; renderAssessmentResults(); } // Calls restored function
+                     else if (paginationContainer.id === 'sectionProgressPagination') { progressCurrentPage = targetPage; renderPaginatedTable(allProgressData, sectionProgressTableBody, sectionProgressPagination, progressCurrentPage, populateSectionProgressRow, 7); }
+                     else if (paginationContainer.id === 'feedbackPagination') { feedbackCurrentPage = targetPage; renderPaginatedTable(allFeedbackData, feedbackTableBody, feedbackPagination, feedbackCurrentPage, populateFeedbackRow, 6); }
+                     feather.replace();
+                 }
+                 return;
+             }
+
+             // Handle Details Button
+             const detailsButton = target.closest('.view-details-btn');
+             if (detailsButton) {
+                 const userId = detailsButton.dataset.userid; const identifier = detailsButton.dataset.identifier; const type = detailsButton.dataset.type; const userName = detailsButton.dataset.username;
+                 console.log(`Details clicked - Type: ${type}, UserID: ${userId}, Identifier: ${identifier}`); openDetailsModal(userId, identifier, type, userName); return;
+             }
+
+             // Handle Export Button Clicks
+             const exportButton = target.closest('.admin-export-button');
+             if (exportButton) {
+                 const exportType = exportButton.dataset.exportType;
+                 console.log(`Export button clicked for type: ${exportType}`);
+                 switch (exportType) {
+                     case 'users': handleExportUserCsv(); break;
+                     case 'assessments': handleExportAssessmentCsv(); break;
+                     case 'progress': handleExportProgressCsv(); break;
+                     case 'feedback': handleExportFeedbackCsv(); break;
+                     default: console.warn(`Unknown export type: ${exportType}`);
+                 }
+                 return;
+             }
+         }
+
+        // openDetailsModal, closeDetailsModal (Keep as is from previous version)
+        async function openDetailsModal(userId, identifier, type, userName) {
+             if (!detailsModal || !modalBody || !modalTitle) return; let titlePrefix = "Details"; if (type === 'assessment') titlePrefix = `Assessment Details (${SECTION_ID_FRIENDLY_NAMES[identifier] || identifier})`; else if (type === 'section') titlePrefix = `Section Answers (${SECTION_ID_FRIENDLY_NAMES[identifier] || identifier})`; else if (type === 'feedback') titlePrefix = `Feedback Details`; modalTitle.textContent = `${titlePrefix} for ${userName || 'User ' + userId.substring(0, 6)}`; modalBody.innerHTML = '<p class="loading-indicator-small">Loading details...</p>'; detailsModal.style.display = "block"; const details = await fetchUserDetailsForModal(userId, identifier, type);
+             if (details === null) { modalBody.innerHTML = '<p style="color: var(--error-red);">Could not load details.</p>'; } else if (details.length === 0) { modalBody.innerHTML = `<p>No details found for this ${type}.</p>`; }
+             else { let detailsHtml = ''; if (type === 'assessment' || type === 'section') { details.forEach((item, index) => { let answerDisplay = item.answer || 'N/A'; let correctnessClass = ''; if (item.is_passed === true) correctnessClass = 'correct'; if (item.is_passed === false) correctnessClass = 'incorrect'; const submitted = item.submitted_at ? `<span style='font-size:0.8em; color: var(--text-light);'>(${new Date(item.submitted_at).toLocaleString()})</span>` : ''; detailsHtml += `<div class="detail-item"><strong>${index + 1}. ${item.question_text || (type === 'assessment' ? `Question ID: ${identifier}` : 'Question')}</strong><span class="${correctnessClass}">${answerDisplay}</span>${item.score !== null && typeof item.score !== 'undefined' ? `<span style='font-size:0.8em; color: var(--text-light);'> (Score: ${item.score})</span>` : ''}${submitted}</div>`; }); } else if (type === 'feedback') { const item = details[0]; const submitted = item.submitted_at ? `Submitted: ${new Date(item.submitted_at).toLocaleString()}` : ''; detailsHtml += `<div class="detail-item"><strong>Question:</strong><span>${item.question || 'N/A'}</span></div><div class="detail-item"><strong>Answer:</strong><span>${item.answer || 'N/A'}</span></div>${submitted ? `<div class="detail-item"><strong style='font-size:0.9em;'>${submitted}</strong></div>` : ''}`; } modalBody.innerHTML = detailsHtml; }
+        }
+        function closeDetailsModal() { if (detailsModal) detailsModal.style.display = "none"; if (modalBody) modalBody.innerHTML = ''; }
+
+        // --- Assessment Filtering & Charts ---
+        // applyAdminFilters, renderCharts (Keep as is from previous version)
+        function applyAdminFilters() {
+            if (!allAssessmentData) return; console.log("Applying assessment filters..."); const statusValue = statusFilter.value; const typeValue = typeFilter.value; const searchValue = searchFilter.value.toLowerCase().trim();
+            filteredAssessmentData = allAssessmentData.filter(item => {
+                let statusMatch = true; if (statusValue !== 'all') { let itemStatusStr = 'unknown'; if (item.completion_status) { itemStatusStr = item.completion_status; } else if (item.is_correct !== null && typeof item.is_correct !== 'undefined') { itemStatusStr = item.is_correct ? 'passed' : 'failed'; } if (statusValue === 'passed') { statusMatch = (itemStatusStr === 'passed'); } else if (statusValue === 'failed') { statusMatch = (itemStatusStr === 'failed' || itemStatusStr === 'needs-support'); } else if (statusValue === 'completed') { statusMatch = (itemStatusStr === 'completed'); } else if (statusValue === 'in-progress') { statusMatch = (itemStatusStr === 'in-progress'); } else if (statusValue === 'unknown') { statusMatch = (itemStatusStr === 'unknown' || itemStatusStr === null || typeof itemStatusStr === 'undefined'); } else { statusMatch = false; } }
+                const typeMatch = typeValue === 'all' || item.question_id === typeValue; const searchMatch = searchValue === '' || (item.name && item.name.toLowerCase().includes(searchValue)) || (item.user_email && item.user_email.toLowerCase().includes(searchValue));
+                return statusMatch && typeMatch && searchMatch;
+            });
+            console.log(`Filtering assessments complete. Found ${filteredAssessmentData.length} records.`); assessmentCurrentPage = 1;
+            renderAssessmentResults(); // Calls restored function
+        }
+        function renderCharts(data) {
+            if (!statusChartCanvas || !scoreChartCanvas || !data) { console.warn("Chart elements missing or no data."); return; } const ctxStatus = statusChartCanvas.getContext('2d'); const ctxScore = scoreChartCanvas.getContext('2d'); if (!ctxStatus || !ctxScore) { console.error("Failed to get chart context."); return; }
+            const statusCounts = data.reduce((acc, item) => { let s = 'unknown'; if (item.completion_status) { s = item.completion_status; } else if (item.is_correct !== null && typeof item.is_correct !== 'undefined') { s = item.is_correct ? 'passed' : 'failed'; } if (s === 'needs-support') s = 'failed'; acc[s] = (acc[s] || 0) + 1; return acc; }, {}); const statusLabels=Object.keys(statusCounts); const statusData=Object.values(statusCounts); const statusColors=statusLabels.map(l=>{if(l==='passed') return'rgba(34,197,94,0.7)'; if(l==='completed') return 'rgba(14, 165, 233, 0.7)'; if(l==='failed') return'rgba(239,68,68,0.7)'; if(l==='in-progress') return'rgba(59,130,246,0.7)'; return'rgba(245,158,11,0.7)'; }); if(statusChartInstance)statusChartInstance.destroy(); statusChartInstance=new Chart(ctxStatus,{type:'pie',data:{labels:statusLabels.map(l=>l.charAt(0).toUpperCase()+l.slice(1).replace(/[-_]/g,' ')),datasets:[{data:statusData,backgroundColor:statusColors,borderWidth:1}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'top',align:'center',labels:{boxWidth:15,font:{size:11},padding:10}},title:{display:false},tooltip:{bodyFont:{size:12},titleFont:{size:13}}}}});
+            const scoreCounts=data.reduce((acc,item)=>{const s=item.score; let r='N/A'; if(typeof s==='number' && !isNaN(s)){if(s>=0&&s<=49)r='0-49%'; else if(s>=50&&s<=74)r='50-74%'; else if(s>=75&&s<=100)r='75-100%';} acc[r]=(acc[r]||0)+1; return acc;},{}); const scoreOrder=['0-49%','50-74%','75-100%','N/A']; const scoreLabels=scoreOrder.filter(label=>scoreCounts[label]>0); const scoreData=scoreLabels.map(l=>scoreCounts[l]||0); if(scoreChartInstance)scoreChartInstance.destroy(); scoreChartInstance=new Chart(ctxScore,{type:'bar',data:{labels:scoreLabels,datasets:[{label:'Users by Score',data:scoreData,backgroundColor:'rgba(245,158,11,0.7)',borderColor:'rgba(217,119,6,1)',borderWidth:1}]},options:{responsive:true,maintainAspectRatio:false,scales:{y:{beginAtZero:true,title:{display:true,text:'Number of Users',font:{size:11}},ticks:{font:{size:10}}},x:{title:{display:true,text:'Score Range (%)',font:{size:11}},ticks:{font:{size:10}}}},plugins:{legend:{display:false},title:{display:false},tooltip:{bodyFont:{size:12},titleFont:{size:13}}}}});
+            console.log("Charts rendered/updated.");
+        }
+
+
+        // --- START: CSV Export Logic ---
+
+        function escapeCsvField(field) { const value = (field === null || typeof field === 'undefined') ? '' : String(field); if (value.includes(',') || value.includes('"') || value.includes('\n')) { return `"${value.replace(/"/g, '""')}"`; } return value; }
+        function formatDateForCsv(dateString) { if (!dateString) return ''; try { const date = new Date(dateString); if (isNaN(date.getTime())) return ''; const year = date.getFullYear(); const month = String(date.getMonth() + 1).padStart(2, '0'); const day = String(date.getDate()).padStart(2, '0'); return `${year}-${month}-${day}`; } catch (e) { console.error("Error formatting date for CSV:", e); return ''; } }
+        function formatDateForDisplay(dateString) { if (!dateString) return 'N/A'; try { const date = new Date(dateString); if (isNaN(date.getTime())) return 'Invalid Date'; return date.toLocaleDateString(); } catch (e) { console.error("Error formatting date for display:", e); return 'Error'; } }
+
+        function triggerCsvDownload(headers, dataRows, filename) {
+             if (!dataRows || dataRows.length === 0) { alert("No data available to export."); console.log(`CSV Export Aborted: No data for ${filename}`); return; }
+             console.log(`Generating CSV for ${filename}. Rows: ${dataRows.length}`); const csv = [headers.map(escapeCsvField).join(',')];
+             dataRows.forEach(rowArray => { csv.push(rowArray.map(escapeCsvField).join(',')); });
+             const csvContent = csv.join('\n'); const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' }); const link = document.createElement("a");
+             if (link.download !== undefined) { const url = URL.createObjectURL(blob); link.setAttribute("href", url); link.setAttribute("download", filename); link.style.visibility = 'hidden'; document.body.appendChild(link); link.click(); document.body.removeChild(link); URL.revokeObjectURL(url); console.log(`CSV Export Success: ${filename}`); }
+             else { alert("CSV export is not supported in your browser."); console.error(`CSV Export Failed: Browser lacks download attribute support.`); }
+         }
+
+        function handleExportUserCsv() {
+            const headers = ["Name", "Email", "Registered At", "Intro Assessment Completed", "Final Assessment Completed"];
+            const dataRows = allUserData.map(user => { const introStatus = user.assessment_completed === true ? 'Completed' : (user.assessment_completed === false ? 'Not Completed' : 'Pending'); const finalStatus = user.final_assessment_completed === true ? 'Completed' : (user.final_assessment_completed === false ? 'Not Completed' : 'Pending'); return [ user.name || 'N/A', user.email || 'N/A', formatDateForCsv(user.created_at), introStatus, finalStatus ]; });
+            triggerCsvDownload(headers, dataRows, `user_management_${formatDateForCsv(new Date())}.csv`);
+        }
+        function handleExportAssessmentCsv() {
+            const headers = ["User Name", "Email", "Assessment Name", "Assessment ID", "Status", "Score", "Submitted At"];
+             const dataRows = filteredAssessmentData.map(item => { const assessmentName = SECTION_ID_FRIENDLY_NAMES[item.question_id] || item.question_text || item.question_id || 'N/A'; let displayStatus = item.completion_status; if (!displayStatus && item.is_correct !== null && typeof item.is_correct !== 'undefined') { displayStatus = item.is_correct ? 'Passed' : 'Failed'; } else if (!displayStatus) { displayStatus = 'Unknown'; } return [ item.name || 'N/A', item.user_email || 'N/A', assessmentName, item.question_id || 'N/A', displayStatus, item.score ?? '', formatDateForCsv(item.submitted_at) ]; });
+            triggerCsvDownload(headers, dataRows, `assessment_results_${formatDateForCsv(new Date())}.csv`);
+        }
+        function handleExportProgressCsv() {
+             const headers = ["User Name", "Email", "Section ID", "Section Name", "Question", "Answer", "Submitted At"];
+             const dataRows = allProgressData.map(item => { const sectionName = SECTION_ID_FRIENDLY_NAMES[item.section_id] || item.section_id || 'N/A'; return [ item.user_name || 'N/A', item.user_email || 'N/A', item.section_id || 'N/A', sectionName, item.question_text || item.question_id || 'N/A', item.answer || '', formatDateForCsv(item.submitted_at) ]; });
+             triggerCsvDownload(headers, dataRows, `section_progress_${formatDateForCsv(new Date())}.csv`);
+         }
+        function handleExportFeedbackCsv() {
+            const headers = ["User Name", "Email", "Question", "Answer", "Submitted At"];
+             const dataRows = allFeedbackData.map(item => { return [ item.name || 'N/A', item.email || 'N/A', item.question || 'N/A', item.answer || '', formatDateForCsv(item.submitted_at) ]; });
+            triggerCsvDownload(headers, dataRows, `feedback_responses_${formatDateForCsv(new Date())}.csv`);
+        }
+        // --- END: CSV Export Logic ---
+
+
+        // --- Utility Functions ---
+        function getCurrentUser() { try{const u=localStorage.getItem(CURRENT_USER_KEY); if(!u)return null; const p=JSON.parse(u); if(p&&p.email&&p.id){if(!p.name)p.name=p.email.split('@')[0]; return p;}else{localStorage.removeItem(CURRENT_USER_KEY);localStorage.removeItem(LOGGED_IN_KEY);return null;}}catch(e){console.error("Parse user error",e);localStorage.removeItem(CURRENT_USER_KEY);localStorage.removeItem(LOGGED_IN_KEY);return null;} }
+        function displayUserInfo(c){try{let n='User',e='';if(c){n=c.name||c.email.split('@')[0];e=c.email||'';}if(userNameDisplay)userNameDisplay.textContent=n;if(userEmailDisplay)userEmailDisplay.textContent=e;}catch(r){console.error("Display user info error:",r);if(userNameDisplay)userNameDisplay.textContent='Welcome';if(userEmailDisplay)userEmailDisplay.textContent='';}}
+        function logout(){try{localStorage.removeItem(LOGGED_IN_KEY);localStorage.removeItem(CURRENT_USER_KEY);window.location.href='login.html';}catch(e){console.error("Logout error:",e);window.location.href='login.html';}}
+        function showDashboardError(m){console.error("Dashboard Error:",m);}
+        function handleFatalError(m){console.error("FATAL ERROR:",m);if(mainContainer)mainContainer.innerHTML=`<p style="color:red; text-align:center; padding: 2rem;">${m}<br>Please try refreshing the page or contact support.</p>`;else document.body.innerHTML=`<p style="color: red; padding: 20px;">${m}</p>`;if(mainContainer)mainContainer.style.display='block';}
+
+    </script>
+</body>
+</html>

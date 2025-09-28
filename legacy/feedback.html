@@ -1,0 +1,968 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Course Feedback</title> <!-- Changed Title -->
+    <!-- Favicon Links -->
+    <link rel="apple-touch-icon" sizes="180x180" href="https://cdn-icons-png.flaticon.com/512/3281/3281289.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="https://cdn-icons-png.flaticon.com/512/3281/3281289.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="https://cdn-icons-png.flaticon.com/512/3281/3281289.png">
+     <!-- Supabase JS Library -->
+     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        /* --- Global Styles (Original) --- */
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        html { scroll-behavior: smooth; }
+        body { margin: 0; padding: 0; line-height: 1.7; background-color: #f9f9f9; color: #333; }
+        /* --- User Bar Styles (Original) --- */
+        .user-bar { background-color: #34495e; padding: 10px 20px; display: flex; justify-content: space-between; align-items: center; color: white; font-size: 14px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .user-info { display: flex; align-items: center; gap: 12px; }
+        .user-info svg { opacity: 0.8; }
+        .user-details { display: flex; flex-direction: column; }
+        .user-name { font-weight: 600; font-size: 14px; }
+        .user-email { font-size: 12px; opacity: 0.8; }
+        .logout-button { background-color: #e74c3c; color: white; border: none; padding: 8px 15px; border-radius: 6px; cursor: pointer; font-weight: 500; transition: all 0.3s ease; display: flex; align-items: center; gap: 6px; font-size: 13px; }
+        .logout-button:hover { background-color: #c0392b; transform: translateY(-1px); }
+        .logout-button:active { transform: translateY(0); }
+        /* --- Navigation Tabs (Original Sticky) --- */
+        .nav-tab { background-color: #2c3e50; padding: 12px 10px; text-align: center; position: sticky; top: 0; z-index: 100; overflow-x: auto; white-space: nowrap; -webkit-overflow-scrolling: touch; scrollbar-width: thin; scrollbar-color: #556a80 #2c3e50; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .nav-tab::-webkit-scrollbar { height: 6px; }
+        .nav-tab::-webkit-scrollbar-track { background: #2c3e50; }
+        .nav-tab::-webkit-scrollbar-thumb { background-color: #556a80; border-radius: 10px; border: 1px solid #2c3e50; }
+        .nav-tab a { color: white; text-decoration: none; margin: 0 8px; padding: 8px 12px; border-radius: 6px; transition: background-color 0.3s, color 0.3s; font-size: 14px; display: inline-block; }
+        .nav-tab a:hover, .nav-tab a.active { background-color: #34495e; color: #fff; }
+
+        /* --- Sticky Progress Bar --- */
+        #sticky-progress-container { position: sticky; top: 48px; /* Adjusted for potential nav bar height */ left: 0; width: 100%; background-color: #e9ecef; padding: 8px 0; z-index: 99; box-shadow: 0 3px 6px rgba(0,0,0,0.1); border-bottom: 1px solid #dee2e6; }
+        #sticky-progress-bar-wrapper { max-width: 800px; margin: 0 auto; background-color: #d8dde2; border-radius: 8px; overflow: hidden; height: 24px; box-shadow: inset 0 1px 2px rgba(0,0,0,0.1); }
+        #sticky-progress-bar { height: 100%; width: 0%; background: linear-gradient(90deg, #2ecc71, #27ae60); transition: width 0.6s cubic-bezier(0.68, -0.55, 0.27, 1.55); display: flex; align-items: center; justify-content: center; position: relative; text-align: center; }
+        #sticky-progress-text { font-size: 13px; font-weight: 700; color: white; text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5); white-space: nowrap; padding: 0 10px; position: absolute; left: 50%; transform: translateX(-50%); }
+        /* --- End Sticky Progress Bar --- */
+
+        /* Main Content Styles (Original) */
+        h1 { color: #fff; background-color: #e67e22; padding: 20px; border-radius: 8px; text-align: center; margin: 25px auto; max-width: 800px; font-size: 26px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        .container { max-width: 800px; margin: 20px auto 30px; background: white; padding: 30px; box-shadow: 0 0 10px rgba(0,0,0,0.1); border-radius: 8px; position: relative; }
+        .question-box { background-color: rgba(52, 152, 219, 0.08); padding: 25px; border-radius: 6px; margin: 25px 0; border: 1px solid rgba(52, 152, 219, 0.2); border-left: 5px solid #3498db; position: relative; }
+        .question-box h3 { margin-top: 0; margin-bottom: 15px; color: #34495e; font-weight: 600; font-size: 1.2em; }
+        .question-box h3 .required-star { color: #e74c3c; font-weight: bold; margin-left: 3px; }
+        textarea, input[type="text"], input[type="number"], select { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 4px; margin-top: 8px; margin-bottom: 10px; background-color: white; min-height: 45px; line-height: 1.6; display: block; color: #333; font-size: 15px; transition: border-color 0.3s, box-shadow 0.3s; }
+        textarea { min-height: 100px; resize: vertical; }
+        textarea:focus, input:focus, select:focus { outline: none; border-color: #e67e22; box-shadow: 0 0 0 3px rgba(230, 126, 34, 0.2); }
+        textarea::placeholder, input::placeholder { color: #aaa; opacity: 1; }
+        textarea:disabled, input:disabled, select:disabled { background-color: #f0f0f0 !important; cursor: not-allowed !important; color: #6c757d !important; border-color: #ddd !important; box-shadow: none !important;}
+        .save-button, .delete-button { color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer; transition: all 0.3s ease; font-size: 14px; font-weight: 500; }
+        .save-button { background-color: #27ae60; }
+        .delete-button { background-color: #e74c3c; margin-left: 8px; }
+        .save-button:hover:not(:disabled) { background-color: #2ecc71; transform: translateY(-1px); }
+        .delete-button:hover:not(:disabled) { background-color: #c0392b; transform: translateY(-1px); }
+        .save-button:active, .delete-button:active { transform: translateY(0); }
+        .save-button:disabled, .delete-button:disabled { background-color: #bdc3c7 !important; cursor: not-allowed !important; transform: none !important; box-shadow: none !important; opacity: 0.7 !important; }
+        .button-group { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 15px; }
+        .save-status { font-size: 14px; color: #27ae60; margin-top: 12px; display: none; font-weight: 600; }
+        .error-message { color: #e74c3c; font-size: 13px; display: block; margin-top: 4px; margin-bottom: 10px; font-weight: 500; min-height: 1.2em; display: none; }
+        .navigation-buttons { display: flex; justify-content: flex-end; /* Only Submit button */ margin-top: 40px; gap: 20px; border-top: 1px solid #eee; padding-top: 25px; }
+        /* Adjusted button selector */
+        .navigation-buttons button, .modal-actions button {
+            text-decoration: none; padding: 12px 25px; color: white; border-radius: 4px;
+            font-weight: 600; text-align: center; transition: all 0.3s ease;
+            font-size: 16px; border: none; cursor: pointer;
+        }
+        .navigation-buttons button { background-color: #e67e22; } /* Original submit button color */
+        .navigation-buttons button:hover:not(:disabled) { background-color: #d35400; transform: translateY(-1px); }
+        .navigation-buttons button:disabled { background-color: #bdc3c7 !important; cursor: not-allowed !important; opacity: 0.7 !important; }
+
+        .floating-warning { background-color: #fff8e1; border-left: 4px solid #ffc107; padding: 15px 25px; color: #333; display: none; position: fixed; top: 100px; /* Adjusted */ left: 50%; transform: translateX(-50%); z-index: 1001; border-radius: 6px; box-shadow: 0 3px 10px rgba(0,0,0,0.2); animation: slideDownFadeInWarn 0.4s ease-out; font-weight: 500; max-width: 90%; width: auto; min-width: 300px; text-align: center; }
+        @keyframes slideDownFadeInWarn { from { opacity: 0; top: 70px; } to { opacity: 1; top: 100px; } }
+        @keyframes fadeOutUpWarn { from { opacity: 1; top: 100px; } to { opacity: 0; top: 70px; } }
+        .required-field { border: 2px solid #e74c3c !important; background-color: #fff2f1 !important; box-shadow: none !important; }
+        .required-star { color: #e74c3c; font-weight: bold; margin-left: 2px; }
+        .question-progress-container { display: none !important; }
+
+         /* Rating Styles */
+         .rating-container { margin-top: 10px; margin-bottom: 15px; }
+         .rating-label { display: block; margin-bottom: 8px; font-weight: 500; color: #495057; }
+         .rating-options { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+         .rating-options input[type="radio"] { position: absolute; opacity: 0; width: 0; height: 0; }
+         .rating-options label {
+             cursor: pointer;
+             padding: 8px 15px;
+             border: 1px solid #ced4da;
+             border-radius: 20px; /* Pill shape */
+             background-color: #fff;
+             color: #495057;
+             transition: all 0.3s ease;
+             font-size: 14px;
+         }
+         .rating-options input[type="radio"]:checked + label {
+             background-color: #3498db; /* Blue when selected */
+             color: white;
+             border-color: #2980b9;
+             font-weight: 600;
+         }
+          .rating-options input[type="radio"]:disabled + label {
+             background-color: #e9ecef;
+             color: #adb5bd;
+             cursor: not-allowed;
+             border-color: #dee2e6;
+         }
+         .rating-options label:hover:not(.disabled):not(:has(input:checked)) { /* Hover only if not disabled or checked */
+             background-color: #eef5fc;
+             border-color: #a5cff8;
+         }
+          /* Class to disable hover/click on labels when whole group is disabled */
+         .rating-options.disabled label {
+             cursor: not-allowed;
+             background-color: #e9ecef !important; /* Ensure override */
+             color: #adb5bd !important;
+             border-color: #dee2e6 !important;
+             /* Remove hover effects */
+             transition: none;
+             transform: none;
+         }
+          .rating-options.disabled label:hover { /* Explicitly disable hover effects */
+            background-color: #e9ecef !important;
+            border-color: #dee2e6 !important;
+          }
+
+        /* --- Completion Screen Styles --- */
+        #completionScreen {
+            display: none; /* Hidden by default */
+            text-align: center;
+            padding: 40px 20px;
+            margin: 30px auto;
+            max-width: 600px;
+            background-color: #e8f5e9; /* Light green background */
+            border: 1px solid #a5d6a7;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        #completionScreen h2 {
+            font-size: 2em;
+            color: #2e7d32; /* Dark green */
+            margin-bottom: 15px;
+        }
+        #completionScreen p {
+            font-size: 1.1em;
+            color: #333;
+            line-height: 1.6;
+            margin-bottom: 25px;
+        }
+        #completionScreen .exit-button {
+            background-color: #e67e22; /* Orange button */
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            font-size: 16px;
+            text-decoration: none; /* If using <a> tag */
+            display: inline-block;
+        }
+        #completionScreen .exit-button:hover {
+            background-color: #d35400;
+            transform: translateY(-1px);
+        }
+
+        /* --- Custom Confirmation Modal Styles --- */
+        #confirmationModal {
+            display: none; /* Hidden by default */
+            position: fixed;
+            z-index: 1050; /* High z-index */
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0, 0, 0, 0.5); /* Dim background */
+            justify-content: center;
+            align-items: center;
+        }
+        .modal-content {
+            background-color: #fff;
+            margin: auto;
+            padding: 25px 30px;
+            border-radius: 8px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+            width: 90%;
+            max-width: 450px; /* Limit max width */
+            text-align: center;
+            animation: fadeInModal 0.3s ease-out;
+        }
+        @keyframes fadeInModal {
+             from { opacity: 0; transform: translateY(-20px); }
+             to { opacity: 1; transform: translateY(0); }
+        }
+        .modal-content p {
+            font-size: 1.1em;
+            margin-bottom: 25px;
+            color: #333;
+            line-height: 1.6;
+        }
+        .modal-actions {
+            display: flex;
+            justify-content: center; /* Center buttons */
+            gap: 15px; /* Space between buttons */
+            margin-top: 10px;
+        }
+        /* Style modal buttons */
+        .modal-actions button {
+             padding: 10px 20px; /* Slightly smaller padding */
+             font-size: 15px;
+        }
+        #confirmSubmitBtn {
+            background-color: #e67e22; /* Match original submit button */
+        }
+        #confirmSubmitBtn:hover {
+            background-color: #d35400;
+        }
+        #cancelSubmitBtn {
+            background-color: #95a5a6; /* Grey for cancel */
+            color: #fff;
+        }
+        #cancelSubmitBtn:hover {
+            background-color: #7f8c8d;
+        }
+
+
+        /* --- Responsive Adjustments (Original + Completion + Modal) --- */
+        @media (max-width: 768px) {
+             #sticky-progress-container { top: 48px; padding: 6px 0; } /* Ensure correct top value based on nav */
+             #sticky-progress-bar-wrapper { height: 20px; }
+             #sticky-progress-text { font-size: 11px; }
+             .floating-warning { top: 90px; /* Adjusted */ }
+             @keyframes slideDownFadeInWarn { from { opacity: 0; top: 70px; } to { opacity: 1; top: 90px; } }
+             @keyframes fadeOutUpWarn { from { opacity: 1; top: 90px; } to { opacity: 0; top: 70px; } }
+             /* Other original */
+             h1 { font-size: 22px; padding: 15px; margin: 20px 15px; }
+             .container { padding: 20px; margin: 15px auto 20px; }
+             .user-bar { padding: 10px 15px; font-size: 13px; }
+             .user-name { font-size: 13px; } .user-email { font-size: 11px; }
+             .logout-button { padding: 7px 12px; font-size: 12px; }
+             .nav-tab { top: 0; } /* Reset top for nav-tab */
+             .nav-tab a { margin: 0 5px; padding: 7px 10px; font-size: 13px;}
+             .question-box { padding: 15px; margin: 20px 0; }
+             textarea { min-height: 80px; }
+             .save-button, .delete-button { padding: 7px 13px; font-size: 13px; }
+             .navigation-buttons { justify-content: center; } /* Center single button */
+             .navigation-buttons button, .modal-actions button { font-size: 15px; padding: 12px 20px; flex: 0 1 auto; /* Allow button to size naturally */}
+             .rating-options label { padding: 6px 12px; font-size: 13px;}
+             #completionScreen { padding: 30px 15px; }
+             #completionScreen h2 { font-size: 1.8em; }
+             #completionScreen p { font-size: 1em; }
+             #completionScreen .exit-button { padding: 10px 25px; font-size: 15px; }
+             .modal-content { padding: 20px; }
+        }
+         @media (max-width: 480px) {
+             #sticky-progress-container { top: 48px; } /* Ensure correct top value */
+             #sticky-progress-bar-wrapper { height: 18px; }
+             #sticky-progress-text { font-size: 10px; }
+             .floating-warning { top: 85px; /* Adjusted */ }
+             @keyframes slideDownFadeInWarn { from { opacity: 0; top: 65px; } to { opacity: 1; top: 85px; } }
+             @keyframes fadeOutUpWarn { from { opacity: 1; top: 85px; } to { opacity: 0; top: 65px; } }
+             /* Other original */
+             h1 { font-size: 20px; } h2 { font-size: 1.3em; } h3 { font-size: 1.1em; }
+             .container { padding: 15px; margin: 10px auto 15px; }
+             .button-group { gap: 8px; }
+             .rating-options { gap: 6px; }
+             .rating-options label { padding: 5px 10px; font-size: 12px;}
+             #completionScreen h2 { font-size: 1.6em; }
+             #completionScreen p { font-size: 0.95em; }
+             #completionScreen .exit-button { padding: 10px 20px; font-size: 14px; }
+             .modal-content { padding: 15px; }
+             .modal-content p { font-size: 1em; margin-bottom: 20px;}
+             .modal-actions button { padding: 10px 15px; font-size: 14px;}
+         }
+    </style>
+</head>
+<body>
+    <!-- User Info Bar (Original) -->
+    <div class="user-bar">
+        <div class="user-info"> <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.8;"> <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path> <circle cx="12" cy="7" r="4"></circle> </svg> <div class="user-details"> <span class="user-name" id="userName">Loading...</span> <span class="user-email" id="userEmail"></span> </div> </div> <button class="logout-button" onclick="logout()"> <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"> <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path> <polyline points="16 17 21 12 16 7"></polyline> <line x1="21" y1="12" x2="9" y2="12"></line> </svg> Logout </button>
+    </div>
+
+    <!-- Navigation Tabs (Original Sticky) -->
+    <nav class="nav-tab">
+        <a href="dashboard.html">Dashboard</a>
+        <a href="index.html">Home</a>
+        <a href="introduction.html">Introduction</a>
+        <a href="coaching-skills.html">Coaching Skills</a>
+        <a href="coaching-individuals.html">Coaching Individuals</a>
+        <a href="coaching-team.html">Team Coaching</a>
+        <a href="coaching-yourself.html">Self Coaching</a>
+        <a href="action-plan.html">Action Plan</a>
+        <a href="ass.html">Assessment</a>
+        <!-- Add link to feedback.html if needed -->
+        <a href="feedback.html" class="active">Feedback</a>
+    </nav>
+
+    <!-- Sticky Progress Bar -->
+    <div id="sticky-progress-container">
+        <div id="sticky-progress-bar-wrapper">
+            <div id="sticky-progress-bar">
+                <span id="sticky-progress-text">Progress: 0%</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Heading -->
+    <h1>Course Feedback</h1>
+
+    <!-- Floating Warning Message -->
+    <div class="floating-warning" id="generalWarningMessage"></div>
+
+    <!-- Main Feedback Form Container -->
+    <div class="container" id="feedbackFormContainer">
+
+        <p style="text-align: center; font-size: 1.1em; margin-bottom: 30px;">We value your feedback! Please take a moment to share your thoughts on the course content and your learning experience.</p>
+
+        <!-- Question 1: Overall Rating -->
+        <div class="question-box" id="question-container-feedback_q1">
+            <h3>Overall Course Rating<span class="required-star">*</span></h3>
+            <p>How would you rate your overall experience with this Coaching & Leadership course?</p>
+            <div class="rating-container">
+                <span class="rating-label">Rate from 1 (Poor) to 5 (Excellent):</span>
+                <div class="rating-options">
+                    <input type="radio" id="rating1" name="overall_rating" value="1" class="required-answer editable-answer" data-question="feedback_q1">
+                    <label for="rating1">1</label>
+                    <input type="radio" id="rating2" name="overall_rating" value="2" class="required-answer editable-answer" data-question="feedback_q1">
+                    <label for="rating2">2</label>
+                    <input type="radio" id="rating3" name="overall_rating" value="3" class="required-answer editable-answer" data-question="feedback_q1">
+                    <label for="rating3">3</label>
+                    <input type="radio" id="rating4" name="overall_rating" value="4" class="required-answer editable-answer" data-question="feedback_q1">
+                    <label for="rating4">4</label>
+                    <input type="radio" id="rating5" name="overall_rating" value="5" class="required-answer editable-answer" data-question="feedback_q1">
+                    <label for="rating5">5</label>
+                </div>
+            </div>
+            <div class="button-group">
+                <button class="save-button" onclick="saveAnswer('feedback_q1')">Save Rating</button>
+                <button class="delete-button" onclick="deleteAnswer('feedback_q1')">Clear Rating</button>
+                 <span class="error-message" id="error-feedback_q1"></span>
+            </div>
+            <span class="save-status" id="save-status-feedback_q1">Saved ✅</span>
+        </div>
+
+        <!-- Question 2: Most Valuable Part -->
+        <div class="question-box" id="question-container-feedback_q2">
+            <h3>Most Valuable Aspect<span class="required-star">*</span></h3>
+            <p>What part of the course did you find most valuable or insightful?</p>
+            <textarea placeholder="e.g., Learning about the GROW model, the section on team dynamics, the practical exercises..." class="editable-answer required-answer" data-question="feedback_q2"></textarea>
+            <div class="button-group">
+                 <!-- Ensure onclick calls saveAnswer with the correct question ID -->
+                <button class="save-button" onclick="saveAnswer('feedback_q2')">Save</button>
+                <button class="delete-button" onclick="deleteAnswer('feedback_q2')">Delete</button>
+                 <span class="error-message" id="error-feedback_q2"></span>
+            </div>
+            <span class="save-status" id="save-status-feedback_q2">Saved ✅</span>
+        </div>
+
+         <!-- Question 3: Least Valuable Part -->
+        <div class="question-box" id="question-container-feedback_q3">
+            <h3>Least Valuable Aspect (Optional)</h3>
+            <p>Was there any part of the course you found less helpful or clear? (Optional)</p>
+            <textarea placeholder="Your honest feedback helps us improve..." class="editable-answer" data-question="feedback_q3"></textarea> <!-- Not required -->
+            <div class="button-group">
+                 <!-- Ensure onclick calls saveAnswer with the correct question ID -->
+                <button class="save-button" onclick="saveAnswer('feedback_q3')">Save</button>
+                <button class="delete-button" onclick="deleteAnswer('feedback_q3')">Delete</button>
+                 <span class="error-message" id="error-feedback_q3"></span> <!-- Still include for potential future validation -->
+            </div>
+             <span class="save-status" id="save-status-feedback_q3">Saved ✅</span>
+        </div>
+
+         <!-- Question 4: Application -->
+        <div class="question-box" id="question-container-feedback_q4">
+            <h3>Practical Application<span class="required-star">*</span></h3>
+            <p>How likely are you to apply the coaching techniques learned in this course in your work? (1 = Very Unlikely, 5 = Very Likely)</p>
+             <div class="rating-container">
+                <div class="rating-options">
+                    <input type="radio" id="apply1" name="apply_likelihood" value="1" class="required-answer editable-answer" data-question="feedback_q4">
+                    <label for="apply1">1</label>
+                    <input type="radio" id="apply2" name="apply_likelihood" value="2" class="required-answer editable-answer" data-question="feedback_q4">
+                    <label for="apply2">2</label>
+                    <input type="radio" id="apply3" name="apply_likelihood" value="3" class="required-answer editable-answer" data-question="feedback_q4">
+                    <label for="apply3">3</label>
+                    <input type="radio" id="apply4" name="apply_likelihood" value="4" class="required-answer editable-answer" data-question="feedback_q4">
+                    <label for="apply4">4</label>
+                    <input type="radio" id="apply5" name="apply_likelihood" value="5" class="required-answer editable-answer" data-question="feedback_q4">
+                    <label for="apply5">5</label>
+                </div>
+            </div>
+            <div class="button-group">
+                <button class="save-button" onclick="saveAnswer('feedback_q4')">Save Rating</button>
+                <button class="delete-button" onclick="deleteAnswer('feedback_q4')">Clear Rating</button>
+                 <span class="error-message" id="error-feedback_q4"></span>
+            </div>
+            <span class="save-status" id="save-status-feedback_q4">Saved ✅</span>
+        </div>
+
+         <!-- Question 5: Suggestions -->
+        <div class="question-box" id="question-container-feedback_q5">
+            <h3>Suggestions for Improvement (Optional)</h3>
+            <p>Do you have any suggestions for how this course could be improved? (Topics, examples, format, etc.)</p>
+            <textarea placeholder="We appreciate your ideas!" class="editable-answer" data-question="feedback_q5"></textarea> <!-- Not required -->
+            <div class="button-group">
+                 <!-- Ensure onclick calls saveAnswer with the correct question ID -->
+                <button class="save-button" onclick="saveAnswer('feedback_q5')">Save</button>
+                <button class="delete-button" onclick="deleteAnswer('feedback_q5')">Delete</button>
+                 <span class="error-message" id="error-feedback_q5"></span>
+            </div>
+             <span class="save-status" id="save-status-feedback_q5">Saved ✅</span>
+        </div>
+
+        <p style="text-align: center; font-weight: 600; margin-top: 30px;">Thank you for completing the course and providing your valuable feedback!</p>
+
+        <!-- Navigation Buttons -->
+        <div class="navigation-buttons">
+             <!-- Only Submit Button Needed -->
+            <button type="button" class="button" id="submitFeedbackButton">Submit Feedback</button>
+        </div>
+    </div><!-- /.container -->
+
+    <!-- Completion Screen (Initially Hidden) -->
+    <div id="completionScreen">
+        <h2>🎉 Congratulations! 🎉</h2>
+        <p>You've successfully completed the Coaching & Leadership course and submitted your feedback.</p>
+        <p>Thank you for your valuable input! 🙏<br>Your journey as a coach starts now! 🚀</p>
+        <button class="exit-button" onclick="window.location.href='index.html'">Back to Home</button>
+    </div>
+
+    <!-- Custom Confirmation Modal -->
+    <div id="confirmationModal">
+        <div class="modal-content">
+            <p>Are you sure you want to submit your feedback? This action cannot be undone.</p>
+            <div class="modal-actions">
+                <button id="cancelSubmitBtn">Cancel</button>
+                <button id="confirmSubmitBtn">Confirm Submit</button>
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+        // --- Supabase Configuration ---
+        const SUPABASE_URL = 'https://lgcutmuspcaralydycmg.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxnY3V0bXVzcGNhcmFseWR5Y21nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU0NDY3MDEsImV4cCI6MjA2MTAyMjcwMX0.3u5Y7pkH2NNnnoGLMWVfAa5b8fq88o1itRYnG1K38tE';
+        let supabase = null;
+
+        // --- Configuration ---
+        const localStorageKey = 'allUserAnswers_feedback'; // Unique key for this page (stores SAVED status)
+        const SECTION_ID = 'feedback'; // Unique ID for progress tracking (on this page)
+        const PAGE_NAME = 'feedback.html'; // Page name
+        // *** CRITICAL: Ensure ALL feedback answers go ONLY to this table ***
+        const FEEDBACK_TABLE = 'feedback_responses';
+
+        // --- Unified Keys ---
+        const LOGGED_IN_KEY = 'isUserLoggedIn';
+        const CURRENT_USER_KEY = 'currentUser';
+
+        // --- Required Question IDs for Progress Bar & Submission Validation ---
+        const requiredQuestionIds = [
+            'feedback_q1', // Overall Rating
+            'feedback_q2', // Most Valuable
+            'feedback_q4'  // Application Likelihood
+            // Q3 and Q5 are optional
+        ];
+
+        // --- Supabase Table Structure & RLS (Informational Comment) ---
+        /*
+            REQUIRED Supabase Table: feedback_responses
+            Columns MUST include at least:
+            - user_id (uuid)
+            - email (text)
+            - name (text, nullable)
+            - question (text)
+            - answer (text)
+            - submitted_at (timestamp with time zone)
+            (Other columns like id, created_at are standard)
+
+            REQUIRED RLS Policies on `feedback_responses`:
+            - Ensure RLS is ENABLED.
+            - Ensure INSERT policy allows insert WHERE auth.uid() = user_id.
+              (Example: WITH CHECK (auth.uid() = user_id) )
+            - Ensure column names in policy (user_id) MATCH table EXACTLY.
+        */
+
+        // --- DOM Element References --- (Added Modal Elements)
+        let confirmationModal = null;
+        let confirmSubmitBtn = null;
+        let cancelSubmitBtn = null;
+        let originalSubmitButton = null; // Reference to the original button
+        let feedbackFormContainer = null;
+        let completionScreen = null;
+
+
+        // Initialize Supabase Client
+        try {
+            if (window.supabase && window.supabase.createClient) {
+                supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+                console.log(`Supabase client initialized successfully on ${PAGE_NAME}.`);
+            } else { throw new Error("Supabase library not found."); }
+        } catch (error) { console.error("CRITICAL ERROR initializing Supabase:", error); }
+
+
+        // --- Initialization ---
+        document.addEventListener('DOMContentLoaded', function() {
+             console.log(`%c${PAGE_NAME}: DOMContentLoaded event fired.`, "color: green;");
+
+             // Get Modal and related elements
+             confirmationModal = document.getElementById('confirmationModal');
+             confirmSubmitBtn = document.getElementById('confirmSubmitBtn');
+             cancelSubmitBtn = document.getElementById('cancelSubmitBtn');
+             originalSubmitButton = document.getElementById('submitFeedbackButton'); // Get original button
+             feedbackFormContainer = document.getElementById('feedbackFormContainer');
+             completionScreen = document.getElementById('completionScreen');
+
+
+             if (!supabase) {
+                 console.error(`Supabase client failed to initialize on ${PAGE_NAME}.`);
+                 showGeneralWarningMessage('Database connection error. Progress might not save correctly.', true);
+                 // Disable submit button if DB fails?
+                 if(originalSubmitButton) originalSubmitButton.disabled = true;
+             }
+
+              // Check if all essential DOM elements exist
+              if (!confirmationModal || !confirmSubmitBtn || !cancelSubmitBtn || !originalSubmitButton || !feedbackFormContainer || !completionScreen) {
+                 console.error("Initialization Error: Missing essential page elements (modal, buttons, containers). Functionality may be broken.");
+                 showGeneralWarningMessage('Page structure error. Cannot proceed with feedback submission.', true);
+                 if(originalSubmitButton) originalSubmitButton.disabled = true; // Disable submit if crucial elements are missing
+                 return; // Stop further initialization if core elements are missing
+             }
+
+             const currentUser = getCurrentUser();
+             if (!currentUser || !currentUser.id || !currentUser.email) {
+                 console.error(`%c${PAGE_NAME}: User not logged in or essential data missing. Redirecting...`, "color: red;");
+                  // Basic redirection loop prevention
+                  if (!window.location.search.includes('redir_attempt')) { window.location.href = `login.html?redirect=${encodeURIComponent(window.location.pathname + window.location.search)}&redir_attempt=1`; }
+                  else { console.error("REDIRECTION LOOP DETECTED."); document.body.innerHTML = '<p style="color: red; padding: 20px;">Login check failed repeatedly. Please log in again.</p>'; }
+                 return;
+             }
+             console.log(`%c${PAGE_NAME}: User validated (${currentUser.email}, ID: ${currentUser.id}, Name: ${currentUser.name}). Initializing.`, "color: green;"); // Added name to log
+             displayUserInfo();
+             loadUserAnswers(currentUser); // Load SAVED state from localStorage
+             updateStickyProgressBar(); // Initial progress calculation based on loaded state
+             setupEventListeners(currentUser);
+             highlightActiveNav();
+
+             // Add default text dataset for button helper
+             document.querySelectorAll('.save-button, .delete-button').forEach(btn => { btn.dataset.defaultText = btn.textContent; });
+             if(originalSubmitButton) originalSubmitButton.dataset.defaultText = originalSubmitButton.textContent;
+
+             // ***** CRITICAL DEBUG STEP *****
+             // Check if any *other* script might be interfering
+             console.warn(`%c${PAGE_NAME}: Checking for conflicting save logic. Ensure ONLY 'saveAnswer' function in this script handles saving to '${FEEDBACK_TABLE}'. Search project for supabase calls targeting 'user_progress' from textareas on this page.`, "color: orange; font-weight: bold;");
+             // -----------------------------
+
+             console.log(`%c${PAGE_NAME}: Initialization complete.`, "color: blue;");
+        });
+
+        // --- User Info & Auth --- (Functions unchanged: getCurrentUser, saveCurrentUser, displayUserInfo, logout, highlightActiveNav)
+        function getCurrentUser() { try { const d = localStorage.getItem(CURRENT_USER_KEY); if (!d) return null; const p = JSON.parse(d); if (p && typeof p === 'object' && p.email && p.name && p.id) { if (typeof p.progress !== 'object' || p.progress === null) p.progress = {}; return p; } else { localStorage.removeItem(CURRENT_USER_KEY); localStorage.removeItem(LOGGED_IN_KEY); return null; } } catch (e) { console.error("GUC Error:", e); localStorage.removeItem(CURRENT_USER_KEY); localStorage.removeItem(LOGGED_IN_KEY); return null; } }
+        function saveCurrentUser(userObject) { try { if (!userObject || typeof userObject !== 'object') throw new Error("Invalid user object"); localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(userObject)); } catch (error) { console.error("SCU Error:", error); } }
+        function displayUserInfo() { const u=getCurrentUser(); if(u){document.getElementById('userName').textContent=`Welcome, ${u.name || u.email.split('@')[0]}`; document.getElementById('userEmail').textContent=u.email;}else{console.warn("DIU: No user");}}
+        function logout() { localStorage.removeItem(LOGGED_IN_KEY); localStorage.removeItem(CURRENT_USER_KEY); localStorage.removeItem(localStorageKey); window.location.href = 'login.html';}
+        function highlightActiveNav() { const cP=window.location.pathname.split('/').pop()||PAGE_NAME; document.querySelectorAll('.nav-tab a').forEach(l=>{const lP=(l.getAttribute('href')||'').split('/').pop(); l.classList.toggle('active',lP===cP);});}
+
+        // --- Answer Handling (Loading state from localStorage) --- (Functions unchanged: loadUserAnswers, loadFieldState)
+        function loadUserAnswers(currentUser) { if (!currentUser || !currentUser.email) return; let allAnswersState = {}; try { const d = localStorage.getItem(localStorageKey); if (d) allAnswersState = JSON.parse(d) || {}; } catch (e) { console.error("Load Answers State Error:", e); } const userAnswersState = allAnswersState[currentUser.email] || {}; document.querySelectorAll('.editable-answer').forEach(field => { const questionId = field.dataset.question; if (questionId) { loadFieldState(field, questionId, userAnswersState); } }); }
+        function loadFieldState(field, questionId, userAnswersState) { if (!field) return; const isRadioGroup = field.type === 'radio'; const container = field.closest('.question-box'); if (!container) return; const errorId = `error-${questionId}`; const statusId = `save-status-${questionId}`; const statusElement = document.getElementById(statusId); const buttonGroup = container.querySelector('.button-group'); const saveButton = buttonGroup?.querySelector('.save-button'); const deleteButton = buttonGroup?.querySelector('.delete-button'); const radioOptionsContainer = container.querySelector('.rating-options'); hideError(errorId); if (statusElement) statusElement.style.display = 'none'; const isSaved = userAnswersState[questionId] !== undefined && userAnswersState[questionId] !== null; if (isSaved) { field.classList.remove('required-field'); if (isRadioGroup) { container.querySelectorAll(`input[type="radio"][data-question="${questionId}"]`).forEach(radio => radio.disabled = true); if(radioOptionsContainer) radioOptionsContainer.classList.add('disabled'); const savedValue = userAnswersState[questionId]; if (savedValue) { const checkedRadio = container.querySelector(`input[type="radio"][data-question="${questionId}"][value="${savedValue}"]`); if (checkedRadio) checkedRadio.checked = true; } } else { field.disabled = true; // Existing saved text answers are marked disabled
+           // >>> ADDITION: Load the saved text value into the disabled field
+           if (userAnswersState[questionId] && typeof userAnswersState[questionId] === 'string') {
+             field.value = userAnswersState[questionId];
+           }
+           // <<< END ADDITION
+         } if (buttonGroup) buttonGroup.style.display = 'none'; if (statusElement) { statusElement.textContent = 'Saved ✅'; statusElement.style.display = 'inline-block'; } } else { field.classList.remove('required-field'); if (isRadioGroup) { container.querySelectorAll(`input[type="radio"][data-question="${questionId}"]`).forEach(radio => { radio.disabled = false; radio.checked = false; }); if(radioOptionsContainer) radioOptionsContainer.classList.remove('disabled'); } else { field.value = ''; field.disabled = false; } if (buttonGroup) { buttonGroup.style.display = 'flex'; if (saveButton) { saveButton.disabled = false; saveButton.textContent = saveButton.dataset.defaultText || (field.type === 'radio' ? 'Save Rating' : 'Save'); } if (deleteButton) { deleteButton.disabled = false; deleteButton.style.display = 'inline-block'; deleteButton.textContent = deleteButton.dataset.defaultText || (field.type === 'radio' ? 'Clear Rating' : 'Delete'); } } if (statusElement) statusElement.style.display = 'none'; } }
+
+        // --- Local Storage Management --- (Functions unchanged: markAnswerAsSavedInStorage, removeAnswerSavedStateFromStorage)
+        function markAnswerAsSavedInStorage(userEmail, questionId, valueToStore = true) { if (!userEmail || !questionId) return false; let allStates = {}; try { const d = localStorage.getItem(localStorageKey); if (d) allStates = JSON.parse(d) || {}; } catch (e) { allStates = {}; } if (!allStates[userEmail]) allStates[userEmail] = {}; allStates[userEmail][questionId] = valueToStore; try { localStorage.setItem(localStorageKey, JSON.stringify(allStates)); return true; } catch (e) { console.error("Save State Storage Err:", e); return false; } }
+        function removeAnswerSavedStateFromStorage(userEmail, questionId) { if (!userEmail || !questionId) return false; let allStates = {}; try { const d = localStorage.getItem(localStorageKey); if (d) allStates = JSON.parse(d) || {}; else return false; } catch (e) { return false; } let stateChanged = false; if (allStates[userEmail]?.[questionId] !== undefined) { delete allStates[userEmail][questionId]; stateChanged = true; if (Object.keys(allStates[userEmail]).length === 0) delete allStates[userEmail]; } if (stateChanged) { try { localStorage.setItem(localStorageKey, JSON.stringify(allStates)); return true; } catch (e) { console.error("Delete State Storage Err:", e); return false; } } return false; }
+
+        // --- Sticky Progress Bar Function --- (Function unchanged: updateStickyProgressBar)
+        function updateStickyProgressBar() { const currentUser = getCurrentUser(); if (!currentUser?.email) return; let allAnswersState = {}; try { const d = localStorage.getItem(localStorageKey); if (d) allAnswersState = JSON.parse(d) || {}; } catch (e) { console.error("Progress LS Error:", e); return; } const userAnswersState = allAnswersState[currentUser.email] || {}; const totalRequired = requiredQuestionIds.length; if (totalRequired === 0) return; let savedRequiredCount = 0; requiredQuestionIds.forEach(qId => { if (userAnswersState[qId] !== undefined && userAnswersState[qId] !== null) { savedRequiredCount++; } }); const percentage = totalRequired > 0 ? Math.round((savedRequiredCount / totalRequired) * 100) : 0; const barElement = document.getElementById('sticky-progress-bar'); const textElement = document.getElementById('sticky-progress-text'); if (barElement && textElement) { barElement.style.width = `${percentage}%`; textElement.textContent = `Progress: ${percentage}%`; } if (!currentUser.progress) currentUser.progress = {}; currentUser.progress[SECTION_ID] = percentage; saveCurrentUser(currentUser); console.log(`Sticky Progress Updated: ${percentage}% (${savedRequiredCount}/${totalRequired})`); }
+
+        // --- Event Listeners Setup --- (Unchanged: setupEventListeners)
+        function setupEventListeners(currentUser) {
+             if (!currentUser?.email) return;
+
+             // Input field listeners
+             document.querySelectorAll('.editable-answer').forEach(field => {
+                 const eventType = (field.tagName === 'TEXTAREA' || field.type === 'text' || field.type === 'number') ? 'input' : 'change';
+                 field.addEventListener(eventType, function() {
+                     const questionId = this.dataset.question;
+                     if (questionId && !this.disabled) {
+                         hideError(`error-${questionId}`);
+                         const buttonGroup = this.closest('.question-box')?.querySelector('.button-group');
+                         const saveButton = buttonGroup?.querySelector('.save-button');
+                         if (saveButton) saveButton.disabled = false;
+                     }
+                 });
+             });
+
+             // Original Submit Button Listener
+             if (originalSubmitButton) {
+                 originalSubmitButton.addEventListener('click', handleSubmitFeedback);
+             } else { console.warn("Original Submit Feedback button not found during listener setup."); }
+
+             // Modal Button Listeners
+             if (cancelSubmitBtn) {
+                 cancelSubmitBtn.addEventListener('click', hideConfirmationModal);
+             } else { console.warn("Modal Cancel button not found during listener setup."); }
+
+             if (confirmSubmitBtn) {
+                confirmSubmitBtn.addEventListener('click', () => {
+                    hideConfirmationModal();
+                    proceedWithSubmission(); // Call the function that contains the final steps
+                });
+             } else { console.warn("Modal Confirm button not found during listener setup."); }
+        }
+
+        // --- Modal Control Functions --- (Unchanged: showConfirmationModal, hideConfirmationModal)
+        function showConfirmationModal() {
+            if (confirmationModal) {
+                confirmationModal.style.display = 'flex'; // Use flex to enable centering
+                 // Reset original submit button state just in case it was left loading
+                 if (originalSubmitButton) {
+                    setButtonLoading(originalSubmitButton, false, originalSubmitButton.dataset.defaultText || 'Submit Feedback');
+                }
+            } else {
+                 console.error("Cannot show modal: Modal element not found.");
+                 // Fallback to alert if modal fails? Or show error message.
+                 alert("Confirmation required, but modal failed to load. Cannot submit.");
+            }
+        }
+
+        function hideConfirmationModal() {
+            if (confirmationModal) {
+                confirmationModal.style.display = 'none';
+            }
+        }
+
+
+        // --- UI Feedback & Validation --- (Unchanged: validateAllAnswers, showGeneralWarningMessage, hideWarningMessage, showError, hideError, hideMessages)
+        function validateAllAnswers(showErrors = false) { let allRequiredSaved = true; let firstInvalidField = null; console.log(`Feedback Validation (Show Errors: ${showErrors}) - Checking if all required are SAVED.`); hideWarningMessage(); requiredQuestionIds.forEach(qId => { const container = document.getElementById(`question-container-${qId}`); const field = container?.querySelector(`.required-answer[data-question="${qId}"]`); if (!field) { console.error(`Validation Error: Required field/container ${qId} not found!`); allRequiredSaved = false; return; } if (!field.disabled) { // Check if the field is NOT disabled (meaning not saved yet)
+            allRequiredSaved = false; if (!firstInvalidField) { firstInvalidField = field; } if (showErrors) { const errorId = `error-${qId}`; showError(errorId, field.type === 'radio' ? null : field, 'Please save your feedback for this required question.'); } } else { const errorId = `error-${qId}`; hideError(errorId); if (field.type !== 'radio') field.classList.remove('required-field'); } }); if (!allRequiredSaved && showErrors && firstInvalidField) { firstInvalidField.scrollIntoView({ behavior: 'smooth', block: 'center' }); showGeneralWarningMessage(); } else if (!allRequiredSaved && showErrors) { showGeneralWarningMessage(); } console.log("Feedback Validation (All Required Saved) result:", allRequiredSaved); return allRequiredSaved; }
+        function showGeneralWarningMessage(message = "Please save your answers for all required feedback questions marked with * before submitting.", sticky = false) { const w=document.getElementById('generalWarningMessage'); if(!w) return; w.innerHTML = `<strong>Action Required:</strong> ${message}`; w.style.animation='none'; void w.offsetWidth; w.style.display='block'; w.style.animation='slideDownFadeInWarn 0.4s ease-out'; clearTimeout(w.timer); if (!sticky) { w.timer=setTimeout(()=>{ w.style.animation='fadeOutUpWarn 0.5s ease-out forwards'; setTimeout(()=>{ if(w.style.animationName === 'fadeOutUpWarn'){w.style.display='none';w.style.animation='';} }, 500); }, 5000); } }
+        function hideWarningMessage() { const w=document.getElementById('generalWarningMessage'); if(w && w.style.display !== 'none'){ w.style.animation='fadeOutUpWarn 0.5s ease-out forwards'; setTimeout(()=>{if(w.style.animationName==='fadeOutUpWarn'){w.style.display='none'; w.style.animation='';}},500);}}
+        function showError(errorId, fieldToMark, message = 'This field is required.') { const e=document.getElementById(errorId); if(e){e.textContent=message; e.style.display='block'; e.style.width='100%'; e.style.textAlign = fieldToMark ? 'left' : 'center';} if(fieldToMark && !fieldToMark.disabled) fieldToMark.classList.add('required-field');}
+        function hideError(errorId) { const e=document.getElementById(errorId); if(e) e.style.display='none';}
+        function hideMessages(statusId, errorId, field) { hideError(errorId); const s = statusId ? document.getElementById(statusId) : null; if(s)s.style.display='none'; if (field && field.type !== 'radio') field.classList.remove('required-field'); }
+
+
+        // --- Actions (Save to DB, Delete unsaved) ---
+        // ***** START saveAnswer Function (Confirmed to target FEEDBACK_TABLE and include Name) *****
+        window.saveAnswer = async function(questionId) {
+             // Ensure Supabase client is available
+             if (!supabase) { showGeneralWarningMessage('Database connection error. Cannot save.', true); return; }
+
+             // Ensure user is logged in and has necessary info
+             const currentUser = getCurrentUser();
+             if (!currentUser?.email || !currentUser.id) { showGeneralWarningMessage('Session expired. Please log in again.', true); setTimeout(logout, 3000); return; }
+             // Log the intended action clearly
+             console.log(`==> Attempting SAVE for QID: ${questionId} to TABLE: '${FEEDBACK_TABLE}' | User: ${currentUser.email} (ID: ${currentUser.id}, Name: ${currentUser.name})`);
+
+             // Get DOM elements for the specific question
+             const container = document.getElementById(`question-container-${questionId}`);
+             if (!container) { console.error("Save Error: Question container not found for", questionId); return; }
+             const field = container.querySelector(`.editable-answer[data-question="${questionId}"]`); // Could be radio or textarea
+             const errorId = `error-${questionId}`;
+             const statusId = `save-status-${questionId}`;
+             const statusElement = document.getElementById(statusId);
+             const buttonGroup = container.querySelector('.button-group');
+             const saveButton = buttonGroup?.querySelector('.save-button');
+             const deleteButton = buttonGroup?.querySelector('.delete-button');
+             const radioOptionsContainer = container.querySelector('.rating-options');
+
+             // Basic check for essential elements
+             if (!field || !buttonGroup || !saveButton || !deleteButton) { console.error(`Save Error: Required elements missing for ${questionId}.`); return; }
+
+             // Prevent saving if already saved (field is disabled)
+             if (field.disabled) { console.warn(`Attempted save on already disabled field/group: ${questionId}.`); return; }
+
+             let answer = null;
+             let trimmedAnswer = null;
+             let isValid = false;
+             const isRequired = requiredQuestionIds.includes(questionId);
+             let questionText = `Feedback Question ID: ${questionId}`; // Default question text
+
+             hideMessages(statusId, errorId, field); // Clear previous messages
+
+             // --- Validate input based on type ---
+             if (field.type === 'radio') {
+                 const checkedRadio = container.querySelector(`input[type="radio"][data-question="${questionId}"]:checked`);
+                 if (checkedRadio) {
+                     answer = checkedRadio.value;
+                     isValid = true;
+                 } else if (isRequired) {
+                     showError(errorId, null, 'Please select a rating.');
+                     isValid = false;
+                 } else { // Optional radio
+                     isValid = true;
+                     answer = null;
+                 }
+                 console.log(`Validation for QID ${questionId} (Radio): Value='${answer}', IsValid=${isValid}`);
+             } else { // Textarea or other text-based inputs
+                 answer = field.value;
+                 trimmedAnswer = answer.trim();
+                 if (isRequired && trimmedAnswer === '') {
+                     showError(errorId, field, 'Please provide your feedback for this required question.');
+                     isValid = false;
+                 } else if (!isRequired && trimmedAnswer === '') { // Optional and empty
+                     answer = null; // Store null if optional and empty
+                     isValid = true;
+                 } else { // Required & filled, or Optional & filled
+                     answer = trimmedAnswer; // Store the trimmed answer
+                     isValid = true;
+                 }
+                 console.log(`Validation for QID ${questionId} (Text): Value='${answer}', IsValid=${isValid}`);
+             }
+
+             // If validation failed, stop here
+             if (!isValid) {
+                setButtonLoading(saveButton, false, saveButton.dataset.defaultText); // Reset button state if validation fails early
+                deleteButton.disabled = false;
+                console.warn(`Validation failed for QID: ${questionId}. Aborting save.`);
+                updateStickyProgressBar();
+                return;
+             }
+
+             // --- Prepare for Supabase Call ---
+             setButtonLoading(saveButton, true, 'Saving...', saveButton.dataset.defaultText);
+             deleteButton.disabled = true;
+
+             try {
+                 // Get the actual question text from H3 or P tag
+                 const h3 = container.querySelector('h3');
+                 if (h3) {
+                     questionText = h3.textContent.replace(/\s*\*$/g, '').trim();
+                 } else {
+                     const p = container.querySelector('p:first-of-type');
+                     if(p) questionText = p.textContent.trim();
+                 }
+
+                 const submissionTime = new Date().toISOString();
+
+                 // --- Construct the payload for Supabase ---
+                 const feedbackPayload = {
+                     user_id: currentUser.id,
+                     email: currentUser.email,
+                     name: currentUser.name || null, // User's name (or null)
+                     question: questionText,
+                     answer: answer,
+                     submitted_at: submissionTime
+                 };
+
+                 console.log(`==> Inserting into table '${FEEDBACK_TABLE}':`, JSON.stringify(feedbackPayload));
+
+                 // --- Perform the INSERT operation ONLY into FEEDBACK_TABLE ---
+                 const { data, error } = await supabase
+                     .from(FEEDBACK_TABLE) // Explicitly using FEEDBACK_TABLE variable
+                     .insert([feedbackPayload])
+                     .select();
+
+                 // --- Handle Supabase Response ---
+                 if (error) {
+                     // Handle potential errors like RLS violation or duplicates
+                     if (error.code === '23505') { // Duplicate key error
+                         console.error(`Insert failed (Likely Duplicate): QID=${questionId}, UserID=${currentUser.id}. Error: ${error.message}`);
+                         showError(errorId, field.type === 'radio' ? null : field, `Feedback already submitted.`);
+                          setButtonLoading(saveButton, false, saveButton.dataset.defaultText);
+                          deleteButton.disabled = false;
+                          if (statusElement) statusElement.style.display = 'none';
+                          return; // Stop here
+                     } else {
+                        // Handle other errors (like RLS 403 Forbidden)
+                         console.error(`Supabase insert error for QID: ${questionId} into ${FEEDBACK_TABLE}. Code: ${error.code}, Message: ${error.message}`, error);
+                         throw new Error(`Supabase insert error (Code: ${error.code}): ${error.message}`); // Throw to be caught below
+                     }
+                 }
+
+                 // --- Runs ONLY if Supabase insert was successful ---
+                 console.log(`%c==> Supabase insert SUCCESS for QID: ${questionId} into ${FEEDBACK_TABLE}. Result:`, "color: green;", data);
+
+                 // --- Update UI on Success ---
+                 if(field.type === 'radio') {
+                     container.querySelectorAll(`input[type="radio"][data-question="${questionId}"]`).forEach(radio => radio.disabled = true);
+                     if(radioOptionsContainer) radioOptionsContainer.classList.add('disabled');
+                 } else {
+                     field.disabled = true; // Disable textarea/input
+                 }
+                 field.classList.remove('required-field'); // Remove validation border
+                 buttonGroup.style.display = 'none'; // Hide buttons
+                 if (statusElement) {
+                     statusElement.textContent = 'Saved ✅';
+                     statusElement.style.display = 'inline-block'; // Show saved status
+                 }
+
+                 // Mark as saved in local storage (store the actual answer value)
+                 markAnswerAsSavedInStorage(currentUser.email, questionId, answer);
+                 updateStickyProgressBar(); // Update progress bar
+
+             } catch (error) {
+                 // --- Handle any error during the try block ---
+                 console.error(`%c==> FAILED to save answer for QID: ${questionId} to ${FEEDBACK_TABLE}. Error:`, "color: red;", error);
+                 // Display user-friendly error (mentioning RLS is a common cause)
+                 showError(errorId, field.type === 'radio' ? null : field, `Save failed (Q:${questionId}). Check console/RLS policies.`);
+
+                 // --- Revert UI to pre-saving state ---
+                 if(field.type === 'radio') {
+                     container.querySelectorAll(`input[type="radio"][data-question="${questionId}"]`).forEach(radio => radio.disabled = false);
+                     if(radioOptionsContainer) radioOptionsContainer.classList.remove('disabled');
+                 } else {
+                     field.disabled = false; // Re-enable text field
+                 }
+                 setButtonLoading(saveButton, false, saveButton.dataset.defaultText || (field.type === 'radio' ? 'Save Rating' : 'Save'));
+                 deleteButton.disabled = false;
+                  if (deleteButton.style.display !== 'inline-block') {
+                      deleteButton.style.display = 'inline-block';
+                  }
+                 if (statusElement) statusElement.style.display = 'none';
+             }
+         };
+        // ***** END saveAnswer Function *****
+
+
+        // --- Delete Unsaved Answer Function (Unchanged: deleteAnswer) ---
+        window.deleteAnswer = function(questionId) {
+            const container = document.getElementById(`question-container-${questionId}`);
+            if (!container) return;
+            const field = container.querySelector(`.editable-answer[data-question="${questionId}"]`);
+            if (!field) return;
+
+            // IMPORTANT: Deleting SAVED answers from the database is not implemented here.
+            // This function ONLY clears the *unsaved* input locally.
+            if (field.disabled) {
+                console.warn(`Attempted to delete already saved/disabled answer: ${questionId}`);
+                const errorId = `error-${questionId}`;
+                showError(errorId, null, "Saved answers cannot be cleared or deleted from here.");
+                setTimeout(() => hideError(errorId), 3500);
+                return; // Prevent clearing if already saved
+            }
+
+            const currentUser = getCurrentUser();
+            if (!currentUser?.email) return;
+
+            const errorId = `error-${questionId}`;
+            const statusId = `save-status-${questionId}`;
+            const statusElement = document.getElementById(statusId);
+            const buttonGroup = container.querySelector('.button-group');
+            const saveButton = buttonGroup?.querySelector('.save-button');
+            const deleteButton = buttonGroup?.querySelector('.delete-button');
+            const radioOptionsContainer = container.querySelector('.rating-options');
+
+            hideMessages(statusId, errorId, field); // Clear any previous error/status
+
+            // Reset the input field(s)
+            if (field.type === 'radio') {
+                container.querySelectorAll(`input[type="radio"][data-question="${questionId}"]`).forEach(radio => {
+                    radio.checked = false;
+                    // Ensure radios are enabled (should be already if not disabled)
+                    radio.disabled = false;
+                });
+                if(radioOptionsContainer) radioOptionsContainer.classList.remove('disabled');
+            } else {
+                field.value = ''; // Clear text area/input
+                field.disabled = false; // Ensure field is enabled
+                field.classList.remove('required-field'); // Remove error styling
+            }
+
+            // Remove the saved state from local storage *if it existed* (though it shouldn't for unsaved)
+            removeAnswerSavedStateFromStorage(currentUser.email, questionId);
+
+            console.log("Cleared unsaved answer input locally for", questionId);
+            updateStickyProgressBar(); // Update progress as an item might become 'unsaved'
+
+            // Ensure buttons are visible and enabled
+            if (buttonGroup) {
+                buttonGroup.style.display = 'flex';
+                if (saveButton) saveButton.disabled = false; // Re-enable save
+                if (deleteButton) deleteButton.disabled = false; // Re-enable delete
+            }
+        };
+
+
+        // --- Submit Feedback Function (Trigger Validation & Show Modal) --- (Unchanged: handleSubmitFeedback)
+        function handleSubmitFeedback() {
+            console.log("Submit Feedback button clicked. Validating saved state...");
+            // 1. Validate that all REQUIRED questions are saved (inputs are disabled)
+            if (!validateAllAnswers(true)) { // Pass true to show errors if validation fails
+                showGeneralWarningMessage("Please save your answers for all required feedback questions (*) before submitting.");
+                console.warn("Validation failed: Not all required questions have been saved.");
+                // Ensure button is not stuck in loading state if validation fails early
+                if (originalSubmitButton) {
+                   setButtonLoading(originalSubmitButton, false, originalSubmitButton.dataset.defaultText || 'Submit Feedback');
+                }
+                return; // Stop submission if validation fails
+            }
+
+            console.log("Validation successful: All required questions appear saved.");
+            // 2. Show Custom Confirmation Modal
+            showConfirmationModal();
+            // The rest of the logic (UI transition) is moved to proceedWithSubmission(), called by the modal's confirm button
+        }
+
+        // --- Function to Proceed After Modal Confirmation --- (Unchanged: proceedWithSubmission)
+        function proceedWithSubmission() {
+             console.log("Proceeding with submission after modal confirmation. Switching UI.");
+             // Set loading state on the original button (even though it will be hidden)
+             if(originalSubmitButton) {
+                 setButtonLoading(originalSubmitButton, true, 'Finalizing...');
+             }
+
+            // Hide Form, Show Completion Screen
+            // No DB interaction needed here.
+            try {
+                if(!feedbackFormContainer || !completionScreen) {
+                    throw new Error("Form container or completion screen element not found.");
+                }
+
+                // Hide form elements gracefully
+                feedbackFormContainer.style.transition = 'opacity 0.5s ease-out';
+                feedbackFormContainer.style.opacity = '0';
+
+                // Hide progress bar and warning messages
+                const progressContainer = document.getElementById('sticky-progress-container');
+                if(progressContainer) progressContainer.style.display = 'none';
+                hideWarningMessage(); // Hide any floating warning
+
+                // Use setTimeout to allow opacity transition before setting display: none
+                setTimeout(() => {
+                    feedbackFormContainer.style.display = 'none';
+                    // Display completion screen
+                    completionScreen.style.display = 'block';
+                    // Optional: Scroll to top
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                    // Hide the main H1 title as well
+                    const mainTitle = document.querySelector('h1');
+                     if(mainTitle) mainTitle.style.display = 'none';
+
+                     console.log("Feedback submission UI finalized. Displaying completion screen.");
+                     // No need to reset the originalSubmitButton loading state here,
+                     // as the button itself is hidden along with the form.
+
+                }, 500); // Match timeout to transition duration
+
+            } catch (err) {
+                 console.error("Error during feedback finalization UI transition:", err);
+                 showGeneralWarningMessage('An error occurred while finalizing your feedback. Please refresh and try again.', true);
+                 // Reset button on error
+                 if(originalSubmitButton) {
+                    setButtonLoading(originalSubmitButton, false, originalSubmitButton.dataset.defaultText || 'Submit Feedback');
+                 }
+                 // Optionally re-show the form if the transition failed badly
+                 if(feedbackFormContainer) {
+                    feedbackFormContainer.style.display = 'block';
+                    feedbackFormContainer.style.opacity = '1';
+                 }
+            }
+        }
+
+        // --- Helper for Button Loading State --- (Unchanged: setButtonLoading)
+        function setButtonLoading(button, isLoading, loadingText = 'Saving...', defaultText = 'Save') { if (!button) return; button.disabled = isLoading; if (isLoading) { button.textContent = loadingText; } else { button.textContent = defaultText || button.dataset.defaultText || 'Save'; } }
+
+    </script>
+
+</body>
+</html>
