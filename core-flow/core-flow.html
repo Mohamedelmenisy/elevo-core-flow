@@ -208,7 +208,6 @@
             color: var(--button-text-color);
         }
 
-        /* ✅✅✅ START OF MODIFICATION (CSS) ✅✅✅ */
         .scenario-dropdown .special-compensation-scenario {
             font-weight: bold;
             color: var(--success-color); 
@@ -217,23 +216,6 @@
             content: "⭐ ";
             color: var(--warning-color); 
         }
-
-        .scenario-dropdown .partner-scenario {
-            font-weight: bold;
-            color: #FF9800; /* Custom Orange color for better visibility */
-        }
-        .scenario-dropdown .partner-scenario::before {
-            content: "📦 ";
-        }
-        
-        .scenario-dropdown .manual-intervention-scenario {
-            font-weight: bold;
-            color: #2196F3; /* Custom Blue color for better visibility */
-        }
-        .scenario-dropdown .manual-intervention-scenario::before {
-            content: "🔧 ";
-        }
-        /* ✅✅✅ END OF MODIFICATION (CSS) ✅✅✅ */
 
         .highlight-scenario-title-animation {
             animation: pulse-title 0.6s 2 ease-in-out;
@@ -694,97 +676,65 @@
 
         // --- Authentication and Initialization ---
         async function initializeApp() {
-            console.log("initializeApp: Starting core-flow initialization..."); 
             if (!supabase) { 
-                 authLoadingDiv.innerHTML = '<p style="color:var(--danger-color); text-align:center;">Critical Error: Services unavailable. Please try again later.</p>';
+                 authLoadingDiv.innerHTML = '<p style="color:var(--danger-color); text-align:center;">Critical Error: Services unavailable.</p>';
                  return;
             }
             const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-            if (sessionError) {
-                console.error("initializeApp: Error fetching session:", sessionError);
-                authLoadingDiv.innerHTML = '<p style="color:var(--danger-color);">Error verifying session. Try refreshing.</p>';
-                return;
-            }
-            if (!session) {
-                console.log("initializeApp: No active session. Redirecting to login page.");
+            if (sessionError || !session) {
                 window.location.replace('login.html'); 
                 return;
             }
 
-            // --- START: Resilient User Profile Handling ---
             const storedUserData = JSON.parse(localStorage.getItem('elevoCoreUserData'));
             if (storedUserData && storedUserData.id === session.user.id && !storedUserData.profileError) {
                 currentUser = storedUserData;
             } else {
                 try {
-                    let { data: profile, error: profileError } = await supabase
+                    const { data: profile, error } = await supabase
                         .from('users')
                         .select('name, is_admin, role')
                         .eq('id', session.user.id)
                         .single();
-
-                    if (profileError && profileError.code === 'PGRST116') { // User not found in 'users' table
-                        console.log(`User ${session.user.id} not in 'users' table. Creating profile.`);
-                        const newUserProfile = {
-                            id: session.user.id,
-                            email: session.user.email,
-                            name: session.user.user_metadata?.full_name || session.user.email.split('@')[0],
-                            role: 'agent', // ✅ KEY FIX: Default role
-                            is_admin: false
-                        };
-                        const { error: insertError } = await supabase.from('users').insert(newUserProfile);
-                        if (insertError) throw insertError; // Throw error to be caught by the outer catch block
-                        profile = newUserProfile; // Use the newly created profile data
-                    } else if (profileError) {
-                        throw profileError; // Throw other DB errors
-                    }
+                    
+                    if (error && error.code !== 'PGRST116') throw error;
 
                     currentUser = {
                         id: session.user.id,
                         email: session.user.email,
-                        name: profile.name,
-                        isAdmin: profile.is_admin,
-                        role: profile.role
+                        name: profile?.name || session.user.user_metadata?.full_name || session.user.email.split('@')[0],
+                        isAdmin: profile?.is_admin || false,
+                        role: profile?.role || 'agent'
                     };
                     localStorage.setItem('elevoCoreUserData', JSON.stringify(currentUser));
-                    console.log("Successfully fetched or created user profile.");
 
                 } catch (error) {
-                    console.error("CRITICAL: Failed to fetch or create user profile. Proceeding with basic info.", error);
-                    // Graceful Degradation: Don't block the app. Proceed with minimal data.
+                    console.error("CRITICAL: Failed to fetch user profile.", error);
                     currentUser = {
                         id: session.user.id,
                         email: session.user.email,
-                        name: (session.user.user_metadata?.full_name || session.user.email.split('@')[0]) + " (Profile Error)",
+                        name: (session.user.user_metadata?.full_name || session.user.email.split('@')[0]),
                         isAdmin: false,
-                        role: 'agent', // Fallback role
-                        profileError: true // Flag to indicate something went wrong
+                        role: 'agent',
+                        profileError: true
                     };
-                    // Do not save this partial/error state to localStorage
                 }
             }
-            // --- END: Resilient User Profile Handling ---
 
-            if (userNameSpan) userNameSpan.textContent = currentUser.name;
-            if (userInfoDiv) userInfoDiv.style.display = 'flex';
+            userNameSpan.textContent = currentUser.name;
+            userInfoDiv.style.display = 'flex';
             if (dashboardLink) dashboardLink.style.display = currentUser.isAdmin ? 'inline-block' : 'none';
             
             authLoadingDiv.style.display = 'none';
             
             if (restoreCallState()) { 
-                console.log("initializeApp: Restored active call session.");
                 switchToCallFlowView(false); 
                 renderStep(); 
                 updateSystemStatus("🟢 In Call (Restored)", "status-in-call");
             } else {
-                console.log("initializeApp: No active call state found or state invalid. Loading initial view.");
                 switchToInitialView();
                 await loadActiveScenarios();
-                showAssistantMessage("Welcome! Select a scenario to begin.", true, 7000, () => {
-                     if (initialViewDiv && initialViewDiv.style.display === 'block') { 
-                          showAssistantMessage("💡 Tip: Choose a scenario and click 'Receive Call'.", true, 0); 
-                     }
-                 });
+                showAssistantMessage("Welcome! Select a scenario to begin.", true, 7000);
             }
         }
 
@@ -826,7 +776,7 @@
             scenarioDropdown.innerHTML = '<option value="" disabled selected>Loading scenarios...</option>';
             try {
                 const { data: scenarios, error } = await supabase
-                    .from('call_scenarios_with_creator') 
+                    .from('call_scenarios') 
                     .select('id, title')                 
                     .eq('is_active', true) 
                     .order('created_at', { ascending: false }); 
@@ -838,609 +788,292 @@
                         const option = document.createElement('option');
                         option.value = s.id;
                         option.textContent = s.title; 
-                        const normalizedTitle = s.title.trim();
-
-                        // ✅✅✅ START OF MODIFICATION (JavaScript) ✅✅✅
-                        // This block now checks for different symbols to apply different classes
-                        if (normalizedTitle.includes('⭐') || normalizedTitle.toLowerCase().includes('compensation')) {
+                        const normalizedTitle = s.title.trim().toLowerCase();
+                        if (normalizedTitle.includes('compensation') || normalizedTitle.startsWith('⭐')) {
                             option.classList.add('special-compensation-scenario');
-                        } else if (normalizedTitle.includes('📦')) {
-                            option.classList.add('partner-scenario');
-                        } else if (normalizedTitle.includes('🔧')) {
-                            option.classList.add('manual-intervention-scenario');
                         }
-                        // ✅✅✅ END OF MODIFICATION (JavaScript) ✅✅✅
-                        
                         scenarioDropdown.appendChild(option);
                     });
                     scenarioDropdown.disabled = false;
                     setButtonLoadingState(receiveCallBtn, false, "Receive Call");
                     receiveCallBtn.disabled = true;
                 } else {
-                    scenarioDropdown.innerHTML = '<option value="" disabled>No scenarios available.</option>';
-                    showAssistantMessage("⚠️ No active call scenarios available.", true, 0); 
-                    setButtonLoadingState(receiveCallBtn, false, "Receive Call");
+                    scenarioDropdown.innerHTML = '<option value="" disabled>No active scenarios.</option>';
                     receiveCallBtn.disabled = true;
                 }
             } catch (err) {
                 console.error("Error loading scenarios:", err);
-                scenarioDropdown.innerHTML = '<option value="" disabled>⚠️ Failed to load scenarios.</option>';
-                showAssistantMessage(`⚠️ Error loading scenarios: ${err.message}`, true, 8000);
-                setButtonLoadingState(receiveCallBtn, false, "Receive Call");
+                scenarioDropdown.innerHTML = '<option value="" disabled>⚠️ Error loading.</option>';
                 receiveCallBtn.disabled = true;
             }
         }
         
         receiveCallBtn.addEventListener('click', async () => {
             const selectedScenarioId = scenarioDropdown.value;
-            if (!selectedScenarioId) {
-                showAssistantMessage("⚠️ Please select a scenario first.", true, 5000);
+            if (!selectedScenarioId || currentUser.profileError) {
+                showAssistantMessage(currentUser.profileError ? "⚠️ Profile error, cannot start." : "⚠️ Please select a scenario.", true, 5000);
                 return;
             }
-            if (currentUser.profileError) {
-                 showAssistantMessage("⚠️ Cannot start call due to a profile loading error. Please refresh or contact support.", true, 7000);
-                 return;
-            }
+
             setButtonLoadingState(receiveCallBtn, true, "Receive Call", "Starting...");
+            if(callStartSound) callStartSound.play().catch(e => console.warn("Audio play failed:", e));
 
-            if(callStartSound && callStartSound.src) callStartSound.play().catch(e => console.warn("Call start audio play failed:", e.message, e));
-
-            resetCallState(); 
+            resetCallState();
             switchToCallFlowView();
             updateSystemStatus("🟡 Loading Scenario...", "status-loading");
             stepsContainer.innerHTML = '<p class="placeholder-text">Loading scenario details...</p>';
-            decisionButtonsContainer.innerHTML = ''; 
-            scenarioTitleElement.innerHTML = `<span id="step-type-icon" class="step-type-icon"></span>Loading...`; 
-            scenarioTitleElement.classList.remove('highlight-scenario-title-animation');
-
+            
             try {
                 const { data: scenarioData, error: scenarioError } = await supabase
                     .from('call_scenarios') 
                     .select('id, title, steps') 
                     .eq('id', selectedScenarioId)
                     .single();
-
                 if (scenarioError) throw scenarioError;
 
-                if (!scenarioData || !Array.isArray(scenarioData.steps) || scenarioData.steps.length === 0) {
-                    throw new Error("Scenario data is invalid or has no steps.");
-                }
-                if (!scenarioData.steps[0] || typeof scenarioData.steps[0].id === 'undefined') { 
-                    console.error("Scenario steps are not in the new format (missing 'id' in first step). Scenario JSON:", scenarioData.steps);
-                    throw new Error("Scenario steps are not in the new format (missing 'id' in first step). Please update scenario JSON.");
-                }
-
-                currentScenario = scenarioData; 
-                currentStepId = currentScenario.steps[0].id; 
-                stepHistory = [];
-                accumulatedStepDurations = {}; 
-                currentScenario.steps.forEach(step => { 
-                    if(step && typeof step.id !== 'undefined') { 
-                        accumulatedStepDurations[step.id] = 0;
-                    } else {
-                        console.warn("Found a step without an ID during initialization of durations:", step);
-                    }
-                });
-
-
-                callStartTimeISO = new Date().toISOString(); 
+                currentScenario = scenarioData;
+                currentStepId = currentScenario.steps[0].id;
+                
+                callStartTimeISO = new Date().toISOString();
                 const { data: newSession, error: sessionInsertError } = await supabase
                     .from('call_sessions')
                     .insert({ user_id: currentUser.id, scenario_id: currentScenario.id, start_time: callStartTimeISO, agent_name: currentUser.name, agent_email: currentUser.email })
-                    .select('id') 
+                    .select('id')
                     .single();
-                if (sessionInsertError) {
-                    callStartTimeISO = null; 
-                    throw sessionInsertError;
-                }
+                if (sessionInsertError) throw sessionInsertError;
                 callSessionId = newSession.id;
-                
-                const normalizedCurrentTitle = currentScenario.title.trim();
-                if (normalizedCurrentTitle.includes('⭐') || normalizedCurrentTitle.toLowerCase().includes('compensation')) {
-                    if (compensationScenarioSound && compensationScenarioSound.src) compensationScenarioSound.play().catch(e => console.warn("Compensation sound play failed:", e));
+
+                const normalizedTitle = currentScenario.title.trim().toLowerCase();
+                if (normalizedTitle.includes('compensation') || normalizedTitle.startsWith('⭐')) {
+                    if (compensationScenarioSound) compensationScenarioSound.play().catch(e => console.warn("Comp audio failed:", e));
                     scenarioTitleElement.classList.add('highlight-scenario-title-animation');
                     setTimeout(() => scenarioTitleElement.classList.remove('highlight-scenario-title-animation'), 1200);
                 }
+
                 updateSystemStatus("🟢 In Call", "status-in-call");
-                renderStep(); 
+                renderStep();
                 setButtonLoadingState(receiveCallBtn, false, "Receive Call");
-                receiveCallBtn.disabled = true;
             } catch (err) {
                 console.error("Error starting call:", err);
-                resetCallState(); 
-                switchToInitialView();
-                showAssistantMessage(`⚠️ Error starting call: ${err.message}. Please try again.`, true, 7000);
+                resetCallState(true); // Switch back to initial view on error
+                showAssistantMessage(`⚠️ Error: ${err.message}`, true, 7000);
                 await loadActiveScenarios();
             }
         });
 
         function renderStep() {
-            if (!currentScenario || !currentStepId) {
-                stepsContainer.innerHTML = '<p class="placeholder-text">Error: Invalid scenario or step ID.</p>';
-                decisionButtonsContainer.innerHTML = '';
-                console.error("Render step error: Invalid scenario or currentStepId.", currentScenario, currentStepId);
-                return;
-            }
-
-            const stepObject = currentScenario.steps.find(s => s && s.id === currentStepId); 
-
+            if (!currentScenario || !currentStepId) return;
+            const stepObject = currentScenario.steps.find(s => s.id === currentStepId);
             if (!stepObject) {
-                stepsContainer.innerHTML = `<p class="placeholder-text">Error: Step with ID "${currentStepId}" not found in scenario.</p>`;
-                decisionButtonsContainer.innerHTML = '';
-                console.error(`Render step error: Step ID "${currentStepId}" not found. Scenario steps:`, currentScenario.steps);
                 finishCall(false, `Error: Step ${currentStepId} not found`);
                 return;
             }
             
-            const dynamicTitleElement = scenarioTitleElement.childNodes.length > 1 ? scenarioTitleElement.childNodes[1] : scenarioTitleElement; 
-            if(dynamicTitleElement && dynamicTitleElement.nodeType === Node.TEXT_NODE) dynamicTitleElement.nodeValue = ` ${currentScenario.title}`; 
-            else if (dynamicTitleElement) dynamicTitleElement.textContent = ` ${currentScenario.title}`; // Fallback
-            
-            const currentStepTypeIcon = document.getElementById('step-type-icon'); 
-            if (currentStepTypeIcon) {
-                 if (stepObject.type === 'decision') currentStepTypeIcon.textContent = '🧠'; 
-                 else if (stepObject.options && stepObject.options.length > 0) currentStepTypeIcon.textContent = '🤔'; 
-                 else currentStepTypeIcon.textContent = '🗣️'; 
-            }
-
-
-            currentStepIndexForProgressBar = currentScenario.steps.findIndex(s => s && s.id === currentStepId); 
-            if (currentStepIndexForProgressBar === -1) currentStepIndexForProgressBar = 0; 
-
-            stepsContainer.innerHTML = `<p>${stepObject.text.replace(/\n/g, '<br>')}</p>`; 
-            decisionButtonsContainer.innerHTML = ''; 
-
-            renderProgressTracker(); 
+            stepTypeIconElement.textContent = (stepObject.type === 'decision') ? '🧠' : '🗣️';
+            scenarioTitleElement.childNodes[1].nodeValue = ` ${currentScenario.title}`;
+            stepsContainer.innerHTML = `<p>${stepObject.text.replace(/\n/g, '<br>')}</p>`;
+            decisionButtonsContainer.innerHTML = '';
+            renderProgressTracker();
 
             prevStepBtn.style.display = stepHistory.length > 0 ? 'inline-flex' : 'none';
             endCallBtn.style.display = 'inline-flex';
 
-            if (stepObject.type === 'decision' && stepObject.options && Array.isArray(stepObject.options) && stepObject.options.length > 0) {
-                nextStepBtn.style.display = 'none'; 
+            if (stepObject.type === 'decision' && stepObject.options) {
+                nextStepBtn.style.display = 'none';
                 stepObject.options.forEach(option => {
-                    if (!option || typeof option.label === 'undefined' || typeof option.next_id === 'undefined') {
-                        console.warn("Invalid option found in decision step:", option, "Step:", stepObject);
-                        return; 
-                    }
                     const button = document.createElement('button');
-                    button.className = 'decision-button'; 
-                    
-                    let iconSpan = document.createElement('span');
-                    iconSpan.className = 'icon';
-
+                    button.className = 'decision-button';
                     const labelLower = option.label.toLowerCase();
-                    if (labelLower.includes('yes') || labelLower.includes('confirm') || labelLower.includes('agree') || labelLower.includes('accept')) {
-                        button.classList.add('positive');
-                        iconSpan.textContent = '✔';
-                    } else if (labelLower.includes('no') || labelLower.includes('cancel') || labelLower.includes('deny') || labelLower.includes('reject')) {
-                        button.classList.add('negative');
-                        iconSpan.textContent = '✖';
-                    } else {
-                        button.classList.add('neutral');
-                    }
-                    
-                    if(iconSpan.textContent) button.appendChild(iconSpan);
-                    let textSpan = document.createElement('span');
-                    textSpan.textContent = option.label;
-                    button.appendChild(textSpan);
-                    
+                    if (['yes', 'confirm', 'agree'].some(w => labelLower.includes(w))) button.classList.add('positive');
+                    else if (['no', 'cancel', 'deny'].some(w => labelLower.includes(w))) button.classList.add('negative');
+                    else button.classList.add('neutral');
+                    button.innerHTML = `<span class="icon">${button.classList.contains('positive') ? '✔' : (button.classList.contains('negative') ? '✖' : '')}</span> <span>${option.label}</span>`;
                     button.addEventListener('click', () => navigateToStep(option.next_id));
                     decisionButtonsContainer.appendChild(button);
                 });
-            } else { 
-                decisionButtonsContainer.innerHTML = ''; 
-                const nextStepBtnText = nextStepBtn.querySelector('.btn-text');
-                const nextStepBtnIcon = nextStepBtn.querySelector('.btn-icon');
-
-                if (stepObject.next_id) {
-                    if(nextStepBtnText) nextStepBtnText.textContent = "Next Step";
-                    if(nextStepBtnIcon) nextStepBtnIcon.style.display = 'inline-flex';
-                    nextStepBtn.style.display = 'inline-flex';
-                } else { 
-                    if(nextStepBtnText) nextStepBtnText.textContent = "Finish Scenario";
-                    if(nextStepBtnIcon) nextStepBtnIcon.style.display = 'none'; // Hide icon for finish
-                    nextStepBtn.style.display = 'inline-flex';
-                }
-            }
-
-            startStepTimer(); 
-            saveCallState();  
-
-            const assistantStepPreview = stepObject.text.length > 45 ? stepObject.text.substring(0, 42) + "..." : stepObject.text;
-            let finalAssistantMessage;
-            if (stepHistory.length === 0 && currentScenario && currentScenario.title) { 
-                const scenarioTitlePreview = currentScenario.title.length > 30 ? currentScenario.title.substring(0,27) + "..." : currentScenario.title;
-                finalAssistantMessage = `🚀 Scenario "${scenarioTitlePreview}"! First: ${assistantStepPreview}`;
             } else {
-                const validSteps = currentScenario.steps.filter(s => s && s.id);
-                const totalStepsForDisplay = validSteps.length;
-                const currentDisplayIndex = validSteps.findIndex(s => s.id === currentStepId) + 1;
-                finalAssistantMessage = `📌 Step (${currentDisplayIndex > 0 ? currentDisplayIndex : '?'}/${totalStepsForDisplay}): ${assistantStepPreview}`;
+                nextStepBtn.style.display = 'inline-flex';
+                const nextBtnText = nextStepBtn.querySelector('.btn-text');
+                nextBtnText.textContent = stepObject.next_id ? "Next Step" : "Finish Scenario";
             }
-            showAssistantMessage(finalAssistantMessage, false, 0); 
+
+            startStepTimer();
+            saveCallState();
         }
         
         function navigateToStep(nextId) {
-            const callFlowCardElement = document.getElementById('call-flow-view');
-            if (callFlowCardElement) {
-                callFlowCardElement.classList.add('decision-made-animation');
-                setTimeout(() => callFlowCardElement.classList.remove('decision-made-animation'), 700);
-            }
-
             stopAndRecordStepTimer();
-            if (nextId === null || typeof nextId === 'undefined' || nextId === "") { 
-                console.log("navigateToStep: No valid nextId provided or end of path. Finishing call as completed.");
-                finishCall(true, "Reached end of defined scenario path."); 
+            if (!nextId) {
+                finishCall(true, "Reached end of scenario path.");
                 return;
             }
-
-            const targetStep = currentScenario.steps.find(s => s && s.id === nextId); 
+            const targetStep = currentScenario.steps.find(s => s.id === nextId);
             if (!targetStep) {
-                console.error(`navigateToStep: Target step ID "${nextId}" not found in scenario. Current scenario steps:`, currentScenario.steps);
-                showAssistantMessage(`⚠️ Error: Could not find next step ("${nextId}"). Ending call.`, false, 7000);
                 finishCall(false, `Error: Path broken, step ${nextId} not found.`);
                 return;
             }
-
-            if (currentStepId) stepHistory.push(currentStepId); 
+            stepHistory.push(currentStepId);
             currentStepId = nextId;
             renderStep();
         }
 
-
         function renderProgressTracker() {
-            if (!progressTrackerContainer || !currentScenario || !currentScenario.steps || currentScenario.steps.length === 0) {
-                if(progressTrackerContainer) progressTrackerContainer.style.display = 'none';
-                return;
-            }
             const stepperWrapper = progressTrackerContainer.querySelector('.stepper-wrapper');
-            if (!stepperWrapper) {
-                console.error("Progress tracker's stepper-wrapper not found.");
-                return;
-            }
-            
-            stepperWrapper.innerHTML = ''; 
+            if (!stepperWrapper) return;
+            stepperWrapper.innerHTML = '';
             const stepperUl = document.createElement('ul');
             stepperUl.className = 'stepper';
-
-            const validSteps = currentScenario.steps.filter(step => step && typeof step.id !== 'undefined'); 
-
-            validSteps.forEach((step, index) => {
+            currentScenario.steps.forEach((step, index) => {
                 const stepLi = document.createElement('li');
                 stepLi.className = 'step';
+                if (stepHistory.includes(step.id)) stepLi.classList.add('completed');
+                else if (step.id === currentStepId) stepLi.classList.add('active');
                 
-                if (stepHistory.includes(step.id)) {
-                    stepLi.classList.add('completed');
-                } else if (step.id === currentStepId) {
-                    stepLi.classList.add('active');
-                }
-
                 const stepNumber = document.createElement('span');
                 stepNumber.className = 'step-number';
                 stepNumber.textContent = stepHistory.includes(step.id) ? '✓' : index + 1;
                 stepLi.appendChild(stepNumber);
                 stepperUl.appendChild(stepLi);
 
-                if (index < validSteps.length - 1) { 
+                if (index < currentScenario.steps.length - 1) {
                     const separator = document.createElement('li');
                     separator.className = 'step-separator';
                     stepperUl.appendChild(separator);
                 }
             });
             stepperWrapper.appendChild(stepperUl);
-            progressTrackerContainer.style.display = 'flex'; 
         }
 
-
         nextStepBtn.addEventListener('click', () => {
-            const stepObject = currentScenario.steps.find(s => s && s.id === currentStepId); 
-            if (!stepObject) {
-                console.error("Next button clicked, but current step object not found for ID:", currentStepId);
-                return;
-            }
-
-            if (stepObject.next_id) { 
-                navigateToStep(stepObject.next_id);
-            } else { 
-                stopAndRecordStepTimer(); 
-                finishCall(true, "Scenario finished via 'Finish Scenario' button."); 
-            }
+            const stepObject = currentScenario.steps.find(s => s.id === currentStepId);
+            navigateToStep(stepObject?.next_id);
         });
 
         prevStepBtn.addEventListener('click', () => {
-            stopAndRecordStepTimer(); 
+            stopAndRecordStepTimer();
             if (stepHistory.length > 0) {
-                currentStepId = stepHistory.pop(); 
+                currentStepId = stepHistory.pop();
                 renderStep();
             }
         });
         
+        // ✅ FIX: Correct logic for End Call button
         endCallBtn.addEventListener('click', () => {
             stopAndRecordStepTimer(); 
             finishCall(false, "Call ended by agent"); 
         });
 
         function startStepTimer() {
-            callTimerDiv.style.display = 'inline-block'; 
+            callTimerDiv.style.display = 'inline-block';
             if (stepTimerInterval) clearInterval(stepTimerInterval);
-            if (stepStartTime === 0) stepStartTime = Date.now(); 
+            if (stepStartTime === 0) stepStartTime = Date.now();
             
-            function updateTimerDisplay() {
-                const elapsedMilliseconds = Date.now() - stepStartTime;
-                const totalSeconds = Math.floor(elapsedMilliseconds / 1000);
+            const updateTimerDisplay = () => {
+                const totalSeconds = Math.floor((Date.now() - stepStartTime) / 1000);
                 const minutes = String(Math.floor(totalSeconds / 60)).padStart(2, '0');
                 const seconds = String(totalSeconds % 60).padStart(2, '0');
                 callTimerDiv.textContent = `${minutes}:${seconds}`;
-            }
-            updateTimerDisplay(); 
+            };
+            updateTimerDisplay();
             stepTimerInterval = setInterval(updateTimerDisplay, 1000);
         }
 
         function stopAndRecordStepTimer() {
             if (stepTimerInterval) clearInterval(stepTimerInterval);
             stepTimerInterval = null;
-
-            if (stepStartTime > 0 && currentScenario && currentStepId && accumulatedStepDurations.hasOwnProperty(currentStepId)) {
+            if (stepStartTime > 0 && currentStepId) {
                 const durationSeconds = Math.floor((Date.now() - stepStartTime) / 1000);
                 accumulatedStepDurations[currentStepId] = (accumulatedStepDurations[currentStepId] || 0) + durationSeconds;
             }
-            stepStartTime = 0; 
+            stepStartTime = Date.now(); // Reset for the next step
         }
         
-        async function finishCall(completedAllSteps, reasonText) { 
-            stopAndRecordStepTimer(); 
-            
+        // ✅ FIX: Corrected finishCall to always move to summary view
+        async function finishCall(completed, reason) { 
+            stopAndRecordStepTimer();
             const endTimeISO = new Date().toISOString();
-            let durationInSecondsForSummary = 0; 
-
-            if (callStartTimeISO) {
-                durationInSecondsForSummary = Math.floor((new Date(endTimeISO).getTime() - new Date(callStartTimeISO).getTime()) / 1000);
-                if (durationInSecondsForSummary < 0) durationInSecondsForSummary = 0;
-            } else {
-                durationInSecondsForSummary = Object.values(accumulatedStepDurations).reduce((sum, dur) => sum + (dur || 0), 0);
-            }
+            const totalDurationSeconds = callStartTimeISO ? Math.floor((new Date(endTimeISO) - new Date(callStartTimeISO)) / 1000) : 0;
+            const quality = completed ? 'Good' : (totalDurationSeconds > 0 ? 'Bad' : 'N/A');
             
-            const quality = completedAllSteps ? 'Good' : (durationInSecondsForSummary > 0 ? 'Bad' : 'N/A'); 
-            const reason = reasonText || (completedAllSteps ? 'Scenario path completed successfully.' : 'Call ended prematurely or path incomplete.');
-            
-            updateSystemStatus(completedAllSteps ? "✅ Call Completed" : "⚪ Call Ended", 
-                               completedAllSteps ? "status-completed" : "status-ended");
+            updateSystemStatus(completed ? "✅ Call Completed" : "⚪ Call Ended", completed ? "status-completed" : "status-ended");
 
             if (callSessionId) {
-                const updatePayload = {
-                    end_time: endTimeISO,
-                   duration: durationInSecondsForSummary,
-                    completed: completedAllSteps, 
-                    call_quality: quality,
-                    quality_reason: reason,
-                };
-                
-                const { error: updateError } = await supabase
+                const { error } = await supabase
                     .from('call_sessions')
-                    .update(updatePayload)
+                    .update({ end_time: endTimeISO, duration: totalDurationSeconds, completed, call_quality: quality, quality_reason: reason })
                     .eq('id', callSessionId);
-
-                if (updateError) {
-                    console.error("Failed to update call session in Supabase. ID:", callSessionId, "Error:", JSON.stringify(updateError, null, 2));
-                    showAssistantMessage(`⚠️ Error saving call summary: ${updateError.message}. Check console.`, false, 8000);
-                } else {
-                    console.log("Call session (ID: " + callSessionId + ") updated successfully in Supabase.");
-                }
-            } else {
-                console.warn("callSessionId is null. Cannot update call session.");
-                showAssistantMessage("⚠️ Could not save call summary: No active session ID.", false, 8000);
+                if (error) console.error("Failed to update call session:", error);
             }
             
             displayPostCallSummary(quality, reason, totalDurationSeconds);
-            clearCallState(); 
+            clearCallState();
         }
 
         function displayPostCallSummary(quality, reason, totalDurationSeconds) {
             let summaryHTML = `
-                <p><strong>Call Quality:</strong> <span class="quality-text quality-${quality?.toLowerCase() || 'na'}">${quality || 'N/A'}</span></p>
-                <p><strong>Reason:</strong> ${reason || "N/A"}</p>
-                <p><strong>Total Call Duration:</strong> ${Math.floor(totalDurationSeconds / 60)}m ${totalDurationSeconds % 60}s</p>
+                <p><strong>Call Quality:</strong> <span class="quality-text quality-${quality?.toLowerCase() || 'na'}">${quality}</span></p>
+                <p><strong>Reason:</strong> ${reason}</p>
+                <p><strong>Total Duration:</strong> ${Math.floor(totalDurationSeconds / 60)}m ${totalDurationSeconds % 60}s</p>
                 <hr style="margin: 1rem 0; border-color: var(--border-color);">
-                <p><strong>Time Spent on Steps (visited):</strong></p>
-                <ul style="list-style: none; padding-left: 0; max-height: 150px; overflow-y: auto; border: 1px solid var(--border-color); padding: 0.5rem; border-radius: 12px; background-color: var(--background-color);">`;
-
-            if (currentScenario && currentScenario.steps && Object.keys(accumulatedStepDurations).length > 0) {
-                let visitedStepsInOrder = [...stepHistory];
-                if(currentStepId && !visitedStepsInOrder.includes(currentStepId)) visitedStepsInOrder.push(currentStepId); 
-                
-                let uniqueVisitedSteps = [...new Set(visitedStepsInOrder)].filter(id => id != null); 
-                
-                uniqueVisitedSteps.forEach(stepId => {
-                    const stepObject = currentScenario.steps.find(s => s && s.id === stepId); 
+                <p><strong>Time Spent on Steps:</strong></p>
+                <ul style="list-style: none; padding-left: 0;">`;
+            
+            [...new Set([...stepHistory, currentStepId])].forEach(stepId => {
+                const step = currentScenario.steps.find(s => s.id === stepId);
+                if (step) {
                     const duration = accumulatedStepDurations[stepId] || 0;
-                    if (stepObject && (duration > 0 || stepHistory.includes(stepId) || stepId === currentStepId) ) { 
-                        const stepShortText = stepObject.text.length > 30 ? stepObject.text.substring(0, 27) + "..." : stepObject.text;
-                        const timeStr = `${Math.floor(duration / 60)}m ${duration % 60}s`;
-                        summaryHTML += `<li style="margin-bottom: 0.3rem; padding: 0.2rem; border-bottom: 1px dashed var(--border-color); ">"${stepShortText}": <strong style="color: var(--primary-color);">${timeStr}</strong></li>`;
-                    }
-                });
-
-                 const totalAccumulatedDuration = Object.values(accumulatedStepDurations).reduce((sum, dur) => sum + (dur || 0), 0);
-                 summaryHTML += `<li style="margin-top: 0.5rem; font-weight: bold; padding-top: 0.5rem; color: var(--text-color);">Total Active Step Time: ${Math.floor(totalAccumulatedDuration / 60)}m ${totalAccumulatedDuration % 60}s</li>`;
-
-            } else {
-                summaryHTML += `<li>No step duration data available.</li>`;
-            }
+                    summaryHTML += `<li>"${step.text.substring(0, 30)}...": <strong>${duration}s</strong></li>`;
+                }
+            });
             summaryHTML += `</ul>`;
+
             callSummaryContentDiv.innerHTML = summaryHTML;
             switchToSummaryView();
         }
         
         returnToInitialViewBtn.addEventListener('click', async () => {
-            resetCallState(true); 
+            resetCallState(true);
             await loadActiveScenarios();
-            showAssistantMessage("💡 Ready for the next call! Select a scenario.", true, 7000);
         });
 
         function saveCallState() {
-            if (!callSessionId || !currentScenario || !callStartTimeISO || !currentStepId) {
-                console.warn("Attempted to save call state, but critical data missing. Skipping save.");
-                return;
-            }
-            const state = {
-                callSessionId,
-                currentScenario, 
-                currentStepId, 
-                stepHistory: [...stepHistory], 
-                accumulatedStepDurations: {...accumulatedStepDurations}, 
-                stepStartTime: stepStartTime, 
-                callStartTimeISO: callStartTimeISO, 
-                timestamp: Date.now()
-            };
-            try {
-                sessionStorage.setItem(SESSION_STATE_KEY, JSON.stringify(state));
-                console.log("Call state saved to sessionStorage.");
-            } catch (e) { console.error("Error saving call state to sessionStorage:", e); }
+            if (!callSessionId) return;
+            const state = { callSessionId, currentScenario, currentStepId, stepHistory, accumulatedStepDurations, stepStartTime, callStartTimeISO };
+            sessionStorage.setItem(SESSION_STATE_KEY, JSON.stringify(state));
         }
 
         function restoreCallState() {
-            try {
-                const savedStateJSON = sessionStorage.getItem(SESSION_STATE_KEY);
-                if (!savedStateJSON) return false;
-                const savedState = JSON.parse(savedStateJSON);
-                
-                if (!savedState.callSessionId || !savedState.currentScenario || !savedState.currentScenario.steps ||
-                    !savedState.currentStepId || !savedState.callStartTimeISO || !Array.isArray(savedState.stepHistory) ||
-                    typeof savedState.accumulatedStepDurations !== 'object') { 
-                    console.warn("Invalid or incomplete call state (v3) found. Clearing it.", savedState);
-                    clearCallState();
-                    return false;
-                }
-                
-                callSessionId = savedState.callSessionId;
-                currentScenario = savedState.currentScenario; 
-                currentStepId = savedState.currentStepId;
-                stepHistory = savedState.stepHistory;
-                accumulatedStepDurations = savedState.accumulatedStepDurations;
-                stepStartTime = savedState.stepStartTime || 0; 
-                callStartTimeISO = savedState.callStartTimeISO; 
-                
-                console.log("Call state (v3) restored from sessionStorage:", savedState);
-                return true;
-            } catch (e) {
-                console.error("Error restoring call state (v3) from sessionStorage:", e);
-                clearCallState(); 
-                return false;
-            }
+            const savedStateJSON = sessionStorage.getItem(SESSION_STATE_KEY);
+            if (!savedStateJSON) return false;
+            const state = JSON.parse(savedStateJSON);
+            Object.assign(window, state); // Assigns all saved properties to global scope
+            return true;
         }
 
         function clearCallState() {
             sessionStorage.removeItem(SESSION_STATE_KEY);
-            callStartTimeISO = null; 
-            callSessionId = null; 
-            currentStepId = null;
-            stepHistory = [];
-            console.log("Cleared call state from sessionStorage and reset related state variables.");
+            callSessionId = null;
         }
 
         function resetCallState(switchToInitial = false) {
-            stopAndRecordStepTimer(); 
-            clearCallState();         
-
-            currentScenario = null;
-            currentStepId = null;
-            stepHistory = [];
-            accumulatedStepDurations = {};
-            stepStartTime = 0;
-            currentStepIndexForProgressBar = 0;
-            
-            if (switchToInitial) {
-                switchToInitialView();
-            }
-            console.log("Full call state reset.");
+            stopAndRecordStepTimer();
+            clearCallState();
+            Object.assign(window, { currentScenario: null, currentStepId: null, stepHistory: [], accumulatedStepDurations: {}, stepStartTime: 0 });
+            if (switchToInitial) switchToInitialView();
         }
 
         logoutButton.addEventListener('click', async () => {
-            resetCallState(); 
-            localStorage.removeItem('elevoCoreUserData'); 
-            if (supabase) {
-                const { error } = await supabase.auth.signOut();
-                if (error) console.error("Logout error:", error);
-            }
+            resetCallState();
+            localStorage.removeItem('elevoCoreUserData');
+            await supabase.auth.signOut();
             window.location.replace("login.html");
         });
 
         scenarioDropdown.addEventListener('change', () => {
-            const isValidSelection = scenarioDropdown.value && scenarioDropdown.value !== "" &&
-                                     scenarioDropdown.options[scenarioDropdown.selectedIndex] &&
-                                     !scenarioDropdown.options[scenarioDropdown.selectedIndex].disabled;
-            receiveCallBtn.disabled = !isValidSelection;
-             if (!isValidSelection) {
-                 setButtonLoadingState(receiveCallBtn, false, "Receive Call"); // Reset if selection becomes invalid
-                 receiveCallBtn.disabled = true;
-             } else {
-                 setButtonLoadingState(receiveCallBtn, false, "Receive Call"); // Ensure enabled with correct text
-                 receiveCallBtn.disabled = false;
-             }
-        });
-
-        window.addEventListener('error', function(event) {
-            console.error('Global error caught:', event.error, 'at', event.filename, ':', event.lineno);
-            // Optionally, show a user-friendly message or log to a remote service
-        });
-
-        window.addEventListener('beforeunload', () => {
-            if (callSessionId && currentScenario && callStartTimeISO && currentStepId) { 
-                saveCallState(); 
-            }
+            receiveCallBtn.disabled = !scenarioDropdown.value;
         });
         
-        if (supabase) { 
-            initializeApp();
-        } else {
-            authLoadingDiv.innerHTML = '<p style="color:var(--danger-color); text-align:center;">Core services could not be initialized. Application cannot start.</p>';
-        }
-        console.log("Elevo Core Flow script (v.with_decision_steps_v3.2_ui_revamp_2) loaded and initialized execution.");
+        if (supabase) initializeApp();
     </script>
-
-<!-- START: Core Flow Realtime Listener for KB updates -->
-<script>
-(async function(){
-  if(typeof supabase === 'undefined') return;
-  // try determine current case id from page variable or DOM
-  const caseId = window.currentCaseId || (window.flow && window.flow.caseId) || (document.querySelector('[data-case-id]') && document.querySelector('[data-case-id]').getAttribute('data-case-id')) || null;
-  if(!caseId) {
-    console.warn('No caseId found for realtime subscription');
-    return;
-  }
-  // subscribe to updates on this case
-  try{
-    const channel = supabase.channel('public:cases')
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'cases', filter: `id=eq.${caseId}` }, (payload)=>{
-        console.log('Realtime KB update for case', caseId, payload);
-        const newRow = payload.record;
-        // update in-memory scenario content if your app stores it in window.currentScenario
-        if(window.currentScenario && window.currentScenario.step && typeof window.updateCurrentStepContent === 'function'){
-          window.currentScenario.content = newRow.content_en || newRow.content_ar || window.currentScenario.content;
-          window.updateCurrentStepContent(window.currentScenario);
-        }else{
-          // try to find elements and replace content
-          const el = document.querySelector('[data-current-step-content]');
-          if(el) el.innerHTML = newRow.content_en || newRow.content_ar || el.innerHTML;
-        }
-        // show unobtrusive toast if available
-        if(window.showToast) window.showToast('تم تحديث محتوى السيناريو');
-      })
-      .subscribe();
-    window._core_kb_channel = channel;
-  }catch(e){
-    console.warn('Realtime subscription error', e);
-  }
-
-  // helper to unsubscribe when finished
-  window.unsubscribeKBUpdates = function(){
-    try{
-      if(window._core_kb_channel) supabase.removeChannel(window._core_kb_channel);
-      if(window._infini_case_channel) supabase.removeChannel(window._infini_case_channel);
-    }catch(e){}
-  };
-})();
-</script>
-<!-- END: Core Flow Realtime Listener -->
 </body>
 </html>
