@@ -199,8 +199,10 @@
         }
         .dark #noLiveCallsMessage { color: var(--text-color-subtle); }
 
+        /* NEW: Styles for Long Call Alert */
         .live-call-item.long-call-alert {
             border-left: 4px solid var(--danger-color, #dc3545);
+            animation: pulse-border 1.5s infinite;
         }
         .dark .live-call-item.long-call-alert {
             background-color: rgba(220, 53, 69, 0.15);
@@ -211,6 +213,12 @@
             font-size: 0.8em;
             margin-left: 0.5em;
         }
+        @keyframes pulse-border {
+            0% { border-left-color: var(--danger-color); }
+            50% { border-left-color: rgba(var(--danger-color-rgb), 0.5); }
+            100% { border-left-color: var(--danger-color); }
+        }
+
 
         /* MODIFICATION: Styles for Analytics Section Enhancements */
         .analytics-section.card { /* Uses general .card styles which are updated */ }
@@ -587,7 +595,7 @@
     <script type="module">
         // Supabase Client Setup
         const SUPABASE_URL = 'https://aefiigottnlcmjzilqnh.supabase.co';
-        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFlZmlpZ290dG5sY21qemlscW5oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcxNzY2MDQsImV4cCI6MjA2Mjc1MjYwNH0.FypB02v3tGMnxXV9ZmZMdMC0oQpREKOJWgHMPxUzwX4';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFlZmlpZ290dG5sY21qemlscW5oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcxNzY2MDQsImV4cCI6MjA2Mjc1MjYwNH0.FypB02v3tGMnxXV9ZmZMdMC-oQpREKOJWgHMPxUzwX4';
 
         let supabase;
         try {
@@ -847,21 +855,8 @@
             }
 
             if (!currentUser.isAdmin) {
-                try {
-                    const { data: adminStatus, error: functionError } = await supabase.functions.invoke('check-admin-access');
-                    if (functionError) throw functionError;
-
-                    if (!adminStatus || !adminStatus.isAdmin) {
-                        showAccessDenied();
-                        return;
-                    }
-                    currentUser.isAdmin = true;
-                    localStorage.setItem('elevoCoreUserData', JSON.stringify(currentUser));
-                } catch (err) {
-                    console.error("Admin check function error:", err);
-                    showAccessDenied("Could not verify administrator privileges.");
-                    return;
-                }
+                showAccessDenied();
+                return;
             }
 
             appContainerContent.style.display = 'flex';
@@ -1733,7 +1728,7 @@
             XLSX.writeFile(workbook, `elevo_dashboard_export_${new Date().toISOString().slice(0,10)}.xlsx`);
         }
 
-        async function setupLiveCallMonitoring() { // MODIFIED "No data" message handling
+        async function setupLiveCallMonitoring() { 
             if (!supabase) return;
             await fetchAndRenderLiveCalls();
 
@@ -1769,7 +1764,7 @@
                         console.log('Subscribed to live call updates!');
                     } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
                         console.error('Live call subscription error:', status, err);
-                        noLiveCallsMessage.innerHTML = "⚠️ Error connecting to live updates."; // MODIFIED
+                        noLiveCallsMessage.innerHTML = "⚠️ Error connecting to live updates.";
                         noLiveCallsMessage.style.display = 'block';
                     } else if (status === 'CLOSED') {
                         console.log('Live call subscription closed.');
@@ -1777,7 +1772,7 @@
                 });
         }
 
-        async function fetchAndRenderLiveCalls() { // MODIFIED "No data" messages
+        async function fetchAndRenderLiveCalls() {
              try {
                 const { data: liveSessions, error } = await supabase
                     .from('call_sessions')
@@ -1791,6 +1786,8 @@
                 }
 
                 liveCallsContainer.innerHTML = '';
+                
+                // NEW: Threshold for long call alert (10 minutes in milliseconds)
                 const LONG_CALL_THRESHOLD = 10 * 60 * 1000;
 
                 if (liveSessions && liveSessions.length > 0) {
@@ -1805,6 +1802,8 @@
 
                         const callDurationMs = Date.now() - new Date(call.start_time).getTime();
                         let longCallIndicatorHTML = '';
+                        
+                        // NEW: Check if the call duration exceeds the threshold
                         if (callDurationMs > LONG_CALL_THRESHOLD) {
                             callDiv.classList.add('long-call-alert');
                             longCallIndicatorHTML = `<span class="long-call-indicator">(Long Call!)</span>`;
