@@ -22,9 +22,8 @@
             Error: Could not initialize authentication service.
         </div>
         
-        <!-- ✅ NEW: Message for already logged-in users -->
         <div id="alreadyLoggedInMessage" class="form-message success-message" style="display: none;">
-            You are already logged in. <a href="core-flow.html" style="color: var(--success-color); font-weight: bold; text-decoration: underline;">Go to App</a>
+            You are already logged in. <a href="#" id="loggedInRedirectLink" style="color: var(--success-color); font-weight: bold; text-decoration: underline;">Go to App</a>
         </div>
         
         <div id="loginMessage" class="form-message success-message" style="display: none;"></div>
@@ -74,7 +73,7 @@
         import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
         
         const SUPABASE_URL = 'https://aefiigottnlcmjzilqnh.supabase.co';
-        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFlZmlpZ290dG5sY21qemlscW5oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcxNzY2MDQsImV4cCI6MjA2Mjc1MjYwNH0.FypB02v3tGMnxXV9ZmZMdMC0oQpREKOJWgHMPxUzwX4';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFlZmlpZ290dG5sY21qemlscW5oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcxNzY2MDQsImV4cCI6MjA2Mjc1MjYwNH0.FypB02v3tGMnxXV9ZmZMdMC-oQpREKOJWgHMPxUzwX4';
         
         let supabase;
         try {
@@ -103,6 +102,7 @@
         const loginGeneralError = document.getElementById('loginError');
         const loginSuccessMessage = document.getElementById('loginMessage');
         const alreadyLoggedInMessageDiv = document.getElementById('alreadyLoggedInMessage');
+        const loggedInRedirectLink = document.getElementById('loggedInRedirectLink');
         const forgotPasswordLink = document.getElementById('forgotPasswordLink');
 
         const REMEMBERED_EMAIL_KEY = 'elevoCoreRememberedEmail';
@@ -127,7 +127,7 @@
         }
         
         async function storeUserDetails(user) {
-            if (!user || !supabase) return;
+            if (!user || !supabase) return null;
             try {
                 const { data: profile, error } = await supabase
                     .from('users')
@@ -144,8 +144,10 @@
                     isAdmin: profile?.is_admin || false, 
                 };
                 localStorage.setItem(USER_DATA_KEY, JSON.stringify(userData));
+                return userData;
             } catch (e) {
                 console.error('Failed to store user details:', e);
+                return null;
             }
         }
 
@@ -155,18 +157,21 @@
             const urlParams = new URLSearchParams(window.location.search);
             const signedUp = urlParams.get('signedup') === 'true';
             
-            // ✅ MODIFICATION: Check for session but DON'T redirect automatically
             const { data: { session } } = await supabase.auth.getSession();
 
-            if (session && !signedUp) { 
+            if (session && !signedUp) {
                 console.log('User already logged in. Showing message instead of redirecting.');
-                // Hide the form and show the "already logged in" message
+                const userData = JSON.parse(localStorage.getItem(USER_DATA_KEY)) || await storeUserDetails(session.user);
+                
+                if (userData && loggedInRedirectLink) {
+                    loggedInRedirectLink.href = userData.isAdmin ? 'dashboard.html' : 'core-flow.html';
+                }
+
                 if(loginForm) loginForm.style.display = 'none';
                 if(alreadyLoggedInMessageDiv) alreadyLoggedInMessageDiv.style.display = 'block';
-                return; // Stop further execution
+                return;
             }
 
-            // Show the form if the user is not logged in
             if(loginForm) loginForm.style.display = 'block';
             if(alreadyLoggedInMessageDiv) alreadyLoggedInMessageDiv.style.display = 'none';
 
@@ -176,7 +181,6 @@
                 if (emailFromParam && emailInput) {
                     emailInput.value = emailFromParam;
                 }
-                // Clean the URL
                 window.history.replaceState({}, document.title, window.location.pathname);
             } else {
                 const rememberedEmail = localStorage.getItem(REMEMBERED_EMAIL_KEY);
@@ -235,16 +239,16 @@
                     if (error) throw error; 
 
                     if (data && data.user) { 
-                        await storeUserDetails(data.user); 
+                        const userData = await storeUserDetails(data.user); 
                         
-                        // ✅ MODIFICATION: Show success message before redirect
                         displaySuccess(loginSuccessMessage, 'Login successful! Redirecting...');
                         
-                        const redirectToTarget = new URLSearchParams(window.location.search).get('redirectTo') || 'core-flow.html'; 
+                        // --- CORE CHANGE: ROLE-BASED REDIRECTION ---
+                        const targetPage = userData?.isAdmin ? 'dashboard.html' : 'core-flow.html';
 
                         setTimeout(() => {
-                            window.location.replace(redirectToTarget); 
-                        }, 1000); // Wait 1 second before redirecting
+                            window.location.replace(targetPage); 
+                        }, 1200);
                     } else {
                          throw new Error('Login successful but no user data returned.'); 
                     }
@@ -261,7 +265,7 @@
                         }
                     }
                     displayError(loginGeneralError, errorMessage);
-                    setButtonLoading(false); // Only stop loading on error
+                    setButtonLoading(false);
                 }
             });
         }
@@ -289,7 +293,6 @@
                     displaySuccess(loginSuccessMessage, 'Password reset instructions sent. Please check your inbox and spam folder.');
                 } catch (error) {
                     console.error('Password reset error:', error);
-                    // Show a generic success message for security reasons (don't reveal if an email exists)
                     displaySuccess(loginSuccessMessage, 'If your email is registered, you will receive reset instructions.');
                 } finally {
                     setButtonLoading(false);
@@ -303,4 +306,3 @@
     </script>
 </body>
 </html>
-التالي: سأرسل لك كود core-flow.html الذي طلبته مع التحسينات.
