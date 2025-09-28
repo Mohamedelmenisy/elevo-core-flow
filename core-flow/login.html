@@ -86,8 +86,6 @@
                 supabaseErrorDiv.style.display = 'block';
             }
             document.getElementById('loginForm').style.display = 'none';
-            document.querySelector('.links').style.display = 'none';
-            document.querySelector('.login-header').style.display = 'none';
         }
 
         const loginForm = document.getElementById('loginForm');
@@ -126,7 +124,7 @@
             toggleButton.setAttribute('aria-label', isPassword ? 'Hide password' : 'Show password');
         }
         
-        async function storeUserDetails(user) {
+        async function fetchAndStoreUserDetails(user) {
             if (!user || !supabase) return null;
             try {
                 const { data: profile, error } = await supabase
@@ -160,8 +158,7 @@
             const { data: { session } } = await supabase.auth.getSession();
 
             if (session && !signedUp) {
-                console.log('User already logged in. Showing message instead of redirecting.');
-                const userData = JSON.parse(localStorage.getItem(USER_DATA_KEY)) || await storeUserDetails(session.user);
+                const userData = await fetchAndStoreUserDetails(session.user);
                 
                 if (userData && loggedInRedirectLink) {
                     loggedInRedirectLink.href = userData.isAdmin ? 'dashboard.html' : 'core-flow.html';
@@ -176,7 +173,7 @@
             if(alreadyLoggedInMessageDiv) alreadyLoggedInMessageDiv.style.display = 'none';
 
             if (signedUp) {
-                displaySuccess(loginSuccessMessage, 'Signup successful! Please log in. ✅');
+                displaySuccess(loginSuccessMessage, 'Signup successful! Please log in to continue.');
                 const emailFromParam = urlParams.get('email');
                 if (emailFromParam && emailInput) {
                     emailInput.value = emailFromParam;
@@ -196,10 +193,7 @@
         if (passwordToggle && passwordInput) {
             passwordToggle.addEventListener('click', () => togglePasswordVisibility(passwordToggle, passwordInput));
             passwordToggle.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    togglePasswordVisibility(passwordToggle, passwordInput);
-                }
+                if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); togglePasswordVisibility(passwordToggle, passwordInput); }
             });
         }
 
@@ -211,24 +205,14 @@
 
                 const email = emailInput.value.trim().toLowerCase();
                 const password = passwordInput.value;
-                const rememberMe = rememberCheckbox ? rememberCheckbox.checked : false;
-
-                let isValid = true;
-                if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-                    displayError(emailError, 'Please enter a valid email address.');
-                    isValid = false;
-                }
-                if (!password) {
-                    displayError(passwordError, 'Password is required.');
-                    isValid = false;
-                }
-
-                if (!isValid) {
+                if (!email || !password) {
+                    if (!email) displayError(emailError, 'Please enter a valid email address.');
+                    if (!password) displayError(passwordError, 'Password is required.');
                     setButtonLoading(false);
                     return;
                 }
 
-                if (rememberMe) {
+                if (rememberCheckbox && rememberCheckbox.checked) {
                     localStorage.setItem(REMEMBERED_EMAIL_KEY, email);
                 } else {
                     localStorage.removeItem(REMEMBERED_EMAIL_KEY);
@@ -239,12 +223,15 @@
                     if (error) throw error; 
 
                     if (data && data.user) { 
-                        const userData = await storeUserDetails(data.user); 
+                        // CRITICAL: Fetch fresh user data from DB to get the correct role
+                        const userData = await fetchAndStoreUserDetails(data.user); 
+                        
+                        console.log("User data from DB:", userData); // For debugging
                         
                         displaySuccess(loginSuccessMessage, 'Login successful! Redirecting...');
                         
-                        // --- CORE CHANGE: ROLE-BASED REDIRECTION ---
                         const targetPage = userData?.isAdmin ? 'dashboard.html' : 'core-flow.html';
+                        console.log(`User is admin: ${userData?.isAdmin}. Redirecting to: ${targetPage}`); // For debugging
 
                         setTimeout(() => {
                             window.location.replace(targetPage); 
@@ -255,7 +242,7 @@
                 } catch (error) { 
                     console.error('Login error:', error);
                     let errorMessage = 'Login failed. Please check your credentials.';
-                    if (error && error.message) { 
+                    if (error?.message) {
                         if (error.message.toLowerCase().includes('invalid login credentials')) {
                             errorMessage = 'Incorrect email or password.';
                         } else if (error.message.toLowerCase().includes('email not confirmed')) {
@@ -276,7 +263,7 @@
                 const email = emailInput.value.trim();
                 [loginGeneralError, emailError, loginSuccessMessage].forEach(clearError);
 
-                if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+                if (!email) {
                     displayError(loginGeneralError, 'Please enter your email address above to request a password reset.');
                     emailInput.focus();
                     return;
@@ -287,7 +274,7 @@
 
                 try {
                     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-                        redirectTo: window.location.origin + window.location.pathname.replace('login.html', 'reset-password.html') 
+                        redirectTo: window.location.origin + '/reset-password.html'
                     });
                     if (error) throw error;
                     displaySuccess(loginSuccessMessage, 'Password reset instructions sent. Please check your inbox and spam folder.');
