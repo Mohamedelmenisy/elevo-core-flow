@@ -101,8 +101,8 @@
         .card h2, .card h3 { margin-top: 0; margin-bottom: 1.5rem; font-weight: 600; border-bottom: 1px solid var(--border-color); padding-bottom: 0.75rem; font-size: 1.1rem; display: flex; align-items: center; gap: 0.5rem; }
 
         .filter-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1.5rem; align-items: end; }
-        #resetFiltersBtn { background-color: var(--text-color-secondary); color: var(--card-bg-color); font-weight: 600; border: none; }
-        #resetFiltersBtn:hover { background-color: var(--primary-color); }
+        #resetFiltersBtn { background-color: transparent; color: var(--text-color-light); border: 1px solid var(--border-color); font-size: 0.85rem; padding: 0.6rem 1rem !important; }
+        #resetFiltersBtn:hover { background-color: var(--bg-dark-accent); color: var(--primary-color); border-color: var(--primary-color);}
 
         .table-responsive { overflow-x: auto; }
         #recentCallsTable { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
@@ -121,22 +121,39 @@
         .chart-container h3 { text-align: center; font-size: 0.9rem; margin-bottom: 1rem; padding: 0; border: none; font-weight: 500; color: var(--text-color-light); }
         .chart-container canvas { flex-grow: 1; }
         
-        /* --- LIVE INDICATOR ANIMATION --- */
-        @keyframes pulse {
-            0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(var(--success-color), 0.7); }
-            70% { transform: scale(1.1); box-shadow: 0 0 5px 10px rgba(var(--success-color), 0); }
-            100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(var(--success-color), 0); }
+        /* --- IMPRESSIVE LIVE INDICATOR --- */
+        .live-indicator {
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
         }
-        .live-indicator-icon {
-            color: var(--success-color);
+        .live-indicator::before, .live-indicator::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
             border-radius: 50%;
-            animation: pulse 2s infinite;
+            background-color: var(--success-color);
+            animation-name: live-pulse;
+            animation-duration: 2s;
+            animation-timing-function: ease-out;
+            animation-iteration-count: infinite;
         }
-
-        /* --- SKELETON LOADER --- */
-        @keyframes skeleton-loading { 0% { background-color: hsl(228, 15%, 25%); } 100% { background-color: hsl(228, 15%, 35%); } }
-        .skeleton-text { animation: skeleton-loading 1s linear infinite alternate; color: transparent; border-radius: 4px; }
-        .skeleton-row td > div { height: 20px; }
+        .live-indicator::before {
+            width: 8px;
+            height: 8px;
+        }
+        .live-indicator::after {
+            animation-delay: -1s;
+        }
+        @keyframes live-pulse {
+            0% { width: 8px; height: 8px; opacity: 1; }
+            100% { width: 24px; height: 24px; opacity: 0; }
+        }
 
     </style>
 </head>
@@ -188,7 +205,7 @@
                     </div>
                     <div class="sidebar-column">
                         <div id="liveCallsContainerWrapper" class="card">
-                            <h2><svg class="live-indicator-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="2"></circle></svg> Live Monitoring</h2>
+                            <h2><div class="live-indicator"></div> Live Monitoring</h2>
                             <div id="liveCallsContainer" class="live-calls-list"><p id="noLiveCallsMessage" style="display:block;">Loading live tickets...</p></div>
                         </div>
                         <div id="delayedTicketsContainerWrapper" class="card">
@@ -212,16 +229,27 @@
     </div>
 
     <script type="module">
-        // --- Supabase Client & All DOM Elements are defined here, same as before ---
+        // Supabase Client Setup
         const SUPABASE_URL = 'https://aefiigottnlcmjzilqnh.supabase.co';
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFlZmlpZ290dG5sY21qemlscW5oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcxNzY2MDQsImV4cCI6MjA2Mjc1MjYwNH0.FypB02v3tGMnxXV9ZmZMdMC0oQpREKOJWgHMPxUzwX4';
+        
         let supabase;
-        try { supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY); } catch (error) { console.error("Supabase client failed:", error); }
+        try {
+            supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+            console.log('Supabase client initialized for dashboard.html');
+        } catch (error) {
+            console.error("Supabase client initialization failed:", error);
+            const authLoading = document.getElementById('authLoadingMessage');
+            if(authLoading) authLoading.innerHTML = '<p style="color:red; text-align:center;">Critical Error: Services unavailable. Dashboard cannot be loaded.</p>';
+        }
+
+        // DOM Elements
         const appContainerContent = document.getElementById('appContainerContent');
         const authLoadingMessageDiv = document.getElementById('authLoadingMessage');
         const dashboardContentDiv = document.getElementById('dashboardContent');
         const accessDeniedModal = document.getElementById('accessDeniedModal');
         const returnToAppBtn = document.getElementById('returnToAppBtn');
+
         const userNameDisplayHeader = document.getElementById('userNameDisplay');
         const dashboardUserGreeting = document.getElementById('dashboardUserGreeting');
         const userAvatarCharEl = document.getElementById('userAvatarCharacter');
@@ -229,6 +257,8 @@
         const logoutButton = document.getElementById('logoutButton');
         const rtmDashboardLink = document.getElementById('rtmDashboardLink');
         document.getElementById('currentYear').textContent = new Date().getFullYear();
+
+        // Stats elements
         const totalCallsEl = document.getElementById('totalCalls');
         const avgCallDurationEl = document.getElementById('avgCallDuration');
         const completionRateEl = document.getElementById('completionRate');
@@ -239,34 +269,333 @@
         const statsPeriodEl = document.getElementById('statsPeriod');
         const statsPeriodDurationEl = document.getElementById('statsPeriodDuration');
         const statsPeriodCompletionEl = document.getElementById('statsPeriodCompletion');
+
+        // Filter elements
         const userFilterDropdown = document.getElementById('userFilterDropdown');
         const searchInput = document.getElementById('searchInput');
         const qualityFilter = document.getElementById('qualityFilter');
         const startDateFilter = document.getElementById('startDateFilter');
         const endDateFilter = document.getElementById('endDateFilter');
         const resetFiltersBtn = document.getElementById('resetFiltersBtn');
+
+        // Table and Pagination elements
         const recentCallsTableBody = document.querySelector('#recentCallsTable tbody');
         const recentCallsTitleEl = document.getElementById('recentCallsTitle');
         const paginationControlsContainer = document.getElementById('paginationControls');
         const exportDataBtn = document.getElementById('exportDataBtn');
         const exportDataXLSXBtn = document.getElementById('exportDataXLSXBtn');
+
+        // Live/Delayed Tickets elements
         const liveCallsContainer = document.getElementById('liveCallsContainer');
         const noLiveCallsMessage = document.getElementById('noLiveCallsMessage');
         const delayedTicketsContainer = document.getElementById('delayedTicketsContainer');
         const noDelayedTicketsMessage = document.getElementById('noDelayedTicketsMessage');
+
+        // Chart instances
         let statusChart, ticketVolumeChart, qualityScoreChart, badReasonsChart;
-        let currentUser = null, allCallSessions = [], filteredCallSessions = [], allAgents = [], currentPage = 1;
+
+
+        // State Variables
+        let currentUser = null; 
+        let allCallSessions = [];
+        let filteredCallSessions = [];
+        let allAgents = []; 
+        let currentPage = 1;
         const ROWS_PER_PAGE = 10;
-        let filterTimeoutId = null, liveCallsChannel = null;
+        let filterTimeoutId = null;
+        let liveCallsChannel = null;
         const FILTER_STORAGE_KEY = 'elevoCoreAdminFilters_v3';
         const EGYPT_TIMEZONE = 'Africa/Cairo';
 
-        // --- All utility functions (formatDateTime, etc.) are the same ---
-        function formatDateTimeEgypt(d,o={}){if(!d)return'N/A';const t=new Date(d);return t.toLocaleString('en-GB',{timeZone:EGYPT_TIMEZONE,day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:true,...o})}
-        function formatTimeEgypt(d){if(!d)return'N/A';const t=new Date(d);return t.toLocaleTimeString('en-GB',{timeZone:EGYPT_TIMEZONE,hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:true})}
-        function formatDateForCSVEgypt(d){if(!d)return'N/A';const t=new Date(d);const e=t.toLocaleDateString('en-CA',{year:'numeric',timeZone:EGYPT_TIMEZONE}),o=t.toLocaleDateString('en-CA',{month:'2-digit',timeZone:EGYPT_TIMEZONE}),i=t.toLocaleDateString('en-CA',{day:'2-digit',timeZone:EGYPT_TIMEZONE}),n=t.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false,timeZone:EGYPT_TIMEZONE});return`${e}-${o.padStart(2,"0")}-${i.padStart(2,"0")} ${n}`}
+        function formatDateTimeEgypt(dateString, options = {}) {
+            if (!dateString) return 'N/A';
+            const date = new Date(dateString);
+            const defaultOptions = {
+                timeZone: EGYPT_TIMEZONE,
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: true
+            };
+            return date.toLocaleString('en-GB', { ...defaultOptions, ...options });
+        }
 
-        // --- Chart Update Function (NEW & IMPROVED) ---
+        function formatTimeEgypt(dateString) {
+            if (!dateString) return 'N/A';
+            const date = new Date(dateString);
+            return date.toLocaleTimeString('en-GB', {
+                timeZone: EGYPT_TIMEZONE,
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: true
+            });
+        }
+
+        function formatDateForCSVEgypt(dateString) {
+            if (!dateString) return 'N/A';
+            const date = new Date(dateString);
+            const year = date.toLocaleDateString('en-CA', { year: 'numeric', timeZone: EGYPT_TIMEZONE });
+            const month = date.toLocaleDateString('en-CA', { month: '2-digit', timeZone: EGYPT_TIMEZONE });
+            const day = date.toLocaleDateString('en-CA', { day: '2-digit', timeZone: EGYPT_TIMEZONE });
+            const time = date.toLocaleTimeString('en-GB', {
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: false,
+                timeZone: EGYPT_TIMEZONE
+            });
+            return `${year}-${month.padStart(2,'0')}-${day.padStart(2,'0')} ${time}`;
+        }
+
+        async function initializeDashboard() {
+            if (!supabase) return;
+
+            const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+
+            if (sessionError || !session) {
+                window.location.href = 'login.html';
+                return;
+            }
+
+            const storedUserData = JSON.parse(localStorage.getItem('elevoCoreUserData'));
+            if (storedUserData && storedUserData.id === session.user.id) {
+                currentUser = storedUserData;
+            } else {
+                const { data: profile, error: profileError } = await supabase
+                    .from('users')
+                    .select('name, is_admin')
+                    .eq('id', session.user.id)
+                    .single();
+
+                if (profileError && profileError.code !== 'PGRST116') {
+                    console.error("Profile fetch error:", profileError);
+                    showAccessDenied("Could not verify your user profile.");
+                    return;
+                }
+                currentUser = {
+                    id: session.user.id,
+                    email: session.user.email,
+                    name: profile?.name || session.user.user_metadata?.full_name || session.user.email.split('@')[0],
+                    isAdmin: profile?.is_admin || false
+                };
+                localStorage.setItem('elevoCoreUserData', JSON.stringify(currentUser));
+            }
+
+            if (!currentUser.isAdmin) {
+                showAccessDenied();
+                return;
+            }
+
+            appContainerContent.style.display = 'flex';
+            authLoadingMessageDiv.style.display = 'none';
+            dashboardContentDiv.style.display = 'flex'; 
+
+            setupAdminUI();
+            await loadInitialData();
+            loadPersistedFilters();
+            applyFiltersAndRender();
+            setupEventListeners();
+            setupLiveCallMonitoring();
+        }
+
+        function showAccessDenied(message = "You do not have permission to view this page. This section is restricted to administrators.") {
+            authLoadingMessageDiv.style.display = 'none';
+            dashboardContentDiv.style.display = 'none';
+            appContainerContent.style.display = 'flex';
+
+            accessDeniedModal.querySelector('p').textContent = message;
+            accessDeniedModal.style.display = 'flex';
+            if (liveCallsChannel) {
+                supabase.removeChannel(liveCallsChannel);
+                liveCallsChannel = null;
+            }
+        }
+
+        returnToAppBtn.addEventListener('click', () => {
+            window.location.href = 'core-flow.html';
+        });
+
+        function setupAdminUI() { 
+            userNameDisplayHeader.textContent = currentUser.name;
+            dashboardUserGreeting.innerHTML = `👋 Welcome back, <span class="user-name-emphasis">${currentUser.name}</span>!`;
+            userAvatarCharEl.textContent = currentUser.name.charAt(0).toUpperCase();
+            userInfoDivHeader.style.display = 'flex';
+            if (currentUser.isAdmin) {
+                rtmDashboardLink.style.display = 'inline-block';
+            }
+        }
+
+        async function loadInitialData() {
+            try {
+                const { data: agentsData, error: agentsError } = await supabase
+                    .from('users')
+                    .select('id, name, email')
+                    .order('name', { ascending: true });
+                if (agentsError) throw agentsError;
+                allAgents = agentsData || [];
+                populateAgentFilter();
+
+                const { data: sessionsData, error: sessionsError } = await supabase
+                    .from('call_sessions')
+                    .select(`
+                        *,
+                        call_sessions_scenario_id_fkey(id, title)
+                    `)
+                    .order('start_time', { ascending: false });
+                if (sessionsError) throw sessionsError;
+                allCallSessions = sessionsData || [];
+
+            } catch (error) {
+                console.error("Error loading initial dashboard data:", error);
+                recentCallsTableBody.innerHTML = `<tr><td colspan="8" style="text-align:center; color:var(--danger-color);">Failed to load data: ${error.message}</td></tr>`;
+            }
+        }
+
+        function populateAgentFilter() {
+            userFilterDropdown.innerHTML = '<option value="">All Agents</option>';
+            allAgents.forEach(agent => {
+                const option = document.createElement('option');
+                option.value = agent.id;
+                option.textContent = agent.name ? `${agent.name} (${agent.email})` : agent.email;
+                userFilterDropdown.appendChild(option);
+            });
+        }
+
+        function applyFiltersAndRender() {
+            saveFiltersToLocalStorage();
+
+            let tempFiltered = [...allCallSessions];
+            const searchTerm = searchInput.value.toLowerCase().trim();
+            const selectedAgentId = userFilterDropdown.value;
+            const selectedQuality = qualityFilter.value;
+            const startDate = startDateFilter.value;
+            const endDate = endDateFilter.value;
+
+            if (selectedAgentId) {
+                tempFiltered = tempFiltered.filter(s => s.user_id === selectedAgentId);
+            }
+            if (searchTerm) {
+                tempFiltered = tempFiltered.filter(s => {
+                    const agent = allAgents.find(a => a.id === s.user_id);
+                    return (
+                        (s.call_sessions_scenario_id_fkey?.title || '').toLowerCase().includes(searchTerm) ||
+                        (s.quality_reason || '').toLowerCase().includes(searchTerm) ||
+                        (agent?.name || '').toLowerCase().includes(searchTerm) ||
+                        (agent?.email || '').toLowerCase().includes(searchTerm)
+                    );
+                });
+            }
+            if (selectedQuality) {
+                tempFiltered = tempFiltered.filter(s => (selectedQuality === "N/A" ? !s.call_quality : s.call_quality === selectedQuality));
+            }
+            if (startDate) {
+                tempFiltered = tempFiltered.filter(s => s.start_time && new Date(s.start_time) >= new Date(startDate + "T00:00:00.000Z"));
+            }
+            if (endDate) {
+                const endOfDay = new Date(endDate + "T23:59:59.999Z");
+                tempFiltered = tempFiltered.filter(s => s.start_time && new Date(s.start_time) <= endOfDay);
+            }
+
+            filteredCallSessions = tempFiltered;
+            currentPage = 1;
+            renderTable();
+            updateStats();
+            renderPagination();
+            updateAnalyticsCharts();
+        }
+        
+        function renderTable() { 
+            recentCallsTableBody.innerHTML = '';
+            if (filteredCallSessions.length === 0) {
+                recentCallsTableBody.innerHTML = `<tr class="placeholder-row"><td colspan="8" style="text-align:center; padding: 3rem; font-size: 1.1rem; color: var(--text-color-light);"><svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="display: block; margin: 0 auto 1rem;"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>No ticket sessions match your filters.</td></tr>`;
+                return;
+            }
+
+            const paginatedSessions = filteredCallSessions.slice((currentPage - 1) * ROWS_PER_PAGE, currentPage * ROWS_PER_PAGE);
+            paginatedSessions.forEach(session => {
+                const agent = allAgents.find(a => a.id === session.user_id);
+                const row = recentCallsTableBody.insertRow();
+                row.insertCell().textContent = agent?.name || 'Unknown Agent';
+                row.insertCell().textContent = agent?.email || 'N/A';
+                row.insertCell().textContent = session.call_sessions_scenario_id_fkey?.title || 'N/A';
+                row.insertCell().textContent = formatDateTimeEgypt(session.start_time);
+                const duration = session.duration || 0;
+                row.insertCell().textContent = `${Math.floor(duration / 60)}m ${duration % 60}s`;
+                row.insertCell().textContent = session.completed ? 'Yes' : 'No';
+                
+                const qualityCell = row.insertCell();
+                const qualityContainer = document.createElement('div');
+                qualityContainer.style.display = 'flex';
+                qualityContainer.style.alignItems = 'center';
+                qualityContainer.style.gap = '0.5em';
+
+                const qualityIcon = document.createElement('span');
+                let iconSvg = '', qualityClass = 'na';
+                switch (session.call_quality?.toLowerCase()) {
+                    case 'good': iconSvg = `<svg viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>`; qualityClass = 'good'; break;
+                    case 'normal': iconSvg = `<svg viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>`; qualityClass = 'normal'; break;
+                    case 'bad': iconSvg = `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>`; qualityClass = 'bad'; break;
+                    default: iconSvg = `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="8" y1="12" x2="16" y2="12"></line></svg>`;
+                }
+                qualityIcon.innerHTML = iconSvg.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"');
+                qualityIcon.classList.add(qualityClass);
+                qualityContainer.appendChild(qualityIcon);
+                qualityContainer.appendChild(document.createTextNode(session.call_quality || 'N/A'));
+                qualityCell.appendChild(qualityContainer);
+
+                row.insertCell().textContent = session.quality_reason || '-';
+            });
+        }
+
+        function updateStats() {
+            const count = filteredCallSessions.length;
+            totalCallsEl.textContent = count;
+
+            const selectedAgentId = userFilterDropdown.value;
+            const agent = allAgents.find(a => a.id === selectedAgentId);
+            const agentName = agent?.name || agent?.email || 'Selected Agent';
+            const statsPeriodText = selectedAgentId ? agentName : 'All Agents';
+            [statsPeriodEl, statsPeriodDurationEl, statsPeriodCompletionEl].forEach(el => el.textContent = statsPeriodText);
+            recentCallsTitleEl.textContent = selectedAgentId ? `Ticket Sessions for ${agentName}` : 'Recent Ticket Sessions';
+
+            if (count > 0) {
+                const totalDuration = filteredCallSessions.reduce((sum, s) => sum + (s.duration || 0), 0);
+                const avgDuration = Math.round(totalDuration / count);
+                avgCallDurationEl.textContent = `${Math.floor(avgDuration / 60)}m ${avgDuration % 60}s`;
+
+                const completedCount = filteredCallSessions.filter(s => s.completed).length;
+                completionRateEl.textContent = `${Math.round((completedCount / count) * 100)}%`;
+
+                const qualityCounts = { good: 0, normal: 0, bad: 0, rated: 0 };
+                filteredCallSessions.forEach(s => {
+                    if (s.call_quality === 'Good') { qualityCounts.good++; qualityCounts.rated++; }
+                    else if (s.call_quality === 'Normal') { qualityCounts.normal++; qualityCounts.rated++; }
+                    else if (s.call_quality === 'Bad') { qualityCounts.bad++; qualityCounts.rated++; }
+                });
+                if (qualityCounts.rated > 0) {
+                    gaugeGoodEl.style.width = `${(qualityCounts.good / qualityCounts.rated) * 100}%`;
+                    gaugeNormalEl.style.width = `${(qualityCounts.normal / qualityCounts.rated) * 100}%`;
+                    gaugeBadEl.style.width = `${(qualityCounts.bad / qualityCounts.rated) * 100}%`;
+                    if (qualityCounts.bad / qualityCounts.rated > 0.3) avgQualityTextEl.textContent = "Improvement Needed";
+                    else if (qualityCounts.good / qualityCounts.rated >= 0.7) avgQualityTextEl.textContent = "Excellent";
+                    else if (qualityCounts.good / qualityCounts.rated >= 0.5) avgQualityTextEl.textContent = "Mostly Good";
+                    else avgQualityTextEl.textContent = "Mixed Quality";
+                } else {
+                    [gaugeGoodEl, gaugeNormalEl, gaugeBadEl].forEach(el => el.style.width = '0%');
+                    avgQualityTextEl.textContent = 'No Rated Tickets';
+                }
+            } else {
+                avgCallDurationEl.textContent = '0m 0s';
+                completionRateEl.textContent = '0%';
+                [gaugeGoodEl, gaugeNormalEl, gaugeBadEl].forEach(el => el.style.width = '0%');
+                avgQualityTextEl.textContent = 'No Tickets';
+            }
+        }
+
         function updateAnalyticsCharts() {
             const gridColor = 'rgba(192, 202, 245, 0.1)';
             const textColor = 'rgba(192, 202, 245, 0.9)';
@@ -283,7 +612,9 @@
                 padding: 10,
                 cornerRadius: 8,
                 displayColors: true,
-                boxPadding: 4
+                boxPadding: 4,
+                titleFont: { weight: 'bold' },
+                bodyFont: { size: 13 }
             };
             
             // --- 1. Completion Status Chart (Doughnut) ---
@@ -337,79 +668,278 @@
                 options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, scales: { x: { beginAtZero: true, grid: { color: gridColor } }, y: { grid: { color: gridColor } } }, plugins: { legend: { display: false }, tooltip: tooltipOptions } }
             });
         }
-        
-        // --- SKELETON LOADER & IMPROVED RENDER TABLE ---
-        function renderSkeletonLoader() {
-            recentCallsTableBody.innerHTML = '';
-            for (let i = 0; i < 5; i++) {
-                const row = recentCallsTableBody.insertRow();
-                row.className = 'skeleton-row';
-                for (let j = 0; j < 8; j++) {
-                    const cell = row.insertCell();
-                    cell.innerHTML = `<div class="skeleton-text">.</div>`;
+
+        function renderPagination() {
+            paginationControlsContainer.innerHTML = '';
+            const totalPages = Math.ceil(filteredCallSessions.length / ROWS_PER_PAGE);
+            if (totalPages <= 1) return;
+
+            const prevBtn = document.createElement('button');
+            prevBtn.textContent = 'Previous';
+            prevBtn.disabled = currentPage === 1;
+            prevBtn.addEventListener('click', () => { currentPage--; renderTable(); renderPagination(); });
+            paginationControlsContainer.appendChild(prevBtn);
+
+            const pageInfo = document.createElement('span');
+            pageInfo.textContent = ` Page ${currentPage} of ${totalPages} `;
+            pageInfo.style.margin = "0 10px";
+            paginationControlsContainer.appendChild(pageInfo);
+
+            const nextBtn = document.createElement('button');
+            nextBtn.textContent = 'Next';
+            nextBtn.disabled = currentPage === totalPages;
+            nextBtn.addEventListener('click', () => { currentPage++; renderTable(); renderPagination(); });
+            paginationControlsContainer.appendChild(nextBtn);
+        }
+
+        function saveFiltersToLocalStorage() {
+            const filters = {
+                agentId: userFilterDropdown.value,
+                searchTerm: searchInput.value,
+                quality: qualityFilter.value,
+                startDate: startDateFilter.value,
+                endDate: endDateFilter.value,
+            };
+            localStorage.setItem(FILTER_STORAGE_KEY, JSON.stringify(filters));
+        }
+
+        function loadPersistedFilters() {
+            const savedFilters = localStorage.getItem(FILTER_STORAGE_KEY);
+            if (savedFilters) {
+                try {
+                    const filters = JSON.parse(savedFilters);
+                    userFilterDropdown.value = filters.agentId || '';
+                    searchInput.value = filters.searchTerm || '';
+                    qualityFilter.value = filters.quality || '';
+                    startDateFilter.value = filters.startDate || '';
+                    endDateFilter.value = filters.endDate || '';
+                } catch (e) {
+                    console.error("Error parsing saved filters:", e);
+                    localStorage.removeItem(FILTER_STORAGE_KEY);
                 }
             }
         }
+        
+        function setupEventListeners() {
+            logoutButton.addEventListener('click', async () => {
+                if (liveCallsChannel) {
+                    supabase.removeChannel(liveCallsChannel);
+                    liveCallsChannel = null;
+                }
+                localStorage.removeItem('elevoCoreUserData');
+                localStorage.removeItem(FILTER_STORAGE_KEY);
+                const { error } = await supabase.auth.signOut();
+                if (error) console.error("Logout error:", error);
+                window.location.replace("login.html");
+            });
 
-        function renderTable() { 
-            recentCallsTableBody.innerHTML = '';
+            [userFilterDropdown, qualityFilter, startDateFilter, endDateFilter].forEach(el => {
+                el.addEventListener('change', applyFiltersAndRender);
+            });
+            searchInput.addEventListener('input', () => {
+                clearTimeout(filterTimeoutId);
+                filterTimeoutId = setTimeout(applyFiltersAndRender, 500);
+            });
+            resetFiltersBtn.addEventListener('click', () => {
+                userFilterDropdown.value = '';
+                searchInput.value = '';
+                qualityFilter.value = '';
+                startDateFilter.value = '';
+                endDateFilter.value = '';
+                localStorage.removeItem(FILTER_STORAGE_KEY);
+                applyFiltersAndRender();
+            });
+            exportDataBtn.addEventListener('click', exportFilteredDataToCSV);
+            exportDataXLSXBtn.addEventListener('click', exportFilteredDataToXLSX);
+        }
+
+        function exportFilteredDataToCSV() {
             if (filteredCallSessions.length === 0) {
-                recentCallsTableBody.innerHTML = `<tr class="placeholder-row"><td colspan="8" style="text-align:center; padding: 3rem; font-size: 1.1rem; color: var(--text-color-light);"><svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="display: block; margin: 0 auto 1rem;"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>No ticket sessions match your filters.</td></tr>`;
+                alert("No data to export based on current filters.");
                 return;
             }
-            paginatedSessions = filteredCallSessions.slice((currentPage - 1) * ROWS_PER_PAGE, currentPage * ROWS_PER_PAGE);
-            paginatedSessions.forEach(session => {
+            const headers = ["Agent Name", "Agent Email", "Scenario", "Start Time (Egypt)", "Duration (s)", "Completed", "Quality", "Reason"];
+            const rows = filteredCallSessions.map(session => {
                 const agent = allAgents.find(a => a.id === session.user_id);
-                const row = recentCallsTableBody.insertRow();
-                row.insertCell().textContent = agent?.name || 'Unknown Agent';
-                row.insertCell().textContent = agent?.email || 'N/A';
-                row.insertCell().textContent = session.call_sessions_scenario_id_fkey?.title || 'N/A';
-                row.insertCell().textContent = formatDateTimeEgypt(session.start_time);
-                const duration = session.duration || 0;
-                row.insertCell().textContent = `${Math.floor(duration / 60)}m ${duration % 60}s`;
-                row.insertCell().textContent = session.completed ? 'Yes' : 'No';
-                
-                // --- PERFECT ICON ALIGNMENT ---
-                const qualityCell = row.insertCell();
-                const qualityContainer = document.createElement('div');
-                qualityContainer.style.display = 'flex';
-                qualityContainer.style.alignItems = 'center';
-                qualityContainer.style.gap = '0.5em';
-
-                const qualityIcon = document.createElement('span');
-                let iconSvg = '', qualityClass = 'na';
-                switch (session.call_quality?.toLowerCase()) {
-                    case 'good': iconSvg = `<svg viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>`; qualityClass = 'good'; break;
-                    case 'normal': iconSvg = `<svg viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>`; qualityClass = 'normal'; break;
-                    case 'bad': iconSvg = `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>`; qualityClass = 'bad'; break;
-                    default: iconSvg = `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="8" y1="12" x2="16" y2="12"></line></svg>`;
-                }
-                qualityIcon.innerHTML = iconSvg.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"');
-                qualityIcon.classList.add(qualityClass);
-                qualityContainer.appendChild(qualityIcon);
-                qualityContainer.appendChild(document.createTextNode(session.call_quality || 'N/A'));
-                qualityCell.appendChild(qualityContainer);
-
-                row.insertCell().textContent = session.quality_reason || '-';
+                return [
+                    agent?.name || 'Unknown',
+                    agent?.email || 'N/A',
+                    session.call_sessions_scenario_id_fkey?.title || 'N/A',
+                    formatDateForCSVEgypt(session.start_time),
+                    session.duration || 0,
+                    session.completed ? 'Yes' : 'No',
+                    session.call_quality || 'N/A',
+                    session.quality_reason || '-'
+                ].map(field => `"${String(field).replace(/"/g, '""')}"`);
             });
+
+            const csvContent = [headers.join(','), ...rows.map(row => row.join(','))].join('\n');
+            const blob = new Blob(["\uFEFF"+csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            const url = URL.createObjectURL(blob);
+            link.setAttribute("href", url);
+            link.setAttribute("download", `elevo_dashboard_export_${new Date().toISOString().slice(0,10)}.csv`);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
         }
 
-        // --- All other functions are IDENTICAL and COMPLETE ---
-        async function initializeDashboard(){if(!supabase)return;const{data:{session:e},error:o}=await supabase.auth.getSession();if(o||!e)return void(window.location.href="login.html");const t=JSON.parse(localStorage.getItem("elevoCoreUserData"));if(t&&t.id===e.user.id)currentUser=t;else{const{data:o,error:i}=await supabase.from("users").select("name, is_admin").eq("id",e.user.id).single();if(i&&"PGRST116"!==i.code)return console.error("Profile fetch error:",i),void showAccessDenied("Could not verify your user profile.");currentUser={id:e.user.id,email:e.user.email,name:(null==o?void 0:o.name)||(null==e.user.user_metadata?void 0:e.user.user_metadata.full_name)||e.user.email.split("@")[0],isAdmin:(null==o?void 0:o.is_admin)||!1},localStorage.setItem("elevoCoreUserData",JSON.stringify(currentUser))}currentUser.isAdmin?(appContainerContent.style.display="flex",authLoadingMessageDiv.style.display="none",dashboardContentDiv.style.display="flex",setupAdminUI(),await loadInitialData(),loadPersistedFilters(),applyFiltersAndRender(),setupEventListeners(),setupLiveCallMonitoring()):showAccessDenied()}
-        function showAccessDenied(e="You do not have permission to view this page. This section is restricted to administrators."){authLoadingMessageDiv.style.display="none",dashboardContentDiv.style.display="none",appContainerContent.style.display="flex",accessDeniedModal.querySelector("p").textContent=e,accessDeniedModal.style.display="flex",liveCallsChannel&&(supabase.removeChannel(liveCallsChannel),liveCallsChannel=null)}returnToAppBtn.addEventListener("click",()=>{window.location.href="core-flow.html"});
-        function setupAdminUI(){userNameDisplayHeader.textContent=currentUser.name,dashboardUserGreeting.innerHTML=`👋 Welcome back, <span class="user-name-emphasis">${currentUser.name}</span>!`,userAvatarCharEl.textContent=currentUser.name.charAt(0).toUpperCase(),userInfoDivHeader.style.display="flex",currentUser.isAdmin&&(rtmDashboardLink.style.display="inline-block")}
-        async function loadInitialData(){try{const{data:e,error:o}=await supabase.from("users").select("id, name, email").order("name",{ascending:!0});if(o)throw o;allAgents=e||[],populateAgentFilter();const{data:t,error:i}=await supabase.from("call_sessions").select("*, call_sessions_scenario_id_fkey(id, title)").order("start_time",{ascending:!1});if(i)throw i;allCallSessions=t||[]}catch(e){console.error("Error loading initial dashboard data:",e),recentCallsTableBody.innerHTML=`<tr><td colspan="8" style="text-align:center; color:var(--danger-color);">Failed to load data: ${e.message}</td></tr>`}}
-        function populateAgentFilter(){userFilterDropdown.innerHTML='<option value="">All Agents</option>',allAgents.forEach(e=>{const o=document.createElement("option");o.value=e.id,o.textContent=e.name?`${e.name} (${e.email})`:e.email,userFilterDropdown.appendChild(o)})}
-        function applyFiltersAndRender(){saveFiltersToLocalStorage();renderSkeletonLoader();setTimeout(()=>{let e=[...allCallSessions];const o=searchInput.value.toLowerCase().trim(),t=userFilterDropdown.value,i=qualityFilter.value,n=startDateFilter.value,s=endDateFilter.value;if(t&&(e=e.filter(e=>e.user_id===t)),o&&(e=e.filter(e=>{var i;const n=allAgents.find(o=>o.id===e.user_id);return(null===(i=e.call_sessions_scenario_id_fkey)?void 0:i.title||"").toLowerCase().includes(o)||(e.quality_reason||"").toLowerCase().includes(o)||(null==n?void 0:n.name||"").toLowerCase().includes(o)||(null==n?void 0:n.email||"").toLowerCase().includes(o)})),i&&(e=e.filter(e=>"N/A"===i?!e.call_quality:e.call_quality===i)),n&&(e=e.filter(e=>e.start_time&&new Date(e.start_time)>=new Date(n+"T00:00:00.000Z"))),s){const o=new Date(s+"T23:59:59.999Z");e=e.filter(e=>e.start_time&&new Date(e.start_time)<=o)}filteredCallSessions=e,currentPage=1,renderTable(),updateStats(),renderPagination(),updateAnalyticsCharts()},200)}
-        function updateStats(){const e=filteredCallSessions.length;totalCallsEl.textContent=e;const o=userFilterDropdown.value,t=allAgents.find(e=>e.id===o),i=(null==t?void 0:t.name)||(null==t?void 0:t.email)||"Selected Agent",n=o?i:"All Agents";[statsPeriodEl,statsPeriodDurationEl,statsPeriodCompletionEl].forEach(e=>e.textContent=n),recentCallsTitleEl.textContent=o?`Ticket Sessions for ${i}`:"Recent Ticket Sessions",e>0?(avgCallDurationEl.textContent=function(){const o=filteredCallSessions.reduce((e,o)=>e+(o.duration||0),0),t=Math.round(o/e);return`${Math.floor(t/60)}m ${t%60}s`}(),completionRateEl.textContent=`${Math.round(filteredCallSessions.filter(e=>e.completed).length/e*100)}%`,function(){const e={good:0,normal:0,bad:0,rated:0};filteredCallSessions.forEach(o=>{"Good"===o.call_quality?(e.good++,e.rated++):"Normal"===o.call_quality?(e.normal++,e.rated++):"Bad"===o.call_quality&&(e.bad++,e.rated++)}),e.rated>0?(gaugeGoodEl.style.width=`${e.good/e.rated*100}%`,gaugeNormalEl.style.width=`${e.normal/e.rated*100}%`,gaugeBadEl.style.width=`${e.bad/e.rated*100}%`,avgQualityTextEl.textContent=e.bad/e.rated>.3?"Improvement Needed":e.good/e.rated>=.7?"Excellent":e.good/e.rated>=.5?"Mostly Good":"Mixed Quality"):([gaugeGoodEl,gaugeNormalEl,gaugeBadEl].forEach(e=>e.style.width="0%"),avgQualityTextEl.textContent="No Rated Tickets")}()):(avgCallDurationEl.textContent="0m 0s",completionRateEl.textContent="0%",[gaugeGoodEl,gaugeNormalEl,gaugeBadEl].forEach(e=>e.style.width="0%"),avgQualityTextEl.textContent="No Tickets")}
-        function renderPagination(){paginationControlsContainer.innerHTML="";const e=Math.ceil(filteredCallSessions.length/ROWS_PER_PAGE);if(e<=1)return;const o=document.createElement("button");o.textContent="Previous",o.disabled=1===currentPage,o.addEventListener("click",()=>{currentPage--,renderTable(),renderPagination()}),paginationControlsContainer.appendChild(o);const t=document.createElement("span");t.textContent=` Page ${currentPage} of ${e} `,t.style.margin="0 10px",paginationControlsContainer.appendChild(t);const i=document.createElement("button");i.textContent="Next",i.disabled=currentPage===e,i.addEventListener("click",()=>{currentPage++,renderTable(),renderPagination()}),paginationControlsContainer.appendChild(i)}
-        function saveFiltersToLocalStorage(){const e={agentId:userFilterDropdown.value,searchTerm:searchInput.value,quality:qualityFilter.value,startDate:startDateFilter.value,endDate:endDateFilter.value};localStorage.setItem(FILTER_STORAGE_KEY,JSON.stringify(e))}
-        function loadPersistedFilters(){const e=localStorage.getItem(FILTER_STORAGE_KEY);if(e)try{const o=JSON.parse(e);userFilterDropdown.value=o.agentId||"",searchInput.value=o.searchTerm||"",qualityFilter.value=o.quality||"",startDateFilter.value=o.startDate||"",endDateFilter.value=o.endDate||""}catch(e){console.error("Error parsing saved filters:",e),localStorage.removeItem(FILTER_STORAGE_KEY)}}
-        function setupEventListeners(){logoutButton.addEventListener("click",async()=>{liveCallsChannel&&(supabase.removeChannel(liveCallsChannel),liveCallsChannel=null),localStorage.removeItem("elevoCoreUserData"),localStorage.removeItem(FILTER_STORAGE_KEY);const{error:e}=await supabase.auth.signOut();e&&console.error("Logout error:",e),window.location.replace("login.html")}),[userFilterDropdown,qualityFilter,startDateFilter,endDateFilter].forEach(e=>{e.addEventListener("change",applyFiltersAndRender)}),searchInput.addEventListener("input",()=>{clearTimeout(filterTimeoutId),filterTimeoutId=setTimeout(applyFiltersAndRender,500)}),resetFiltersBtn.addEventListener("click",()=>{userFilterDropdown.value="",searchInput.value="",qualityFilter.value="",startDateFilter.value="",endDateFilter.value="",localStorage.removeItem(FILTER_STORAGE_KEY),applyFiltersAndRender()}),exportDataBtn.addEventListener("click",exportFilteredDataToCSV),exportDataXLSXBtn.addEventListener("click",exportFilteredDataToXLSX)}
-        function exportFilteredDataToCSV(){if(0===filteredCallSessions.length)return void alert("No data to export based on current filters.");const e=["Agent Name","Agent Email","Scenario","Start Time (Egypt)","Duration (s)","Completed","Quality","Reason"],o=filteredCallSessions.map(e=>{var o;const t=allAgents.find(o=>o.id===e.user_id);return[null==t?void 0:t.name||"Unknown",null==t?void 0:t.email||"N/A",null===(o=e.call_sessions_scenario_id_fkey)?void 0:o.title||"N/A",formatDateForCSVEgypt(e.start_time),e.duration||0,e.completed?"Yes":"No",e.call_quality||"N/A",e.quality_reason||"-"].map(e=>`"${String(e).replace(/"/g,'""')}"`)}),t=[e.join(","),...o.map(e=>e.join(","))].join("\n"),i=new Blob(["\ufeff"+t],{type:"text/csv;charset=utf-8;"}),n=document.createElement("a"),s=URL.createObjectURL(i);n.setAttribute("href",s),n.setAttribute("download",`elevo_dashboard_export_${(new Date).toISOString().slice(0,10)}.csv`),n.style.visibility="hidden",document.body.appendChild(n),n.click(),document.body.removeChild(n),URL.revokeObjectURL(s)}
-        function exportFilteredDataToXLSX(){if("undefined"==typeof XLSX)return console.error("XLSX (SheetJS) is not defined. Ensure the library is loaded."),void alert("Excel export library (SheetJS) could not be loaded. Please check your internet connection or try refreshing the page.");if(0===filteredCallSessions.length)return void alert("No data to export based on current filters.");const e=["Agent Name","Agent Email","Scenario","Start Time (Egypt)","Duration (s)","Completed","Quality","Reason"],o=filteredCallSessions.map(e=>{var o;const t=allAgents.find(o=>o.id===e.user_id);return{"Agent Name":null==t?void 0:t.name||"Unknown","Agent Email":null==t?void 0:t.email||"N/A",Scenario:null===(o=e.call_sessions_scenario_id_fkey)?void 0:o.title||"N/A","Start Time (Egypt)":formatDateForCSVEgypt(e.start_time),"Duration (s)":e.duration||0,Completed:e.completed?"Yes":"No",Quality:e.call_quality||"N/A",Reason:e.quality_reason||"-"}}),t=XLSX.utils.json_to_sheet(o),i=XLSX.utils.book_new();XLSX.utils.book_append_sheet(i,t,"TicketSessions"),t["!cols"]=e.map(e=>{const t=Math.max(e.length,...o.map(o=>String(null==o[e]||void 0===o[e]?"":o[e]).length));return{wch:t+2}}),XLSX.writeFile(i,`elevo_dashboard_export_${(new Date).toISOString().slice(0,10)}.xlsx`)}
-        async function setupLiveCallMonitoring(){if(!supabase)return;await fetchAndRenderLiveCalls(),liveCallsChannel&&supabase.removeChannel(liveCallsChannel),liveCallsChannel=supabase.channel("public:call_sessions:live").on("postgres_changes",{event:"*",schema:"public",table:"call_sessions"},async e=>{console.log("Realtime: Ticket session change detected",e),setTimeout(async()=>{await fetchAndRenderLiveCalls();const{data:e,error:o}=await supabase.from("call_sessions").select("*, call_sessions_scenario_id_fkey(id, title)").order("start_time",{ascending:!1});o?console.error("Error reloading all sessions after live update:",o):(allCallSessions=e||[],applyFiltersAndRender())},500)}).subscribe((e,o)=>{switch(e){case"SUBSCRIBED":console.log("Subscribed to live ticket updates!");break;case"CHANNEL_ERROR":case"TIMED_OUT":console.error("Live ticket subscription error:",e,o),noLiveCallsMessage.innerHTML="⚠️ Error connecting to live updates.",noLiveCallsMessage.style.display="block";break;case"CLOSED":console.log("Live ticket subscription closed.")}})}
-        async function fetchAndRenderLiveCalls(){try{const{data:e,error:o}=await supabase.from("call_sessions").select("id, user_id, scenario_id, start_time, agent_name, agent_email, call_sessions_scenario_id_fkey(title)").is("end_time",null).order("start_time",{ascending:!0});if(o)throw o;liveCallsContainer.innerHTML="",delayedTicketsContainer.innerHTML="";let t=0,i=0;e&&e.length>0&&e.forEach(e=>{var o;const n=e.agent_name||e.agent_email||`Agent ID: ${e.user_id.substring(0,8)}`,s=(null===(o=e.call_sessions_scenario_id_fkey)?void 0:o.title)||"Loading scenario...",a=formatTimeEgypt(e.start_time),l=document.createElement("div");l.className="live-call-item";const r=Date.now()-new Date(e.start_time).getTime();let d="";const c=r>6e5;c&&(l.classList.add("long-call-alert"),d='<span style="color:var(--danger-color); font-weight: bold; margin-left: 0.5rem;">(Delayed!)</span>');const p=Math.floor(r/6e4),u=Math.floor(r%6e4/1e3),m=`${p}m ${u}s`;l.innerHTML=`\n <div class="live-call-item-agent">${n} ${d}</div>\n <div class="live-call-item-scenario" style="font-size: 0.85rem; color: var(--text-color-light);">Scenario: ${s}</div>\n <div class="live-call-item-time" style="font-size: 0.85rem; color: var(--text-color-light);">Started: ${a} (Duration: ${m})</div>\n `,c?(delayedTicketsContainer.appendChild(l),i++):(liveCallsContainer.appendChild(l),t++)}),noLiveCallsMessage.style.display=t>0?"none":"block",0===t&&(noLiveCallsMessage.innerHTML="📭 No active tickets at the moment."),noDelayedTicketsMessage.style.display=i>0?"none":"block",0===i&&(noDelayedTicketsMessage.innerHTML="✅ No delayed tickets.")}catch(e){console.error("Error fetching live tickets:",e),noLiveCallsMessage.innerHTML="⚠️ Failed to load live tickets data.",noLiveCallsMessage.style.display="block",liveCallsContainer.innerHTML=""}}
+        function exportFilteredDataToXLSX() {
+            if (typeof XLSX === 'undefined') {
+                alert("Excel export library (SheetJS) could not be loaded. Please check your internet connection or try refreshing the page.");
+                console.error("XLSX (SheetJS) is not defined. Ensure the library is loaded.");
+                return;
+            }
+            if (filteredCallSessions.length === 0) {
+                alert("No data to export based on current filters.");
+                return;
+            }
+
+            const headers = ["Agent Name", "Agent Email", "Scenario", "Start Time (Egypt)", "Duration (s)", "Completed", "Quality", "Reason"];
+            const dataForExport = filteredCallSessions.map(session => {
+                const agent = allAgents.find(a => a.id === session.user_id);
+                return {
+                    "Agent Name": agent?.name || 'Unknown',
+                    "Agent Email": agent?.email || 'N/A',
+                    "Scenario": session.call_sessions_scenario_id_fkey?.title || 'N/A',
+                    "Start Time (Egypt)": formatDateForCSVEgypt(session.start_time),
+                    "Duration (s)": session.duration || 0,
+                    "Completed": session.completed ? 'Yes' : 'No',
+                    "Quality": session.call_quality || 'N/A',
+                    "Reason": session.quality_reason || '-'
+                };
+            });
+
+            const worksheet = XLSX.utils.json_to_sheet(dataForExport);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "TicketSessions");
+
+            const colWidths = headers.map(header => {
+                 const maxLength = Math.max(
+                    header.length,
+                    ...dataForExport.map(row => String(row[header] === null || typeof row[header] === 'undefined' ? '' : row[header]).length)
+                );
+                return { wch: maxLength + 2 };
+            });
+            worksheet['!cols'] = colWidths;
+
+            XLSX.writeFile(workbook, `elevo_dashboard_export_${new Date().toISOString().slice(0,10)}.xlsx`);
+        }
+
+        async function setupLiveCallMonitoring() { 
+            if (!supabase) return;
+            await fetchAndRenderLiveCalls();
+
+            if (liveCallsChannel) {
+                supabase.removeChannel(liveCallsChannel);
+            }
+
+            liveCallsChannel = supabase
+                .channel('public:call_sessions:live')
+                .on('postgres_changes',
+                    { event: '*', schema: 'public', table: 'call_sessions' },
+                    async (payload) => {
+                        console.log('Realtime: Ticket session change detected', payload);
+                        setTimeout(async () => {
+                            await fetchAndRenderLiveCalls();
+
+                            const { data: sessionsData, error: sessionsError } = await supabase
+                                .from('call_sessions')
+                                .select(`*, call_sessions_scenario_id_fkey(id, title)`)
+                                .order('start_time', { ascending: false });
+                            if (!sessionsError) {
+                                allCallSessions = sessionsData || [];
+                                applyFiltersAndRender();
+                            } else {
+                                console.error("Error reloading all sessions after live update:", sessionsError);
+                            }
+                        }, 500);
+                    }
+                )
+                .subscribe((status, err) => {
+                    if (status === 'SUBSCRIBED') {
+                        console.log('Subscribed to live ticket updates!');
+                    } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+                        console.error('Live ticket subscription error:', status, err);
+                        noLiveCallsMessage.innerHTML = "⚠️ Error connecting to live updates."; 
+                        noLiveCallsMessage.style.display = 'block';
+                    } else if (status === 'CLOSED') {
+                        console.log('Live ticket subscription closed.');
+                    }
+                });
+        }
+
+        async function fetchAndRenderLiveCalls() { 
+             try {
+                const { data: liveSessions, error } = await supabase
+                    .from('call_sessions')
+                    .select('id, user_id, scenario_id, start_time, agent_name, agent_email, call_sessions_scenario_id_fkey(title)')
+                    .is('end_time', null)
+                    .order('start_time', { ascending: true });
+
+                if (error) throw error;
+
+                liveCallsContainer.innerHTML = '';
+                delayedTicketsContainer.innerHTML = ''; 
+                const LONG_CALL_THRESHOLD_MINUTES = 10;
+                const LONG_CALL_THRESHOLD_MS = LONG_CALL_THRESHOLD_MINUTES * 60 * 1000;
+
+                let liveCount = 0;
+                let delayedCount = 0;
+
+                if (liveSessions && liveSessions.length > 0) {
+                    liveSessions.forEach(call => {
+                        const agentName = call.agent_name || call.agent_email || `Agent ID: ${call.user_id.substring(0,8)}`;
+                        const scenarioName = call.call_sessions_scenario_id_fkey?.title || 'Loading scenario...';
+                        const startTimeFormatted = formatTimeEgypt(call.start_time);
+
+                        const callDiv = document.createElement('div');
+                        callDiv.className = 'live-call-item';
+
+                        const callDurationMs = Date.now() - new Date(call.start_time).getTime();
+                        let longCallIndicatorHTML = '';
+                        
+                        const isDelayed = callDurationMs > LONG_CALL_THRESHOLD_MS;
+                        if (isDelayed) {
+                            callDiv.classList.add('long-call-alert');
+                            longCallIndicatorHTML = `<span style="color:var(--danger-color); font-weight: bold; margin-left: 0.5rem;">(Delayed!)</span>`;
+                        }
+
+                        const durationMinutes = Math.floor(callDurationMs / 60000);
+                        const durationSeconds = Math.floor((callDurationMs % 60000) / 1000);
+                        const liveDurationStr = `${durationMinutes}m ${durationSeconds}s`;
+
+                        callDiv.innerHTML = `
+                            <div class="live-call-item-agent">${agentName} ${longCallIndicatorHTML}</div>
+                            <div class="live-call-item-scenario" style="font-size: 0.85rem; color: var(--text-color-light);">Scenario: ${scenarioName}</div>
+                            <div class="live-call-item-time" style="font-size: 0.85rem; color: var(--text-color-light);">Started: ${startTimeFormatted} (Duration: ${liveDurationStr})</div>
+                        `;
+                        
+                        if(isDelayed){
+                            delayedTicketsContainer.appendChild(callDiv);
+                            delayedCount++;
+                        } else {
+                            liveCallsContainer.appendChild(callDiv);
+                            liveCount++;
+                        }
+                    });
+                } 
+                
+                noLiveCallsMessage.style.display = liveCount > 0 ? 'none' : 'block';
+                if(liveCount === 0) noLiveCallsMessage.innerHTML = "📭 No active tickets at the moment.";
+
+                noDelayedTicketsMessage.style.display = delayedCount > 0 ? 'none' : 'block';
+                if(delayedCount === 0) noDelayedTicketsMessage.innerHTML = "✅ No delayed tickets.";
+
+            } catch (error) {
+                console.error("Error fetching live tickets:", error);
+                noLiveCallsMessage.innerHTML = "⚠️ Failed to load live tickets data.";
+                noLiveCallsMessage.style.display = 'block';
+                liveCallsContainer.innerHTML = '';
+            }
+        }
 
         initializeDashboard();
         console.log("Dashboard.html script (Final Impressive Version) loaded and initialized.");
