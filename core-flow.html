@@ -98,6 +98,7 @@
         .logout-btn svg { margin-right: 0.3em; }
         /* --- END UNIFIED HEADER STYLE --- */
 
+        /* MODIFICATION: Increased card width */
         .card {
             background-color: var(--card-background-color);
             padding: 2rem;
@@ -106,7 +107,7 @@
             border: 1px solid var(--border-color);
             margin-bottom: 1.5rem;
             width: 100%;
-            max-width: 800px; /* MODIFICATION: Increased card width */
+            max-width: 950px; 
         }
         
         .initial-card {
@@ -245,19 +246,18 @@
             50% { transform: scale(1.03); opacity: 0.8; color: var(--warning-color); }
         }
 
-        /* MODIFICATION: Improved button layout */
         .step-actions {
             margin-top: 1.5rem;
             display: flex;
-            flex-direction: row; /* Changed to row */
-            flex-wrap: wrap;       /* Allow wrapping on small screens */
-            justify-content: center; /* Center the buttons */
+            flex-direction: row; 
+            flex-wrap: wrap;      
+            justify-content: center; 
             gap: 0.75rem;
         }
         .decision-button {
-            width: auto; /* Let button size to content */
-            min-width: 120px; /* Ensure a minimum width */
-            padding: 0.85rem 1.5rem; /* Increased padding slightly */
+            width: auto; 
+            min-width: 120px;
+            padding: 0.85rem 1.5rem; 
             font-size: 1rem;
             border: 1px solid var(--border-color);
             background-color: var(--input-background-color);
@@ -293,7 +293,7 @@
         .decision-button.neutral:hover { background-color: var(--primary-color-dark); border-color: var(--primary-color); box-shadow: 0 0 8px rgba(var(--primary-color-rgb), 0.4); }
         .decision-button .icon { font-size: 1.1em; }
 
-        .progress-tracker-container { width: 100%; margin-bottom: 1.5rem; }
+        .progress-tracker-container { width: 100%; margin-bottom: 1.5rem; max-width: 950px; }
         .stepper-wrapper { padding: 0; }
         .stepper { display: flex; align-items: center; justify-content: space-between; padding: 0; margin: 0; list-style-type: none; }
         .step { display: flex; flex-direction: column; align-items: center; position: relative; text-align: center; flex-grow: 0; }
@@ -351,7 +351,7 @@
             <div id="systemStatus" class="status-indicator status-waiting">🔴 Waiting for Ticket</div>
         </div>
 
-        <div id="progressTracker" class="progress-tracker-container" style="display: none; max-width: 800px; width: 100%;">
+        <div id="progressTracker" class="progress-tracker-container" style="display: none;">
              <div class="stepper-wrapper"></div>
         </div>
 
@@ -390,8 +390,10 @@
                     </span>
                     <span class="btn-text">Receive Ticket</span>
                 </button>
-                <audio id="callStartSound" src="call_sound.mp3" preload="auto"></audio>
-                <audio id="compensationScenarioSound" src="compensation_alert.mp3" preload="auto"></audio>
+                <!-- FIX: The audio tags below point to files that don't exist, causing a 404 error and blocking execution.
+                     They are kept here but commented out. If you provide the audio files, you can uncomment them. -->
+                <!-- <audio id="callStartSound" src="call_sound.mp3" preload="auto"></audio> -->
+                <!-- <audio id="compensationScenarioSound" src="compensation_alert.mp3" preload="auto"></audio> -->
             </div>
 
             <div id="call-flow-view" class="card call-flow-card fade-in" style="display: none;">
@@ -681,13 +683,20 @@
                  return;
             }
             setButtonLoadingState(receiveCallBtn, true, "Receive Ticket", "Starting...");
-            if(callStartSound) callStartSound.play().catch(e => console.warn("Audio play failed:", e));
+            
+            // FIX: The audio files were causing the app to freeze because they didn't exist (404 error).
+            // This code is now safe to run even if the audio elements are not in the HTML.
+            if(callStartSound) {
+                callStartSound.play().catch(e => console.warn("Call start audio could not be played. This is expected if the file doesn't exist.", e));
+            }
 
             resetCallState(); 
-            switchToCallFlowView();
-            updateSystemStatus("🟡 Loading Scenario...", "status-loading");
 
             try {
+                // We switch the view immediately for a better user experience
+                switchToCallFlowView();
+                updateSystemStatus("🟡 Loading Scenario...", "status-loading");
+
                 const { data: scenarioData, error: scenarioError } = await supabase.from('call_scenarios').select('id, title, steps').eq('id', selectedScenarioId).single();
                 if (scenarioError) throw scenarioError;
 
@@ -702,19 +711,23 @@
                 callSessionId = newSession.id;
                 
                 if (currentScenario.title.toLowerCase().includes("compensation")) {
-                    if (compensationScenarioSound) compensationScenarioSound.play().catch(e => console.warn("Audio play failed:", e));
+                    if (compensationScenarioSound) {
+                        compensationScenarioSound.play().catch(e => console.warn("Compensation audio could not be played.", e));
+                    }
                     scenarioTitleElement.classList.add('highlight-scenario-title-animation');
                     setTimeout(() => scenarioTitleElement.classList.remove('highlight-scenario-title-animation'), 1200);
                 }
 
                 updateSystemStatus("🟢 In Ticket", "status-in-call");
                 renderStep(); 
-                setButtonLoadingState(receiveCallBtn, false, "Receive Ticket");
+                // No need to reset the button here, as we are in a new view
             } catch (err) {
                 console.error("Error starting ticket:", err);
+                // If anything fails, go back to the initial view and show an error
                 resetCallState(); 
                 switchToInitialView();
-                await loadActiveScenarios();
+                showAssistantMessage(`Error starting ticket: ${err.message}`, true, 8000);
+                await loadActiveScenarios(); // Reload scenarios to re-enable the UI
             }
         });
 
@@ -919,7 +932,7 @@
     </script>
 </body>
 </html>
-ملف: agent-portal.html (الكود الكامل والمُحدَّث)
+ملف: agent-portal.html (الكود الكامل والصحيح)
 code
 Html
 <!DOCTYPE html>
