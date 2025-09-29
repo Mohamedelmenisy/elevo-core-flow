@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RTM Dashboard - Elevo Core</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234e8cff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M22 12h-4l-3 9L9 3l-3 9H2'/></svg>">
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        .dashboard-main {
+            width: 100%;
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+
+        .rtm-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 1.5rem;
+            align-items: flex-start;
+        }
+
+        .live-tickets-container, .activity-log-container {
+            background-color: var(--card-bg-color);
+            padding: 1.5rem;
+            border-radius: var(--border-radius-lg);
+            box-shadow: var(--shadow-md);
+            max-height: 600px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .live-tickets-list, .activity-log-list {
+            overflow-y: auto;
+            flex-grow: 1;
+        }
+        
+        .live-ticket-item, .log-item {
+            padding: 1rem;
+            border-bottom: 1px solid var(--border-color);
+            display: grid;
+            grid-template-columns: 1fr 1.5fr 1fr 1fr;
+            gap: 1rem;
+            align-items: center;
+        }
+        .live-ticket-item:last-child, .log-item:last-child {
+            border-bottom: none;
+        }
+
+        .agent-name { font-weight: 600; color: var(--primary-color); }
+        .scenario-title { font-size: 0.9em; }
+        .duration { font-family: 'Roboto Mono', monospace; }
+        
+        .log-item {
+            grid-template-columns: auto 1fr;
+        }
+        .log-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+        }
+        .log-icon.created { background-color: var(--primary-color); }
+        .log-icon.completed { background-color: var(--success-color); }
+        .log-icon.ended { background-color: var(--danger-color); }
+
+        .log-message {
+            font-size: 0.9em;
+        }
+        .log-timestamp {
+            font-size: 0.8em;
+            color: var(--text-color-light);
+        }
+
+        #accessDeniedModal {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(0, 0, 0, 0.7); display: none;
+            justify-content: center; align-items: center; z-index: 1000; color: var(--text-color);
+        }
+        .access-denied-content {
+            background-color: var(--card-bg-color); padding: 2rem 3rem; border-radius: var(--border-radius-lg); text-align: center;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2); max-width: 450px;
+        }
+    </style>
+</head>
+<body>
+    <div id="accessDeniedModal">
+         <div class="access-denied-content">
+             <h3>Access Denied</h3>
+             <p>This dashboard is for administrators only.</p>
+             <button id="returnToAppBtn" class="action-button primary-button">Return to Main App</button>
+         </div>
+    </div>
+
+    <div class="app-container" id="appContainerContent" style="display: none;">
+        <header class="app-header">
+            <div class="logo-container">
+                <svg class="company-logo" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="color: var(--primary-color); width: 28px; height: 28px;">
+                    <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+                </svg>
+                <span class="app-title" style="font-size: 1.4rem;">Real-Time Management</span>
+            </div>
+            <div class="header-controls">
+                 <a href="core-flow.html" class="nav-link">Core Flow</a>
+                 <a href="dashboard.html" class="nav-link">Admin Dashboard</a>
+                 <div class="user-info" id="userInfo" style="display: none;">
+                    <span id="userName" class="user-name-display"></span>
+                    <button id="logoutButton" class="logout-btn nav-button">Logout</button>
+                 </div>
+            </div>
+        </header>
+
+        <main class="app-main dashboard-main">
+            <div id="auth-loading" class="loading-container" style="display: flex; justify-content: center; align-items: center; height: 70vh;">
+                <div class="spinner"></div>
+                <p>Loading Real-Time Data...</p>
+            </div>
+
+            <div id="dashboardContent" style="display: none;">
+                <div class="stats-grid" id="statsGrid">
+                     <div class="stat-card"><h3>Active Tickets</h3><p id="activeTickets">0</p></div>
+                     <div class="stat-card"><h3>Avg. Active Duration</h3><p id="avgActiveDuration">0m 0s</p></div>
+                     <div class="stat-card"><h3>Tickets Today</h3><p id="ticketsToday">0</p></div>
+                     <div class="stat-card"><h3>Completion Rate (Today)</h3><p id="completionRateToday">0%</p></div>
+                </div>
+
+                <div class="rtm-grid" style="margin-top: 2rem;">
+                    <div class="live-tickets-container">
+                        <h2>Live Tickets</h2>
+                        <div id="liveTicketsList" class="live-tickets-list">
+                            <p id="noLiveTicketsMessage" style="text-align: center; padding: 2rem; color: var(--text-color-subtle);">No active tickets right now.</p>
+                        </div>
+                    </div>
+                    <div class="activity-log-container">
+                        <h2>Activity Log</h2>
+                        <div id="activityLogList" class="activity-log-list">
+                            <!-- Logs will be prepended here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script type="module">
+        const SUPABASE_URL = 'https://aefiigottnlcmjzilqnh.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFlZmlpZ290dG5sY21qemlscW5oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcxNzY2MDQsImV4cCI6MjA2Mjc1MjYwNH0.FypB02v3tGMnxXV9ZmZMdMC0oQpREKOJWgHMPxUzwX4';
+        
+        let supabase;
+        try {
+            supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        } catch(e) {
+            console.error("Supabase init failed", e);
+            document.getElementById('auth-loading').innerHTML = `<p style="color:red">Error connecting to services.</p>`;
+        }
+
+        // DOM Elements
+        const authLoadingDiv = document.getElementById('auth-loading');
+        const dashboardContentDiv = document.getElementById('dashboardContent');
+        const appContainerContent = document.getElementById('appContainerContent');
+        const accessDeniedModal = document.getElementById('accessDeniedModal');
+        const returnToAppBtn = document.getElementById('returnToAppBtn');
+
+        const userNameSpan = document.getElementById('userName');
+        const logoutButton = document.getElementById('logoutButton');
+        const liveTicketsList = document.getElementById('liveTicketsList');
+        const noLiveTicketsMessage = document.getElementById('noLiveTicketsMessage');
+        const activityLogList = document.getElementById('activityLogList');
+
+        // Stats
+        const activeTicketsEl = document.getElementById('activeTickets');
+        const avgActiveDurationEl = document.getElementById('avgActiveDuration');
+        const ticketsTodayEl = document.getElementById('ticketsToday');
+        const completionRateTodayEl = document.getElementById('completionRateToday');
+
+        let currentUser = null;
+        let liveTickets = new Map();
+        let liveStatsInterval;
+
+        async function initializeDashboard() {
+            if (!supabase) return;
+            const { data: { session }, error } = await supabase.auth.getSession();
+            if (error || !session) {
+                window.location.replace('login.html');
+                return;
+            }
+
+            const storedUserData = JSON.parse(localStorage.getItem('elevoCoreUserData'));
+            if (storedUserData && storedUserData.id === session.user.id) {
+                currentUser = storedUserData;
+            } else {
+                const { data: profile } = await supabase.from('users').select('name, is_admin').eq('id', session.user.id).single();
+                currentUser = {
+                    id: session.user.id,
+                    email: session.user.email,
+                    name: profile?.name || session.user.email,
+                    isAdmin: profile?.is_admin || false
+                };
+                localStorage.setItem('elevoCoreUserData', JSON.stringify(currentUser));
+            }
+
+            if (!currentUser.isAdmin) {
+                showAccessDenied();
+                return;
+            }
+
+            setupUI();
+            await fetchInitialData();
+            setupRealtimeSubscription();
+            
+            liveStatsInterval = setInterval(updateLiveDurationsAndStats, 1000);
+
+            authLoadingDiv.style.display = 'none';
+            dashboardContentDiv.style.display = 'block';
+        }
+
+        function showAccessDenied() {
+            authLoadingDiv.style.display = 'none';
+            appContainerContent.style.display = 'flex';
+            accessDeniedModal.style.display = 'flex';
+            returnToAppBtn.addEventListener('click', () => window.location.href = 'core-flow.html');
+        }
+
+        function setupUI() {
+            userNameSpan.textContent = currentUser.name;
+            document.getElementById('userInfo').style.display = 'flex';
+        }
+
+        async function fetchInitialData() {
+            const { data, error } = await supabase
+                .from('call_sessions')
+                .select('id, start_time, agent_name, scenario:call_scenarios(title)')
+                .is('end_time', null);
+
+            if (error) {
+                console.error("Error fetching initial live tickets:", error);
+                return;
+            }
+            
+            data.forEach(ticket => liveTickets.set(ticket.id, ticket));
+            renderLiveTickets();
+            await fetchTodayStats();
+        }
+
+        function setupRealtimeSubscription() {
+            supabase
+                .channel('public:call_sessions')
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'call_sessions' }, payload => {
+                    handleRealtimeUpdate(payload);
+                })
+                .subscribe();
+        }
+
+        async function handleRealtimeUpdate(payload) {
+            const { eventType, new: newRecord, old: oldRecord } = payload;
+            const record = newRecord.id ? newRecord : oldRecord;
+
+            if (eventType === 'INSERT') {
+                const { data, error } = await supabase
+                    .from('call_sessions')
+                    .select('id, start_time, agent_name, scenario:call_scenarios(title)')
+                    .eq('id', record.id)
+                    .single();
+                if (!error && data) {
+                    liveTickets.set(data.id, data);
+                    addActivityLog('created', data);
+                }
+            } else if (eventType === 'UPDATE') {
+                if (record.end_time && liveTickets.has(record.id)) {
+                    const endedTicket = liveTickets.get(record.id);
+                    liveTickets.delete(record.id);
+                    addActivityLog(record.completed ? 'completed' : 'ended', endedTicket);
+                }
+            } else if (eventType === 'DELETE') {
+                 if (liveTickets.has(record.id)) {
+                    const deletedTicket = liveTickets.get(record.id);
+                    liveTickets.delete(record.id);
+                    addActivityLog('ended', deletedTicket);
+                }
+            }
+            renderLiveTickets();
+            await fetchTodayStats();
+        }
+
+        function renderLiveTickets() {
+            liveTicketsList.innerHTML = '';
+            if (liveTickets.size === 0) {
+                noLiveTicketsMessage.style.display = 'block';
+                return;
+            }
+            noLiveTicketsMessage.style.display = 'none';
+
+            liveTickets.forEach(ticket => {
+                const item = document.createElement('div');
+                item.className = 'live-ticket-item';
+                item.id = `ticket-${ticket.id}`;
+                item.innerHTML = `
+                    <div class="agent-name">${ticket.agent_name || 'Unknown'}</div>
+                    <div class="scenario-title">${ticket.scenario?.title || 'Loading...'}</div>
+                    <div class="start-time">${new Date(ticket.start_time).toLocaleTimeString()}</div>
+                    <div class="duration">0m 0s</div>
+                `;
+                liveTicketsList.appendChild(item);
+            });
+            updateLiveDurationsAndStats();
+        }
+
+        function updateLiveDurationsAndStats() {
+            let totalDuration = 0;
+            liveTickets.forEach(ticket => {
+                const elem = document.getElementById(`ticket-${ticket.id}`);
+                if (elem) {
+                    const durationMs = Date.now() - new Date(ticket.start_time).getTime();
+                    totalDuration += durationMs;
+                    const mins = Math.floor(durationMs / 60000);
+                    const secs = Math.floor((durationMs % 60000) / 1000);
+                    elem.querySelector('.duration').textContent = `${mins}m ${secs}s`;
+                }
+            });
+            
+            // Update live stats
+            activeTicketsEl.textContent = liveTickets.size;
+            if (liveTickets.size > 0) {
+                const avgDurationMs = totalDuration / liveTickets.size;
+                const avgMins = Math.floor(avgDurationMs / 60000);
+                const avgSecs = Math.floor((avgDurationMs % 60000) / 1000);
+                avgActiveDurationEl.textContent = `${avgMins}m ${avgSecs}s`;
+            } else {
+                avgActiveDurationEl.textContent = '0m 0s';
+            }
+        }
+
+        async function fetchTodayStats() {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            
+            const { data, error, count } = await supabase
+                .from('call_sessions')
+                .select('*', { count: 'exact' })
+                .gte('start_time', today.toISOString());
+            
+            if (error) {
+                console.error("Error fetching today's stats:", error);
+                return;
+            }
+            
+            ticketsTodayEl.textContent = count || 0;
+            if (count > 0) {
+                const completedCount = data.filter(d => d.completed).length;
+                completionRateTodayEl.textContent = `${Math.round((completedCount / count) * 100)}%`;
+            } else {
+                completionRateTodayEl.textContent = '0%';
+            }
+        }
+
+        function addActivityLog(type, ticket) {
+            const logItem = document.createElement('div');
+            logItem.className = 'log-item';
+            
+            let icon, message;
+            switch(type) {
+                case 'created':
+                    icon = '🚀';
+                    message = `<strong>${ticket.agent_name}</strong> started a new ticket: <em>${ticket.scenario?.title || ''}</em>`;
+                    break;
+                case 'completed':
+                    icon = '✅';
+                    message = `<strong>${ticket.agent_name}</strong> completed the ticket: <em>${ticket.scenario?.title || ''}</em>`;
+                    break;
+                case 'ended':
+                    icon = '❌';
+                    message = `<strong>${ticket.agent_name}</strong> ended the ticket: <em>${ticket.scenario?.title || ''}</em>`;
+                    break;
+            }
+
+            logItem.innerHTML = `
+                <div class="log-icon ${type}">${icon}</div>
+                <div>
+                    <div class="log-message">${message}</div>
+                    <div class="log-timestamp">${new Date().toLocaleString()}</div>
+                </div>
+            `;
+            activityLogList.prepend(logItem);
+        }
+        
+        logoutButton.addEventListener('click', async () => {
+            clearInterval(liveStatsInterval);
+            await supabase.auth.signOut();
+            localStorage.removeItem('elevoCoreUserData');
+            window.location.replace("login.html");
+        });
+
+        if (supabase) initializeDashboard();
+    </script>
+</body>
+</html>
