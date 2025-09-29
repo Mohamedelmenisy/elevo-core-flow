@@ -58,17 +58,32 @@
         h1 { font-size: 1.5rem; } /* MODIFIED */
         h2 { font-size: 1.15rem; } /* MODIFIED */
         h3 { font-size: 1.0rem; } /* MODIFIED */
+        
+        /* NEW: Main Dashboard Grid Layout */
+        #dashboardContent {
+            display: grid;
+            grid-template-columns: 1fr 450px; /* Main content and a sidebar */
+            grid-template-areas: "header header" "main sidebar";
+            gap: 1.5rem;
+        }
+        .dashboard-header { grid-area: header; }
+        .main-column { grid-area: main; display: flex; flex-direction: column; gap: 1.5rem; }
+        .sidebar-column { grid-area: sidebar; display: flex; flex-direction: column; gap: 1.5rem; }
+
+        @media (max-width: 1200px) {
+            #dashboardContent {
+                grid-template-columns: 1fr;
+                grid-template-areas: "header" "sidebar" "main";
+            }
+        }
+
 
         @keyframes fadeInUp {
           0% { opacity: 0; transform: translateY(20px); }
           100% { opacity: 1; transform: translateY(0); }
         }
 
-        #statsGrid,
-        #liveCallsContainerWrapper,
-        #analyticsSection,
-        #filterControlsCard,
-        #recentActivitySection {
+        .card, .stats-grid {
             animation: fadeInUp 0.5s ease-out both;
         }
 
@@ -132,11 +147,11 @@
 
         #resetFiltersBtn {
             border-radius: var(--border-radius-md, 8px);
-            padding: 0.6rem 1.2rem;
+            padding: 0.5rem 1rem; /* MODIFIED: Reduced size */
             display: inline-flex;
             align-items: center;
             gap: 0.5rem;
-            font-size: 0.9em;
+            font-size: 0.85rem; /* MODIFIED: Reduced size */
             height: fit-content;
         }
         #resetFiltersBtn svg {
@@ -147,9 +162,8 @@
         
         .live-monitoring-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            grid-template-columns: 1fr; /* Stacked in the sidebar */
             gap: 1.5rem;
-            margin-bottom: 1.5rem;
         }
 
         #liveCallsContainerWrapper {
@@ -226,7 +240,7 @@
             margin-left: 0.5em;
         }
         
-        .analytics-section.card { }
+        .analytics-section.card { margin-bottom: 0; }
         .dark .analytics-section.card { }
         .analytics-section h2 {
             margin-top:0;
@@ -243,7 +257,7 @@
         
         .charts-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
             gap: 1.5rem;
         }
         .chart-container {
@@ -251,7 +265,7 @@
             border: 1px solid var(--border-color);
             border-radius: var(--border-radius-md);
             background-color: var(--bg-color);
-            min-height: 300px; /* Reduced height */
+            min-height: 250px; /* MODIFIED: Reduced height */
             display: flex;
             flex-direction: column;
         }
@@ -276,29 +290,33 @@
             font-weight: 600;
         }
 
+        /* UNIFIED LOGOUT BUTTON STYLE */
         .logout-btn {
-            transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
-            border: 1px solid transparent;
+            background-color: transparent;
+            color: var(--primary-color);
+            border: 1px solid var(--primary-color);
+            border-radius: 12px;
+            padding: 0.6rem 1.2rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5em;
+            cursor: pointer;
+            transition: all 0.2s ease-in-out;
         }
         .logout-btn:hover {
-            background-color: var(--logout-hover-bg);
-            color: var(--danger-color);
-            border-color: rgba(var(--danger-color-rgb), 0.3);
+            background-color: rgba(var(--primary-color-rgb), 0.1);
+            color: var(--primary-color-dark);
         }
-        .dark .logout-btn:hover {
-            background-color: rgba(var(--danger-color-rgb), 0.15);
-            color: var(--danger-color);
-            border-color: rgba(var(--danger-color-rgb), 0.4);
-        }
+
+        /* FIX: Table icon alignment */
         .quality-cell {
             display: flex;
             align-items: center;
+            gap: 8px;
         }
-        .quality-icon {
-            display: inline-block;
-            margin-right: 8px;
+        .quality-icon svg {
+            display: block; /* Removes extra space below SVG */
         }
-
     </style>
 </head>
 <body>
@@ -349,92 +367,97 @@
                     <div class="greeting-section">
                         <div id="userAvatarCharacter" class="user-avatar-char-dashboard"></div>
                         <div>
-                            <h1 id="dashboardUserGreeting">Welcome, Admin!</h1> <!-- Will be updated by JS -->
-                            <p id="dashboardUserSubtext">Real-time overview of agent activities and ticket status.</p>
+                            <h1 id="dashboardUserGreeting">Welcome, Admin!</h1>
+                            <p id="dashboardUserSubtext">Historical performance data and agent analytics.</p>
                         </div>
                     </div>
                 </div>
 
-                <div class="stats-grid" id="statsGrid">
-                     <div class="stat-card"><h3>Total Tickets (Filtered)</h3><p id="totalCalls">0</p><span class="stat-period" id="statsPeriod">All Agents</span></div>
-                     <div class="stat-card"><h3>Avg. Handle Time</h3><p id="avgCallDuration">0m 0s</p><span class="stat-period" id="statsPeriodDuration">All Agents</span></div>
-                     <div class="stat-card"><h3>Completion Rate</h3><p id="completionRate">0%</p><span class="stat-period" id="statsPeriodCompletion">All Agents</span></div>
-                     <div class="stat-card"><h3>Agent Quality Score</h3><div class="quality-gauge"><div class="gauge-bar-container"><div id="gaugeGood" class="gauge-segment good"></div><div id="gaugeNormal" class="gauge-segment normal"></div><div id="gaugeBad" class="gauge-segment bad"></div></div><span id="avgQualityText">N/A</span></div></div>
-                </div>
-                
-                <div class="live-monitoring-grid">
-                    <div id="liveCallsContainerWrapper" class="card">
-                        <h2>
-                            <svg class="live-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1.5"></circle><circle cx="12" cy="12" r="5.5"></circle><circle cx="12" cy="12" r="9.5"></circle></svg>
-                            Live Ticket Monitoring
-                        </h2>
-                        <div id="liveCallsContainer" class="live-calls-list">
-                            <p id="noLiveCallsMessage" style="display:block;">Loading live tickets...</p>
+                <!-- Main Content Column -->
+                <div class="main-column">
+                    <div class="filter-controls card" id="filterControlsCard">
+                        <h3>🔍 Filter Ticket Sessions</h3>
+                        <div class="filter-grid">
+                            <div><label for="userFilterDropdown">Agent:</label><select id="userFilterDropdown"><option value="">All Agents</option></select></div>
+                            <div><label for="searchInput">Search (Scenario, Reason, Agent):</label><input type="text" id="searchInput" placeholder="Type and wait..."></div>
+                            <div><label for="qualityFilter">Ticket Quality:</label><select id="qualityFilter"><option value="">All</option><option value="Good">Good</option><option value="Normal">Normal</option><option value="Bad">Bad</option><option value="N/A">N/A</option></select></div>
+                            <div>
+                                <label for="startDateFilter">Start Date:</label>
+                                <input type="date" id="startDateFilter" title="Start date for filtering" style="margin-bottom: 0.5rem;">
+                                <label for="endDateFilter">End Date:</label>
+                                <input type="date" id="endDateFilter" title="End date for filtering">
+                            </div>
+                            <div class="filter-buttons-group">
+                                <button id="resetFiltersBtn" class="action-button secondary-button">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+                                    <span>Reset</span>
+                                </button>
+                            </div>
                         </div>
                     </div>
-                    <!-- NEW: Delayed Tickets Section -->
-                    <div id="delayedTicketsContainerWrapper" class="card">
-                        <h2>
-                            <svg class="delayed-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-                            Delayed Tickets Monitoring
-                        </h2>
-                        <div id="delayedTicketsContainer" class="live-calls-list">
-                            <p id="noDelayedTicketsMessage" style="display:block;">No delayed tickets.</p>
+
+                    <div class="recent-activity-section card" id="recentActivitySection">
+                        <h2 id="recentCallsTitle">Recent Ticket Sessions</h2>
+                        <div class="table-responsive">
+                            <table id="recentCallsTable">
+                                <thead>
+                                    <tr>
+                                        <th>Agent Name</th><th>Agent Email</th><th>Scenario</th><th>Start Time</th><th>Duration</th><th>Completed</th><th>Quality</th><th>Reason</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                </tbody>
+                            </table>
                         </div>
-                    </div>
-                </div>
-
-
-                <div class="analytics-section card" id="analyticsSection">
-                    <h2>Performance Analytics (Based on Filtered Data)</h2>
-                    <div class="charts-grid">
-                        <div class="chart-container"><h3>Ticket Completion Status</h3><canvas id="statusChart"></canvas></div>
-                        <div class="chart-container"><h3>Daily Ticket Volume</h3><canvas id="ticketVolumeChart"></canvas></div>
-                        <div class="chart-container"><h3>Agent Quality Score</h3><canvas id="qualityScoreChart"></canvas></div>
-                        <div class="chart-container"><h3>Top Reasons for 'Bad' Quality</h3><canvas id="badReasonsChart"></canvas></div>
-                    </div>
-                </div>
-
-                <div class="filter-controls card" id="filterControlsCard">
-                    <h3>🔍 Filter Ticket Sessions</h3>
-                    <div class="filter-grid">
-                        <div><label for="userFilterDropdown">Agent:</label><select id="userFilterDropdown"><option value="">All Agents</option></select></div>
-                        <div><label for="searchInput">Search (Scenario, Reason, Agent):</label><input type="text" id="searchInput" placeholder="Type and wait..."></div>
-                        <div><label for="qualityFilter">Ticket Quality:</label><select id="qualityFilter"><option value="">All</option><option value="Good">Good</option><option value="Normal">Normal</option><option value="Bad">Bad</option><option value="N/A">N/A</option></select></div>
-                        <div>
-                            <label for="startDateFilter">Start Date:</label>
-                            <input type="date" id="startDateFilter" title="Start date for filtering" style="margin-bottom: 0.5rem;">
-                            <label for="endDateFilter">End Date:</label>
-                            <input type="date" id="endDateFilter" title="End date for filtering">
-                        </div>
-                        <div class="filter-buttons-group">
-                             <button id="resetFiltersBtn" class="action-button secondary-button">
-                                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
-                                 <span>Reset Filters</span>
-                             </button>
+                        <div id="paginationControls" class="pagination-container"></div>
+                        <div class="export-buttons-container" style="margin-top: 1.5rem; display: flex; gap: 0.75rem; flex-wrap: wrap;">
+                            <button id="exportDataBtn" class="action-button secondary-button">Export Filtered Data (CSV)</button>
+                            <button id="exportDataXLSXBtn" class="action-button primary-button">Export to Excel (XLSX)</button>
                         </div>
                     </div>
                 </div>
 
-                <div class="recent-activity-section card" id="recentActivitySection">
-                    <h2 id="recentCallsTitle">Recent Ticket Sessions</h2>
-                    <div class="table-responsive">
-                        <table id="recentCallsTable">
-                            <thead>
-                                <tr>
-                                    <th>Agent Name</th><th>Agent Email</th><th>Scenario</th><th>Start Time</th><th>Duration</th><th>Completed</th><th>Quality</th><th>Reason</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                            </tbody>
-                        </table>
+                <!-- Sidebar Column -->
+                <div class="sidebar-column">
+                    <div class="stats-grid" id="statsGrid">
+                        <div class="stat-card"><h3>Total Tickets</h3><p id="totalCalls">0</p><span class="stat-period" id="statsPeriod"></span></div>
+                        <div class="stat-card"><h3>Avg. Time</h3><p id="avgCallDuration">0m 0s</p><span class="stat-period" id="statsPeriodDuration"></span></div>
+                        <div class="stat-card"><h3>Completion</h3><p id="completionRate">0%</p><span class="stat-period" id="statsPeriodCompletion"></span></div>
+                        <div class="stat-card"><h3>Quality Score</h3><div class="quality-gauge"><div class="gauge-bar-container"><div id="gaugeGood" class="gauge-segment good"></div><div id="gaugeNormal" class="gauge-segment normal"></div><div id="gaugeBad" class="gauge-segment bad"></div></div><span id="avgQualityText">N/A</span></div></div>
                     </div>
-                    <div id="paginationControls" class="pagination-container"></div>
-                    <div class="export-buttons-container" style="margin-top: 1.5rem; display: flex; gap: 0.75rem; flex-wrap: wrap;">
-                        <button id="exportDataBtn" class="action-button secondary-button">Export Filtered Data (CSV)</button>
-                        <button id="exportDataXLSXBtn" class="action-button primary-button">Export to Excel (XLSX)</button>
+
+                    <div class="live-monitoring-grid">
+                        <div id="liveCallsContainerWrapper" class="card">
+                            <h2>
+                                <svg class="live-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1.5"></circle><circle cx="12" cy="12" r="5.5"></circle><circle cx="12" cy="12" r="9.5"></circle></svg>
+                                Live Ticket Monitoring
+                            </h2>
+                            <div id="liveCallsContainer" class="live-calls-list">
+                                <p id="noLiveCallsMessage" style="display:block;">Loading live tickets...</p>
+                            </div>
+                        </div>
+                        <div id="delayedTicketsContainerWrapper" class="card">
+                            <h2>
+                                <svg class="delayed-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                                Delayed Tickets Monitoring
+                            </h2>
+                            <div id="delayedTicketsContainer" class="live-calls-list">
+                                <p id="noDelayedTicketsMessage" style="display:block;">No delayed tickets.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="analytics-section card" id="analyticsSection">
+                        <h2>Analytics</h2>
+                        <div class="charts-grid">
+                            <div class="chart-container"><h3>Completion Status</h3><canvas id="statusChart"></canvas></div>
+                            <div class="chart-container"><h3>Daily Volume</h3><canvas id="ticketVolumeChart"></canvas></div>
+                            <div class="chart-container"><h3>Quality Score</h3><canvas id="qualityScoreChart"></canvas></div>
+                            <div class="chart-container"><h3>Top 'Bad' Reasons</h3><canvas id="badReasonsChart"></canvas></div>
+                        </div>
                     </div>
                 </div>
+
             </div>
         </main>
 
@@ -609,7 +632,7 @@
 
             appContainerContent.style.display = 'flex';
             authLoadingMessageDiv.style.display = 'none';
-            dashboardContentDiv.style.display = 'block';
+            dashboardContentDiv.style.display = 'grid'; // Changed to grid
 
             setupAdminUI();
             await loadInitialData();
@@ -639,7 +662,6 @@
         function setupAdminUI() { 
             userNameDisplayHeader.textContent = currentUser.name;
             dashboardUserGreeting.innerHTML = `👋 Welcome back, <span class="user-name-emphasis">${currentUser.name}</span>!`;
-            dashboardUserSubtext.textContent = "Real-time overview of agent activities and ticket status."; 
             userAvatarCharEl.textContent = currentUser.name.charAt(0).toUpperCase();
             userInfoDivHeader.style.display = 'flex';
             if (currentUser.isAdmin) {
