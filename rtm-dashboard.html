@@ -86,6 +86,24 @@
             background-color: var(--card-bg-color); padding: 2rem 3rem; border-radius: var(--border-radius-lg); text-align: center;
             box-shadow: 0 5px 15px rgba(0,0,0,0.2); max-width: 450px;
         }
+        
+        /* UNIFIED LOGOUT BUTTON STYLE */
+        .logout-btn {
+            background-color: transparent;
+            color: var(--primary-color);
+            border: 1px solid var(--primary-color);
+            border-radius: 12px;
+            padding: 0.6rem 1.2rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5em;
+            cursor: pointer;
+            transition: all 0.2s ease-in-out;
+        }
+        .logout-btn:hover {
+            background-color: rgba(var(--primary-color-rgb), 0.1);
+            color: var(--primary-color-dark);
+        }
     </style>
 </head>
 <body>
@@ -116,13 +134,17 @@
         </header>
 
         <main class="app-main dashboard-main">
-            <div id="auth-loading" class="loading-container" style="display: flex; justify-content: center; align-items: center; height: 70vh;">
+            <div id="auth-loading" class="loading-container" style="display: flex; flex-direction:column; justify-content: center; align-items: center; height: 70vh;">
                 <div class="spinner"></div>
                 <p>Loading Real-Time Data...</p>
             </div>
 
             <div id="dashboardContent" style="display: none;">
-                <div class="stats-grid" id="statsGrid">
+                <div class="dashboard-header">
+                     <h1 id="rtm-greeting">Live System Status</h1>
+                     <p id="rtm-subtext" class="text-color-light">Real-time overview of agent activities and ticket status.</p>
+                </div>
+                <div class="stats-grid" id="statsGrid" style="margin-top: 1rem;">
                      <div class="stat-card"><h3>Active Tickets</h3><p id="activeTickets">0</p></div>
                      <div class="stat-card"><h3>Avg. Active Duration</h3><p id="avgActiveDuration">0m 0s</p></div>
                      <div class="stat-card"><h3>Tickets Today</h3><p id="ticketsToday">0</p></div>
@@ -204,6 +226,9 @@
                 localStorage.setItem('elevoCoreUserData', JSON.stringify(currentUser));
             }
 
+            // FIX: Show main container first, then decide whether to show content or modal
+            appContainerContent.style.display = 'flex';
+
             if (!currentUser.isAdmin) {
                 showAccessDenied();
                 return;
@@ -221,7 +246,7 @@
 
         function showAccessDenied() {
             authLoadingDiv.style.display = 'none';
-            appContainerContent.style.display = 'flex';
+            dashboardContentDiv.style.display = 'none';
             accessDeniedModal.style.display = 'flex';
             returnToAppBtn.addEventListener('click', () => window.location.href = 'core-flow.html');
         }
@@ -258,28 +283,29 @@
 
         async function handleRealtimeUpdate(payload) {
             const { eventType, new: newRecord, old: oldRecord } = payload;
-            const record = newRecord.id ? newRecord : oldRecord;
+            const recordId = newRecord.id || oldRecord.id;
+            if (!recordId) return;
 
             if (eventType === 'INSERT') {
                 const { data, error } = await supabase
                     .from('call_sessions')
                     .select('id, start_time, agent_name, scenario:call_scenarios(title)')
-                    .eq('id', record.id)
+                    .eq('id', recordId)
                     .single();
                 if (!error && data) {
                     liveTickets.set(data.id, data);
                     addActivityLog('created', data);
                 }
             } else if (eventType === 'UPDATE') {
-                if (record.end_time && liveTickets.has(record.id)) {
-                    const endedTicket = liveTickets.get(record.id);
-                    liveTickets.delete(record.id);
-                    addActivityLog(record.completed ? 'completed' : 'ended', endedTicket);
+                if (newRecord.end_time && liveTickets.has(recordId)) {
+                    const endedTicket = { ...liveTickets.get(recordId), ...newRecord };
+                    liveTickets.delete(recordId);
+                    addActivityLog(newRecord.completed ? 'completed' : 'ended', endedTicket);
                 }
             } else if (eventType === 'DELETE') {
-                 if (liveTickets.has(record.id)) {
-                    const deletedTicket = liveTickets.get(record.id);
-                    liveTickets.delete(record.id);
+                 if (liveTickets.has(recordId)) {
+                    const deletedTicket = liveTickets.get(recordId);
+                    liveTickets.delete(recordId);
                     addActivityLog('ended', deletedTicket);
                 }
             }
@@ -295,7 +321,9 @@
             }
             noLiveTicketsMessage.style.display = 'none';
 
-            liveTickets.forEach(ticket => {
+            const sortedTickets = Array.from(liveTickets.values()).sort((a,b) => new Date(b.start_time) - new Date(a.start_time));
+
+            sortedTickets.forEach(ticket => {
                 const item = document.createElement('div');
                 item.className = 'live-ticket-item';
                 item.id = `ticket-${ticket.id}`;
@@ -363,18 +391,21 @@
             logItem.className = 'log-item';
             
             let icon, message;
+            const agentName = ticket.agent_name || 'Unknown Agent';
+            const scenarioTitle = ticket.scenario?.title || ticket.scenario_title || 'a ticket';
+
             switch(type) {
                 case 'created':
                     icon = '🚀';
-                    message = `<strong>${ticket.agent_name}</strong> started a new ticket: <em>${ticket.scenario?.title || ''}</em>`;
+                    message = `<strong>${agentName}</strong> started: <em>${scenarioTitle}</em>`;
                     break;
                 case 'completed':
                     icon = '✅';
-                    message = `<strong>${ticket.agent_name}</strong> completed the ticket: <em>${ticket.scenario?.title || ''}</em>`;
+                    message = `<strong>${agentName}</strong> completed: <em>${scenarioTitle}</em>`;
                     break;
                 case 'ended':
                     icon = '❌';
-                    message = `<strong>${ticket.agent_name}</strong> ended the ticket: <em>${ticket.scenario?.title || ''}</em>`;
+                    message = `<strong>${agentName}</strong> ended: <em>${scenarioTitle}</em>`;
                     break;
             }
 
@@ -386,6 +417,10 @@
                 </div>
             `;
             activityLogList.prepend(logItem);
+             // Limit logs to prevent performance issues
+            while (activityLogList.children.length > 50) {
+                activityLogList.removeChild(activityLogList.lastChild);
+            }
         }
         
         logoutButton.addEventListener('click', async () => {
