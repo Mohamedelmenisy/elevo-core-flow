@@ -135,9 +135,10 @@
                 <span class="app-title" style="font-size: 1.4rem;">Real-Time Management</span>
             </div>
             <div class="header-controls">
+                 <!-- MODIFIED: Links will be shown/hidden based on user role by JS -->
                  <a href="core-flow.html" class="nav-link">Core Flow</a>
-                 <a href="dashboard.html" class="nav-link">Admin Dashboard</a>
-                 <a href="agent-portal.html" class="nav-link">Agent Portal</a>
+                 <a href="dashboard.html" class="nav-link" id="adminDashboardLink" style="display: none;">Admin Dashboard</a>
+                 <a href="agent-portal.html" class="nav-link" id="agentPortalLink" style="display: none;">Agent Portal</a>
                  <div class="user-info" id="userInfo" style="display: none;">
                     <span id="userName" class="user-name-display"></span>
                     <button id="logoutButton" class="logout-btn">
@@ -222,6 +223,8 @@
         const liveTicketsList = document.getElementById('liveTicketsList');
         const noLiveTicketsMessage = document.getElementById('noLiveTicketsMessage');
         const activityLogList = document.getElementById('activityLogList');
+        const adminDashboardLink = document.getElementById('adminDashboardLink');
+        const agentPortalLink = document.getElementById('agentPortalLink');
         document.getElementById('currentYear').textContent = new Date().getFullYear();
 
         // Stats
@@ -240,8 +243,9 @@
         let currentUser = null;
         let liveTickets = new Map();
         let liveStatsInterval, periodicShiftInterval;
-        const EGYPT_TIMEZONE = 'Africa/Cairo';
+        const EGYPT_TIMEZONE = 'Africa/Cairo'; // MODIFIED: Timezone constant
 
+        // MODIFIED: Timezone formatting function
         function formatDateTimeEgypt(dateString) {
             if (!dateString) return 'N/A';
             const date = new Date(dateString);
@@ -308,6 +312,11 @@
         function setupUI() {
             userNameSpan.textContent = currentUser.name;
             document.getElementById('userInfo').style.display = 'flex';
+            // MODIFIED: User Permissions
+            if(currentUser.isAdmin) {
+                if (adminDashboardLink) adminDashboardLink.style.display = 'inline-block';
+            }
+            if (agentPortalLink) agentPortalLink.style.display = 'inline-block';
         }
 
         async function fetchInitialData() {
@@ -331,7 +340,7 @@
                 const startTime = new Date(ticket.start_time);
                 const minutesAgo = (now - startTime) / (60 * 1000);
                 if (minutesAgo < TICKET_VOLUME_TIMESPAN_MINUTES) {
-                    const bucketIndex = Math.floor((TICKET_VOLUME_TIMESPAN_MINUTES - minutesAgo) / TICKET_VOLUME_BUCKET_MINUTES);
+                    const bucketIndex = Math.floor(minutesAgo / TICKET_VOLUME_BUCKET_MINUTES);
                     const finalIndex = ticketVolumeData.length - 1 - bucketIndex;
                     if (finalIndex >= 0 && finalIndex < ticketVolumeData.length) {
                          ticketVolumeData[finalIndex]++;
@@ -343,6 +352,7 @@
             await fetchTodayStats();
         }
 
+        // MODIFIED: Realtime Sync
         function setupRealtimeSubscription() {
             supabase
                 .channel('public:call_sessions')
@@ -356,33 +366,33 @@
             const { eventType, new: newRecord, old: oldRecord } = payload;
             const recordId = newRecord.id || oldRecord?.id;
             if (!recordId) return;
-
+            
             if (eventType === 'INSERT') {
                 const { data, error } = await supabase
                     .from('call_sessions')
-                    .select('id, start_time, agent_name, scenario:call_scenarios(title)')
+                    .select('id, start_time, end_time, completed, agent_name, scenario:call_scenarios(title)')
                     .eq('id', recordId)
                     .single();
-                if (!error && data) {
+                if (!error && data && data.end_time === null) {
                     liveTickets.set(data.id, data);
-                    addActivityLog('created', data);
-                    updateTicketVolumeChart(newRecord, false);
+                    addActivityLog('created', data); // MODIFIED: Activity Log
+                    updateTicketVolumeChart(newRecord, false); // MODIFIED: Volume Chart
                 }
             } else if (eventType === 'UPDATE') {
                 if (newRecord.end_time && liveTickets.has(recordId)) {
                     const endedTicket = { ...liveTickets.get(recordId), ...newRecord };
                     liveTickets.delete(recordId);
-                    addActivityLog(newRecord.completed ? 'completed' : 'ended', endedTicket);
+                    addActivityLog(newRecord.completed ? 'completed' : 'ended', endedTicket); // MODIFIED: Activity Log
                 }
             } else if (eventType === 'DELETE') {
                  if (liveTickets.has(recordId)) {
                     const deletedTicket = liveTickets.get(recordId);
                     liveTickets.delete(recordId);
-                    addActivityLog('ended', deletedTicket);
+                    addActivityLog('ended', deletedTicket); // MODIFIED: Activity Log
                 }
             }
             renderLiveTickets();
-            await fetchTodayStats();
+            await fetchTodayStats(); // MODIFIED: Refresh stats on any change
         }
 
         function renderLiveTickets() {
@@ -445,14 +455,18 @@
             avgActiveDurationEl.textContent = `${avgMins}m ${avgSecs}s`;
         }
 
+        // MODIFIED: Live Stats Fix
         async function fetchTodayStats() {
             const today = new Date();
-            today.setHours(0, 0, 0, 0);
+            const year = today.getFullYear();
+            const month = today.getMonth();
+            const day = today.getDate();
+            const startOfDay = new Date(Date.UTC(year, month, day, 0, 0, 0, 0) - (new Date().getTimezoneOffset() * 60000) + (3 * 3600000)); // Adjust for Egypt Time
             
             const { data, error, count } = await supabase
                 .from('call_sessions')
                 .select('*', { count: 'exact' })
-                .gte('start_time', today.toISOString());
+                .gte('start_time', startOfDay.toISOString());
             
             if (error) {
                 console.error("Error fetching today's stats:", error);
@@ -460,14 +474,14 @@
             }
             
             ticketsTodayEl.textContent = count || 0;
-            const completedCount = data.filter(d => d.completed).length;
-            const finishedTicketsCount = data.filter(d => d.end_time).length;
-            const endedCount = finishedTicketsCount - completedCount;
+            const finishedTickets = data.filter(d => d.end_time);
+            const completedCount = finishedTickets.filter(d => d.completed).length;
+            const endedCount = finishedTickets.length - completedCount;
 
-            if (finishedTicketsCount > 0) {
-                completionRateTodayEl.textContent = `${Math.round((completedCount / finishedTicketsCount) * 100)}%`;
+            if (finishedTickets.length > 0) {
+                completionRateTodayEl.textContent = `${Math.round((completedCount / finishedTickets.length) * 100)}%`;
             } else {
-                completionRateTodayEl.textContent = '0%';
+                completionRateTodayEl.textContent = 'N/A';
             }
 
             updateTicketStatusChart(liveTickets.size, completedCount, endedCount);
@@ -498,7 +512,7 @@
                 options: {
                     responsive: true, maintainAspectRatio: false,
                     scales: {
-                         y: { ticks: { color: colors.text, font: { size: 14 }, stepSize: 1 }, grid: { color: colors.border } },
+                         y: { ticks: { color: colors.text, font: { size: 14 }, stepSize: 1, beginAtZero: true }, grid: { color: colors.border } },
                          x: { ticks: { color: colors.text, font: { size: 14 } }, grid: { color: colors.border } }
                     },
                     plugins: { legend: { display: false } }
@@ -512,14 +526,14 @@
             ticketStatusChartInstance.data.datasets[0].data = [active, completed, ended];
             ticketStatusChartInstance.update();
         }
-
+        
+        // MODIFIED: Ticket Volume Chart fix
         function updateTicketVolumeChart(newRecord, shiftOnly = false) {
             if (!ticketVolumeChartInstance) return;
             if (shiftOnly) {
                 ticketVolumeData.shift();
                 ticketVolumeData.push(0);
             } else if (newRecord) {
-                // This logic correctly places the new ticket in the last bucket.
                 ticketVolumeData[ticketVolumeData.length - 1]++;
             }
 
@@ -530,18 +544,18 @@
                 labels.push(time.toLocaleTimeString([], { timeZone: EGYPT_TIMEZONE, hour: '2-digit', minute: '2-digit' }));
             }
             ticketVolumeChartInstance.data.labels = labels;
-            ticketVolumeChartInstance.data.datasets[0].data = ticketVolumeData;
+            ticketVolumeChartInstance.data.datasets[0].data = [...ticketVolumeData];
             ticketVolumeChartInstance.update('none');
         }
 
-
+        // MODIFIED: Activity Log activation
         function addActivityLog(type, ticket) {
             const logItem = document.createElement('div');
             logItem.className = 'log-item';
             
             let icon, message;
             const agentName = ticket.agent_name || 'Unknown Agent';
-            const scenarioTitle = ticket.scenario?.title || ticket.scenario_title || 'a ticket';
+            const scenarioTitle = ticket.scenario?.title || 'a ticket';
 
             switch(type) {
                 case 'created': icon = '🚀'; message = `<strong>${agentName}</strong> started: <em>${scenarioTitle}</em>`; break;
@@ -553,7 +567,7 @@
                 <div class="log-icon ${type}">${icon}</div>
                 <div>
                     <div class="log-message">${message}</div>
-                    <div class="log-timestamp">${new Date().toLocaleString('en-GB', { timeZone: EGYPT_TIMEZONE, hour: '2-digit', minute:'2-digit', second: '2-digit' })}</div>
+                    <div class="log-timestamp">${new Date().toLocaleString('en-GB', { timeZone: EGYPT_TIMEZONE, hour: '2-digit', minute:'2-digit', second: '2-digit', hour12: true })}</div>
                 </div>
             `;
             activityLogList.prepend(logItem);
