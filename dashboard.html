@@ -535,75 +535,54 @@
         }
         
         async function fetchAndRenderLiveCalls() {
-            try {
-                // show a loading placeholder until data arrives
-                noLiveCallsMessage.style.display = 'block';
-                noLiveCallsMessage.textContent = 'Loading live tickets...';
-                liveCallsContainer.innerHTML = '';
-
-                const { data, error } = await supabase
-                    .from('call_sessions')
-                    .select('id, agent_name, start_time, scenario:call_scenarios(title)')
-                    .is('end_time', null)
-                    .order('start_time', { ascending: false });
-
-                if (error) throw error;
-
-                liveCallsContainer.innerHTML = '';
-                if (!data || data.length === 0) {
-                    noLiveCallsMessage.style.display = 'block';
-                    noLiveCallsMessage.textContent = 'No active tickets.';
-                    return;
-                }
-
-                noLiveCallsMessage.style.display = 'none';
-
-                data.forEach(call => {
-                    // compute duration safely
-                    const startMs = parseTimeMs(call.start_time);
-                    let duration = 0;
-                    if (startMs) duration = Math.floor((Date.now() - startMs) / 1000);
-                    if (isNaN(duration) || duration < 0) duration = 0;
-                    const mins = Math.floor(duration / 60);
-                    const secs = duration % 60;
-                    const isDelayed = duration > DELAY_THRESHOLD_SECONDS;
-
-                    const item = document.createElement('div');
-                    item.className = 'live-call-item';
-                    if (isDelayed) item.classList.add('long-call-alert');
-
-                    item.innerHTML = `
-                        <div><strong class="live-call-item-agent">${call.agent_name || 'Unknown'}</strong> on "${call.scenario?.title || 'a ticket'}"</div>
-                        <div class="live-call-item-time">
-                            <span class="text-color-light">Started: ${formatDateTimeEgypt(call.start_time, {includeSeconds:false})}</span>
-                            <span class="live-call-duration">Now: ${mins}m ${secs}s ${isDelayed ? '<span class="long-call-indicator">DELAYED</span>' : ''}</span>
-                        </div>
-                    `;
-                    liveCallsContainer.appendChild(item);
-                });
-            } catch(error) {
-                console.error("Error fetching live calls:", error);
-                noLiveCallsMessage.textContent = 'Error loading live data.';
-                noLiveCallsMessage.style.display = 'block';
-            }
+    try {
+        noLiveCallsMessage.style.display = 'block';
+        noLiveCallsMessage.textContent = 'Loading live tickets...';
+        liveCallsContainer.innerHTML = '';
+        const { data, error } = await supabase
+            .from('call_sessions')
+            .select('id, agent_name, start_time, scenario:call_scenarios(title)')
+            .is('end_time', null)
+            .order('start_time', { ascending: false });
+        if (error) throw error;
+        liveCallsContainer.innerHTML = '';
+        if (!data || data.length === 0) {
+            noLiveCallsMessage.style.display = 'block';
+            noLiveCallsMessage.textContent = 'No active tickets.';
+            return;
         }
-
-        async function setupLiveCallMonitoring() {
-            await fetchAndRenderLiveCalls();
-            liveCallsChannel = supabase
-                .channel('public:call_sessions')
-                .on('postgres_changes', { event: '*', schema: 'public', table: 'call_sessions' }, (payload) => {
-                    console.log('Realtime change received:', payload);
-                    fetchAndRenderLiveCalls(); 
-
-                    // Also refetch all sessions to update the main table and stats in real-time
-                    loadInitialData().then(() => {
-                        applyFiltersAndRender();
-                    });
-                })
-                .subscribe();
-
-            setInterval(fetchAndRenderLiveCalls, 5000); // Refresh durations every 5 seconds
+        noLiveCallsMessage.style.display = 'none';
+        data.forEach(call => {
+            const startMs = Date.parse(call.start_time);
+            let duration = Math.floor((Date.now() - startMs) / 1000);
+            if (isNaN(duration) || duration < 0) duration = 0;
+            const mins = Math.floor(duration/60);
+            const secs = duration % 60;
+            const isDelayed = duration > 120;
+            const item = document.createElement('div');
+            item.className = 'live-call-item';
+            if (isDelayed) item.classList.add('long-call-alert');
+            item.innerHTML = `<div><strong class="live-call-item-agent">${call.agent_name || 'Unknown'}</strong> on "${call.scenario?.title || 'a ticket'}"</div>
+                <div class="live-call-item-time"><span class="text-color-light">Started: ${new Date(call.start_time).toLocaleString('en-GB',{timeZone:'Africa/Cairo'})}</span>
+                <span class="live-call-duration">Now: ${mins}m ${secs}s ${isDelayed?'<span class="long-call-indicator">DELAYED</span>':''}</span></div>`;
+            liveCallsContainer.appendChild(item);
+        });
+    } catch(e) {
+        console.error("Error fetching live calls:", e);
+        noLiveCallsMessage.textContent = 'Error loading live data.';
+        noLiveCallsMessage.style.display = 'block';
+    }
+}
+async function setupLiveCallMonitoring() {
+    await fetchAndRenderLiveCalls();
+    liveCallsChannel = supabase
+        .channel('public:call_sessions')
+        .on('postgres_changes', {event:'*',schema:'public',table:'call_sessions'}, payload=>{
+            fetchAndRenderLiveCalls();
+            loadInitialData().then(()=>applyFiltersAndRender());
+        }).subscribe();
+    setInterval(fetchAndRenderLiveCalls,5000);
+} // Refresh durations every 5 seconds
         } // Refresh durations every 5 seconds
         }
 
