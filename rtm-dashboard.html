@@ -394,51 +394,50 @@
         }
 
         async async function handleRealtimeUpdate(payload) {
-            // normalize payload shapes across supabase versions
-            const eventType = payload.eventType || payload.type || payload.event || payload?.event;
-            const newRecord = payload.new || payload.record || payload.payload?.new || payload?.new;
-            const oldRecord = payload.old || payload.oldRecord || payload.payload?.old || payload?.old;
-            const recordId = newRecord?.id || oldRecord?.id;
-            if (!recordId) return;
+    const eventType = payload.eventType || payload.type || payload.event || payload?.event;
+    const newRecord = payload.new || payload.record || payload.payload?.new || payload?.new;
+    const oldRecord = payload.old || payload.oldRecord || payload.payload?.old || payload?.old;
+    const recordId = newRecord?.id || oldRecord?.id;
+    if (!recordId) return;
 
-            try {
-                if (eventType === 'INSERT') {
-                    const { data, error } = await supabase
-                        .from('call_sessions')
-                        .select('id, start_time, end_time, completed, agent_name, scenario:call_scenarios(title)')
-                        .eq('id', recordId)
-                        .single();
-                    if (!error && data) {
-                        liveTickets.set(data.id, data);
-                        addActivityLog('created', data);
-                        updateTicketVolumeChart(data, false);
-                    }
-                } else if (eventType === 'UPDATE') {
-                    if (newRecord?.end_time && liveTickets.has(recordId)) {
-                        const existing = liveTickets.get(recordId) || {};
-                        const endedTicket = { ...existing, ...newRecord };
-                        liveTickets.delete(recordId);
-                        addActivityLog(newRecord.completed ? 'completed' : 'ended', endedTicket);
-                    } else {
-                        if (liveTickets.has(recordId)) {
-                            const existing = liveTickets.get(recordId);
-                            liveTickets.set(recordId, { ...existing, ...newRecord });
-                        }
-                    }
-                } else if (eventType === 'DELETE') {
-                    if (liveTickets.has(recordId)) {
-                        const deletedTicket = liveTickets.get(recordId);
-                        liveTickets.delete(recordId);
-                        addActivityLog('ended', deletedTicket);
-                    }
-                }
-            } catch(e) {
-                console.error("Realtime handler error:", e);
+    try {
+        if (eventType === 'INSERT') {
+            const { data, error } = await supabase
+                .from('call_sessions')
+                .select('id, start_time, end_time, completed, agent_name, scenario:call_scenarios(title)')
+                .eq('id', recordId)
+                .single();
+            if (!error && data) {
+                liveTickets.set(data.id, data);
+                addActivityLog('created', data);
+                updateTicketVolumeChart(data, false);
             }
-
-            renderLiveTickets();
-            await fetchTodayStats();
+        } else if (eventType === 'UPDATE') {
+            if (newRecord?.end_time && liveTickets.has(recordId)) {
+                const existing = liveTickets.get(recordId) || {};
+                const endedTicket = { ...existing, ...newRecord };
+                liveTickets.delete(recordId);
+                addActivityLog(newRecord.completed ? 'completed' : 'ended', endedTicket);
+            } else {
+                if (liveTickets.has(recordId)) {
+                    const existing = liveTickets.get(recordId);
+                    liveTickets.set(recordId, { ...existing, ...newRecord });
+                }
+            }
+        } else if (eventType === 'DELETE') {
+            if (liveTickets.has(recordId)) {
+                const deletedTicket = liveTickets.get(recordId);
+                liveTickets.delete(recordId);
+                addActivityLog('ended', deletedTicket);
+            }
         }
+    } catch(e) {
+        console.error("Realtime handler error:", e);
+    }
+
+    renderLiveTickets();
+    await fetchTodayStats();
+}
 
         function renderLiveTickets() {
             liveTicketsList.innerHTML = '';
