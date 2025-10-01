@@ -14,6 +14,7 @@
             width: 100%;
             max-width: none; 
             padding: 1.5rem 2rem; 
+            text-align: left; /* MODIFIED */
         }
 
         .portal-layout-grid {
@@ -145,11 +146,12 @@
         .modal {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background-color: rgba(0, 0, 0, 0.7);
-            display: flex; align-items: center; justify-content: center;
+            display: none; align-items: center; justify-content: center;
             z-index: 1000; opacity: 0; visibility: hidden;
             transition: opacity 0.3s ease, visibility 0s 0.3s;
         }
         .modal.visible {
+            display: flex;
             opacity: 1;
             visibility: visible;
             transition-delay: 0s;
@@ -233,6 +235,9 @@
             </div>
             <div class="header-controls">
                  <a href="core-flow.html" class="nav-link">Go to Call App</a>
+                 <!-- MODIFIED: Links will be shown/hidden based on user role by JS -->
+                 <a href="dashboard.html" class="nav-link" id="dashboardLink" style="display: none;">Admin Dashboard</a>
+                 <a href="rtm-dashboard.html" class="nav-link" id="rtmDashboardLink" style="display: none;">RTM Dashboard</a>
                  <div class="user-info" id="userInfo" style="display: none;">
                     <span id="userName" class="user-name-display"></span>
                     <button id="logoutButton" class="logout-btn">
@@ -416,6 +421,8 @@
               noBadCallsMessage = document.getElementById('noBadCallsMessage');
         const paginationControls = document.getElementById('paginationControls');
         const exportDataBtn = document.getElementById('exportDataBtn');
+        const dashboardLink = document.getElementById('dashboardLink');
+        const rtmDashboardLink = document.getElementById('rtmDashboardLink');
         document.getElementById('currentYear').textContent = new Date().getFullYear();
         
         const agentScratchpad = document.getElementById('agentScratchpad');
@@ -440,30 +447,38 @@
         let currentPage = 1;
         const ROWS_PER_PAGE = 6;
         let currentNotesPage = 1;
-        const NOTES_PER_PAGE = 5;
+        const NOTES_PER_PAGE = 5; // MODIFIED: Notes Pagination
         let noteToEditTimestamp = null;
         let noteToDeleteTimestamp = null;
         const DAILY_TICKET_TARGET = 20;
-        const NOTES_STORAGE_KEY = 'agentSavedNotes';
+        const NOTES_STORAGE_KEY_PREFIX = 'agentSavedNotes_';
+        let NOTES_STORAGE_KEY = '';
+        const EGYPT_TIMEZONE = 'Africa/Cairo'; // MODIFIED: Timezone constant
+
+        // MODIFIED: Timezone formatting function
+        function formatDateTimeEgypt(dateString, options = {}) {
+            if (!dateString) return 'N/A';
+            const date = new Date(dateString);
+            const defaultOptions = { timeZone: EGYPT_TIMEZONE, year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute:'2-digit', hour12: true };
+            return date.toLocaleString('en-US', { ...defaultOptions, ...options });
+        }
         
+        // MODIFIED: Notes Pagination
         function renderNotesPagination(totalNotes) {
             notesPaginationControls.innerHTML = '';
             const totalPages = Math.ceil(totalNotes / NOTES_PER_PAGE);
             if (totalPages <= 1) return;
 
             const prevButton = document.createElement('button');
-            prevButton.innerHTML = `&laquo; Previous`;
-            prevButton.className = 'action-button secondary-button';
+            prevButton.innerHTML = `&laquo; Prev`;
             prevButton.disabled = currentNotesPage === 1;
             prevButton.addEventListener('click', () => { if (currentNotesPage > 1) { currentNotesPage--; renderSavedNotes(); } });
 
             const pageInfo = document.createElement('span');
-            pageInfo.className = 'pagination-info';
             pageInfo.textContent = `Page ${currentNotesPage} of ${totalPages}`;
 
             const nextButton = document.createElement('button');
             nextButton.innerHTML = `Next &raquo;`;
-            nextButton.className = 'action-button secondary-button';
             nextButton.disabled = currentNotesPage === totalPages;
             nextButton.addEventListener('click', () => { if (currentNotesPage < totalPages) { currentNotesPage++; renderSavedNotes(); } });
 
@@ -486,13 +501,11 @@
             notes.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
             
             const startIndex = (currentNotesPage - 1) * NOTES_PER_PAGE;
-            const endIndex = startIndex + NOTES_PER_PAGE;
-            const paginatedNotes = notes.slice(startIndex, endIndex);
+            const paginatedNotes = notes.slice(startIndex, startIndex + NOTES_PER_PAGE);
 
             paginatedNotes.forEach(note => {
                 const noteDate = new Date(note.timestamp);
-                const formattedDate = noteDate.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
-                const formattedTime = noteDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                const formattedDateTime = formatDateTimeEgypt(note.timestamp);
                 
                 const sanitizedText = document.createElement('div');
                 sanitizedText.innerText = note.text;
@@ -500,25 +513,20 @@
                 const noteElement = `
                     <div class="note-card">
                         <div class="note-header">
-                            <div class="note-author">
-                                <span>Agent Name</span>
-                                <span>${currentUser?.name || 'N/A'}</span>
+                             <div class="note-timestamp">
+                                <span>${formattedDateTime}</span>
                             </div>
-                            <div class="note-timestamp">
-                                <span>Date & Time</span>
-                                <span>${formattedDate} at ${formattedTime}</span>
+                            <div class="note-actions">
+                                 <button class="note-action-btn edit-note-btn" title="Edit Note" data-timestamp="${note.timestamp}">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                                </button>
+                                <button class="note-action-btn delete-note-btn" title="Delete Note" data-timestamp="${note.timestamp}">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+                                </button>
                             </div>
                         </div>
                         <div class="note-content">
                             <p>${sanitizedText.innerHTML.replace(/\n/g, '<br>')}</p>
-                        </div>
-                        <div class="note-actions">
-                             <button class="note-action-btn edit-note-btn" title="Edit Note" data-timestamp="${note.timestamp}">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
-                            </button>
-                            <button class="note-action-btn delete-note-btn" title="Delete Note" data-timestamp="${note.timestamp}">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
-                            </button>
                         </div>
                     </div>
                 `;
@@ -585,12 +593,15 @@
             const { data: { session } } = await supabase.auth.getSession();
             if (!session) { window.location.replace('login.html'); return; }
 
-            currentUser = JSON.parse(localStorage.getItem('elevoCoreUserData'));
-            if (!currentUser || currentUser.id !== session.user.id) {
-                const { data: profile } = await supabase.from('users').select('name').eq('id', session.user.id).single();
-                currentUser = { id: session.user.id, email: session.user.email, name: profile?.name || session.user.email };
+            const storedUserData = JSON.parse(localStorage.getItem('elevoCoreUserData'));
+             if (storedUserData && storedUserData.id === session.user.id) {
+                currentUser = storedUserData;
+            } else {
+                const { data: profile } = await supabase.from('users').select('name, is_admin').eq('id', session.user.id).single();
+                currentUser = { id: session.user.id, email: session.user.email, name: profile?.name || session.user.email, isAdmin: profile?.is_admin || false };
                 localStorage.setItem('elevoCoreUserData', JSON.stringify(currentUser));
             }
+            NOTES_STORAGE_KEY = `${NOTES_STORAGE_KEY_PREFIX}${currentUser.id}`;
 
             setupUI();
             await loadAgentData();
@@ -603,6 +614,13 @@
             userNameSpan.textContent = currentUser.name;
             agentGreeting.textContent = `Welcome, ${currentUser.name}!`;
             document.getElementById('userInfo').style.display = 'flex';
+            
+            // MODIFIED: User Permissions
+            if (currentUser.isAdmin) {
+                if(dashboardLink) dashboardLink.style.display = 'inline-block';
+                if(rtmDashboardLink) rtmDashboardLink.style.display = 'inline-block';
+            }
+
             renderSavedNotes();
         }
 
@@ -630,8 +648,8 @@
                 const callDate = new Date(call.start_time);
                 const matchesSearch = !searchTerm || (call.scenario?.title || '').toLowerCase().includes(searchTerm);
                 const matchesQuality = !quality || call.call_quality === quality;
-                const matchesStartDate = !startDate || callDate >= new Date(startDate);
-                const matchesEndDate = !endDate || callDate <= new Date(new Date(endDate).setHours(23, 59, 59, 999));
+                const matchesStartDate = !startDate || callDate >= new Date(startDate + "T00:00:00.000Z");
+                const matchesEndDate = !endDate || callDate <= new Date(endDate + "T23:59:59.999Z");
                 return matchesSearch && matchesQuality && matchesStartDate && matchesEndDate;
             });
 
@@ -649,21 +667,26 @@
             endDateFilter.value = '';
             applyFiltersAndRender();
         }
-
+        
+        // MODIFIED: Performance Stats Fix
         function updateStats(calls) {
-            const today = new Date().toLocaleDateString();
-            const todaysCalls = calls.filter(c => new Date(c.start_time).toLocaleDateString() === today);
+            const today = new Date();
+            const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString();
+
+            const todaysCalls = allUserCalls.filter(c => c.start_time >= startOfToday);
 
             kpiTotalCalls.textContent = calls.length;
 
-            const totalDuration = calls.reduce((acc, call) => acc + (call.duration || 0), 0);
-            if (calls.length > 0) {
-                const avgDuration = Math.round(totalDuration / calls.length);
+            const callsWithDuration = calls.filter(call => typeof call.duration === 'number');
+            const totalDuration = callsWithDuration.reduce((acc, call) => acc + call.duration, 0);
+            
+            if (callsWithDuration.length > 0) {
+                const avgDuration = Math.round(totalDuration / callsWithDuration.length);
                 const avgMins = Math.floor(avgDuration / 60);
-                const avgSecs = avgDuration % 60;
+                const avgSecs = String(avgDuration % 60).padStart(2, '0');
                 kpiAvgTime.textContent = `${avgMins}m ${avgSecs}s`;
             } else {
-                kpiAvgTime.textContent = '0m 0s';
+                kpiAvgTime.textContent = '0m 00s';
             }
             
             const targetPercent = Math.min(100, Math.round((todaysCalls.length / DAILY_TICKET_TARGET) * 100));
@@ -687,9 +710,9 @@
             paginatedCalls.forEach(call => {
                 const dur = call.duration || 0;
                 const row = `<tr>
-                        <td>${new Date(call.start_time).toLocaleDateString()}</td>
+                        <td>${new Date(call.start_time).toLocaleDateString('en-GB', { timeZone: EGYPT_TIMEZONE })}</td>
                         <td>${call.scenario?.title || 'N/A'}</td>
-                        <td>${Math.floor(dur / 60)}m ${dur % 60}s</td>
+                        <td>${Math.floor(dur / 60)}m ${String(dur % 60).padStart(2, '0')}s</td>
                         <td>${call.completed ? '✅ Yes' : '❌ No'}</td>
                         <td><span class="quality-text quality-${(call.call_quality || 'na').toLowerCase()}">${call.call_quality || 'N/A'}</span></td>
                         <td>${call.quality_reason || '-'}</td>
@@ -705,17 +728,14 @@
 
             const prevButton = document.createElement('button');
             prevButton.innerHTML = `&laquo; Previous`;
-            prevButton.className = 'action-button secondary-button';
             prevButton.disabled = currentPage === 1;
             prevButton.addEventListener('click', () => { if (currentPage > 1) { currentPage--; renderTable(); renderPagination(); } });
 
             const pageInfo = document.createElement('span');
-            pageInfo.className = 'pagination-info';
             pageInfo.textContent = `Page ${currentPage} of ${totalPages}`;
 
             const nextButton = document.createElement('button');
             nextButton.innerHTML = `Next &raquo;`;
-            nextButton.className = 'action-button secondary-button';
             nextButton.disabled = currentPage === totalPages;
             nextButton.addEventListener('click', () => { if (currentPage < totalPages) { currentPage++; renderTable(); renderPagination(); } });
 
