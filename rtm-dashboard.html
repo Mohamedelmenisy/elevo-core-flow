@@ -172,6 +172,17 @@
                     <div id="ticketVolumeChartContainer" class="chart-container">
                         <h2>Ticket Volume (Last Hour)</h2>
                         <canvas id="ticketVolumeChart"></canvas>
+        <div class="charts-row" style="margin-top:1rem;">
+          <div class="live-kpi-graph">
+            <h4 style="margin:0 0 0.6rem 0;">Live Active Tickets (Last 5 min)</h4>
+            <canvas id="liveKpiGraph"></canvas>
+          </div>
+          <div class="delayed-box">
+            <h4 style="margin:0 0 0.6rem 0;">Delayed Tickets (over 3 min)</h4>
+            <ul id="delayedList" style="list-style:none;padding:0;margin:0;"><li>No delayed tickets.</li></ul>
+          </div>
+        </div>
+        
                     </div>
 
                     <div class="live-tickets-container chart-container">
@@ -586,5 +597,53 @@
 
         if (supabase) initializeDashboard();
     </script>
+
+<script>
+(function(){
+  const safe = typeof supabase !== 'undefined';
+  // Populate placeholders with safe defaults or from views if available
+  async function fetchKpis() {
+    try {
+      if (!safe) {
+        // default demo values when supabase missing
+        document.getElementById('kpi-fastest')?.textContent = '0m 0s';
+        document.getElementById('kpi-longest')?.textContent = '0m 0s';
+        document.getElementById('kpi-top-scenario')?.textContent = '-';
+        document.getElementById('topAgentsList')?.innerHTML = '<li>No data yet <span>—</span></li>';
+        document.getElementById('delayedList')?.innerHTML = '<li>No delayed tickets.</li>';
+        document.getElementById('ins-total')?.textContent = '0';
+        document.getElementById('ins-avg')?.textContent = '0m 0s';
+        document.getElementById('ins-completion')?.textContent = '0%';
+        return;
+      }
+      // Attempt to call views if supabase exists
+      const { data: kpi } = await supabase.from('kpi_today').select('*').limit(1).single();
+      if (kpi) {
+        document.getElementById('ins-total')?.textContent = kpi.tickets_started_today || 0;
+        document.getElementById('ins-completion')?.textContent = (kpi.completion_rate || 0) + '%';
+        document.getElementById('ins-avg')?.textContent = (kpi.avg_handling_time_minutes || 0) + 'm';
+        document.getElementById('kpi-fastest')?.textContent = '—';
+        document.getElementById('kpi-longest')?.textContent = '—';
+      }
+      // top agents
+      const { data: top } = await supabase.rpc('top_agents_today'); // optional if exists
+      if (top && top.length) {
+        const html = top.slice(0,5).map(t => `<li>${t.agent_name}<span>${t.count}</span></li>`).join('');
+        document.getElementById('topAgentsList').innerHTML = html;
+      }
+      // delayed
+      const { data: delayed } = await supabase.from('delayed_tickets').select('*');
+      if (delayed && delayed.length) {
+        document.getElementById('delayedList').innerHTML = delayed.map(d=>`<li>${d.agent_name} — ${Math.floor(d.seconds_open/60)}m ${d.seconds_open%60}s</li>`).join('');
+      }
+    } catch(e){
+      console.warn('KPI placeholders error', e);
+    }
+  }
+  // call once
+  fetchKpis();
+})();
+</script>
+
 </body>
 </html>
