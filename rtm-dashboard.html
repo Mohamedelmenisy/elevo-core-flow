@@ -10,57 +10,17 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
     <style>
-        /* --- START UNIFIED HEADER STYLE --- */
-        .app-header {
-            background-color: var(--card-bg-color);
-            color: var(--text-color);
-            padding: 1rem 1.5rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom: 1px solid var(--border-color);
-            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-            width: 100%;
-        }
-        .app-title { font-weight: 600; }
-        .header-controls { display: flex; align-items: center; gap: 1rem; }
-        .nav-link {
-            color: var(--text-color-light);
-            text-decoration: none;
-            transition: color 0.2s;
-            font-weight: 500;
-        }
-        .nav-link:hover { color: var(--primary-color); }
-        .user-info { display: flex; align-items: center; gap: 1rem; }
-        .user-name-display { color: var(--text-color-secondary); }
-
-        .logout-btn {
-            background-color: transparent;
-            color: var(--primary-color);
-            border: 1px solid var(--primary-color);
-            border-radius: 12px;
-            padding: 0.6rem 1.2rem;
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5em;
-            cursor: pointer;
-            transition: all 0.2s ease-in-out;
-            font-size: 0.9rem;
-        }
-        .logout-btn:hover {
-            background-color: rgba(var(--primary-color-rgb), 0.1);
-            color: var(--primary-color-dark);
-            transform: translateY(-1px);
-        }
-        .logout-btn svg { margin-right: 0.3em; }
-        /* --- END UNIFIED HEADER STYLE --- */
-
         .dashboard-main {
             width: 100%;
             max-width: 1600px;
             margin: 0 auto;
+            text-align: left;
         }
         
+        .dashboard-header {
+             text-align: left;
+        }
+
         .master-grid {
             display: grid;
             grid-template-columns: repeat(12, 1fr);
@@ -70,7 +30,7 @@
         }
 
         .stats-grid {
-            grid-column: 1 / -1; /* Span full width */
+            grid-column: 1 / -1;
         }
 
         .chart-container {
@@ -89,50 +49,64 @@
         }
 
         #ticketVolumeChartContainer {
-            grid-column: 1 / -1; /* Span full width */
+            grid-column: 1 / -1;
         }
 
         .live-tickets-container {
-            grid-column: span 5;
-            max-height: 600px;
-            display: flex;
-            flex-direction: column;
+            grid-column: span 12;
         }
         
         #ticketStatusChartContainer {
-            grid-column: span 3;
+            grid-column: span 6;
         }
         
         .activity-log-container {
-            grid-column: span 4;
-            max-height: 600px;
-            display: flex;
-            flex-direction: column;
+            grid-column: span 6;
+        }
+
+        @media (min-width: 992px) {
+            .live-tickets-container {
+                grid-column: span 5;
+            }
+            #ticketStatusChartContainer {
+                grid-column: span 3;
+            }
+            .activity-log-container {
+                grid-column: span 4;
+            }
         }
         
         .live-tickets-list, .activity-log-list {
+            max-height: 500px;
             overflow-y: auto;
-            flex-grow: 1;
         }
         
-        .live-ticket-item, .log-item {
+        .live-ticket-item {
             padding: 1rem;
             border-bottom: 1px solid var(--border-color);
             display: grid;
             gap: 1rem;
             align-items: center;
+            grid-template-columns: 1fr 1.5fr 1fr 1fr;
         }
-        .live-ticket-item { grid-template-columns: 1fr 1.5fr 1fr 1fr; }
+        .log-item {
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid var(--border-color);
+            display: grid;
+            gap: 1rem;
+            align-items: center;
+            grid-template-columns: auto 1fr;
+        }
+
         .live-ticket-item:last-child, .log-item:last-child { border-bottom: none; }
 
         .agent-name { font-weight: 600; color: var(--primary-color); }
-        .scenario-title { font-size: 0.9em; }
-        .duration { font-family: 'Roboto Mono', monospace; }
+        .scenario-title { font-size: 0.9em; color: var(--text-color-light); }
+        .duration, .start-time { font-family: 'Roboto Mono', monospace; font-weight: 500; }
         
-        .log-item { grid-template-columns: auto 1fr; }
         .log-icon {
             width: 32px; height: 32px; border-radius: 50%; display: flex;
-            align-items: center; justify-content: center; color: #fff; font-size: 1.1rem;
+            align-items: center; justify-content: center; color: #fff; font-size: 1.1rem; flex-shrink: 0;
         }
         .log-icon.created { background-color: var(--primary-color); }
         .log-icon.completed { background-color: var(--success-color); }
@@ -141,19 +115,10 @@
         .log-message { font-size: 0.9em; }
         .log-timestamp { font-size: 0.8em; color: var(--text-color-light); }
 
-        #accessDeniedModal {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background-color: rgba(0, 0, 0, 0.7); display: none;
-            justify-content: center; align-items: center; z-index: 1000; color: var(--text-color);
-        }
-        .access-denied-content {
-            background-color: var(--card-bg-color); padding: 2rem 3rem; border-radius: var(--border-radius-lg); text-align: center;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.2); max-width: 450px;
-        }
     </style>
 </head>
 <body>
-    <div id="accessDeniedModal">
+    <div id="accessDeniedModal" style="display: none;">
          <div class="access-denied-content">
              <h3>Access Denied</h3>
              <p>This dashboard is for administrators only.</p>
@@ -172,6 +137,7 @@
             <div class="header-controls">
                  <a href="core-flow.html" class="nav-link">Core Flow</a>
                  <a href="dashboard.html" class="nav-link">Admin Dashboard</a>
+                 <a href="agent-portal.html" class="nav-link">Agent Portal</a>
                  <div class="user-info" id="userInfo" style="display: none;">
                     <span id="userName" class="user-name-display"></span>
                     <button id="logoutButton" class="logout-btn">
@@ -275,8 +241,6 @@
         let liveTickets = new Map();
         let liveStatsInterval, periodicShiftInterval;
         const EGYPT_TIMEZONE = 'Africa/Cairo';
-        const DELAY_THRESHOLD_SECONDS = 120; // seconds
-        function parseTimeMs(dateString){ const t = Date.parse(dateString); return isNaN(t)?null:t; }
 
         function formatDateTimeEgypt(dateString) {
             if (!dateString) return 'N/A';
@@ -324,10 +288,8 @@
             await fetchInitialData();
             setupRealtimeSubscription();
             
-            // Update live durations every second for accuracy
             liveStatsInterval = setInterval(updateLiveDurationsAndStats, 1000);
             
-            // Shift the time window for the volume chart periodically
             periodicShiftInterval = setInterval(() => {
                 updateTicketVolumeChart(null, true); 
             }, TICKET_VOLUME_BUCKET_MINUTES * 60 * 1000);
@@ -351,7 +313,6 @@
         async function fetchInitialData() {
             const oneHourAgo = new Date(Date.now() - TICKET_VOLUME_TIMESPAN_MINUTES * 60 * 1000).toISOString();
 
-            // Fetch live tickets AND tickets from the last hour
             const { data, error } = await supabase
                 .from('call_sessions')
                 .select('id, start_time, end_time, completed, agent_name, scenario:call_scenarios(title)')
@@ -362,13 +323,11 @@
                 return;
             }
             
-            // Populate live tickets and volume chart
             const now = new Date();
             data.forEach(ticket => {
                 if (ticket.end_time === null) {
                     liveTickets.set(ticket.id, ticket);
                 }
-                // Populate volume chart data
                 const startTime = new Date(ticket.start_time);
                 const minutesAgo = (now - startTime) / (60 * 1000);
                 if (minutesAgo < TICKET_VOLUME_TIMESPAN_MINUTES) {
@@ -379,7 +338,7 @@
                     }
                 }
             });
-            updateTicketVolumeChart(null, false); // Render initial chart data
+            updateTicketVolumeChart(null, false);
             renderLiveTickets();
             await fetchTodayStats();
         }
@@ -393,51 +352,38 @@
                 .subscribe();
         }
 
-        async async function handleRealtimeUpdate(payload) {
-    const eventType = payload.eventType || payload.type || payload.event || payload?.event;
-    const newRecord = payload.new || payload.record || payload.payload?.new || payload?.new;
-    const oldRecord = payload.old || payload.oldRecord || payload.payload?.old || payload?.old;
-    const recordId = newRecord?.id || oldRecord?.id;
-    if (!recordId) return;
+        async function handleRealtimeUpdate(payload) {
+            const { eventType, new: newRecord, old: oldRecord } = payload;
+            const recordId = newRecord.id || oldRecord?.id;
+            if (!recordId) return;
 
-    try {
-        if (eventType === 'INSERT') {
-            const { data, error } = await supabase
-                .from('call_sessions')
-                .select('id, start_time, end_time, completed, agent_name, scenario:call_scenarios(title)')
-                .eq('id', recordId)
-                .single();
-            if (!error && data) {
-                liveTickets.set(data.id, data);
-                addActivityLog('created', data);
-                updateTicketVolumeChart(data, false);
-            }
-        } else if (eventType === 'UPDATE') {
-            if (newRecord?.end_time && liveTickets.has(recordId)) {
-                const existing = liveTickets.get(recordId) || {};
-                const endedTicket = { ...existing, ...newRecord };
-                liveTickets.delete(recordId);
-                addActivityLog(newRecord.completed ? 'completed' : 'ended', endedTicket);
-            } else {
-                if (liveTickets.has(recordId)) {
-                    const existing = liveTickets.get(recordId);
-                    liveTickets.set(recordId, { ...existing, ...newRecord });
+            if (eventType === 'INSERT') {
+                const { data, error } = await supabase
+                    .from('call_sessions')
+                    .select('id, start_time, agent_name, scenario:call_scenarios(title)')
+                    .eq('id', recordId)
+                    .single();
+                if (!error && data) {
+                    liveTickets.set(data.id, data);
+                    addActivityLog('created', data);
+                    updateTicketVolumeChart(newRecord, false);
+                }
+            } else if (eventType === 'UPDATE') {
+                if (newRecord.end_time && liveTickets.has(recordId)) {
+                    const endedTicket = { ...liveTickets.get(recordId), ...newRecord };
+                    liveTickets.delete(recordId);
+                    addActivityLog(newRecord.completed ? 'completed' : 'ended', endedTicket);
+                }
+            } else if (eventType === 'DELETE') {
+                 if (liveTickets.has(recordId)) {
+                    const deletedTicket = liveTickets.get(recordId);
+                    liveTickets.delete(recordId);
+                    addActivityLog('ended', deletedTicket);
                 }
             }
-        } else if (eventType === 'DELETE') {
-            if (liveTickets.has(recordId)) {
-                const deletedTicket = liveTickets.get(recordId);
-                liveTickets.delete(recordId);
-                addActivityLog('ended', deletedTicket);
-            }
+            renderLiveTickets();
+            await fetchTodayStats();
         }
-    } catch(e) {
-        console.error("Realtime handler error:", e);
-    }
-
-    renderLiveTickets();
-    await fetchTodayStats();
-}
 
         function renderLiveTickets() {
             liveTicketsList.innerHTML = '';
@@ -454,18 +400,16 @@
                 item.className = 'live-ticket-item';
                 item.id = `ticket-${ticket.id}`;
                 item.innerHTML = `
-                    <div class="ticket-left">
-                        <div class="text-color-light" style="font-size:0.75rem;margin-bottom:6px;">Agent</div>
+                    <div>
                         <div class="agent-name">${ticket.agent_name || 'Unknown'}</div>
                     </div>
-                    <div class="ticket-center">
-                        <div class="text-color-light" style="font-size:0.75rem;margin-bottom:6px;">Scenario</div>
+                    <div>
                         <div class="scenario-title">${ticket.scenario?.title || 'Loading...'}</div>
                     </div>
-                    <div class="ticket-right">
-                        <div class="text-color-light" style="font-size:0.75rem;margin-bottom:6px;">Start (EET)</div>
+                    <div>
                         <div class="start-time">${formatDateTimeEgypt(ticket.start_time)}</div>
-                        <div class="text-color-light" style="font-size:0.75rem;margin-top:6px;">Duration</div>
+                    </div>
+                    <div>
                         <div class="duration">0m 0s</div>
                     </div>
                 `;
@@ -495,7 +439,7 @@
             });
             
             activeTicketsEl.textContent = liveTickets.size;
-            const avgDurationMs = totalDuration / liveTickets.size;
+            const avgDurationMs = totalDuration > 0 ? totalDuration / liveTickets.size : 0;
             const avgMins = Math.floor(avgDurationMs / 60000);
             const avgSecs = Math.floor((avgDurationMs % 60000) / 1000);
             avgActiveDurationEl.textContent = `${avgMins}m ${avgSecs}s`;
@@ -517,7 +461,7 @@
             
             ticketsTodayEl.textContent = count || 0;
             const completedCount = data.filter(d => d.completed).length;
-            const finishedTicketsCount = data.filter(d => d.end_time).length; // All tickets that have an end time
+            const finishedTicketsCount = data.filter(d => d.end_time).length;
             const endedCount = finishedTicketsCount - completedCount;
 
             if (finishedTicketsCount > 0) {
@@ -529,21 +473,14 @@
             updateTicketStatusChart(liveTickets.size, completedCount, endedCount);
         }
         
-        // --- CHART FUNCTIONS ---
         function initializeCharts() {
             const colors = { good: '#4CAF50', bad: '#F44336', primary: '#4e8cff', cardBg: '#1f2937', text: '#f3f4f6', border: '#4b5563', primaryRgb: '78, 140, 255' };
-            // Doughnut Chart
             const statusCtx = document.getElementById('ticketStatusChart').getContext('2d');
             ticketStatusChartInstance = new Chart(statusCtx, {
                 type: 'doughnut',
                 data: {
                     labels: ['Active', 'Completed Today', 'Ended Today'],
-                    datasets: [{
-                        data: [0, 0, 0],
-                        backgroundColor: [colors.primary, colors.good, colors.bad],
-                        borderColor: colors.cardBg,
-                        borderWidth: 4,
-                    }]
+                    datasets: [{ data: [0, 0, 0], backgroundColor: [colors.primary, colors.good, colors.bad], borderColor: colors.cardBg, borderWidth: 4 }]
                 },
                 options: {
                     responsive: true, maintainAspectRatio: false,
@@ -551,20 +488,12 @@
                 }
             });
             
-            // Volume Line Chart
             const volumeCtx = document.getElementById('ticketVolumeChart').getContext('2d');
             ticketVolumeChartInstance = new Chart(volumeCtx, {
                 type: 'line',
                 data: {
-                    labels: [], // Will be generated
-                    datasets: [{
-                        label: 'Tickets Created',
-                        data: ticketVolumeData,
-                        borderColor: colors.primary,
-                        backgroundColor: `rgba(${colors.primaryRgb}, 0.2)`,
-                        fill: true,
-                        tension: 0.4
-                    }]
+                    labels: [],
+                    datasets: [{ label: 'Tickets Created', data: ticketVolumeData, borderColor: colors.primary, backgroundColor: `rgba(${colors.primaryRgb}, 0.2)`, fill: true, tension: 0.4 }]
                 },
                 options: {
                     responsive: true, maintainAspectRatio: false,
@@ -575,24 +504,23 @@
                     plugins: { legend: { display: false } }
                 }
             });
-            updateTicketVolumeChart(null, true); // Initial setup for labels
+            updateTicketVolumeChart(null, true);
         }
 
         function updateTicketStatusChart(active, completed, ended) {
+            if (!ticketStatusChartInstance) return;
             ticketStatusChartInstance.data.datasets[0].data = [active, completed, ended];
             ticketStatusChartInstance.update();
         }
 
         function updateTicketVolumeChart(newRecord, shiftOnly = false) {
+            if (!ticketVolumeChartInstance) return;
             if (shiftOnly) {
                 ticketVolumeData.shift();
                 ticketVolumeData.push(0);
             } else if (newRecord) {
-                const startTime = new Date(newRecord.start_time);
-                const now = new Date();
-                if ((now - startTime) < (TICKET_VOLUME_BUCKET_MINUTES * 60 * 1000)) {
-                    ticketVolumeData[ticketVolumeData.length - 1]++;
-                }
+                // This logic correctly places the new ticket in the last bucket.
+                ticketVolumeData[ticketVolumeData.length - 1]++;
             }
 
             const labels = [];
@@ -625,7 +553,7 @@
                 <div class="log-icon ${type}">${icon}</div>
                 <div>
                     <div class="log-message">${message}</div>
-                    <div class="log-timestamp">${new Date().toLocaleString('en-GB', { timeZone: EGYPT_TIMEZONE })}</div>
+                    <div class="log-timestamp">${new Date().toLocaleString('en-GB', { timeZone: EGYPT_TIMEZONE, hour: '2-digit', minute:'2-digit', second: '2-digit' })}</div>
                 </div>
             `;
             activityLogList.prepend(logItem);
