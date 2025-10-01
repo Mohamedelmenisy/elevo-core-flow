@@ -49,7 +49,7 @@
             max-width: none;
         }
         
-        #agentScratchpad {
+        #agentScratchpad, #editNoteTextarea {
             width: 100%;
             min-height: 150px;
             background-color: var(--input-bg-color);
@@ -62,7 +62,7 @@
             resize: vertical;
             transition: border-color var(--transition-speed-fast) ease, box-shadow var(--transition-speed-fast) ease;
         }
-        #agentScratchpad:focus {
+        #agentScratchpad:focus, #editNoteTextarea:focus {
             outline: none;
             border-color: var(--primary-color);
             box-shadow: 0 0 0 2px rgba(var(--primary-color-rgb), 0.25);
@@ -170,14 +170,15 @@
             z-index: 1000;
             opacity: 0;
             visibility: hidden;
-            transition: opacity 0.3s ease, visibility 0.3s ease;
+            transition: opacity 0.3s ease, visibility 0s 0.3s;
         }
         .modal-overlay.visible {
             opacity: 1;
             visibility: visible;
+            transition-delay: 0s;
         }
         
-        .modal-content {
+        .modal-content-container {
             background-color: var(--card-bg-color);
             padding: 2rem;
             border-radius: var(--border-radius-lg);
@@ -187,26 +188,19 @@
             transform: scale(0.95);
             transition: transform 0.3s ease;
         }
-        .modal-overlay.visible .modal-content {
+        .modal-overlay.visible .modal-content-container {
             transform: scale(1);
         }
 
-        .modal-content h3 {
+        .modal-content-container h3 {
             margin-top: 0;
             margin-bottom: 1rem;
             font-size: 1.4em;
         }
-        .modal-content p {
+        .modal-content-container p {
             margin-bottom: 1.5rem;
             color: var(--text-color-light);
             line-height: 1.6;
-        }
-
-        #editNoteTextarea {
-            width: 100%;
-            min-height: 180px;
-            margin-bottom: 1rem;
-            resize: vertical;
         }
         
         .modal-actions {
@@ -285,7 +279,7 @@
         }
         .progress-bar {
             height: 100%;
-            width: 75%;
+            width: 0%; /* Start at 0 */
             background-color: var(--accent-color);
             border-radius: 6px;
             transition: width 0.5s ease-in-out;
@@ -463,16 +457,16 @@
         
         <!-- START: NEW FOOTER -->
         <footer class="app-footer">
-            <p>© 2025 Mohamed Elmenisy - Elevo Core. All rights reserved.</p>
+            <p>© <span id="currentYear"></span> Mohamed Elmenisy - Elevo Core. All rights reserved.</p>
         </footer>
         <!-- END: NEW FOOTER -->
     </div>
 
     <!-- START: MODALS -->
     <div id="editNoteModal" class="modal-overlay">
-        <div class="modal-content">
+        <div class="modal-content-container">
             <h3>Edit Note</h3>
-            <textarea id="editNoteTextarea" class="input-field" placeholder="Edit your note..."></textarea>
+            <textarea id="editNoteTextarea" placeholder="Edit your note..."></textarea>
             <div class="modal-actions">
                 <button id="cancelEditBtn" class="action-button secondary-button">Cancel</button>
                 <button id="saveChangesBtn" class="action-button primary-button">Save Changes</button>
@@ -481,7 +475,7 @@
     </div>
 
     <div id="deleteConfirmModal" class="modal-overlay">
-        <div class="modal-content">
+        <div class="modal-content-container">
             <h3>Confirm Deletion</h3>
             <p>Are you sure you want to permanently delete this note? This action cannot be undone.</p>
             <div class="modal-actions">
@@ -508,6 +502,9 @@
         const logoutButton = document.getElementById('logoutButton');
         const agentGreeting = document.getElementById('agentGreeting');
         const kpiTotalCalls = document.getElementById('kpiTotalCalls');
+        const kpiAvgTime = document.getElementById('kpiAvgTime');
+        const dailyTargetPercentage = document.getElementById('dailyTargetPercentage');
+        const dailyTargetProgressBar = document.getElementById('dailyTargetProgressBar');
         const searchInput = document.getElementById('searchInput'), qualityFilter = document.getElementById('qualityFilter'),
               startDateFilter = document.getElementById('startDateFilter'), endDateFilter = document.getElementById('endDateFilter'),
               resetFiltersBtn = document.getElementById('resetFiltersBtn');
@@ -516,6 +513,7 @@
               noBadCallsMessage = document.getElementById('noBadCallsMessage');
         const paginationControls = document.getElementById('paginationControls');
         const exportDataBtn = document.getElementById('exportDataBtn');
+        document.getElementById('currentYear').textContent = new Date().getFullYear();
         
         // Scratchpad & Notes Elements
         const agentScratchpad = document.getElementById('agentScratchpad');
@@ -544,6 +542,7 @@
         const NOTES_PER_PAGE = 5;
         let noteToEditTimestamp = null;
         let noteToDeleteTimestamp = null;
+        const DAILY_TICKET_TARGET = 20; // Example target
 
         // ** START: Notes Functions **
         const NOTES_STORAGE_KEY = 'agentSavedNotes';
@@ -596,7 +595,6 @@
                 const formattedDate = noteDate.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
                 const formattedTime = noteDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
                 
-                // Sanitize text to prevent HTML injection
                 const sanitizedText = document.createElement('div');
                 sanitizedText.innerText = note.text;
                 
@@ -633,7 +631,7 @@
 
         function saveCurrentNote() {
             const noteText = agentScratchpad.value.trim();
-            if (!noteText) return; // Don't save empty notes
+            if (!noteText) return;
 
             const notes = JSON.parse(localStorage.getItem(NOTES_STORAGE_KEY) || '[]');
             const newNote = {
@@ -643,8 +641,8 @@
             notes.push(newNote);
             localStorage.setItem(NOTES_STORAGE_KEY, JSON.stringify(notes));
 
-            agentScratchpad.value = ''; // Clear the textarea
-            currentNotesPage = 1; // Go to first page to see the new note
+            agentScratchpad.value = '';
+            currentNotesPage = 1;
             renderSavedNotes(); 
         }
 
@@ -660,10 +658,8 @@
 
         function deleteNote(timestamp) {
             let notes = JSON.parse(localStorage.getItem(NOTES_STORAGE_KEY) || '[]');
-            const originalLength = notes.length;
             notes = notes.filter(note => note.timestamp !== timestamp);
             
-            // Adjust current page if the last item on the last page was deleted
             const totalPages = Math.ceil(notes.length / NOTES_PER_PAGE);
             if(currentNotesPage > totalPages) {
                 currentNotesPage = totalPages || 1;
@@ -673,7 +669,6 @@
             renderSavedNotes();
         }
         
-        // Modal Handling
         function openEditModal(timestamp) {
             const notes = JSON.parse(localStorage.getItem(NOTES_STORAGE_KEY) || '[]');
             const note = notes.find(n => n.timestamp === timestamp);
@@ -716,7 +711,7 @@
             userNameSpan.textContent = currentUser.name;
             agentGreeting.textContent = `Welcome, ${currentUser.name}!`;
             document.getElementById('userInfo').style.display = 'flex';
-            renderSavedNotes(); // Render saved notes on initial load
+            renderSavedNotes();
         }
 
         async function loadAgentData() {
@@ -741,7 +736,7 @@
 
             filteredCalls = allUserCalls.filter(call => {
                 const callDate = new Date(call.start_time);
-                const matchesSearch = !searchTerm || call.scenario?.title.toLowerCase().includes(searchTerm);
+                const matchesSearch = !searchTerm || (call.scenario?.title || '').toLowerCase().includes(searchTerm);
                 const matchesQuality = !quality || call.call_quality === quality;
                 const matchesStartDate = !startDate || callDate >= new Date(startDate);
                 const matchesEndDate = !endDate || callDate <= new Date(new Date(endDate).setHours(23, 59, 59, 999));
@@ -764,7 +759,25 @@
         }
 
         function updateStats(calls) {
+            const today = new Date().toLocaleDateString();
+            const todaysCalls = calls.filter(c => new Date(c.start_time).toLocaleDateString() === today);
+
             kpiTotalCalls.textContent = calls.length;
+
+            const totalDuration = calls.reduce((acc, call) => acc + (call.duration || 0), 0);
+            if (calls.length > 0) {
+                const avgDuration = Math.round(totalDuration / calls.length);
+                const avgMins = Math.floor(avgDuration / 60);
+                const avgSecs = avgDuration % 60;
+                kpiAvgTime.textContent = `${avgMins}m ${avgSecs}s`;
+            } else {
+                kpiAvgTime.textContent = '0m 0s';
+            }
+            
+            const targetPercent = Math.min(100, Math.round((todaysCalls.length / DAILY_TICKET_TARGET) * 100));
+            dailyTargetPercentage.textContent = `${targetPercent}%`;
+            dailyTargetProgressBar.style.width = `${targetPercent}%`;
+
             document.getElementById('achTicketsCompleted').textContent = calls.filter(c => c.completed).length;
         }
 
@@ -820,47 +833,40 @@
         }
         
         function renderCharts(calls) {
-            const colors = getChartColors();
             const FONT_SIZE_TITLE = 16;
             const FONT_SIZE_LEGEND = 13;
-            const FONT_SIZE_AXIS = 12;
-            
-            Chart.defaults.color = colors.textColor;
-            Chart.defaults.font.family = "'Poppins', sans-serif";
-            
-            const qualityLabels = calls.map(c => new Date(c.start_time).toLocaleDateString('en-US', {month: 'short', day: 'numeric'})).reverse();
-            const qualityData = calls.map(c => (c.call_quality === 'Good' ? 100 : (c.call_quality === 'Bad' ? 0 : 50))).reverse();
             
             if (qualityChartInstance) qualityChartInstance.destroy();
+            const qualityCounts = calls.reduce((acc, call) => {
+                const quality = call.call_quality || 'N/A';
+                acc[quality] = (acc[quality] || 0) + 1;
+                return acc;
+            }, {});
+
             qualityChartInstance = new Chart(qualityChartCanvas, {
-                type: 'line', 
+                type: 'pie', 
                 data: { 
-                    labels: qualityLabels, 
+                    labels: ['Good', 'Bad', 'N/A'],
                     datasets: [{ 
-                        label: 'Good Call %', 
-                        data: qualityData, 
-                        borderColor: colors.primary, 
-                        backgroundColor: `rgba(var(--primary-color-rgb), 0.2)`, 
-                        fill: true, 
-                        tension: 0.4 
+                        data: [qualityCounts['Good'] || 0, qualityCounts['Bad'] || 0, qualityCounts['N/A'] || 0],
+                        backgroundColor: ['var(--success-color)', 'var(--danger-color)', 'var(--secondary-color)'],
+                        borderColor: 'var(--card-bg-color)',
+                        borderWidth: 4,
+                        hoverOffset: 8
                     }] 
                 },
                 options: {
                     responsive: true, maintainAspectRatio: false,
-                    scales: {
-                        y: { beginAtZero: true, max: 100, ticks: { font: { size: FONT_SIZE_AXIS } } },
-                        x: { ticks: { font: { size: FONT_SIZE_AXIS } } }
-                    },
                     plugins: { 
-                        legend: { display: true, labels: { font: { size: FONT_SIZE_LEGEND } } }, 
-                        title: { display: true, text: 'Your Quality Over Time', font: { size: FONT_SIZE_TITLE } } 
+                        legend: { position: 'bottom', labels: { color: 'var(--text-color)', font: { size: FONT_SIZE_LEGEND } } }, 
+                        title: { display: true, text: 'Your Call Quality Breakdown', color: 'var(--text-color)', font: { size: FONT_SIZE_TITLE } } 
                     }
                 }
             });
 
             const badCalls = calls.filter(c => c.call_quality === 'Bad' && c.quality_reason);
             const showBadChart = badCalls.length > 0;
-            badReasonsChartCanvas.parentElement.style.display = showBadChart ? 'block' : 'none';
+            badReasonsChartCanvas.style.display = showBadChart ? 'block' : 'none';
             noBadCallsMessage.style.display = !showBadChart ? 'block' : 'none';
 
             if(badReasonsChartInstance) badReasonsChartInstance.destroy();
@@ -872,15 +878,15 @@
                         labels: Object.keys(reasonCounts), 
                         datasets: [{ 
                             data: Object.values(reasonCounts), 
-                            backgroundColor: [colors.bad, colors.accent4, colors.na, colors.accent2], 
-                            hoverOffset: 4, borderColor: colors.cardBg, borderWidth: 3 
+                            backgroundColor: ['#ef4444', '#f59e0b', '#6b7280', '#3b82f6'], 
+                            hoverOffset: 4, borderColor: 'var(--card-bg-color)', borderWidth: 3 
                         }] 
                     },
                     options: { 
                         responsive: true, maintainAspectRatio: false, 
                         plugins: { 
-                            legend: { position: 'bottom', labels: { font: { size: FONT_SIZE_LEGEND } } }, 
-                            title: { display: true, text: "Reasons for 'Bad' Calls", font: { size: FONT_SIZE_TITLE } }
+                            legend: { position: 'bottom', labels: { color: 'var(--text-color)', font: { size: FONT_SIZE_LEGEND } } }, 
+                            title: { display: true, text: "Reasons for 'Bad' Calls", color: 'var(--text-color)', font: { size: FONT_SIZE_TITLE } }
                         } 
                     }
                 });
@@ -893,7 +899,6 @@
             resetFiltersBtn.addEventListener('click', resetFilters);
             exportDataBtn.addEventListener('click', () => { alert('Exporting data...'); });
             
-            // Listeners for Scratchpad and Notes
             saveNoteBtn.addEventListener('click', saveCurrentNote);
             cancelNoteBtn.addEventListener('click', () => { agentScratchpad.value = ''; });
             
@@ -901,53 +906,26 @@
                 const editButton = e.target.closest('.edit-note-btn');
                 const deleteButton = e.target.closest('.delete-note-btn');
                 
-                if (editButton) {
-                    const timestamp = editButton.dataset.timestamp;
-                    if (timestamp) openEditModal(timestamp);
-                }
-                
-                if (deleteButton) {
-                    const timestamp = deleteButton.dataset.timestamp;
-                    if (timestamp) openDeleteConfirmModal(timestamp);
-                }
+                if (editButton) openEditModal(editButton.dataset.timestamp);
+                if (deleteButton) openDeleteConfirmModal(deleteButton.dataset.timestamp);
             });
             
-            // Modal Listeners
             cancelEditBtn.addEventListener('click', closeEditModal);
             saveChangesBtn.addEventListener('click', () => {
                 const newText = editNoteTextarea.value.trim();
-                if(noteToEditTimestamp && newText) {
-                    updateNote(noteToEditTimestamp, newText);
-                }
+                if(noteToEditTimestamp && newText) updateNote(noteToEditTimestamp, newText);
                 closeEditModal();
             });
             
             cancelDeleteBtn.addEventListener('click', closeDeleteConfirmModal);
             confirmDeleteBtn.addEventListener('click', () => {
-                if(noteToDeleteTimestamp) {
-                    deleteNote(noteToDeleteTimestamp);
-                }
+                if(noteToDeleteTimestamp) deleteNote(noteToDeleteTimestamp);
                 closeDeleteConfirmModal();
             });
             
-            // Close modal if clicking on the overlay
-            editNoteModal.addEventListener('click', (e) => { if(e.target === editNoteModal) closeEditModal(); });
-            deleteConfirmModal.addEventListener('click', (e) => { if(e.target === deleteConfirmModal) closeDeleteConfirmModal(); });
-        }
-
-        function getChartColors() {
-            const style = getComputedStyle(document.documentElement);
-            return {
-                primary: style.getPropertyValue('--primary-color').trim(),
-                primaryRgb: style.getPropertyValue('--primary-color-rgb').trim(),
-                bad: style.getPropertyValue('--danger-color').trim(),
-                accent4: '#E74C3C',
-                na: '#6b7280',
-                accent2: '#3498DB',
-                textColor: style.getPropertyValue('--text-color').trim(),
-                cardBg: style.getPropertyValue('--card-bg-color').trim(),
-                tooltipBorder: style.getPropertyValue('--border-color').trim(),
-            };
+            [editNoteModal, deleteConfirmModal].forEach(modal => {
+                modal.addEventListener('click', (e) => { if(e.target === modal) e.target.classList.remove('visible'); });
+            });
         }
 
         if (supabase) initializePortal();
