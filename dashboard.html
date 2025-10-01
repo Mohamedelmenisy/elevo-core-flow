@@ -88,6 +88,21 @@
                 <div class="stats-grid" id="statsGrid">
                     <div class="stat-card">
                         <div class="stat-card-content"><h3>Total Tickets</h3><p id="totalCalls">0</p><span class="stat-period" id="statsPeriod"></span></div>
+        <!-- Quick KPIs + Top Agents -->
+        <div class="charts-row" style="margin-top:0.8rem;">
+          <div class="top-agents-box">
+            <h3 style="margin:0 0 0.6rem 0;">Top 5 Agents (Today)</h3>
+            <ul class="top-agents-list" id="topAgentsList">
+              <li>No data yet <span>—</span></li>
+            </ul>
+          </div>
+          <div class="quick-kpis">
+            <div class="kpi"><div class="label">Fastest Ticket</div><div class="value" id="kpi-fastest">—</div></div>
+            <div class="kpi"><div class="label">Longest Ticket</div><div class="value" id="kpi-longest">—</div></div>
+            <div class="kpi"><div class="label">Top Scenario</div><div class="value" id="kpi-top-scenario">—</div></div>
+          </div>
+        </div>
+        
                     </div>
                     <div class="stat-card">
                         <div class="stat-card-content"><h3>Avg. Time</h3><p id="avgCallDuration">0m 0s</p><span class="stat-period" id="statsPeriodDuration"></span></div>
@@ -616,5 +631,53 @@
         // Initial call
         if(supabase) initializeDashboard();
     </script>
+
+<script>
+(function(){
+  const safe = typeof supabase !== 'undefined';
+  // Populate placeholders with safe defaults or from views if available
+  async function fetchKpis() {
+    try {
+      if (!safe) {
+        // default demo values when supabase missing
+        document.getElementById('kpi-fastest')?.textContent = '0m 0s';
+        document.getElementById('kpi-longest')?.textContent = '0m 0s';
+        document.getElementById('kpi-top-scenario')?.textContent = '-';
+        document.getElementById('topAgentsList')?.innerHTML = '<li>No data yet <span>—</span></li>';
+        document.getElementById('delayedList')?.innerHTML = '<li>No delayed tickets.</li>';
+        document.getElementById('ins-total')?.textContent = '0';
+        document.getElementById('ins-avg')?.textContent = '0m 0s';
+        document.getElementById('ins-completion')?.textContent = '0%';
+        return;
+      }
+      // Attempt to call views if supabase exists
+      const { data: kpi } = await supabase.from('kpi_today').select('*').limit(1).single();
+      if (kpi) {
+        document.getElementById('ins-total')?.textContent = kpi.tickets_started_today || 0;
+        document.getElementById('ins-completion')?.textContent = (kpi.completion_rate || 0) + '%';
+        document.getElementById('ins-avg')?.textContent = (kpi.avg_handling_time_minutes || 0) + 'm';
+        document.getElementById('kpi-fastest')?.textContent = '—';
+        document.getElementById('kpi-longest')?.textContent = '—';
+      }
+      // top agents
+      const { data: top } = await supabase.rpc('top_agents_today'); // optional if exists
+      if (top && top.length) {
+        const html = top.slice(0,5).map(t => `<li>${t.agent_name}<span>${t.count}</span></li>`).join('');
+        document.getElementById('topAgentsList').innerHTML = html;
+      }
+      // delayed
+      const { data: delayed } = await supabase.from('delayed_tickets').select('*');
+      if (delayed && delayed.length) {
+        document.getElementById('delayedList').innerHTML = delayed.map(d=>`<li>${d.agent_name} — ${Math.floor(d.seconds_open/60)}m ${d.seconds_open%60}s</li>`).join('');
+      }
+    } catch(e){
+      console.warn('KPI placeholders error', e);
+    }
+  }
+  // call once
+  fetchKpis();
+})();
+</script>
+
 </body>
 </html>
