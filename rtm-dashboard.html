@@ -171,17 +171,18 @@
 
                     <div id="ticketVolumeChartContainer" class="chart-container">
                         <h2>Ticket Volume (Last Hour)</h2>
-                        <canvas id="mainTicketVolumeCanvas" style="display: none;"></canvas> <!-- Original canvas hidden, new ones below -->
-                        <div class="charts-row" style="margin-top:1rem;">
-                          <div class="live-kpi-graph">
-                            <h4 style="margin:0 0 0.6rem 0;">Live Active Tickets (Last 5 min)</h4>
-                            <canvas id="liveKpiGraph"></canvas>
-                          </div>
-                          <div class="delayed-box">
-                            <h4 style="margin:0 0 0.6rem 0;">Delayed Tickets (over 3 min)</h4>
-                            <ul id="delayedList" style="list-style:none;padding:0;margin:0;"><li>No delayed tickets.</li></ul>
-                          </div>
-                        </div>
+                        <canvas id="mainTicketVolumeCanvas"></canvas>
+        <div class="charts-row" style="margin-top:1rem;">
+          <div class="live-kpi-graph">
+            <h4 style="margin:0 0 0.6rem 0;">Live Active Tickets (Last 5 min)</h4>
+            <canvas id="liveKpiGraph"></canvas>
+          </div>
+          <div class="delayed-box">
+            <h4 style="margin:0 0 0.6rem 0;">Delayed Tickets (over 3 min)</h4>
+            <ul id="delayedList" style="list-style:none;padding:0;margin:0;"><li>No delayed tickets.</li></ul>
+          </div>
+        </div>
+        
                     </div>
 
                     <div class="live-tickets-container chart-container">
@@ -245,41 +246,66 @@
         const completionRateTodayEl = document.getElementById('completionRateToday');
 
         // Charts
-        let ticketStatusChartInstance, liveKpiChartInstance;
+        let ticketStatusChartInstance, ticketVolumeChartInstance;
+        const TICKET_VOLUME_TIMESPAN_MINUTES = 60;
+        const TICKET_VOLUME_BUCKET_MINUTES = 2;
+        let ticketVolumeData = new Array(TICKET_VOLUME_TIMESPAN_MINUTES / TICKET_VOLUME_BUCKET_MINUTES).fill(0);
 
         // State
         let currentUser = null;
         let liveTickets = new Map();
-        let liveStatsInterval;
+        let dailyStats = { ticketsToday: 0, completedToday: 0, endedToday: 0 };
+        let liveStatsInterval, periodicShiftInterval;
         const EGYPT_TIMEZONE = 'Africa/Cairo';
 
+        // Timezone formatting function
         function formatDateTimeEgypt(dateString) {
             if (!dateString) return 'N/A';
             const date = new Date(dateString);
-            return date.toLocaleTimeString('en-GB', { timeZone: EGYPT_TIMEZONE, hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+            return date.toLocaleTimeString('en-GB', {
+                timeZone: EGYPT_TIMEZONE, hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true
+            });
         }
 
         async function initializeDashboard() {
             if (!supabase) return;
-            const { data: { session } } = await supabase.auth.getSession();
-            if (!session) { window.location.replace('login.html'); return; }
+            const { data: { session }, error } = await supabase.auth.getSession();
+            if (error || !session) {
+                window.location.replace('login.html');
+                return;
+            }
 
             const storedUserData = JSON.parse(localStorage.getItem('elevoCoreUserData'));
-            currentUser = storedUserData && storedUserData.id === session.user.id ? storedUserData : 
-                (await supabase.from('users').select('name, is_admin').eq('id', session.user.id).single()).data;
+            if (storedUserData && storedUserData.id === session.user.id) {
+                currentUser = storedUserData;
+            } else {
+                const { data: profile } = await supabase.from('users').select('name, is_admin').eq('id', session.user.id).single();
+                currentUser = {
+                    id: session.user.id, email: session.user.email,
+                    name: profile?.name || session.user.email, isAdmin: profile?.is_admin || false
+                };
+                localStorage.setItem('elevoCoreUserData', JSON.stringify(currentUser));
+            }
             
-            if (!currentUser) { window.location.replace('login.html'); return; }
-            localStorage.setItem('elevoCoreUserData', JSON.stringify({id: session.user.id, ...currentUser}));
-
             appContainerContent.style.display = 'flex';
-            if (!currentUser.is_admin) { showAccessDenied(); return; }
+            if (!currentUser.isAdmin) {
+                showAccessDenied();
+                return;
+            }
 
             setupUI();
             initializeCharts();
-            await fetchAllInitialData();
+            await fetchInitialData();
             setupRealtimeSubscription();
             
-            liveStatsInterval = setInterval(updateLiveDurationsAndStats, 1000);
+            liveStatsInterval = setInterval(() => {
+                updateLiveDurationsAndStats();
+                updateDelayedTicketsList();
+            }, 1000);
+            
+            periodicShiftInterval = setInterval(() => {
+                updateTicketVolumeChart(null, true); 
+            }, TICKET_VOLUME_BUCKET_MINUTES * 60 * 1000);
 
             authLoadingDiv.style.display = 'none';
             dashboardContentDiv.style.display = 'block';
@@ -295,59 +321,126 @@
         function setupUI() {
             userNameSpan.textContent = currentUser.name;
             document.getElementById('userInfo').style.display = 'flex';
-            if(currentUser.is_admin) {
+            if(currentUser.isAdmin) {
                 if (adminDashboardLink) adminDashboardLink.style.display = 'inline-block';
             }
             if (agentPortalLink) agentPortalLink.style.display = 'inline-block';
         }
 
-        async function fetchAllInitialData() {
-            try {
-                const [kpiRes, liveTicketsRes, delayedRes, activityRes, completedTodayRes] = await Promise.all([
-                    supabase.from('kpi_today').select('*').single(),
-                    supabase.from('live_tickets').select('*'),
-                    supabase.from('delayed_tickets').select('*'),
-                    supabase.from('activity_log_latest').select('*'),
-                    supabase.from('completed_tickets').select('id', { count: 'exact' })
-                ]);
-
-                // Update KPIs
-                const kpi = kpiRes.data;
-                ticketsTodayEl.textContent = kpi?.tickets_started_today || 0;
-                completionRateTodayEl.textContent = `${kpi?.completion_rate || 0}%`;
-
-                // Update Live Tickets
-                liveTickets.clear();
-                liveTicketsRes.data.forEach(t => liveTickets.set(t.id, t));
-                renderLiveTickets();
-
-                // Update Delayed Tickets
-                renderDelayedTickets(delayedRes.data);
-
-                // Update Activity Log
-                renderActivityLog(activityRes.data);
-                
-                // Update Status Chart
-                updateTicketStatusChart(liveTickets.size, completedTodayRes.count);
-
-            } catch(e) {
-                console.error("Failed to fetch initial data:", e);
-                // You can add a user-facing error message here
+        async function fetchInitialData() {
+            // MODIFIED: Use the live_tickets view for initial load of active tickets.
+            const { data: liveData, error: liveError } = await supabase.from('live_tickets').select('*');
+            if (liveError) {
+                console.error("Error fetching initial live tickets:", liveError);
+                return;
             }
+            liveData.forEach(ticket => liveTickets.set(ticket.id, ticket));
+            
+            renderLiveTickets();
+            updateDelayedTicketsList();
+            await fetchTodayStatsFromView();
+            await fetchVolumeChartData();
+        }
+
+        async function fetchVolumeChartData() {
+            const oneHourAgo = new Date(Date.now() - TICKET_VOLUME_TIMESPAN_MINUTES * 60 * 1000).toISOString();
+            const { data, error } = await supabase.from('call_sessions').select('id, start_time').gte('start_time', oneHourAgo);
+            if (error) { console.error("Error fetching volume data:", error); return; }
+            const now = new Date();
+            ticketVolumeData = new Array(TICKET_VOLUME_TIMESPAN_MINUTES / TICKET_VOLUME_BUCKET_MINUTES).fill(0);
+            data.forEach(ticket => {
+                const minutesAgo = (now - new Date(ticket.start_time)) / 60000;
+                if (minutesAgo < TICKET_VOLUME_TIMESPAN_MINUTES) {
+                    const bucketIndex = ticketVolumeData.length - 1 - Math.floor(minutesAgo / TICKET_VOLUME_BUCKET_MINUTES);
+                    if (bucketIndex >= 0 && bucketIndex < ticketVolumeData.length) ticketVolumeData[bucketIndex]++;
+                }
+            });
+            updateTicketVolumeChart(null, false);
+        }
+
+        // MODIFIED: New function to get stats from kpi_today view for accuracy and performance.
+        async function fetchTodayStatsFromView() {
+            const { data: kpi, error } = await supabase.from('kpi_today').select('*').limit(1).single();
+            if (error) {
+                console.error("Error fetching KPI data from view:", error);
+                return;
+            }
+            if (kpi) {
+                dailyStats.ticketsToday = kpi.tickets_started_today || 0;
+                const finishedTickets = kpi.tickets_ended_today || 0;
+                const completionRate = kpi.completion_rate || 0;
+                dailyStats.completedToday = Math.round(finishedTickets * (completionRate / 100));
+                dailyStats.endedToday = finishedTickets - dailyStats.completedToday;
+                
+                ticketsTodayEl.textContent = dailyStats.ticketsToday;
+                completionRateTodayEl.textContent = `${completionRate.toFixed(0)}%`;
+            }
+            updateTicketStatusChart(liveTickets.size, dailyStats.completedToday, dailyStats.endedToday);
+        }
+
+        function setupRealtimeSubscription() {
+            supabase
+                .channel('public:call_sessions')
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'call_sessions' }, payload => {
+                    handleRealtimeUpdate(payload);
+                })
+                .subscribe();
+        }
+
+        // MODIFIED: Efficient real-time handler that updates state directly.
+        async function handleRealtimeUpdate(payload) {
+            const { eventType, new: newRecord, old: oldRecord } = payload;
+            const recordId = newRecord.id || oldRecord?.id;
+            if (!recordId) return;
+            
+            if (eventType === 'INSERT') {
+                const { data, error } = await supabase.from('live_tickets').select('*').eq('id', recordId).single();
+                if (!error && data) {
+                    liveTickets.set(data.id, data);
+                    addActivityLog('created', data);
+                    updateTicketVolumeChart(newRecord, false);
+                    dailyStats.ticketsToday++;
+                    ticketsTodayEl.textContent = dailyStats.ticketsToday;
+                }
+            } else if (eventType === 'UPDATE') {
+                if (newRecord.end_time && oldRecord && !oldRecord.end_time && liveTickets.has(recordId)) {
+                    const endedTicket = { ...liveTickets.get(recordId), ...newRecord };
+                    liveTickets.delete(recordId);
+                    if (newRecord.completed) {
+                        dailyStats.completedToday++;
+                        addActivityLog('completed', endedTicket);
+                    } else {
+                        dailyStats.endedToday++;
+                        addActivityLog('ended', endedTicket);
+                    }
+                    const finishedTickets = dailyStats.completedToday + dailyStats.endedToday;
+                    completionRateTodayEl.textContent = finishedTickets > 0 ? `${Math.round((dailyStats.completedToday / finishedTickets) * 100)}%` : 'N/A';
+                }
+            }
+            
+            renderLiveTickets();
+            updateTicketStatusChart(liveTickets.size, dailyStats.completedToday, dailyStats.endedToday);
         }
         
-        function setupRealtimeSubscription() {
-            const channel = supabase.channel('public:call_sessions');
-            channel.on('postgres_changes', { event: '*', schema: 'public', table: 'call_sessions' }, async (payload) => {
-                // Instead of complex logic, just refetch all data. It's fast with views.
-                // This is simpler and less prone to sync errors.
-                await fetchAllInitialData();
-            }).subscribe();
+        function updateDelayedTicketsList() {
+            if (!delayedList) return;
+            let delayedHtml = '';
+            let delayedCount = 0;
+            liveTickets.forEach(ticket => {
+                const duration = Math.floor((new Date() - new Date(ticket.start_time)) / 1000);
+                if (duration > 180) { // 3 minutes threshold
+                    delayedCount++;
+                    delayedHtml += `<li>${ticket.agent_name} — ${Math.floor(duration/60)}m ${duration%60}s</li>`;
+                }
+            });
+            delayedList.innerHTML = delayedCount === 0 ? '<li>No delayed tickets.</li>' : delayedHtml;
         }
 
         function renderLiveTickets() {
             liveTicketsList.innerHTML = '';
             noLiveTicketsMessage.style.display = liveTickets.size === 0 ? 'block' : 'none';
+            if (liveTickets.size === 0) return;
+
             const sortedTickets = Array.from(liveTickets.values()).sort((a,b) => new Date(b.start_time) - new Date(a.start_time));
             sortedTickets.forEach(ticket => {
                 const item = document.createElement('div');
@@ -356,7 +449,7 @@
                 item.innerHTML = `
                     <div><div class="agent-name">${ticket.agent_name || 'Unknown'}</div></div>
                     <div><div class="scenario-title">${ticket.scenario_title || 'Loading...'}</div></div>
-                    <div><div class="start-time">${formatDateTimeEgypt(ticket.start_time_egypt)}</div></div>
+                    <div><div class="start-time">${formatDateTimeEgypt(ticket.start_time)}</div></div>
                     <div><div class="duration">0m 0s</div></div>
                 `;
                 liveTicketsList.appendChild(item);
@@ -364,96 +457,93 @@
             updateLiveDurationsAndStats();
         }
 
-        function renderDelayedTickets(delayedData) {
-            if (!delayedData || delayedData.length === 0) {
-                delayedList.innerHTML = '<li>No delayed tickets.</li>';
-                return;
-            }
-            delayedList.innerHTML = delayedData.map(d => `<li>${d.agent_name} — ${Math.floor(d.seconds_open/60)}m ${d.seconds_open%60}s</li>`).join('');
-        }
-
-        function renderActivityLog(activityData) {
-            activityLogList.innerHTML = '';
-            if (!activityData || activityData.length === 0) {
-                activityLogList.innerHTML = '<p style="text-align: center; padding: 1rem;">No activity yet.</p>';
-                return;
-            }
-            activityData.forEach(log => addActivityLog(log.event_type, log));
-        }
-
-
         function updateLiveDurationsAndStats() {
             let totalDuration = 0;
+            activeTicketsEl.textContent = liveTickets.size;
             if (liveTickets.size === 0) {
-                 activeTicketsEl.textContent = 0;
                  avgActiveDurationEl.textContent = '0m 0s';
                  return;
             }
             liveTickets.forEach(ticket => {
                 const elem = document.getElementById(`ticket-${ticket.id}`);
-                const startTime = new Date(ticket.start_time).getTime();
-                if (elem && startTime) {
-                    const durationMs = Date.now() - startTime;
-                    totalDuration += durationMs;
-                    const mins = Math.floor(durationMs / 60000);
-                    const secs = Math.floor((durationMs % 60000) / 1000);
-                    elem.querySelector('.duration').textContent = `${mins}m ${secs}s`;
+                const durationMs = Date.now() - new Date(ticket.start_time).getTime();
+                totalDuration += durationMs;
+                if (elem) {
+                    elem.querySelector('.duration').textContent = `${Math.floor(durationMs / 60000)}m ${Math.floor((durationMs % 60000) / 1000)}s`;
                 }
             });
-            activeTicketsEl.textContent = liveTickets.size;
-            const avgDurationMs = totalDuration > 0 ? totalDuration / liveTickets.size : 0;
-            const avgMins = Math.floor(avgDurationMs / 60000);
-            const avgSecs = Math.floor((avgDurationMs % 60000) / 1000);
-            avgActiveDurationEl.textContent = `${avgMins}m ${avgSecs}s`;
+            const avgDurationMs = totalDuration / liveTickets.size;
+            avgActiveDurationEl.textContent = `${Math.floor(avgDurationMs / 60000)}m ${Math.floor((avgDurationMs % 60000) / 1000)}s`;
         }
         
         function initializeCharts() {
-            const statusCtx = document.getElementById('ticketStatusChart').getContext('2d');
-            ticketStatusChartInstance = new Chart(statusCtx, {
+            const colors = { good: '#4CAF50', bad: '#F44336', primary: '#4e8cff', cardBg: '#1f2937', text: '#f3f4f6', border: '#4b5563', primaryRgb: '78, 140, 255' };
+            ticketStatusChartInstance = new Chart(document.getElementById('ticketStatusChart').getContext('2d'), {
                 type: 'doughnut',
-                data: {
-                    labels: ['Active', 'Completed Today'],
-                    datasets: [{ data: [0, 0], backgroundColor: ['#4e8cff', '#22c55e'], borderColor: '#1f2937', borderWidth: 4 }]
-                },
-                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#f3f4f6' } } } }
+                data: { labels: ['Active', 'Completed Today', 'Ended Today'], datasets: [{ data: [0, 0, 0], backgroundColor: [colors.primary, colors.good, colors.bad], borderColor: colors.cardBg, borderWidth: 4 }] },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: colors.text, font: { size: 14 } } } } }
             });
-            
-            const kpiCtx = document.getElementById('liveKpiGraph').getContext('2d');
-            liveKpiChartInstance = new Chart(kpiCtx, { /* Chart config remains the same */
-                 type: 'line', data: { labels:[], datasets:[{label:'Tickets',data:[]}]}, options:{responsive:true}
+            ticketVolumeChartInstance = new Chart(document.getElementById('mainTicketVolumeCanvas').getContext('2d'), {
+                type: 'line',
+                data: { labels: [], datasets: [{ label: 'Tickets Created', data: ticketVolumeData, borderColor: colors.primary, backgroundColor: `rgba(${colors.primaryRgb}, 0.2)`, fill: true, tension: 0.4 }] },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    scales: { y: { ticks: { color: colors.text, font: { size: 14 }, stepSize: 1, beginAtZero: true }, grid: { color: colors.border } }, x: { ticks: { color: colors.text, font: { size: 14 } }, grid: { color: colors.border } } },
+                    plugins: { legend: { display: false } }
+                }
             });
+            updateTicketVolumeChart(null, true);
         }
 
-        function updateTicketStatusChart(active, completed) {
+        function updateTicketStatusChart(active, completed, ended) {
             if (!ticketStatusChartInstance) return;
-            ticketStatusChartInstance.data.datasets[0].data = [active, completed];
+            ticketStatusChartInstance.data.datasets[0].data = [active, completed, ended];
             ticketStatusChartInstance.update();
         }
         
-        function addActivityLog(type, log) {
+        function updateTicketVolumeChart(newRecord, shiftOnly = false) {
+            if (!ticketVolumeChartInstance) return;
+            if (shiftOnly) {
+                ticketVolumeData.shift();
+                ticketVolumeData.push(0);
+            } else if (newRecord) {
+                ticketVolumeData[ticketVolumeData.length - 1]++;
+            }
+            const labels = [];
+            const now = new Date();
+            for (let i = 0; i < ticketVolumeData.length; i++) {
+                const time = new Date(now.getTime() - (ticketVolumeData.length - 1 - i) * TICKET_VOLUME_BUCKET_MINUTES * 60 * 1000);
+                labels.push(time.toLocaleTimeString([], { timeZone: EGYPT_TIMEZONE, hour: '2-digit', minute: '2-digit' }));
+            }
+            ticketVolumeChartInstance.data.labels = labels;
+            ticketVolumeChartInstance.data.datasets[0].data = [...ticketVolumeData];
+            ticketVolumeChartInstance.update('none');
+        }
+
+        function addActivityLog(type, ticket) {
             const logItem = document.createElement('div');
             logItem.className = 'log-item';
-            
-            let icon, message, eventClass;
-            const agentName = log.agent_name || 'Unknown Agent';
-            const scenarioTitle = log.scenario_title || 'a ticket';
-
-            if (type.includes('start')) { icon = '🚀'; message = `<strong>${agentName}</strong> started: <em>${scenarioTitle}</em>`; eventClass = 'created'; }
-            else if (type.includes('complete')) { icon = '✅'; message = `<strong>${agentName}</strong> completed: <em>${scenarioTitle}</em>`; eventClass = 'completed'; }
-            else { icon = '❌'; message = `<strong>${agentName}</strong> ended: <em>${scenarioTitle}</em>`; eventClass = 'ended'; }
-
+            let icon, message;
+            const agentName = ticket.agent_name || 'Unknown Agent';
+            const scenarioTitle = ticket.scenario_title || 'a ticket';
+            switch(type) {
+                case 'created': icon = '🚀'; message = `<strong>${agentName}</strong> started: <em>${scenarioTitle}</em>`; break;
+                case 'completed': icon = '✅'; message = `<strong>${agentName}</strong> completed: <em>${scenarioTitle}</em>`; break;
+                case 'ended': icon = '❌'; message = `<strong>${agentName}</strong> ended: <em>${scenarioTitle}</em>`; break;
+            }
             logItem.innerHTML = `
-                <div class="log-icon ${eventClass}">${icon}</div>
+                <div class="log-icon ${type}">${icon}</div>
                 <div>
                     <div class="log-message">${message}</div>
-                    <div class="log-timestamp">${formatDateTimeEgypt(log.event_time_egypt)}</div>
+                    <div class="log-timestamp">${new Date().toLocaleString('en-GB', { timeZone: EGYPT_TIMEZONE, hour: '2-digit', minute:'2-digit', second: '2-digit', hour12: true })}</div>
                 </div>`;
             activityLogList.prepend(logItem);
-            while (activityLogList.children.length > 50) activityLogList.removeChild(activityLogList.lastChild);
+            if (activityLogList.children.length > 50) activityLogList.removeChild(activityLogList.lastChild);
         }
         
         logoutButton.addEventListener('click', async () => {
             clearInterval(liveStatsInterval);
+            clearInterval(periodicShiftInterval);
             await supabase.auth.signOut();
             localStorage.removeItem('elevoCoreUserData');
             window.location.replace("login.html");
@@ -462,56 +552,123 @@
         if (supabase) initializeDashboard();
     </script>
 
-    <!-- Fallback/Helper Scripts From Original File -->
-    <script>
-    (function(){
-      const safe = typeof supabase !== 'undefined';
-      async function fetchKpis() {
-        try {
-          if (!safe) { return; }
-          const { data: kpi } = await supabase.from('kpi_today').select('*').limit(1).single();
-          if (kpi) {
-            document.getElementById('ins-total')?.textContent = kpi.tickets_started_today || 0;
-            document.getElementById('ins-completion')?.textContent = (kpi.completion_rate || 0) + '%';
-            document.getElementById('ins-avg')?.textContent = (kpi.avg_handling_time_minutes || 0) + 'm';
-          }
-        } catch(e){ console.warn('KPI placeholders error', e); }
+<script>
+(function(){
+  const safe = typeof supabase !== 'undefined';
+  // Populate placeholders with safe defaults or from views if available
+  async function fetchKpis() {
+    try {
+      if (!safe) {
+        // default demo values when supabase missing
+        document.getElementById('kpi-fastest')?.textContent = '0m 0s';
+        document.getElementById('kpi-longest')?.textContent = '0m 0s';
+        document.getElementById('kpi-top-scenario')?.textContent = '-';
+        document.getElementById('topAgentsList')?.innerHTML = '<li>No data yet <span>—</span></li>';
+        document.getElementById('delayedList')?.innerHTML = '<li>No delayed tickets.</li>';
+        document.getElementById('ins-total')?.textContent = '0';
+        document.getElementById('ins-avg')?.textContent = '0m 0s';
+        document.getElementById('ins-completion')?.textContent = '0%';
+        return;
       }
-      fetchKpis();
-    })();
-    </script>
-    <script>
-    (function(){
-      try{
-        const sel = document.querySelector('select[name="scenario"]') || document.querySelector('select');
-        function markScenario(){ 
-          if(!sel) return;
-          const opt = sel.options[sel.selectedIndex];
-          const el = document.querySelector('.scenario-name') || document.getElementById('selectedScenarioName') || document.querySelector('.scenario-selected');
-          if(opt && el){ el.textContent = opt.text; el.classList.add('scenario-selected'); }
-        }
-        if(sel){ sel.addEventListener('change', markScenario); markScenario(); }
-      }catch(e){ console.warn(e); }
-    })();
-    </script>
-    <script>
-    (function(){
-      function initSafeCharts(){
+      // Attempt to call views if supabase exists
+      const { data: kpi } = await supabase.from('kpi_today').select('*').limit(1).single();
+      if (kpi) {
+        document.getElementById('ins-total')?.textContent = kpi.tickets_started_today || 0;
+        document.getElementById('ins-completion')?.textContent = (kpi.completion_rate || 0) + '%';
+        document.getElementById('ins-avg')?.textContent = (kpi.avg_handling_time_minutes || 0) + 'm';
+        document.getElementById('kpi-fastest')?.textContent = '—';
+        document.getElementById('kpi-longest')?.textContent = '—';
+      }
+      // top agents
+      const { data: top } = await supabase.rpc('top_agents_today'); // optional if exists
+      if (top && top.length) {
+        const html = top.slice(0,5).map(t => `<li>${t.agent_name}<span>${t.count}</span></li>`).join('');
+        document.getElementById('topAgentsList').innerHTML = html;
+      }
+      // delayed
+      const { data: delayed } = await supabase.from('delayed_tickets').select('*');
+      if (delayed && delayed.length) {
+        document.getElementById('delayedList').innerHTML = delayed.map(d=>`<li>${d.agent_name} — ${Math.floor(d.seconds_open/60)}m ${d.seconds_open%60}s</li>`).join('');
+      }
+    } catch(e){
+      console.warn('KPI placeholders error', e);
+    }
+  }
+  // call once
+  fetchKpis();
+})();
+</script>
+
+
+<script>
+(function(){
+  try{
+    const sel = document.querySelector('select[name="scenario"]') || document.querySelector('select');
+    function markScenario(){ 
+      if(!sel) return;
+      const opt = sel.options[sel.selectedIndex];
+      const el = document.querySelector('.scenario-name') || document.getElementById('selectedScenarioName') || document.querySelector('.scenario-selected');
+      if(opt && el){ el.textContent = opt.text; el.classList.add('scenario-selected'); }
+    }
+    if(sel){ sel.addEventListener('change', markScenario); markScenario(); }
+  }catch(e){ console.warn(e); }
+})();
+
+function exportTableToCSV(filename = 'report.csv') {
+  const table = document.querySelector('#recentSessionsTable') || document.querySelector('table');
+  if(!table) return alert('No table found to export');
+  const rows = Array.from(table.querySelectorAll('tr')).map(tr => 
+    Array.from(tr.querySelectorAll('th,td')).map(td => '"' + td.innerText.replace(/"/g,'""') + '"').join(',')
+  ).join('\n');
+  const blob = new Blob([rows], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = filename;
+  link.style.display='none';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+</script>
+
+
+<script>
+// RTM safe chart init & loader fallback
+(function(){
+  function initSafeCharts(){
+    try{
+      // ticket volume
+      const vol = document.getElementById('ticketVolumeChart');
+      if(vol && vol.getContext){
         try{
-          const ids = ['liveActiveChart','todayStatusChart','activityLogChart'];
-          ids.forEach(id=>{
-            const el = document.getElementById(id);
-            if(el && el.getContext && typeof Chart !== 'undefined'){
-              try{ new Chart(el.getContext('2d'), { type:'doughnut', data:{labels:[],datasets:[{data:[]}]}, options:{} }); }catch(e){console.warn('chart',id,'init',e);}
-            }
-          });
-        }catch(e){console.error('initSafeCharts',e);}
+          const ctx = vol.getContext('2d');
+          if(ctx && typeof Chart !== 'undefined'){
+            // create simple empty chart if none
+            new Chart(ctx, { type: 'line', data:{labels:[],datasets:[{label:'Tickets',data:[]}]}, options:{responsive:true} });
+          }
+        }catch(e){console.warn('chart init fail', e);}
+      } else {
+        console.warn('ticketVolumeChart not found, skipping chart init');
       }
-      setTimeout(()=>{ const l = document.querySelector('.realtime-loader') || document.getElementById('realtimeLoader'); if(l) l.style.display='none'; document.querySelector('.dashboard-main')?.style.visibility='visible'; }, 400);
-      if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', initSafeCharts);
-      else initSafeCharts();
-    })();
-    </script>
+      // any other charts: check existence before initializing
+      const other = ['liveActiveChart','todayStatusChart','activityLogChart'];
+      other.forEach(id=>{
+        const el = document.getElementById(id);
+        if(el && el.getContext && typeof Chart !== 'undefined'){
+          try{
+            new Chart(el.getContext('2d'), { type:'doughnut', data:{labels:[],datasets:[{data:[]}]}, options:{} });
+          }catch(e){console.warn('chart',id,'init',e);}
+        }
+      });
+    }catch(e){console.error('initSafeCharts',e);}
+  }
+  // remove any stuck loader
+  setTimeout(()=>{ const l = document.querySelector('.realtime-loader') || document.getElementById('realtimeLoader'); if(l) l.style.display='none'; document.querySelector('.dashboard-main')?.style.visibility='visible'; }, 400);
+  // run init after DOM ready
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', initSafeCharts);
+  else initSafeCharts();
+})();
+</script>
 
 </body>
 </html>
