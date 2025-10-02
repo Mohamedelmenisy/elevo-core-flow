@@ -301,8 +301,8 @@
                                     <div><label for="searchInput">Search Scenario:</label><input type="text" id="searchInput" placeholder="Enter scenario name..."></div>
             <div class="charts-row" style="margin-top:1rem;">
               <div class="performance-insights">
-                <h4 style="margin:0 0 0.6rem 0;">Performance Insights (Today)</h4>
-                <p>Total Tickets: <strong id="ins-total">0</strong></p>
+                <h4 style="margin:0 0 0.6rem 0;">Performance Insights</h4>
+                <p>Total Calls: <strong id="ins-total">0</strong></p>
                 <p>Avg Handling: <strong id="ins-avg">0m 0s</strong></p>
                 <p>Completion Rate: <strong id="ins-completion">0%</strong></p>
               </div>
@@ -347,10 +347,9 @@
 
                     <div class="sidebar-column">
                         <div class="charts-container" style="display: flex; flex-direction: column; gap: 2rem;">
-                            <!-- MODIFICATION: Added unique IDs to canvas elements -->
-                            <div class="chart-container"><canvas id="qualityChart" class="chart-mini"></canvas></div>
+                            <div class="chart-container"><canvas class="chart-mini chart-mini">></canvas></div>
                             <div class="chart-container">
-                                <canvas id="badReasonsChart" class="chart-mini"></canvas>
+                                <canvas class="chart-mini chart-mini">></canvas>
                                 <p id="noBadCallsMessage" style="display:none; text-align:center; margin: auto; color: var(--text-color-subtle);">Great job! No 'Bad' calls in this period.</p>
                             </div>
                         </div>
@@ -455,7 +454,8 @@
         const confirmDeleteBtn = document.getElementById('confirmDeleteBtn');
 
         let qualityChartInstance, badReasonsChartInstance;
-// State
+
+        // State
         let currentUser = null, allUserCalls = [], filteredCalls = [], filterTimeout;
         let currentPage = 1;
         const ROWS_PER_PAGE = 6;
@@ -618,7 +618,6 @@
 
             setupUI();
             await loadAgentData();
-            await fetchAgentPerformanceInsights(); // MODIFICATION: Fetch KPIs from view
             setupEventListeners();
             authLoadingDiv.style.display = 'none';
             portalContentDiv.style.display = 'block';
@@ -637,35 +636,10 @@
 
             renderSavedNotes();
         }
-        
-        // MODIFICATION: Fetch agent-specific KPIs from the database views.
-        async function fetchAgentPerformanceInsights() {
-            const { data: kpi, error } = await supabase
-                .from('kpi_today')
-                .select('tickets_started_today, avg_handling_time_minutes, completion_rate')
-                .eq('user_id', currentUser.id)
-                .single();
-
-            if (error || !kpi) {
-                console.warn("Could not fetch today's performance insights for user:", error);
-                document.getElementById('ins-total').textContent = 'N/A';
-                document.getElementById('ins-avg').textContent = 'N/A';
-                document.getElementById('ins-completion').textContent = 'N/A';
-                return;
-            }
-
-            document.getElementById('ins-total').textContent = kpi.tickets_started_today || 0;
-            document.getElementById('ins-avg').textContent = `${kpi.avg_handling_time_minutes || 0}m`;
-            document.getElementById('ins-completion').textContent = `${kpi.completion_rate || 0}%`;
-        }
 
         async function loadAgentData() {
             try {
-                // MODIFICATION: Use the `completed_tickets` view for agent's historical data.
-                const { data, error } = await supabase.from('completed_tickets')
-                    .select('*')
-                    .eq('user_id', currentUser.id)
-                    .order('start_time', { ascending: false });
+                const { data, error } = await supabase.from('call_sessions').select('*, scenario:call_scenarios(title)').eq('user_id', currentUser.id).order('start_time', { ascending: false });
                 if (error) throw error;
                 allUserCalls = data;
                 applyFiltersAndRender();
@@ -685,7 +659,7 @@
 
             filteredCalls = allUserCalls.filter(call => {
                 const callDate = new Date(call.start_time);
-                const matchesSearch = !searchTerm || (call.scenario_title || '').toLowerCase().includes(searchTerm);
+                const matchesSearch = !searchTerm || (call.scenario?.title || '').toLowerCase().includes(searchTerm);
                 const matchesQuality = !quality || call.call_quality === quality;
                 const matchesStartDate = !startDate || callDate >= new Date(startDate + "T00:00:00.000Z");
                 const matchesEndDate = !endDate || callDate <= new Date(endDate + "T23:59:59.999Z");
@@ -748,10 +722,9 @@
 
             paginatedCalls.forEach(call => {
                 const dur = call.duration || 0;
-                // MODIFICATION: Use columns from the view
                 const row = `<tr>
                         <td>${new Date(call.start_time).toLocaleDateString('en-GB', { timeZone: EGYPT_TIMEZONE })}</td>
-                        <td>${call.scenario_title || 'N/A'}</td>
+                        <td>${call.scenario?.title || 'N/A'}</td>
                         <td>${Math.floor(dur / 60)}m ${String(dur % 60).padStart(2, '0')}s</td>
                         <td>${call.completed ? '✅ Yes' : '❌ No'}</td>
                         <td><span class="quality-text quality-${(call.call_quality || 'na').toLowerCase()}">${call.call_quality || 'N/A'}</span></td>
@@ -978,4 +951,3 @@ function exportTableToCSV(filename = 'report.csv') {
 
 </body>
 </html>
-        
