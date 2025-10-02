@@ -130,7 +130,7 @@
                         </div>
                         <div class="recent-activity-section card">
                             <h2 id="recentCallsTitle">Recent Ticket Sessions</h2>
-                            <div class="table-responsive"><table id="recentCallsTable"><thead><tr><th>Agent Name</th><th>Agent Email</th><th>Scenario</th><th>Start Time</th><th>Duration</th><th>Completed</th><th>Quality</th><th>Reason</th></tr></thead><tbody><tr><td colspan="8" style="text-align:center; padding: 2rem; color: var(--text-color-light);">Loading session data...</td></tr></tbody></table></div>
+                            <div class="table-responsive"><table id="recentCallsTable"><thead><tr><th>Agent Name</th><th>Agent Email</th><th>Scenario</th><th>Start Time</th><th>Duration</th><th>Completed</th><th>Quality</th><th>Reason</th></tr></thead><tbody></tbody></table></div>
                             <div id="paginationControls" class="pagination-container" style="margin-top: 1rem;"></div>
                             <div class="export-buttons-container" style="margin-top: 1.5rem; display: flex; gap: 0.75rem; flex-wrap: wrap;"><button id="exportDataBtn" class="action-button secondary-button">Export (CSV)</button><button id="exportDataXLSXBtn" class="action-button primary-button">Export (XLSX)</button></div>
                         </div>
@@ -147,12 +147,12 @@
                         </div>
                         <div class="analytics-section card">
                             <h2>Analytics</h2>
-                            <!-- MODIFIED: Added charts-grid wrapper and loading placeholders -->
-                            <div class="charts-grid">
-                                <div class="chart-container"><p class="chart-placeholder" id="statusChartLoader">Loading chart...</p><canvas id="statusChart" style="display:none;"></canvas></div>
-                                <div class="chart-container"><p class="chart-placeholder" id="qualityScoreChartLoader">Loading chart...</p><canvas id="qualityScoreChart" style="display:none;"></canvas></div>
-                                <div class="chart-container"><p class="chart-placeholder" id="ticketVolumeChartLoader">Loading chart...</p><canvas id="ticketVolumeChart" style="display:none;"></canvas></div>
-                                <div class="chart-container"><p class="chart-placeholder" id="badReasonsChartLoader">Loading chart...</p><canvas id="badReasonsChart" style="display:none;"></canvas></div>
+                            <!-- MODIFIED: Added charts-grid wrapper -->
+                            <div class="charts-row">
+                                <div class="chart-container"><canvas id="statusChart"></canvas></div>
+                                <div class="chart-container"><canvas id="qualityScoreChart"></canvas></div>
+                                <div class="chart-container"><canvas id="ticketVolumeChart"></canvas></div>
+                                <div class="chart-container"><canvas id="badReasonsChart"></canvas></div>
                             </div>
                         </div>
                     </div>
@@ -294,21 +294,14 @@
 
         async function loadInitialData() {
             try {
-                 // MODIFICATION: Use the `completed_tickets` view as requested for historical analysis.
                 const [agentsRes, sessionsRes] = await Promise.all([
                     supabase.from('users').select('id, name, email').order('name', { ascending: true }),
-                    supabase.from('completed_tickets').select('*').order('start_time', { ascending: false })
+                    supabase.from('call_sessions').select(`*, scenario:call_scenarios(id, title)`).order('start_time', { ascending: false })
                 ]);
                 if (agentsRes.error) throw agentsRes.error;
-                if (sessionsRes.error) {
-                    console.warn("Could not fetch from 'completed_tickets' view, falling back to 'call_sessions'. Error:", sessionsRes.error.message);
-                    const { data: fallbackData, error: fallbackError } = await supabase.from('call_sessions').select(`*, scenario:call_scenarios(id, title)`).not('end_time', 'is', null).order('start_time', { ascending: false });
-                    if (fallbackError) throw fallbackError;
-                    allCallSessions = fallbackData || [];
-                } else {
-                    allCallSessions = sessionsRes.data || [];
-                }
+                if (sessionsRes.error) throw sessionsRes.error;
                 allAgents = agentsRes.data || [];
+                allCallSessions = sessionsRes.data || [];
                 populateAgentFilter();
             } catch (error) {
                 console.error("Error loading initial dashboard data:", error);
@@ -333,7 +326,8 @@
                   selectedQuality = qualityFilter.value, startDate = startDateFilter.value, endDate = endDateFilter.value;
             if (selectedAgentId) tempFiltered = tempFiltered.filter(s => s.user_id === selectedAgentId);
             if (searchTerm) tempFiltered = tempFiltered.filter(s => {
-                return ((s.scenario_title || '').toLowerCase().includes(searchTerm) || (s.quality_reason || '').toLowerCase().includes(searchTerm) || (s.agent_name || '').toLowerCase().includes(searchTerm) || (s.agent_email || '').toLowerCase().includes(searchTerm));
+                const agent = allAgents.find(a => a.id === s.user_id);
+                return ((s.scenario?.title || '').toLowerCase().includes(searchTerm) || (s.quality_reason || '').toLowerCase().includes(searchTerm) || (agent?.name || '').toLowerCase().includes(searchTerm) || (agent?.email || '').toLowerCase().includes(searchTerm));
             });
             if (selectedQuality) tempFiltered = tempFiltered.filter(s => (selectedQuality === "N/A" ? !s.call_quality : s.call_quality === selectedQuality));
             if (startDate) tempFiltered = tempFiltered.filter(s => s.start_time && new Date(s.start_time) >= new Date(startDate + "T00:00:00.000Z"));
@@ -354,11 +348,11 @@
             }
             const paginatedSessions = filteredCallSessions.slice((currentPage - 1) * ROWS_PER_PAGE, currentPage * ROWS_PER_PAGE);
             paginatedSessions.forEach(session => {
+                const agent = allAgents.find(a => a.id === session.user_id);
                 const dur = session.duration || 0;
-                // MODIFICATION: Use columns directly from the view
                 const row = `<tr>
-                    <td>${session.agent_name || 'Unknown'}</td><td>${session.agent_email || 'N/A'}</td>
-                    <td>${session.scenario_title || 'N/A'}</td><td>${formatDateTimeEgypt(session.start_time)}</td>
+                    <td>${agent?.name || 'Unknown'}</td><td>${agent?.email || 'N/A'}</td>
+                    <td>${session.scenario?.title || 'N/A'}</td><td>${formatDateTimeEgypt(session.start_time)}</td>
                     <td>${Math.floor(dur / 60)}m ${dur % 60}s</td><td>${session.completed ? '✅ Yes' : '❌ No'}</td>
                     <td class="quality-cell quality-${(session.call_quality || 'na').toLowerCase()}">${session.call_quality || 'N/A'}</td>
                     <td>${session.quality_reason || '-'}</td>
@@ -418,12 +412,6 @@
             const legendOptions = { display: true, position: 'bottom', labels: { color: colors.textColor, font: { size: FONT_SIZE_LEGEND }, padding: 15 } };
             const titleOptions = (text) => ({ display: true, text: text, color: colors.textColor, font: { size: FONT_SIZE_TITLE, weight: '600' }, padding: { bottom: 15 }});
 
-            // Helper to show chart and hide loader
-            const showChart = (canvasId) => {
-                document.getElementById(canvasId).style.display = 'block';
-                document.getElementById(`${canvasId}Loader`).style.display = 'none';
-            };
-
             // 1. Completion Status
             const completed = filteredCallSessions.filter(s => s.completed).length;
             if (statusChart) statusChart.destroy();
@@ -431,7 +419,6 @@
                 type: 'doughnut', data: { labels: ['Completed', 'Not Completed'], datasets: [{ data: [completed, filteredCallSessions.length - completed], backgroundColor: [colors.good, colors.bad], borderColor: colors.tooltipBg, borderWidth: 4, hoverOffset: 8 }] },
                 options: { responsive: true, maintainAspectRatio: false, cutout: '70%', plugins: { legend: legendOptions, tooltip: tooltipOptions, title: titleOptions('Completion Status') } }
             });
-            showChart('statusChart');
 
             // 2. Quality Score
             const qualityCounts = filteredCallSessions.reduce((a, s) => { a[s.call_quality || 'N/A'] = (a[s.call_quality || 'N/A'] || 0) + 1; return a; }, {});
@@ -440,7 +427,6 @@
                 type: 'pie', data: { labels: ['Good', 'Normal', 'Bad', 'N/A'], datasets: [{ data: [qualityCounts['Good']||0, qualityCounts['Normal']||0, qualityCounts['Bad']||0, qualityCounts['N/A']||0], backgroundColor: [colors.good, colors.normal, colors.bad, colors.na], borderColor: colors.tooltipBg, borderWidth: 4, hoverOffset: 8 }] },
                 options: { responsive: true, maintainAspectRatio: false, plugins: { legend: legendOptions, tooltip: tooltipOptions, title: titleOptions('Ticket Quality Breakdown') } }
             });
-            showChart('qualityScoreChart');
 
             // 3. Daily Ticket Volume
             const volumeByDay = filteredCallSessions.reduce((a, s) => { const d = new Date(s.start_time).toLocaleDateString('en-CA', { timeZone: EGYPT_TIMEZONE }); a[d] = (a[d] || 0) + 1; return a; }, {});
@@ -450,7 +436,6 @@
                 type: 'bar', data: { labels: sortedDates, datasets: [{ label: 'Tickets', data: sortedDates.map(d => volumeByDay[d]), backgroundColor: colors.accent1, borderColor: colors.accent1, borderWidth: 1, borderRadius: 4 }] },
                 options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, grid: { color: colors.gridColor }, ticks:{color: colors.textColor, font: { size: FONT_SIZE_AXIS }} }, x: { grid: { color: colors.gridColor }, ticks:{color: colors.textColor, font: { size: FONT_SIZE_AXIS }} } }, plugins: { legend: { display: false }, tooltip: tooltipOptions, title: titleOptions('Daily Ticket Volume') } }
             });
-            showChart('ticketVolumeChart');
 
             // 4. Top 'Bad' Reasons
             const badReasons = filteredCallSessions.filter(s => s.call_quality === 'Bad' && s.quality_reason).reduce((a, s) => { a[s.quality_reason] = (a[s.quality_reason] || 0) + 1; return a; }, {});
@@ -460,7 +445,6 @@
                 type: 'bar', data: { labels: sortedBadReasons.map(i => i[0]), datasets: [{ label: 'Count', data: sortedBadReasons.map(i => i[1]), backgroundColor: colors.bad, borderColor: colors.bad, borderWidth: 1, borderRadius: 4 }] },
                 options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, scales: { x: { beginAtZero: true, grid: { color: colors.gridColor }, ticks:{color: colors.textColor, font: { size: FONT_SIZE_AXIS }} }, y: { grid: { display: false }, ticks:{color: colors.textColor, font: { size: FONT_SIZE_AXIS }} } }, plugins: { legend: { display: false }, tooltip: tooltipOptions, title: titleOptions("Top 'Bad' Quality Reasons") } }
             });
-            showChart('badReasonsChart');
         }
         
         // MODIFIED: Pagination logic
@@ -521,10 +505,11 @@
             const headers = ["Agent Name", "Agent Email", "Scenario", "Start Time (EET)", "End Time (EET)", "Duration (s)", "Completed", "Quality", "Reason"];
             csvContent += headers.join(",") + "\r\n";
             filteredCallSessions.forEach(session => {
+                const agent = allAgents.find(a => a.id === session.user_id);
                 const row = [
-                    `"${session.agent_name || 'Unknown'}"`,
-                    `"${session.agent_email || 'N/A'}"`,
-                    `"${session.scenario_title?.replace(/"/g, '""') || 'N/A'}"`,
+                    `"${agent?.name || 'Unknown'}"`,
+                    `"${agent?.email || 'N/A'}"`,
+                    `"${session.scenario?.title?.replace(/"/g, '""') || 'N/A'}"`,
                     `"${formatDateForCSVEgypt(session.start_time)}"`,
                     `"${formatDateForCSVEgypt(session.end_time)}"`,
                     session.duration || 0,
@@ -546,10 +531,11 @@
         function exportFilteredDataToXLSX() {
             if (filteredCallSessions.length === 0) { alert("No data to export."); return; }
             const dataToExport = filteredCallSessions.map(session => {
+                const agent = allAgents.find(a => a.id === session.user_id);
                 return {
-                    "Agent Name": session.agent_name || 'Unknown',
-                    "Agent Email": session.agent_email || 'N/A',
-                    "Scenario": session.scenario_title || 'N/A',
+                    "Agent Name": agent?.name || 'Unknown',
+                    "Agent Email": agent?.email || 'N/A',
+                    "Scenario": session.scenario?.title || 'N/A',
                     "Start Time (EET)": formatDateForCSVEgypt(session.start_time),
                     "End Time (EET)": formatDateForCSVEgypt(session.end_time),
                     "Duration (s)": session.duration || 0,
@@ -567,55 +553,56 @@
         // MODIFIED: Live Monitoring & Delayed Tickets logic
         async function fetchAndRenderLiveCalls() {
             try {
-                // MODIFICATION: Fetching from the new `live_tickets` and `delayed_tickets` views.
-                const [{ data: liveData, error: liveError }, { data: delayedData, error: delayedError }] = await Promise.all([
-                    supabase.from('live_tickets').select('*').order('start_time', { ascending: false }),
-                    supabase.from('delayed_tickets').select('*').order('start_time', { ascending: false })
-                ]);
+                const { data, error } = await supabase
+                    .from('call_sessions')
+                    .select('id, agent_name, start_time, scenario:call_scenarios(title)')
+                    .is('end_time', null) // Correctly fetches only active calls
+                    .order('start_time', { ascending: false });
 
-                if (liveError) throw liveError;
-                if (delayedError) throw delayedError;
-
+                if (error) throw error;
+                
                 liveCallsContainer.innerHTML = '';
-                if (liveData.length === 0) {
+                delayedTicketsContainer.innerHTML = '';
+                let delayedCount = 0;
+
+                if (data.length === 0) {
                     noLiveCallsMessage.style.display = 'block';
-                } else {
-                    noLiveCallsMessage.style.display = 'none';
-                    liveData.forEach(call => {
-                        const duration = Math.floor((new Date() - new Date(call.start_time)) / 1000);
-                        const item = document.createElement('div');
-                        item.className = 'live-call-item';
-                        item.innerHTML = `
-                            <div><strong class="live-call-item-agent">${call.agent_name || 'Unknown'}</strong> on "${call.scenario_title || 'a ticket'}"</div>
-                            <div class="live-call-item-time">
-                                <span class="text-color-light">Started: ${formatDateTimeEgypt(call.start_time, { hour: '2-digit', minute: '2-digit' })}</span>
-                                <span class="live-call-duration">Now: ${Math.floor(duration/60)}m ${duration%60}s</span>
-                            </div>
-                        `;
-                        liveCallsContainer.appendChild(item);
-                    });
+                    noDelayedTicketsMessage.style.display = 'block';
+                    return;
                 }
                 
-                delayedTicketsContainer.innerHTML = '';
-                 if (delayedData.length === 0) {
+                noLiveCallsMessage.style.display = 'none';
+                
+                data.forEach(call => {
+                    const duration = Math.floor((new Date() - new Date(call.start_time)) / 1000);
+                    const isDelayed = duration > 300; // 5 minutes threshold
+                    
+                    const item = document.createElement('div');
+                    item.className = 'live-call-item';
+                    if (isDelayed) item.classList.add('long-call-alert');
+                    item.innerHTML = `
+                        <div><strong class="live-call-item-agent">${call.agent_name || 'Unknown'}</strong> on "${call.scenario?.title || 'a ticket'}"</div>
+                        <div class="live-call-item-time">
+                            <span class="text-color-light">Started: ${formatDateTimeEgypt(call.start_time, { hour: '2-digit', minute: '2-digit' })}</span>
+                            <span class="live-call-duration">Now: ${Math.floor(duration/60)}m ${duration%60}s ${isDelayed ? '<span class="long-call-indicator">DELAYED</span>' : ''}</span>
+                        </div>
+                    `;
+                    liveCallsContainer.appendChild(item);
+
+                    if (isDelayed) {
+                        delayedTicketsContainer.appendChild(item.cloneNode(true));
+                        delayedCount++;
+                    }
+                });
+
+                if (delayedCount === 0) {
                     noDelayedTicketsMessage.style.display = 'block';
                 } else {
                     noDelayedTicketsMessage.style.display = 'none';
-                    delayedData.forEach(call => {
-                        const item = document.createElement('div');
-                        item.className = 'live-call-item long-call-alert';
-                        item.innerHTML = `
-                             <div><strong class="live-call-item-agent">${call.agent_name || 'Unknown'}</strong> on "${call.scenario_title || 'a ticket'}"</div>
-                             <div class="live-call-item-time">
-                                 <span class="live-call-duration">Open for: ${Math.floor(call.seconds_open/60)}m ${call.seconds_open%60}s <span class="long-call-indicator">DELAYED</span></span>
-                             </div>
-                        `;
-                        delayedTicketsContainer.appendChild(item);
-                    });
                 }
 
             } catch(error) {
-                console.error("Error fetching live/delayed calls:", error);
+                console.error("Error fetching live calls:", error);
                 noLiveCallsMessage.textContent = 'Error loading live data.';
                 noLiveCallsMessage.style.display = 'block';
                 noDelayedTicketsMessage.textContent = 'Error loading delayed data.';
@@ -630,7 +617,8 @@
                 .channel('public:call_sessions')
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'call_sessions' }, (payload) => {
                     fetchAndRenderLiveCalls(); 
-                    // Refresh main table data in near real-time as tickets are completed.
+                    
+                    // Also refetch all sessions to update the main table and stats in real-time
                     loadInitialData().then(() => {
                         applyFiltersAndRender();
                     });
