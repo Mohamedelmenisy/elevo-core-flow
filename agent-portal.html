@@ -3,857 +3,654 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Agent Portal - Elevo Core</title>
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234e8cff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M12 22V12M9 19l3-3 3 3M12 2a4 4 0 0 0-4 4v0a4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4z'/></svg>">
+    <title>Elevo Core Assistant</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234e8cff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M3 12h18M3 6h12M3 18h15'/><path d='M17 9l4 3l-4 3'/></svg>">
     <link rel="stylesheet" href="style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
     <style>
-        .dashboard-main {
-            width: 100%;
-            max-width: none; 
-            padding: 1.5rem 2rem; 
-            text-align: left; /* MODIFIED */
-        }
+.card { max-width: 1100px; margin: 0 auto; }
 
-        .portal-layout-grid {
-            display: grid;
-            grid-template-columns: minmax(0, 1fr);
-            gap: 2rem;
-            margin-top: 1.5rem;
+        .card {
+            max-width: 950px; /* MODIFIED: Increased width */
         }
-
-        .main-content-column, .sidebar-column {
-            display: flex;
-            flex-direction: column;
-            gap: 2rem;
-        }
-
-        @media (min-width: 1024px) {
-            .portal-layout-grid {
-                grid-template-columns: minmax(0, 2.5fr) minmax(0, 1.5fr);
-            }
-        }
-        
-        .call-history-container.card {
-            max-width: none;
-        }
-        
-        #agentScratchpad, #editNoteTextarea {
-            width: 100%;
-            min-height: 150px;
-            background-color: var(--input-bg-color);
-            border: 1px solid var(--border-color);
-            border-radius: var(--border-radius-md);
-            color: var(--text-color);
-            padding: 0.75rem;
-            font-family: inherit;
-            font-size: 0.9em;
-            resize: vertical;
-            transition: border-color var(--transition-speed-fast) ease, box-shadow var(--transition-speed-fast) ease;
-        }
-        #agentScratchpad:focus, #editNoteTextarea:focus {
-            outline: none;
-            border-color: var(--primary-color);
-            box-shadow: 0 0 0 2px rgba(var(--primary-color-rgb), 0.25);
-        }
-
-        .scratchpad-actions {
-            display: flex;
-            justify-content: flex-end;
-            gap: 0.75rem;
-            margin-top: 0.75rem;
-        }
-
-        .saved-notes-list {
-            display: flex;
-            flex-direction: column;
-            gap: 1.25rem;
-        }
-        
-        .note-card {
-            background-color: var(--input-bg-color);
-            border-radius: var(--border-radius-lg);
-            border-left: 4px solid var(--accent-color);
-            padding: 1rem 1.25rem;
-            display: flex;
-            flex-direction: column;
-            gap: 0.75rem;
-        }
-        
-        .note-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            flex-wrap: wrap;
-            gap: 1rem;
-            font-size: 0.85em;
-            color: var(--text-color-light);
-        }
-
-        .note-author, .note-timestamp {
-            display: flex;
-            flex-direction: column;
-        }
-        
-        .note-author span:first-child, .note-timestamp span:first-child {
-            font-weight: 600;
-            color: var(--text-color);
-            margin-bottom: 2px;
-        }
-
-        .note-content p {
-            margin: 0.5rem 0;
-            color: var(--text-color);
-            word-break: break-word;
-            white-space: pre-wrap;
-            font-size: 0.95em;
-            line-height: 1.6;
-        }
-
-        .note-actions {
-            display: flex;
-            justify-content: flex-end;
-            align-items: center;
-            gap: 0.5rem;
-        }
-        
-        .note-action-btn {
-            background: none;
-            border: none;
-            cursor: pointer;
-            padding: 0.35rem;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: background-color 0.2s ease;
-        }
-        
-        .edit-note-btn { color: var(--primary-color); }
-        .edit-note-btn:hover { background-color: rgba(var(--primary-color-rgb), 0.1); }
-        
-        .delete-note-btn { color: var(--danger-color); }
-        .delete-note-btn:hover { background-color: rgba(var(--danger-color-rgb), 0.1); }
-        
-        #notesPaginationControls {
-             margin-top: 1.5rem;
-             padding-top: 1rem;
-             border-top: 1px solid var(--border-color);
-        }
-
-        .modal {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background-color: rgba(0, 0, 0, 0.7);
-            display: none; align-items: center; justify-content: center;
-            z-index: 1000; opacity: 0; visibility: hidden;
-            transition: opacity 0.3s ease, visibility 0s 0.3s;
-        }
-        .modal.visible {
-            display: flex;
-            opacity: 1;
-            visibility: visible;
-            transition-delay: 0s;
-        }
-        
-        .modal-content {
-            background-color: var(--card-bg-color); padding: 2rem;
-            border-radius: var(--border-radius-lg); width: 90%;
-            max-width: 500px; box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-            transform: scale(0.95); transition: transform 0.3s ease;
-        }
-        .modal.visible .modal-content { transform: scale(1); }
-
-        .modal-content h3 { margin-top: 0; margin-bottom: 1rem; font-size: 1.4em; }
-        .modal-content p { margin-bottom: 1.5rem; color: var(--text-color-light); line-height: 1.6; }
-        
-        .modal-actions { display: flex; justify-content: flex-end; gap: 0.75rem; }
-
-        .card h2 {
-            display: flex; justify-content: space-between; align-items: center;
-        }
-
-        .scorecard {
-            display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.5rem;
-        }
-        .kpi-card {
-            background-color: var(--card-bg-color); padding: 1.25rem;
-            border-radius: var(--border-radius-lg); border-left: 4px solid var(--primary-color);
-        }
-        .kpi-card h4 {
-            font-size: 0.9em; color: var(--text-color-light);
-            margin-bottom: 0.5rem; font-weight: 500;
-        }
-        .kpi-value {
-            font-size: 1.75em; font-weight: 600; color: var(--text-color);
-            display: flex; align-items: center; gap: 0.5rem;
-        }
-        
-        .progress-card {
-            background-color: var(--card-bg-color); padding: 1.25rem;
-            border-radius: var(--border-radius-lg);
-        }
-        .progress-title {
-            display: flex; justify-content: space-between; align-items: center;
-            margin-bottom: 0.75rem; font-size: 0.9em; font-weight: 500;
-            color: var(--text-color-light);
-        }
-        .progress-bar-container {
-            width: 100%; height: 12px; background-color: var(--input-bg-color);
-            border-radius: 6px; overflow: hidden;
-        }
-        .progress-bar {
-            height: 100%; width: 0%; background-color: var(--accent-color);
-            border-radius: 6px; transition: width 0.5s ease-in-out;
-        }
-
-        .widget-card {
-            background-color: var(--card-bg-color); padding: 1.5rem;
-            border-radius: var(--border-radius-lg);
-        }
-        .widget-card h3 { margin-top: 0; font-size: 1.1em; margin-bottom: 1rem; }
-        .achievements-list { list-style: none; padding: 0; }
-        .achievement-item {
-            display: flex; align-items: center; gap: 1rem;
-            padding: 0.75rem 0; font-size: 0.95em;
-            border-bottom: 1px solid var(--border-color);
-        }
-        .achievement-item:last-child { border-bottom: none; }
-        .achievement-icon { font-size: 1.5em; }
-
     </style>
 </head>
 <body>
+
     <div class="app-container">
         <header class="app-header">
             <div class="logo-container">
                 <svg class="company-logo" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="color: var(--primary-color); width: 28px; height: 28px;">
-                     <path d="M12 22V12M9 19l3-3 3 3M12 2a4 4 0 0 0-4 4v0a4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M6 17L10 17M6 12L12 12M6 7L14 7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    <path d="M15 6L19 10L15 14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <rect x="3" y="3" width="18" height="18" rx="3" stroke="currentColor" stroke-width="1.5" fill="transparent" opacity="0.6"/>
                 </svg>
-                <span class="app-title" style="font-size: 1.4rem;">Elevo Core - Agent Portal</span>
+                <span class="app-title" style="font-size: 1.2rem;">Elevo Core</span>
             </div>
             <div class="header-controls">
-                 <a href="core-flow.html" class="nav-link">Go to Call App</a>
                  <!-- MODIFIED: Links will be shown/hidden based on user role by JS -->
                  <a href="dashboard.html" class="nav-link" id="dashboardLink" style="display: none;">Admin Dashboard</a>
                  <a href="rtm-dashboard.html" class="nav-link" id="rtmDashboardLink" style="display: none;">RTM Dashboard</a>
-                 <div class="user-info" id="userInfo" style="display: none;">
-                    <span id="userName" class="user-name-display"></span>
-                    <button id="logoutButton" class="logout-btn">
+                 <a href="agent-portal.html" class="nav-link" id="agentPortalLink" style="display: none;">Agent Portal</a>
+                <div class="user-info" id="userInfo" style="display: none;">
+                    <span id="userName" class="user-name-display" style="margin-right: 1rem; color: var(--text-color-secondary);"></span>
+                    <button id="logoutButton" class="logout-btn nav-button">
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
-                        Logout
+                        <span style="margin-left: 0.3em;">Logout</span>
                     </button>
-                 </div>
+                </div>
             </div>
         </header>
 
-        <main class="app-main dashboard-main">
-            <div id="auth-loading" class="loading-container" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 70vh;">
-                <div class="spinner"></div>
-                <p>Loading Your Performance Data...</p>
+        <div class="status-bar">
+            <div id="systemStatus" class="status-indicator status-waiting">🔴 Waiting for Ticket</div>
+        </div>
+
+        <div id="progressTracker" class="progress-tracker-container" style="display: none; max-width: 950px; width: 100%; margin-left: auto; margin-right: auto;">
+             <div class="stepper-wrapper">
+                 {/* Stepper will be dynamically generated here by JavaScript */}
+            </div>
+        </div>
+
+         <div id="timer-container">
+             <div id="callTimer" style="display: none;">00:00</div>
+         </div>
+
+        <main class="app-main">
+            <div id="auth-loading" class="loading-container" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 50vh;">
+                <div class="spinner" style="width: 40px; height: 40px; border-top-color: var(--primary-color);"></div>
+                <p style="color: var(--text-color-secondary); margin-top: 1rem;">Initializing Assistant...</p>
             </div>
 
-            <div id="portalContent" style="display: none;">
-                <div class="dashboard-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
-                     <div>
-                        <h1 id="agentGreeting">Welcome!</h1>
-                        <p id="agentSubtext" class="text-color-light">Review your call history and performance metrics.</p>
-                     </div>
-                     <button id="exportDataBtn" class="action-button primary-button">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-                        Export My Data
+            <div id="initial-view" class="card initial-card fade-in" style="display: none;">
+                <div class="card-icon" style="text-align: center; margin-bottom: 1rem;">
+                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="var(--primary-color)" width="48" height="48"><path d="M12 2C6.486 2 2 6.486 2 12C2 17.514 6.486 22 12 22C17.514 22 22 17.514 22 12C22 6.486 17.514 2 12 2ZM12 20C7.589 20 4 16.411 4 12C4 7.589 7.589 4 12 4C16.411 4 20 7.589 20 12C20 16.411 16.411 20 12 20Z"/><path d="M12 11C10.897 11 10 10.103 10 9C10 7.897 10.897 7 12 7C13.103 7 14 7.897 14 9C14 10.103 13.103 11 12 11ZM12 9C11.514 9 11.121 9.229 11.038 9.583L12.962 10.417C12.879 10.771 12.486 11 12 11C11.448 11 11 10.552 11 10C11 9.448 11.448 9 12 9Z"/><path d="M16.002 16.246C15.483 15.219 14.544 14.5 13.333 14.5H10.667C9.456 14.5 8.517 15.219 7.998 16.246C7.933 16.386 7.996 16.553 8.114 16.641C8.657 17.053 9.737 17.5 12 17.5C14.263 17.5 15.343 17.053 15.886 16.641C16.004 16.553 16.067 16.386 16.002 16.246Z"/></svg>
+                </div>
+                <h2 class="card-title" style="text-align: center;">Core Flow Assistant</h2>
+                <p class="card-subtitle" style="text-align: center;">Select a scenario to start the ticket.</p>
+
+                <div class="scenario-selector-container" style="margin-top: 1.5rem; margin-bottom: 1.5rem;">
+                    <label for="scenarioDropdown" style="display: block; margin-bottom: 0.5rem; font-weight: 500; color: var(--text-color-secondary);">Select Scenario:</label>
+                    <select id="scenarioDropdown" class="scenario-dropdown">
+                        <option value="">Loading scenarios...</option>
+                    </select>
+                </div>
+
+                <div id="assistantBox" class="assistant-box" style="display: none; background-color: var(--input-bg-color); padding: 1rem; border-radius: 12px; margin-bottom: 1.5rem; border-left: 4px solid var(--primary-color);">
+                    <span class="assistant-icon" style="margin-right: 0.5rem; font-size: 1.2rem;">💡</span>
+                    <p id="assistantMessageElement" style="margin: 0; color: var(--text-color);">Welcome to Elevo Core!</p>
+                </div>
+
+                <button id="receive-call-btn" class="action-button primary-button" disabled style="width: 100%;">
+                    <span class="btn btn-receive-icon">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M6.05828 11.0452L4.00001 9.00002C4.00001 9.00002 3.58101 8.99902 3.51201 9.00002C2.04801 9.02602 1.00001 10.318 1.00001 11.785V12.214C1.00001 13.682 2.04801 14.973 3.51201 15H4.00001L6.05828 12.9548C6.12828 12.8848 6.16728 12.7948 6.16728 12C6.16728 11.2052 6.12828 11.1152 6.05828 11.0452ZM20.488 15H21C22.464 14.974 23.512 13.682 23.512 12.215V11.785C23.512 10.318 22.464 9.02602 21 9.00002C20.998 8.99902 20 9.00002 20 9.00002L17.9417 11.0452C17.8717 11.1152 17.8327 11.2052 17.8327 12C17.8327 12.7948 17.8717 12.8848 17.9417 12.9548L20.488 15Z"/><path d="M19.6623 5.08431C19.8803 5.08431 20.0943 5.17031 20.2503 5.32631L21.6743 6.74931C21.9863 7.06231 21.9863 7.56731 21.6743 7.87931C19.4003 10.1523 19.4003 13.8473 21.6743 16.1203C21.9863 16.4323 21.9863 16.9373 21.6743 17.2503L20.2503 18.6733C20.0943 18.8293 19.8803 18.9153 19.6623 18.9153C19.4443 18.9153 19.2303 18.8293 19.0743 18.6733C16.2573 15.8563 16.2573 8.14331 19.0743 5.32631C19.2303 5.17031 19.4443 5.08431 19.6623 5.08431ZM4.92575 5.32631C5.52575 4.72631 6.45075 4.72631 7.05075 5.32631C9.86775 8.14331 9.86775 15.8563 7.05075 18.6733C6.89475 18.8293 6.68075 18.9153 6.46275 18.9153C6.24475 18.9153 6.03075 18.8293 5.87475 18.6733L4.45075 17.2503C4.13875 16.9373 4.13875 16.4323 4.45075 16.1203C6.72375 13.8473 6.72375 10.1523 4.45075 7.87931C4.13875 7.56731 4.13875 7.06231 4.45075 6.74931L5.87475 5.32631C5.71875 5.17031 4.76975 5.17031 4.92575 5.32631Z"/></svg>
+                    </span>
+                    <span class="btn btn-receive-text">Receive Ticket</span>
+                </button>
+                <audio id="callStartSound" src="call_sound.mp3" preload="auto"></audio>
+                <audio id="compensationScenarioSound" src="compensation_alert.mp3" preload="auto"></audio>
+            </div>
+
+            <div id="call-flow-view" class="card call-flow-card fade-in" style="display: none;">
+                <h3 id="scenario-title" class="card-title scenario-title-dynamic"><span id="step-type-icon" class="step-type-icon"></span>Ticket Scenario</h3>
+                <div id="steps-container" class="steps-area" style="margin-bottom: 1.5rem; font-size: 0.95rem; line-height: 1.7; color: var(--text-color-secondary);">
+                    <p class="placeholder-text">Loading ticket steps...</p>
+                </div>
+                <div id="decision-buttons-container" class="step-actions"></div>
+
+                <div class="navigation-buttons" style="margin-top: 1.5rem; display: flex; gap: 0.75rem;">
+                    <button id="prev-step-btn" class="nav-button secondary-button" style="display: none; flex-grow: 1;">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 0.5em;"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                        <span>Previous</span>
+                    </button>
+                    <button id="next-step-btn" class="nav-button primary-button" style="flex-grow: 1;">
+                        <span class="btn btn-receive-text">Next Step</span>
+                        <span class="btn btn-receive-icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                        </span>
                     </button>
                 </div>
-
-                <div class="scorecard" style="margin-top: 1.5rem;">
-                    <div class="kpi-card">
-                        <h4>Avg. Handling Time</h4>
-                        <div class="kpi-value" id="kpiAvgTime">--:--</div>
-                    </div>
-                    <div class="kpi-card" style="border-left-color: var(--success-color);">
-                        <h4>Customer Rating</h4>
-                        <div class="kpi-value" id="kpiAvgRating">⭐ -.--</div>
-                    </div>
-                    <div class="kpi-card" style="border-left-color: var(--warning-color);">
-                         <h4>Calls Completed</h4>
-                        <div class="kpi-value" id="kpiTotalCalls">0</div>
-                    </div>
-                    <div class="kpi-card" style="border-left-color: var(--accent-color);">
-                        <div class="progress-card" style="padding: 0; background: none;">
-                            <div class="progress-title">
-                                <span>Daily Target</span>
-                                <span id="dailyTargetPercentage">0%</span>
-                            </div>
-                            <div class="progress-bar-container">
-                                <div id="dailyTargetProgressBar" class="progress-bar" style="width: 0%;"></div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="portal-layout-grid">
-                    <div class="main-content-column">
-                        <div class="call-history-container card">
-                            <h2>Your Call History</h2>
-                            <div class="filter-controls">
-                                <div class="filter-grid">
-                                    <div><label for="searchInput">Search Scenario:</label><input type="text" id="searchInput" placeholder="Enter scenario name..."></div>
-            <div class="charts-row" style="margin-top:1rem;">
-              <div class="performance-insights">
-                <h4 style="margin:0 0 0.6rem 0;">Performance Insights</h4>
-                <p>Total Calls: <strong id="ins-total">0</strong></p>
-                <p>Avg Handling: <strong id="ins-avg">0m 0s</strong></p>
-                <p>Completion Rate: <strong id="ins-completion">0%</strong></p>
-              </div>
-              <div class="top-agents-box">
-                <h4 style="margin:0 0 0.6rem 0;">This Week: Highlights</h4>
-                <p id="ins-note" style="color:var(--text-color-light)">No highlights yet.</p>
-              </div>
+                 <button id="end-call-btn" class="nav-button danger-button" style="display: none; width: 100%; margin-top: 0.75rem;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 0.5em;"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                    <span>End Ticket</span>
+                </button>
             </div>
-            
-                                    <div><label for="qualityFilter">Filter by Quality:</label><select id="qualityFilter"><option value="">All</option><option value="Good">Good</option><option value="Bad">Bad</option><option value="N/A">N/A</option></select></div>
-                                    <div><label for="startDateFilter">From Date:</label><input type="date" id="startDateFilter"></div>
-                                    <div><label for="endDateFilter">To Date:</label><input type="date" id="endDateFilter"></div>
-                                    <button id="resetFiltersBtn" class="action-button secondary-button">Reset Filters</button>
-                                </div>
-                            </div>
-                            <div class="table-responsive">
-                                <table id="callsTable">
-                                    <thead>
-                                        <tr>
-                                            <th>Date</th>
-                                            <th>Scenario</th>
-                                            <th>Duration</th>
-                                            <th>Completed</th>
-                                            <th>Quality</th>
-                                            <th>Reason</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody></tbody>
-                                </table>
-                                <div id="noDataMessage" style="text-align: center; padding: 2rem; display:none; color: var(--text-color-subtle);"></div>
-                            </div>
-                            <div id="paginationControls" class="pagination-container"></div>
-                        </div>
-                        
-                        <div class="widget-card">
-                            <h3>Saved Notes</h3>
-                            <div id="savedNotesList" class="saved-notes-list"></div>
-                            <p id="noNotesMessage" style="text-align: center; padding: 1rem; display:none; color: var(--text-color-subtle);">No notes saved yet.</p>
-                            <div id="notesPaginationControls" class="pagination-container"></div>
-                        </div>
-                    </div>
 
-                    <div class="sidebar-column">
-                        <div class="charts-container" style="display: flex; flex-direction: column; gap: 2rem;">
-                            <div class="chart-container"><canvas class="chart-mini chart-mini">></canvas></div>
-                            <div class="chart-container">
-                                <canvas class="chart-mini chart-mini">></canvas>
-                                <p id="noBadCallsMessage" style="display:none; text-align:center; margin: auto; color: var(--text-color-subtle);">Great job! No 'Bad' calls in this period.</p>
-                            </div>
-                        </div>
-                        
-                        <div class="widget-card">
-                             <h3>Quick Scratchpad</h3>
-                             <textarea id="agentScratchpad" placeholder="Jot down temporary notes here..."></textarea>
-                             <div class="scratchpad-actions">
-                                 <button id="cancelNoteBtn" class="action-button secondary-button">Cancel</button>
-                                 <button id="saveNoteBtn" class="action-button primary-button">Save Note</button>
-                             </div>
-                        </div>
-                        
-                        <div class="widget-card">
-                             <h3>Your Achievements</h3>
-                             <ul class="achievements-list">
-                                 <li class="achievement-item"><span class="achievement-icon">🏆</span> Fastest Call Today: <strong id="achFastestCall">--:--</strong></li>
-                                 <li class="achievement-item"><span class="achievement-icon">✅</span> Tickets Completed: <strong id="achTicketsCompleted">0</strong></li>
-                                 <li class="achievement-item"><span class="achievement-icon">⭐</span> Top Quality Score</li>
-                             </ul>
-                        </div>
-                        <div class="widget-card">
-                             <h3>Resources</h3>
-                             <a href="#" class="action-button primary-button" style="width: 100%;">Open Learning Hub</a>
-                        </div>
-                    </div>
+            <div id="postCallSummary" class="card post-call-summary-card fade-in" style="display: none;">
+                <h3 class="card-title">Ticket Summary</h3>
+                <div id="callSummaryContent" style="color: var(--text-color-secondary);">
+                    {/* Content will be injected by JS */}
                 </div>
+                <button id="returnToInitialViewBtn" class="action-button primary-button" style="margin-top: 1.5rem; width: 100%;">
+                    <span class="btn btn-receive-text">New Ticket</span>
+                </button>
             </div>
         </main>
-        
+
         <footer class="app-footer">
             <p>© <span id="currentYear"></span> Mohamed Elmenisy - Elevo Core. All rights reserved.</p>
         </footer>
     </div>
 
-    <div id="editNoteModal" class="modal">
-        <div class="modal-content">
-            <h3>Edit Note</h3>
-            <textarea id="editNoteTextarea" placeholder="Edit your note..."></textarea>
-            <div class="modal-actions">
-                <button id="cancelEditBtn" class="action-button secondary-button">Cancel</button>
-                <button id="saveChangesBtn" class="action-button primary-button">Save Changes</button>
-            </div>
-        </div>
-    </div>
-
-    <div id="deleteConfirmModal" class="modal">
-        <div class="modal-content">
-            <h3>Confirm Deletion</h3>
-            <p>Are you sure you want to permanently delete this note? This action cannot be undone.</p>
-            <div class="modal-actions">
-                <button id="cancelDeleteBtn" class="action-button secondary-button">Cancel</button>
-                <button id="confirmDeleteBtn" class="action-button danger-button">Delete</button>
-            </div>
-        </div>
-    </div>
-
-
     <script type="module">
+        // --- Supabase Client Setup ---
         const SUPABASE_URL = 'https://aefiigottnlcmjzilqnh.supabase.co';
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFlZmlpZ290dG5sY21qemlscW5oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcxNzY2MDQsImV4cCI6MjA2Mjc1MjYwNH0.FypB02v3tGMnxXV9ZmZMdMC0oQpREKOJWgHMPxUzwX4';
         
         let supabase;
-        try { supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY); } 
-        catch(e) { document.getElementById('auth-loading').innerHTML = `<p style="color:red">Error connecting to services.</p>`; }
+        try {
+            supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        } catch (error) {
+            console.error("Supabase client initialization failed:", error);
+            document.getElementById('auth-loading').innerHTML = '<p style="color:var(--danger-color); text-align:center;">Error connecting to services.</p>';
+        }
 
-        // DOM Elements
+        // --- DOM Elements ---
         const authLoadingDiv = document.getElementById('auth-loading');
-        const portalContentDiv = document.getElementById('portalContent');
+        const initialViewDiv = document.getElementById('initial-view');
+        const callFlowViewDiv = document.getElementById('call-flow-view');
+        const postCallSummaryDiv = document.getElementById('postCallSummary');
+        
+        const scenarioDropdown = document.getElementById('scenarioDropdown');
+        const receiveCallBtn = document.getElementById('receive-call-btn');
+        const scenarioTitleElement = document.getElementById('scenario-title');
+        const stepTypeIconElement = document.getElementById('step-type-icon'); 
+        const stepsContainer = document.getElementById('steps-container'); 
+        const decisionButtonsContainer = document.getElementById('decision-buttons-container'); 
+        const prevStepBtn = document.getElementById('prev-step-btn');
+        const nextStepBtn = document.getElementById('next-step-btn'); 
+        const endCallBtn = document.getElementById('end-call-btn');
+        
+        const userInfoDiv = document.getElementById('userInfo');
         const userNameSpan = document.getElementById('userName');
         const logoutButton = document.getElementById('logoutButton');
-        const agentGreeting = document.getElementById('agentGreeting');
-        const kpiTotalCalls = document.getElementById('kpiTotalCalls');
-        const kpiAvgTime = document.getElementById('kpiAvgTime');
-        const dailyTargetPercentage = document.getElementById('dailyTargetPercentage');
-        const dailyTargetProgressBar = document.getElementById('dailyTargetProgressBar');
-        const searchInput = document.getElementById('searchInput'), qualityFilter = document.getElementById('qualityFilter'),
-              startDateFilter = document.getElementById('startDateFilter'), endDateFilter = document.getElementById('endDateFilter'),
-              resetFiltersBtn = document.getElementById('resetFiltersBtn');
-        const tableBody = document.querySelector('#callsTable tbody'), noDataMessage = document.getElementById('noDataMessage');
-        const qualityChartCanvas = document.getElementById('qualityChart'), badReasonsChartCanvas = document.getElementById('badReasonsChart'),
-              noBadCallsMessage = document.getElementById('noBadCallsMessage');
-        const paginationControls = document.getElementById('paginationControls');
-        const exportDataBtn = document.getElementById('exportDataBtn');
         const dashboardLink = document.getElementById('dashboardLink');
         const rtmDashboardLink = document.getElementById('rtmDashboardLink');
+        const agentPortalLink = document.getElementById('agentPortalLink');
+        
+        const systemStatusDiv = document.getElementById('systemStatus');
+        const callTimerDiv = document.getElementById('callTimer');
+        const progressTrackerContainer = document.getElementById('progressTracker');
+        
+        const assistantBox = document.getElementById('assistantBox');
+        const assistantMessageElement = document.getElementById('assistantMessageElement');
+        
+        const callSummaryContentDiv = document.getElementById('callSummaryContent');
+        const returnToInitialViewBtn = document.getElementById('returnToInitialViewBtn');
+        const callStartSound = document.getElementById('callStartSound'); 
+        const compensationScenarioSound = document.getElementById('compensationScenarioSound');
         document.getElementById('currentYear').textContent = new Date().getFullYear();
-        
-        const agentScratchpad = document.getElementById('agentScratchpad');
-        const saveNoteBtn = document.getElementById('saveNoteBtn');
-        const cancelNoteBtn = document.getElementById('cancelNoteBtn');
-        const savedNotesList = document.getElementById('savedNotesList');
-        const noNotesMessage = document.getElementById('noNotesMessage');
-        const notesPaginationControls = document.getElementById('notesPaginationControls');
-        
-        const editNoteModal = document.getElementById('editNoteModal');
-        const deleteConfirmModal = document.getElementById('deleteConfirmModal');
-        const editNoteTextarea = document.getElementById('editNoteTextarea');
-        const cancelEditBtn = document.getElementById('cancelEditBtn');
-        const saveChangesBtn = document.getElementById('saveChangesBtn');
-        const cancelDeleteBtn = document.getElementById('cancelDeleteBtn');
-        const confirmDeleteBtn = document.getElementById('confirmDeleteBtn');
 
-        let qualityChartInstance, badReasonsChartInstance;
+        // --- State Variables ---
+        let currentUser = null; 
+        let currentScenario = null; 
+        let currentStepId = null;   
+        let stepHistory = [];       
+        let currentStepIndexForProgressBar = 0; 
 
-        // State
-        let currentUser = null, allUserCalls = [], filteredCalls = [], filterTimeout;
-        let currentPage = 1;
-        const ROWS_PER_PAGE = 6;
-        let currentNotesPage = 1;
-        const NOTES_PER_PAGE = 5; // MODIFIED: Notes Pagination
-        let noteToEditTimestamp = null;
-        let noteToDeleteTimestamp = null;
-        const DAILY_TICKET_TARGET = 20;
-        const NOTES_STORAGE_KEY_PREFIX = 'agentSavedNotes_';
-        let NOTES_STORAGE_KEY = '';
-        const EGYPT_TIMEZONE = 'Africa/Cairo'; // MODIFIED: Timezone constant
+        let callSessionId = null;    
+        let callStartTimeISO = null; 
+        let stepTimerInterval = null;
+        let stepStartTime = 0;      
+        let accumulatedStepDurations = {}; 
 
-        // MODIFIED: Timezone formatting function
-        function formatDateTimeEgypt(dateString, options = {}) {
-            if (!dateString) return 'N/A';
-            const date = new Date(dateString);
-            const defaultOptions = { timeZone: EGYPT_TIMEZONE, year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute:'2-digit', hour12: true };
-            return date.toLocaleString('en-US', { ...defaultOptions, ...options });
-        }
-        
-        // MODIFIED: Notes Pagination
-        function renderNotesPagination(totalNotes) {
-            notesPaginationControls.innerHTML = '';
-            const totalPages = Math.ceil(totalNotes / NOTES_PER_PAGE);
-            if (totalPages <= 1) return;
+        const SESSION_STATE_KEY = 'elevoCoreActiveCallState_v3'; 
 
-            const prevButton = document.createElement('button');
-            prevButton.innerHTML = `&laquo; Prev`;
-            prevButton.disabled = currentNotesPage === 1;
-            prevButton.addEventListener('click', () => { if (currentNotesPage > 1) { currentNotesPage--; renderSavedNotes(); } });
+        // --- UI Helper Functions ---
+        function setButtonLoadingState(buttonElement, isLoading, defaultText = "Submit", loadingText = "Loading...") {
+            const btnTextElement = buttonElement.querySelector('.btn-text');
+            const btnIconElement = buttonElement.querySelector('.btn-icon');
+            let spinner = buttonElement.querySelector('.btn-spinner');
 
-            const pageInfo = document.createElement('span');
-            pageInfo.textContent = `Page ${currentNotesPage} of ${totalPages}`;
-
-            const nextButton = document.createElement('button');
-            nextButton.innerHTML = `Next &raquo;`;
-            nextButton.disabled = currentNotesPage === totalPages;
-            nextButton.addEventListener('click', () => { if (currentNotesPage < totalPages) { currentNotesPage++; renderSavedNotes(); } });
-
-            notesPaginationControls.appendChild(prevButton);
-            notesPaginationControls.appendChild(pageInfo);
-            notesPaginationControls.appendChild(nextButton);
+            if (isLoading) {
+                buttonElement.disabled = true;
+                if (btnTextElement) btnTextElement.textContent = loadingText;
+                if (btnIconElement) btnIconElement.style.display = 'none';
+                if (!spinner) {
+                    spinner = document.createElement('span');
+                    spinner.className = 'btn-spinner';
+                    buttonElement.insertBefore(spinner, btnTextElement || btnIconElement);
+                }
+                spinner.style.display = 'inline-block';
+            } else {
+                buttonElement.disabled = false;
+                if (btnTextElement) btnTextElement.textContent = defaultText;
+                if (btnIconElement) btnIconElement.style.display = 'inline-flex';
+                if (spinner) spinner.style.display = 'none';
+            }
         }
 
-        function renderSavedNotes() {
-            const notes = JSON.parse(localStorage.getItem(NOTES_STORAGE_KEY) || '[]');
-            savedNotesList.innerHTML = '';
 
-            if (notes.length === 0) {
-                noNotesMessage.style.display = 'block';
-                notesPaginationControls.innerHTML = '';
+        function updateSystemStatus(statusText, statusClass = 'status-waiting') {
+            if (systemStatusDiv) {
+                systemStatusDiv.textContent = statusText;
+                systemStatusDiv.className = `status-indicator ${statusClass}`;
+            }
+        }
+
+        function animateView(viewElement) {
+            if (viewElement) {
+                viewElement.classList.remove('fade-in');
+                void viewElement.offsetWidth; 
+                viewElement.classList.add('fade-in');
+                viewElement.style.display = 'block';
+            }
+        }
+        
+        let assistantTimeout = null;
+        let typingInterval = null;
+
+        function typeWriterEffect(element, message, speed = 30, callback) {
+            if (typingInterval) clearInterval(typingInterval);
+            element.textContent = '';
+            let i = 0;
+            typingInterval = setInterval(() => {
+                if (i < message.length) { element.textContent += message.charAt(i); i++; }
+                else { clearInterval(typingInterval); typingInterval = null; if (callback) callback(); }
+            }, speed);
+        }
+        
+        function showAssistantMessage(message, isInitial = false, duration = 5000, onHideCallback = null) {
+            if (!assistantBox || !assistantMessageElement) return;
+            clearTimeout(assistantTimeout);
+            if (typingInterval) clearInterval(typingInterval);
+            assistantBox.classList.remove('show', 'assistant-initial-position'); 
+            void assistantBox.offsetWidth; 
+            if (isInitial) assistantBox.classList.add('assistant-initial-position');
+            else assistantBox.classList.add('show'); 
+            assistantBox.style.display = 'flex';
+            typeWriterEffect(assistantMessageElement, message, 30, () => {
+                if (duration > 0) {
+                    assistantTimeout = setTimeout(() => {
+                        hideAssistant(isInitial);
+                        if (onHideCallback) onHideCallback();
+                    }, duration);
+                }
+            });
+        }
+
+        function hideAssistant(wasInitial = false) {
+             if (!assistantBox) return;
+             if (wasInitial) assistantBox.classList.remove('assistant-initial-position');
+             else assistantBox.classList.remove('show');
+             setTimeout(() => { 
+                if (!assistantBox.classList.contains('show') && !assistantBox.classList.contains('assistant-initial-position')) {
+                    assistantBox.style.display = 'none';
+                }
+             }, wasInitial ? 0 : 400); 
+        }
+
+        async function initializeApp() {
+            if (!supabase) { 
+                 authLoadingDiv.innerHTML = '<p style="color:var(--danger-color); text-align:center;">Services unavailable.</p>';
+                 return;
+            }
+            const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+            if (sessionError || !session) {
+                window.location.replace('login.html'); 
                 return;
             }
-            
-            noNotesMessage.style.display = 'none';
-            notes.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-            
-            const startIndex = (currentNotesPage - 1) * NOTES_PER_PAGE;
-            const paginatedNotes = notes.slice(startIndex, startIndex + NOTES_PER_PAGE);
-
-            paginatedNotes.forEach(note => {
-                const noteDate = new Date(note.timestamp);
-                const formattedDateTime = formatDateTimeEgypt(note.timestamp);
-                
-                const sanitizedText = document.createElement('div');
-                sanitizedText.innerText = note.text;
-                
-                const noteElement = `
-                    <div class="note-card">
-                        <div class="note-header">
-                             <div class="note-timestamp">
-                                <span>${formattedDateTime}</span>
-                            </div>
-                            <div class="note-actions">
-                                 <button class="note-action-btn edit-note-btn" title="Edit Note" data-timestamp="${note.timestamp}">
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
-                                </button>
-                                <button class="note-action-btn delete-note-btn" title="Delete Note" data-timestamp="${note.timestamp}">
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
-                                </button>
-                            </div>
-                        </div>
-                        <div class="note-content">
-                            <p>${sanitizedText.innerHTML.replace(/\n/g, '<br>')}</p>
-                        </div>
-                    </div>
-                `;
-                savedNotesList.insertAdjacentHTML('beforeend', noteElement);
-            });
-            
-            renderNotesPagination(notes.length);
-        }
-
-        function saveCurrentNote() {
-            const noteText = agentScratchpad.value.trim();
-            if (!noteText) return;
-
-            const notes = JSON.parse(localStorage.getItem(NOTES_STORAGE_KEY) || '[]');
-            notes.push({ text: noteText, timestamp: new Date().toISOString() });
-            localStorage.setItem(NOTES_STORAGE_KEY, JSON.stringify(notes));
-
-            agentScratchpad.value = '';
-            currentNotesPage = 1;
-            renderSavedNotes(); 
-        }
-
-        function updateNote(timestamp, newText) {
-            let notes = JSON.parse(localStorage.getItem(NOTES_STORAGE_KEY) || '[]');
-            const noteIndex = notes.findIndex(note => note.timestamp === timestamp);
-            if (noteIndex > -1) {
-                notes[noteIndex].text = newText;
-                localStorage.setItem(NOTES_STORAGE_KEY, JSON.stringify(notes));
-                renderSavedNotes();
-            }
-        }
-
-        function deleteNote(timestamp) {
-            let notes = JSON.parse(localStorage.getItem(NOTES_STORAGE_KEY) || '[]');
-            notes = notes.filter(note => note.timestamp !== timestamp);
-            
-            const totalPages = Math.ceil(notes.length / NOTES_PER_PAGE);
-            if(currentNotesPage > totalPages) currentNotesPage = totalPages || 1;
-
-            localStorage.setItem(NOTES_STORAGE_KEY, JSON.stringify(notes));
-            renderSavedNotes();
-        }
-        
-        function openEditModal(timestamp) {
-            const notes = JSON.parse(localStorage.getItem(NOTES_STORAGE_KEY) || '[]');
-            const note = notes.find(n => n.timestamp === timestamp);
-            if(note) {
-                noteToEditTimestamp = timestamp;
-                editNoteTextarea.value = note.text;
-                editNoteModal.classList.add('visible');
-            }
-        }
-        function closeEditModal() { editNoteModal.classList.remove('visible'); noteToEditTimestamp = null; }
-        
-        function openDeleteConfirmModal(timestamp) {
-            noteToDeleteTimestamp = timestamp;
-            deleteConfirmModal.classList.add('visible');
-        }
-        function closeDeleteConfirmModal() { deleteConfirmModal.classList.remove('visible'); noteToDeleteTimestamp = null; }
-        
-
-        async function initializePortal() {
-            if (!supabase) return;
-            const { data: { session } } = await supabase.auth.getSession();
-            if (!session) { window.location.replace('login.html'); return; }
 
             const storedUserData = JSON.parse(localStorage.getItem('elevoCoreUserData'));
-             if (storedUserData && storedUserData.id === session.user.id) {
+            if (storedUserData && storedUserData.id === session.user.id) {
                 currentUser = storedUserData;
             } else {
-                const { data: profile } = await supabase.from('users').select('name, is_admin').eq('id', session.user.id).single();
-                currentUser = { id: session.user.id, email: session.user.email, name: profile?.name || session.user.email, isAdmin: profile?.is_admin || false };
-                localStorage.setItem('elevoCoreUserData', JSON.stringify(currentUser));
+                try {
+                    const { data: profile, error } = await supabase.from('users').select('name, is_admin').eq('id', session.user.id).single();
+                    if (error) throw error;
+                    currentUser = { id: session.user.id, email: session.user.email, name: profile.name, isAdmin: profile.is_admin };
+                    localStorage.setItem('elevoCoreUserData', JSON.stringify(currentUser));
+                } catch (error) {
+                    console.error("Failed to fetch user profile:", error);
+                    currentUser = { id: session.user.id, email: session.user.email, name: session.user.email.split('@')[0], isAdmin: false, profileError: true };
+                }
             }
-            NOTES_STORAGE_KEY = `${NOTES_STORAGE_KEY_PREFIX}${currentUser.id}`;
 
-            setupUI();
-            await loadAgentData();
-            setupEventListeners();
-            authLoadingDiv.style.display = 'none';
-            portalContentDiv.style.display = 'block';
-        }
-
-        function setupUI() {
             userNameSpan.textContent = currentUser.name;
-            agentGreeting.textContent = `Welcome, ${currentUser.name}!`;
-            document.getElementById('userInfo').style.display = 'flex';
+            userInfoDiv.style.display = 'flex';
             
             // MODIFIED: User Permissions
             if (currentUser.isAdmin) {
-                if(dashboardLink) dashboardLink.style.display = 'inline-block';
-                if(rtmDashboardLink) rtmDashboardLink.style.display = 'inline-block';
+                if (dashboardLink) dashboardLink.style.display = 'inline-block';
+                if (rtmDashboardLink) rtmDashboardLink.style.display = 'inline-block';
             }
-
-            renderSavedNotes();
-        }
-
-        async function loadAgentData() {
-            try {
-                const { data, error } = await supabase.from('call_sessions').select('*, scenario:call_scenarios(title)').eq('user_id', currentUser.id).order('start_time', { ascending: false });
-                if (error) throw error;
-                allUserCalls = data;
-                applyFiltersAndRender();
-            } catch (err) {
-                console.error('Failed to load agent call data:', err);
-                noDataMessage.textContent = 'Could not load your call history.';
-                noDataMessage.style.display = 'block';
-                tableBody.innerHTML = '';
-            }
-        }
-
-        function applyFiltersAndRender() {
-            const searchTerm = searchInput.value.toLowerCase();
-            const quality = qualityFilter.value;
-            const startDate = startDateFilter.value;
-            const endDate = endDateFilter.value;
-
-            filteredCalls = allUserCalls.filter(call => {
-                const callDate = new Date(call.start_time);
-                const matchesSearch = !searchTerm || (call.scenario?.title || '').toLowerCase().includes(searchTerm);
-                const matchesQuality = !quality || call.call_quality === quality;
-                const matchesStartDate = !startDate || callDate >= new Date(startDate + "T00:00:00.000Z");
-                const matchesEndDate = !endDate || callDate <= new Date(endDate + "T23:59:59.999Z");
-                return matchesSearch && matchesQuality && matchesStartDate && matchesEndDate;
-            });
-
-            currentPage = 1;
-            updateStats(filteredCalls);
-            renderTable();
-            renderPagination();
-            renderCharts(filteredCalls);
-        }
-        
-        function resetFilters() {
-            searchInput.value = '';
-            qualityFilter.value = '';
-            startDateFilter.value = '';
-            endDateFilter.value = '';
-            applyFiltersAndRender();
-        }
-        
-        // MODIFIED: Performance Stats Fix
-        function updateStats(calls) {
-            const today = new Date();
-            const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString();
-
-            const todaysCalls = allUserCalls.filter(c => c.start_time >= startOfToday);
-
-            kpiTotalCalls.textContent = calls.length;
-
-            const callsWithDuration = calls.filter(call => typeof call.duration === 'number');
-            const totalDuration = callsWithDuration.reduce((acc, call) => acc + call.duration, 0);
+            agentPortalLink.style.display = 'inline-block'; // Visible for all users
             
-            if (callsWithDuration.length > 0) {
-                const avgDuration = Math.round(totalDuration / callsWithDuration.length);
-                const avgMins = Math.floor(avgDuration / 60);
-                const avgSecs = String(avgDuration % 60).padStart(2, '0');
-                kpiAvgTime.textContent = `${avgMins}m ${avgSecs}s`;
+            authLoadingDiv.style.display = 'none';
+            
+            if (restoreCallState()) { 
+                switchToCallFlowView(false); 
+                renderStep(); 
+                updateSystemStatus("🟢 In Ticket (Restored)", "status-in-call");
             } else {
-                kpiAvgTime.textContent = '0m 00s';
+                switchToInitialView();
+                await loadActiveScenarios();
+                showAssistantMessage("Welcome! Select a scenario to begin.", true, 7000);
             }
-            
-            const targetPercent = Math.min(100, Math.round((todaysCalls.length / DAILY_TICKET_TARGET) * 100));
-            dailyTargetPercentage.textContent = `${targetPercent}%`;
-            dailyTargetProgressBar.style.width = `${targetPercent}%`;
-
-            document.getElementById('achTicketsCompleted').textContent = calls.filter(c => c.completed).length;
         }
 
-        function renderTable() {
-            tableBody.innerHTML = '';
-            noDataMessage.style.display = filteredCalls.length === 0 ? 'block' : 'none';
-            if (filteredCalls.length === 0 && allUserCalls.length > 0) {
-                noDataMessage.textContent = 'No calls match the current filters.';
-            } else if (allUserCalls.length === 0) {
-                noDataMessage.textContent = 'You have no call history yet.';
-            }
-
-            const paginatedCalls = filteredCalls.slice((currentPage - 1) * ROWS_PER_PAGE, currentPage * ROWS_PER_PAGE);
-
-            paginatedCalls.forEach(call => {
-                const dur = call.duration || 0;
-                const row = `<tr>
-                        <td>${new Date(call.start_time).toLocaleDateString('en-GB', { timeZone: EGYPT_TIMEZONE })}</td>
-                        <td>${call.scenario?.title || 'N/A'}</td>
-                        <td>${Math.floor(dur / 60)}m ${String(dur % 60).padStart(2, '0')}s</td>
-                        <td>${call.completed ? '✅ Yes' : '❌ No'}</td>
-                        <td><span class="quality-text quality-${(call.call_quality || 'na').toLowerCase()}">${call.call_quality || 'N/A'}</span></td>
-                        <td>${call.quality_reason || '-'}</td>
-                    </tr>`;
-                tableBody.insertAdjacentHTML('beforeend', row);
-            });
+        function switchToInitialView() {
+            callFlowViewDiv.style.display = 'none';
+            postCallSummaryDiv.style.display = 'none';
+            progressTrackerContainer.style.display = 'none';
+            callTimerDiv.style.display = 'none';
+            animateView(initialViewDiv);
+            updateSystemStatus("🔴 Waiting for Ticket", "status-waiting");
+            hideAssistant(false); 
         }
-        
-        function renderPagination() {
-            paginationControls.innerHTML = '';
-            const totalPages = Math.ceil(filteredCalls.length / ROWS_PER_PAGE);
-            if (totalPages <= 1) return;
 
-            const prevButton = document.createElement('button');
-            prevButton.innerHTML = `&laquo; Previous`;
-            prevButton.disabled = currentPage === 1;
-            prevButton.addEventListener('click', () => { if (currentPage > 1) { currentPage--; renderTable(); renderPagination(); } });
-
-            const pageInfo = document.createElement('span');
-            pageInfo.textContent = `Page ${currentPage} of ${totalPages}`;
-
-            const nextButton = document.createElement('button');
-            nextButton.innerHTML = `Next &raquo;`;
-            nextButton.disabled = currentPage === totalPages;
-            nextButton.addEventListener('click', () => { if (currentPage < totalPages) { currentPage++; renderTable(); renderPagination(); } });
-
-            paginationControls.appendChild(prevButton);
-            paginationControls.appendChild(pageInfo);
-            paginationControls.appendChild(nextButton);
+        function switchToCallFlowView(animate = true) {
+            initialViewDiv.style.display = 'none';
+            postCallSummaryDiv.style.display = 'none';
+            if (animate) animateView(callFlowViewDiv);
+            else callFlowViewDiv.style.display = 'block';
+            progressTrackerContainer.style.display = 'flex'; 
+            updateSystemStatus("🟢 In Ticket", "status-in-call");
+            hideAssistant(true); 
         }
-        
-        function renderCharts(calls) {
-            const FONT_SIZE_TITLE = 16;
-            const FONT_SIZE_LEGEND = 13;
-            
-            if (qualityChartInstance) qualityChartInstance.destroy();
-            const qualityCounts = calls.reduce((acc, call) => {
-                const quality = call.call_quality || 'N/A';
-                acc[quality] = (acc[quality] || 0) + 1;
-                return acc;
-            }, {});
 
-            qualityChartInstance = new Chart(qualityChartCanvas, {
-                type: 'pie', 
-                data: { 
-                    labels: ['Good', 'Bad', 'N/A'],
-                    datasets: [{ 
-                        data: [qualityCounts['Good'] || 0, qualityCounts['Bad'] || 0, qualityCounts['N/A'] || 0],
-                        backgroundColor: ['var(--success-color)', 'var(--danger-color)', 'var(--secondary-color)'],
-                        borderColor: 'var(--card-bg-color)',
-                        borderWidth: 4,
-                        hoverOffset: 8
-                    }] 
-                },
-                options: {
-                    responsive: true, maintainAspectRatio: false,
-                    plugins: { 
-                        legend: { position: 'bottom', labels: { color: 'var(--text-color)', font: { size: FONT_SIZE_LEGEND } } }, 
-                        title: { display: true, text: 'Your Call Quality Breakdown', color: 'var(--text-color)', font: { size: FONT_SIZE_TITLE } } 
-                    }
+        function switchToSummaryView() {
+            initialViewDiv.style.display = 'none';
+            callFlowViewDiv.style.display = 'none';
+            progressTrackerContainer.style.display = 'none';
+            callTimerDiv.style.display = 'none';
+            animateView(postCallSummaryDiv);
+            updateSystemStatus("📊 Review Ticket Summary", "status-summary");
+            hideAssistant(false); 
+        }
+
+        async function loadActiveScenarios() {
+            setButtonLoadingState(receiveCallBtn, true, "Receive Ticket", "Loading...");
+            scenarioDropdown.disabled = true;
+            scenarioDropdown.innerHTML = '<option value="" disabled selected>Loading scenarios...</option>';
+            try {
+                const { data: scenarios, error } = await supabase
+                    .from('call_scenarios') 
+                    .select('id, title')                 
+                    .eq('is_active', true) 
+                    .order('created_at', { ascending: false }); 
+                if (error) throw error;
+
+                if (scenarios && scenarios.length > 0) {
+                    scenarioDropdown.innerHTML = '<option value="">-- Select a Scenario --</option>'; 
+                    scenarios.forEach(s => {
+                        const option = document.createElement('option');
+                        option.value = s.id;
+                        option.textContent = s.title; 
+                        scenarioDropdown.appendChild(option);
+                    });
+                    scenarioDropdown.disabled = false;
+                    setButtonLoadingState(receiveCallBtn, false, "Receive Ticket");
+                    receiveCallBtn.disabled = true;
+                } else {
+                    scenarioDropdown.innerHTML = '<option value="" disabled>No scenarios available.</option>';
+                    showAssistantMessage("⚠️ No active scenarios available.", true, 0); 
+                    setButtonLoadingState(receiveCallBtn, false, "Receive Ticket");
+                    receiveCallBtn.disabled = true;
                 }
-            });
-
-            const badCalls = calls.filter(c => c.call_quality === 'Bad' && c.quality_reason);
-            const showBadChart = badCalls.length > 0;
-            badReasonsChartCanvas.style.display = showBadChart ? 'block' : 'none';
-            noBadCallsMessage.style.display = !showBadChart ? 'block' : 'none';
-
-            if(badReasonsChartInstance) badReasonsChartInstance.destroy();
-            if(showBadChart) {
-                const reasonCounts = badCalls.reduce((acc, c) => { acc[c.quality_reason] = (acc[c.quality_reason] || 0) + 1; return acc; }, {});
-                badReasonsChartInstance = new Chart(badReasonsChartCanvas, {
-                    type: 'doughnut', 
-                    data: { 
-                        labels: Object.keys(reasonCounts), 
-                        datasets: [{ 
-                            data: Object.values(reasonCounts), 
-                            backgroundColor: ['#ef4444', '#f59e0b', '#6b7280', '#3b82f6'], 
-                            hoverOffset: 4, borderColor: 'var(--card-bg-color)', borderWidth: 3 
-                        }] 
-                    },
-                    options: { 
-                        responsive: true, maintainAspectRatio: false, 
-                        plugins: { 
-                            legend: { position: 'bottom', labels: { color: 'var(--text-color)', font: { size: FONT_SIZE_LEGEND } } }, 
-                            title: { display: true, text: "Reasons for 'Bad' Calls", color: 'var(--text-color)', font: { size: FONT_SIZE_TITLE } }
-                        } 
-                    }
-                });
+            } catch (err) {
+                console.error("Error loading scenarios:", err);
+                scenarioDropdown.innerHTML = '<option value="" disabled>⚠️ Failed to load scenarios.</option>';
+                showAssistantMessage(`⚠️ Error loading scenarios: ${err.message}`, true, 8000);
+                setButtonLoadingState(receiveCallBtn, false, "Receive Ticket");
+                receiveCallBtn.disabled = true;
             }
         }
+        
+        receiveCallBtn.addEventListener('click', async () => {
+            const selectedScenarioId = scenarioDropdown.value;
+            if (!selectedScenarioId) {
+                showAssistantMessage("⚠️ Please select a scenario first.", true, 5000);
+                return;
+            }
+            if (currentUser.profileError) {
+                 showAssistantMessage("⚠️ Cannot start ticket due to profile loading error.", true, 7000);
+                 return;
+            }
+            setButtonLoadingState(receiveCallBtn, true, "Receive Ticket", "Starting...");
+            if(callStartSound) callStartSound.play().catch(e => console.warn("Audio play failed:", e));
 
-        function setupEventListeners() {
-            logoutButton.addEventListener('click', async () => { await supabase.auth.signOut(); localStorage.clear(); window.location.replace("login.html"); });
-            [searchInput, qualityFilter, startDateFilter, endDateFilter].forEach(el => { el.addEventListener('input', () => { clearTimeout(filterTimeout); filterTimeout = setTimeout(applyFiltersAndRender, 400); }); });
-            resetFiltersBtn.addEventListener('click', resetFilters);
-            exportDataBtn.addEventListener('click', () => { alert('Exporting data...'); });
-            
-            saveNoteBtn.addEventListener('click', saveCurrentNote);
-            cancelNoteBtn.addEventListener('click', () => { agentScratchpad.value = ''; });
-            
-            savedNotesList.addEventListener('click', (e) => {
-                const editButton = e.target.closest('.edit-note-btn');
-                const deleteButton = e.target.closest('.delete-note-btn');
+            resetCallState(); 
+            switchToCallFlowView();
+            updateSystemStatus("🟡 Loading Scenario...", "status-loading");
+            stepsContainer.innerHTML = '<p class="placeholder-text">Loading scenario details...</p>';
+            decisionButtonsContainer.innerHTML = ''; 
+            scenarioTitleElement.innerHTML = `<span id="step-type-icon" class="step-type-icon"></span>Loading...`; 
+
+            try {
+                const { data: scenarioData, error: scenarioError } = await supabase
+                    .from('call_scenarios') 
+                    .select('id, title, steps') 
+                    .eq('id', selectedScenarioId)
+                    .single();
+
+                if (scenarioError) throw scenarioError;
+                if (!scenarioData || !Array.isArray(scenarioData.steps) || scenarioData.steps.length === 0 || !scenarioData.steps[0].id) {
+                    throw new Error("Scenario data is invalid or has no steps in the new format.");
+                }
+
+                currentScenario = scenarioData; 
+                currentStepId = currentScenario.steps[0].id; 
+                stepHistory = [];
+                accumulatedStepDurations = {}; 
+                currentScenario.steps.forEach(step => { if(step.id) { accumulatedStepDurations[step.id] = 0; } });
+
+                callStartTimeISO = new Date().toISOString(); 
+                const { data: newSession, error: sessionInsertError } = await supabase
+                    .from('call_sessions')
+                    .insert({ user_id: currentUser.id, scenario_id: currentScenario.id, start_time: callStartTimeISO, agent_name: currentUser.name, agent_email: currentUser.email })
+                    .select('id') 
+                    .single();
+                if (sessionInsertError) {
+                    callStartTimeISO = null; 
+                    throw sessionInsertError;
+                }
+                callSessionId = newSession.id;
                 
-                if (editButton) openEditModal(editButton.dataset.timestamp);
-                if (deleteButton) openDeleteConfirmModal(deleteButton.dataset.timestamp);
-            });
+                updateSystemStatus("🟢 In Ticket", "status-in-call");
+                renderStep(); 
+                setButtonLoadingState(receiveCallBtn, false, "Receive Ticket");
+                receiveCallBtn.disabled = true;
+            } catch (err) {
+                console.error("Error starting ticket:", err);
+                resetCallState(); 
+                switchToInitialView();
+                showAssistantMessage(`⚠️ Error starting ticket: ${err.message}. Please try again.`, true, 7000);
+                await loadActiveScenarios();
+            }
+        });
+
+        function renderStep() {
+            if (!currentScenario || !currentStepId) {
+                stepsContainer.innerHTML = '<p class="placeholder-text">Error: Invalid scenario or step.</p>';
+                return;
+            }
+            const stepObject = currentScenario.steps.find(s => s.id === currentStepId); 
+            if (!stepObject) {
+                finishCall(false, `Error: Step ${currentStepId} not found`);
+                return;
+            }
             
-            cancelEditBtn.addEventListener('click', closeEditModal);
-            saveChangesBtn.addEventListener('click', () => {
-                const newText = editNoteTextarea.value.trim();
-                if(noteToEditTimestamp && newText) updateNote(noteToEditTimestamp, newText);
-                closeEditModal();
-            });
+            scenarioTitleElement.textContent = ` ${currentScenario.title}`; 
             
-            cancelDeleteBtn.addEventListener('click', closeDeleteConfirmModal);
-            confirmDeleteBtn.addEventListener('click', () => {
-                if(noteToDeleteTimestamp) deleteNote(noteToDeleteTimestamp);
-                closeDeleteConfirmModal();
-            });
-            
-            [editNoteModal, deleteConfirmModal].forEach(modal => {
-                modal.addEventListener('click', (e) => { if(e.target === modal) e.target.classList.remove('visible'); });
-            });
+            const stepTypeIcon = stepObject.type === 'decision' ? '🤔' : '🗣️';
+            scenarioTitleElement.insertAdjacentHTML('afterbegin', `<span id="step-type-icon" class="step-type-icon">${stepTypeIcon}</span>`);
+
+            stepsContainer.innerHTML = `<p>${stepObject.text.replace(/\n/g, '<br>')}</p>`; 
+            decisionButtonsContainer.innerHTML = ''; 
+
+            renderProgressTracker(); 
+
+            prevStepBtn.style.display = stepHistory.length > 0 ? 'inline-flex' : 'none';
+            endCallBtn.style.display = 'inline-flex';
+
+            if (stepObject.type === 'decision' && Array.isArray(stepObject.options)) {
+                nextStepBtn.style.display = 'none'; 
+                stepObject.options.forEach(option => {
+                    const button = document.createElement('button');
+                    button.className = 'decision-button'; 
+                    button.textContent = option.label;
+                    button.addEventListener('click', () => navigateToStep(option.next_id));
+                    decisionButtonsContainer.appendChild(button);
+                });
+            } else { 
+                nextStepBtn.style.display = 'inline-flex';
+                nextStepBtn.querySelector('.btn-text').textContent = stepObject.next_id ? "Next Step" : "Finish Scenario";
+            }
+            startStepTimer(); 
+            saveCallState();
+        }
+        
+        function navigateToStep(nextId) {
+            stopAndRecordStepTimer();
+            if (nextId === null || typeof nextId === 'undefined') { 
+                finishCall(true, "Reached end of scenario path."); 
+                return;
+            }
+            const targetStep = currentScenario.steps.find(s => s.id === nextId); 
+            if (!targetStep) {
+                finishCall(false, `Error: Step ${nextId} not found.`);
+                return;
+            }
+            stepHistory.push(currentStepId); 
+            currentStepId = nextId;
+            renderStep();
         }
 
-        if (supabase) initializePortal();
+        function renderProgressTracker() {
+             if (!progressTrackerContainer || !currentScenario || !currentScenario.steps) return;
+             const stepperWrapper = progressTrackerContainer.querySelector('.stepper-wrapper');
+             stepperWrapper.innerHTML = ''; 
+             const stepperUl = document.createElement('ul');
+             stepperUl.className = 'stepper';
+             const validSteps = currentScenario.steps.filter(step => step && step.id);
+             validSteps.forEach((step, index) => {
+                 const stepLi = document.createElement('li');
+                 stepLi.className = 'step';
+                 if (stepHistory.includes(step.id)) stepLi.classList.add('completed');
+                 else if (step.id === currentStepId) stepLi.classList.add('active');
+                 const stepNumber = document.createElement('span');
+                 stepNumber.className = 'step-number';
+                 stepNumber.textContent = stepHistory.includes(step.id) ? '✓' : index + 1;
+                 stepLi.appendChild(stepNumber);
+                 stepperUl.appendChild(stepLi);
+                 if (index < validSteps.length - 1) {
+                     const separator = document.createElement('li');
+                     separator.className = 'step-separator';
+                     stepperUl.appendChild(separator);
+                 }
+             });
+             stepperWrapper.appendChild(stepperUl);
+             progressTrackerContainer.style.display = 'flex';
+        }
+
+        nextStepBtn.addEventListener('click', () => {
+            const stepObject = currentScenario.steps.find(s => s.id === currentStepId); 
+            if (stepObject) navigateToStep(stepObject.next_id);
+        });
+        prevStepBtn.addEventListener('click', () => {
+            stopAndRecordStepTimer(); 
+            if (stepHistory.length > 0) { currentStepId = stepHistory.pop(); renderStep(); }
+        });
+        endCallBtn.addEventListener('click', () => {
+            stopAndRecordStepTimer(); 
+            finishCall(false, "Ticket ended by agent"); 
+        });
+
+        function startStepTimer() {
+            callTimerDiv.style.display = 'inline-block'; 
+            if (stepTimerInterval) clearInterval(stepTimerInterval);
+            if (callStartTimeISO) stepStartTime = new Date(callStartTimeISO).getTime();
+            else stepStartTime = Date.now();
+            
+            const timerUpdate = () => {
+                const elapsed = Date.now() - stepStartTime;
+                const totalSeconds = Math.floor(elapsed / 1000);
+                const minutes = String(Math.floor(totalSeconds / 60)).padStart(2, '0');
+                const seconds = String(totalSeconds % 60).padStart(2, '0');
+                callTimerDiv.textContent = `${minutes}:${seconds}`;
+            };
+            timerUpdate();
+            stepTimerInterval = setInterval(timerUpdate, 1000);
+        }
+
+        function stopAndRecordStepTimer() {
+            if (stepTimerInterval) clearInterval(stepTimerInterval);
+            stepTimerInterval = null;
+        }
+        
+        async function finishCall(completed, reason) { 
+            stopAndRecordStepTimer(); 
+            const endTimeISO = new Date().toISOString();
+            let duration = 0;
+            if (callStartTimeISO) duration = Math.floor((new Date(endTimeISO) - new Date(callStartTimeISO)) / 1000);
+            
+            const quality = completed ? 'Good' : (duration > 0 ? 'Bad' : 'N/A');
+            
+            if (callSessionId) {
+                const { error } = await supabase.from('call_sessions').update({
+                    end_time: endTimeISO, duration, completed, call_quality: quality, quality_reason: reason
+                }).eq('id', callSessionId);
+                if (error) console.error("Failed to update ticket session:", error);
+            }
+            
+            displayPostCallSummary(quality, reason, duration);
+            clearCallState(); 
+        }
+
+        function displayPostCallSummary(quality, reason, totalDuration) {
+            let summaryHTML = `<p><strong>Ticket Quality:</strong> <span class="quality-text quality-${quality?.toLowerCase() || 'na'}">${quality || 'N/A'}</span></p>
+                <p><strong>Reason:</strong> ${reason || "N/A"}</p>
+                <p><strong>Total Handle Time:</strong> ${Math.floor(totalDuration / 60)}m ${totalDuration % 60}s</p>`;
+            callSummaryContentDiv.innerHTML = summaryHTML;
+            switchToSummaryView();
+        }
+        
+        returnToInitialViewBtn.addEventListener('click', async () => {
+            resetCallState(true); 
+            await loadActiveScenarios();
+        });
+
+        function saveCallState() {
+            if (!callSessionId) return;
+            sessionStorage.setItem(SESSION_STATE_KEY, JSON.stringify({
+                callSessionId, currentScenario, currentStepId, stepHistory, callStartTimeISO
+            }));
+        }
+
+        function restoreCallState() {
+            const stateJSON = sessionStorage.getItem(SESSION_STATE_KEY);
+            if (!stateJSON) return false;
+            const state = JSON.parse(stateJSON);
+            if (!state.callSessionId || !state.currentStepId) { clearCallState(); return false; }
+            Object.assign(this, state);
+            return true;
+        }
+
+        function clearCallState() { sessionStorage.removeItem(SESSION_STATE_KEY); }
+
+        function resetCallState(switchToInitial = false) {
+            stopAndRecordStepTimer(); 
+            clearCallState();         
+            currentScenario = null; currentStepId = null; stepHistory = []; callSessionId = null; callStartTimeISO = null;
+            if (switchToInitial) switchToInitialView();
+        }
+
+        logoutButton.addEventListener('click', async () => {
+            resetCallState(); 
+            localStorage.removeItem('elevoCoreUserData'); 
+            if (supabase) await supabase.auth.signOut();
+            window.location.replace("login.html");
+        });
+
+        scenarioDropdown.addEventListener('change', () => {
+            receiveCallBtn.disabled = !scenarioDropdown.value;
+        });
+        
+        window.addEventListener('beforeunload', () => { if (callSessionId) saveCallState(); });
+        
+        if (supabase) initializeApp();
     </script>
 
 <script>
@@ -937,15 +734,28 @@ function exportTableToCSV(filename = 'report.csv') {
 
 
 <script>
-// Agent portal safe init: ensure supabase client present
+// Scenario colorizer: mark select option text green when selected
 (function(){
   try{
-    if(typeof supabase === 'undefined'){
-      console.warn('supabase client missing');
+    const sel = document.querySelector('select[name="scenario"]') || document.querySelector('select#scenario') || document.querySelector('select');
+    function markScenario(){
+      if(!sel) return;
+      const opt = sel.options[sel.selectedIndex];
+      const el = document.getElementById('selectedScenarioName') || document.querySelector('.scenario-name') || sel;
+      if(opt && el){
+         el.textContent = opt.text || '';
+         el.classList.add('scenario-selected');
+         el.style.color = 'var(--accent-success,#22c55e)';
+      }
     }
-    // remove loader
-    setTimeout(()=>{ const l = document.querySelector('.realtime-loader'); if(l) l.style.display='none'; document.querySelector('main')?.style.visibility='visible'; }, 300);
-  }catch(e){console.warn(e);}
+    if(sel){
+      sel.addEventListener('change', markScenario);
+      markScenario();
+    }
+    // ensure receive button visible
+    const btn = document.querySelector('button.receive-ticket') || document.querySelector('.btn-receive') || document.querySelector('button');
+    if(btn){ btn.classList.add('btn-receive'); btn.style.fontSize='1rem'; btn.style.padding='10px 18px'; }
+  }catch(e){ console.warn('scenario script', e); }
 })();
 </script>
 
