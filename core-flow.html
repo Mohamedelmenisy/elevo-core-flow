@@ -94,7 +94,7 @@
 
             <div id="call-flow-view" class="card call-flow-card fade-in" style="display: none;">
                 <h3 id="scenario-title" class="card-title scenario-title-dynamic"><span id="step-type-icon" class="step-type-icon"></span>Ticket Scenario</h3>
-                <div id="steps-container" class="steps-area" style="margin-bottom: 1.5rem; color: var(--text-color-secondary);">
+                <div id="steps-container" class="steps-area" style="margin-bottom: 1.5rem; font-size: 0.95rem; line-height: 1.7; color: var(--text-color-secondary);">
                     <p class="placeholder-text">Loading ticket steps...</p>
                 </div>
                 <div id="decision-buttons-container" class="step-actions"></div>
@@ -155,6 +155,7 @@
         const scenarioDropdown = document.getElementById('scenarioDropdown');
         const receiveCallBtn = document.getElementById('receive-call-btn');
         const scenarioTitleElement = document.getElementById('scenario-title');
+        const stepTypeIconElement = document.getElementById('step-type-icon'); 
         const stepsContainer = document.getElementById('steps-container'); 
         const decisionButtonsContainer = document.getElementById('decision-buttons-container'); 
         const prevStepBtn = document.getElementById('prev-step-btn');
@@ -177,6 +178,8 @@
         
         const callSummaryContentDiv = document.getElementById('callSummaryContent');
         const returnToInitialViewBtn = document.getElementById('returnToInitialViewBtn');
+        const callStartSound = document.getElementById('callStartSound'); 
+        const compensationScenarioSound = document.getElementById('compensationScenarioSound');
         document.getElementById('currentYear').textContent = new Date().getFullYear();
 
         // --- State Variables ---
@@ -184,11 +187,41 @@
         let currentScenario = null; 
         let currentStepId = null;   
         let stepHistory = [];       
+        let currentStepIndexForProgressBar = 0; 
+
         let callSessionId = null;    
         let callStartTimeISO = null; 
-        let callTimerInterval = null;
+        let stepTimerInterval = null;
+        let stepStartTime = 0;      
+        let accumulatedStepDurations = {}; 
+
+        const SESSION_STATE_KEY = 'elevoCoreActiveCallState_v3'; 
 
         // --- UI Helper Functions ---
+        function setButtonLoadingState(buttonElement, isLoading, defaultText = "Submit", loadingText = "Loading...") {
+            const btnTextElement = buttonElement.querySelector('.btn-text');
+            const btnIconElement = buttonElement.querySelector('.btn-icon');
+            let spinner = buttonElement.querySelector('.btn-spinner');
+
+            if (isLoading) {
+                buttonElement.disabled = true;
+                if (btnTextElement) btnTextElement.textContent = loadingText;
+                if (btnIconElement) btnIconElement.style.display = 'none';
+                if (!spinner) {
+                    spinner = document.createElement('span');
+                    spinner.className = 'btn-spinner';
+                    buttonElement.insertBefore(spinner, btnTextElement || btnIconElement);
+                }
+                spinner.style.display = 'inline-block';
+            } else {
+                buttonElement.disabled = false;
+                if (btnTextElement) btnTextElement.textContent = defaultText;
+                if (btnIconElement) btnIconElement.style.display = 'inline-flex';
+                if (spinner) spinner.style.display = 'none';
+            }
+        }
+
+
         function updateSystemStatus(statusText, statusClass = 'status-waiting') {
             if (systemStatusDiv) {
                 systemStatusDiv.textContent = statusText;
@@ -196,15 +229,56 @@
             }
         }
 
-        function showAssistantMessage(message, isError = false) {
-            assistantMessageElement.textContent = message;
+        function animateView(viewElement) {
+            if (viewElement) {
+                viewElement.classList.remove('fade-in');
+                void viewElement.offsetWidth; 
+                viewElement.classList.add('fade-in');
+                viewElement.style.display = 'block';
+            }
+        }
+        
+        let assistantTimeout = null;
+        let typingInterval = null;
+
+        function typeWriterEffect(element, message, speed = 30, callback) {
+            if (typingInterval) clearInterval(typingInterval);
+            element.textContent = '';
+            let i = 0;
+            typingInterval = setInterval(() => {
+                if (i < message.length) { element.textContent += message.charAt(i); i++; }
+                else { clearInterval(typingInterval); typingInterval = null; if (callback) callback(); }
+            }, speed);
+        }
+        
+        function showAssistantMessage(message, isInitial = false, duration = 5000, onHideCallback = null) {
+            if (!assistantBox || !assistantMessageElement) return;
+            clearTimeout(assistantTimeout);
+            if (typingInterval) clearInterval(typingInterval);
+            assistantBox.classList.remove('show', 'assistant-initial-position'); 
+            void assistantBox.offsetWidth; 
+            if (isInitial) assistantBox.classList.add('assistant-initial-position');
+            else assistantBox.classList.add('show'); 
             assistantBox.style.display = 'flex';
-            assistantBox.style.borderColor = isError ? 'var(--danger-color)' : 'var(--primary-color)';
-            assistantMessageElement.style.color = isError ? 'var(--danger-color)' : 'var(--text-color)';
+            typeWriterEffect(assistantMessageElement, message, 30, () => {
+                if (duration > 0) {
+                    assistantTimeout = setTimeout(() => {
+                        hideAssistant(isInitial);
+                        if (onHideCallback) onHideCallback();
+                    }, duration);
+                }
+            });
         }
 
-        function hideAssistant() {
-             if (assistantBox) assistantBox.style.display = 'none';
+        function hideAssistant(wasInitial = false) {
+             if (!assistantBox) return;
+             if (wasInitial) assistantBox.classList.remove('assistant-initial-position');
+             else assistantBox.classList.remove('show');
+             setTimeout(() => { 
+                if (!assistantBox.classList.contains('show') && !assistantBox.classList.contains('assistant-initial-position')) {
+                    assistantBox.style.display = 'none';
+                }
+             }, wasInitial ? 0 : 400); 
         }
 
         async function initializeApp() {
@@ -212,8 +286,8 @@
                  authLoadingDiv.innerHTML = '<p style="color:var(--danger-color); text-align:center;">Services unavailable.</p>';
                  return;
             }
-            const { data: { session } } = await supabase.auth.getSession();
-            if (!session) {
+            const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+            if (sessionError || !session) {
                 window.location.replace('login.html'); 
                 return;
             }
@@ -236,15 +310,24 @@
             userNameSpan.textContent = currentUser.name;
             userInfoDiv.style.display = 'flex';
             
+            // MODIFIED: User Permissions
             if (currentUser.isAdmin) {
                 if (dashboardLink) dashboardLink.style.display = 'inline-block';
                 if (rtmDashboardLink) rtmDashboardLink.style.display = 'inline-block';
             }
-            agentPortalLink.style.display = 'inline-block'; 
+            agentPortalLink.style.display = 'inline-block'; // Visible for all users
             
             authLoadingDiv.style.display = 'none';
-            switchToInitialView();
-            await loadActiveScenarios();
+            
+            if (restoreCallState()) { 
+                switchToCallFlowView(false); 
+                renderStep(); 
+                updateSystemStatus("🟢 In Ticket (Restored)", "status-in-call");
+            } else {
+                switchToInitialView();
+                await loadActiveScenarios();
+                showAssistantMessage("Welcome! Select a scenario to begin.", true, 7000);
+            }
         }
 
         function switchToInitialView() {
@@ -252,18 +335,19 @@
             postCallSummaryDiv.style.display = 'none';
             progressTrackerContainer.style.display = 'none';
             callTimerDiv.style.display = 'none';
-            initialViewDiv.style.display = 'block';
+            animateView(initialViewDiv);
             updateSystemStatus("🔴 Waiting for Ticket", "status-waiting");
-            hideAssistant(); 
+            hideAssistant(false); 
         }
 
-        function switchToCallFlowView() {
+        function switchToCallFlowView(animate = true) {
             initialViewDiv.style.display = 'none';
             postCallSummaryDiv.style.display = 'none';
-            callFlowViewDiv.style.display = 'block';
+            if (animate) animateView(callFlowViewDiv);
+            else callFlowViewDiv.style.display = 'block';
             progressTrackerContainer.style.display = 'flex'; 
             updateSystemStatus("🟢 In Ticket", "status-in-call");
-            hideAssistant();
+            hideAssistant(true); 
         }
 
         function switchToSummaryView() {
@@ -271,16 +355,15 @@
             callFlowViewDiv.style.display = 'none';
             progressTrackerContainer.style.display = 'none';
             callTimerDiv.style.display = 'none';
-            postCallSummaryDiv.style.display = 'block';
+            animateView(postCallSummaryDiv);
             updateSystemStatus("📊 Review Ticket Summary", "status-summary");
-            hideAssistant(); 
+            hideAssistant(false); 
         }
 
         async function loadActiveScenarios() {
+            setButtonLoadingState(receiveCallBtn, true, "Receive Ticket", "Loading...");
             scenarioDropdown.disabled = true;
             scenarioDropdown.innerHTML = '<option value="" disabled selected>Loading scenarios...</option>';
-            receiveCallBtn.disabled = true;
-
             try {
                 const { data: scenarios, error } = await supabase
                     .from('call_scenarios') 
@@ -298,31 +381,43 @@
                         scenarioDropdown.appendChild(option);
                     });
                     scenarioDropdown.disabled = false;
-                    hideAssistant();
+                    setButtonLoadingState(receiveCallBtn, false, "Receive Ticket");
+                    receiveCallBtn.disabled = true;
                 } else {
                     scenarioDropdown.innerHTML = '<option value="" disabled>No scenarios available.</option>';
-                    showAssistantMessage("⚠️ No active scenarios available.", true); 
+                    showAssistantMessage("⚠️ No active scenarios available.", true, 0); 
+                    setButtonLoadingState(receiveCallBtn, false, "Receive Ticket");
+                    receiveCallBtn.disabled = true;
                 }
             } catch (err) {
                 console.error("Error loading scenarios:", err);
                 scenarioDropdown.innerHTML = '<option value="" disabled>⚠️ Failed to load scenarios.</option>';
-                showAssistantMessage(`⚠️ Error loading scenarios: ${err.message}`, true);
+                // MODIFICATION: Improved error message for scenario loading failure.
+                showAssistantMessage(`⚠️ Error: Could not load scenarios. Please check your connection and refresh.`, true, 8000);
+                setButtonLoadingState(receiveCallBtn, false, "Receive Ticket");
+                receiveCallBtn.disabled = true;
             }
         }
         
         receiveCallBtn.addEventListener('click', async () => {
             const selectedScenarioId = scenarioDropdown.value;
             if (!selectedScenarioId) {
-                showAssistantMessage("⚠️ Please select a scenario first.", true);
+                showAssistantMessage("⚠️ Please select a scenario first.", true, 5000);
                 return;
             }
-            
-            receiveCallBtn.disabled = true;
-            receiveCallBtn.querySelector('.btn-receive-text').textContent = 'Starting...';
+            if (currentUser.profileError) {
+                 showAssistantMessage("⚠️ Cannot start ticket due to profile loading error.", true, 7000);
+                 return;
+            }
+            setButtonLoadingState(receiveCallBtn, true, "Receive Ticket", "Starting...");
+            if(callStartSound) callStartSound.play().catch(e => console.warn("Audio play failed:", e));
 
+            resetCallState(); 
             switchToCallFlowView();
             updateSystemStatus("🟡 Loading Scenario...", "status-loading");
             stepsContainer.innerHTML = '<p class="placeholder-text">Loading scenario details...</p>';
+            decisionButtonsContainer.innerHTML = ''; 
+            scenarioTitleElement.innerHTML = `<span id="step-type-icon" class="step-type-icon"></span>Loading...`; 
 
             try {
                 const { data: scenarioData, error: scenarioError } = await supabase
@@ -332,13 +427,15 @@
                     .single();
 
                 if (scenarioError) throw scenarioError;
-                if (!scenarioData || !Array.isArray(scenarioData.steps) || scenarioData.steps.length === 0) {
-                    throw new Error("Scenario data is invalid or has no steps.");
+                if (!scenarioData || !Array.isArray(scenarioData.steps) || scenarioData.steps.length === 0 || !scenarioData.steps[0].id) {
+                    throw new Error("Scenario data is invalid or has no steps in the new format.");
                 }
 
                 currentScenario = scenarioData; 
                 currentStepId = currentScenario.steps[0].id; 
                 stepHistory = [];
+                accumulatedStepDurations = {}; 
+                currentScenario.steps.forEach(step => { if(step.id) { accumulatedStepDurations[step.id] = 0; } });
 
                 callStartTimeISO = new Date().toISOString(); 
                 const { data: newSession, error: sessionInsertError } = await supabase
@@ -346,28 +443,30 @@
                     .insert({ user_id: currentUser.id, scenario_id: currentScenario.id, start_time: callStartTimeISO, agent_name: currentUser.name, agent_email: currentUser.email })
                     .select('id') 
                     .single();
-                if (sessionInsertError) throw sessionInsertError;
-                
+                if (sessionInsertError) {
+                    callStartTimeISO = null; 
+                    throw sessionInsertError;
+                }
                 callSessionId = newSession.id;
                 
                 updateSystemStatus("🟢 In Ticket", "status-in-call");
-                startCallTimer();
                 renderStep(); 
-
+                setButtonLoadingState(receiveCallBtn, false, "Receive Ticket");
+                receiveCallBtn.disabled = true;
             } catch (err) {
                 console.error("Error starting ticket:", err);
                 resetCallState(); 
                 switchToInitialView();
-                showAssistantMessage(`⚠️ Error starting ticket: ${err.message}. Please try again.`, true);
+                showAssistantMessage(`⚠️ Error starting ticket: ${err.message}. Please try again.`, true, 7000);
                 await loadActiveScenarios();
-            } finally {
-                receiveCallBtn.querySelector('.btn-receive-text').textContent = 'Receive Ticket';
             }
         });
 
         function renderStep() {
-            if (!currentScenario || !currentStepId) return;
-
+            if (!currentScenario || !currentStepId) {
+                stepsContainer.innerHTML = '<p class="placeholder-text">Error: Invalid scenario or step.</p>';
+                return;
+            }
             const stepObject = currentScenario.steps.find(s => s.id === currentStepId); 
             if (!stepObject) {
                 finishCall(false, `Error: Step ${currentStepId} not found`);
@@ -377,7 +476,7 @@
             scenarioTitleElement.textContent = ` ${currentScenario.title}`; 
             
             const stepTypeIcon = stepObject.type === 'decision' ? '🤔' : '🗣️';
-            scenarioTitleElement.insertAdjacentHTML('afterbegin', `<span class="step-type-icon">${stepTypeIcon}</span>`);
+            scenarioTitleElement.insertAdjacentHTML('afterbegin', `<span id="step-type-icon" class="step-type-icon">${stepTypeIcon}</span>`);
 
             stepsContainer.innerHTML = `<p>${stepObject.text.replace(/\n/g, '<br>')}</p>`; 
             decisionButtonsContainer.innerHTML = ''; 
@@ -391,19 +490,21 @@
                 nextStepBtn.style.display = 'none'; 
                 stepObject.options.forEach(option => {
                     const button = document.createElement('button');
-                    button.className = 'action-button primary-button'; 
+                    button.className = 'decision-button'; 
                     button.textContent = option.label;
-                    button.style.margin = '0.5rem';
                     button.addEventListener('click', () => navigateToStep(option.next_id));
                     decisionButtonsContainer.appendChild(button);
                 });
             } else { 
                 nextStepBtn.style.display = 'inline-flex';
-                nextStepBtn.querySelector('.btn-receive-text').textContent = stepObject.next_id ? "Next Step" : "Finish Scenario";
+                nextStepBtn.querySelector('.btn-text').textContent = stepObject.next_id ? "Next Step" : "Finish Scenario";
             }
+            startStepTimer(); 
+            saveCallState();
         }
         
         function navigateToStep(nextId) {
+            stopAndRecordStepTimer();
             if (nextId === null || typeof nextId === 'undefined') { 
                 finishCall(true, "Reached end of scenario path."); 
                 return;
@@ -419,6 +520,7 @@
         }
 
         function renderProgressTracker() {
+             if (!progressTrackerContainer || !currentScenario || !currentScenario.steps) return;
              const stepperWrapper = progressTrackerContainer.querySelector('.stepper-wrapper');
              stepperWrapper.innerHTML = ''; 
              const stepperUl = document.createElement('ul');
@@ -441,58 +543,61 @@
                  }
              });
              stepperWrapper.appendChild(stepperUl);
+             progressTrackerContainer.style.display = 'flex';
         }
 
         nextStepBtn.addEventListener('click', () => {
             const stepObject = currentScenario.steps.find(s => s.id === currentStepId); 
             if (stepObject) navigateToStep(stepObject.next_id);
         });
-
         prevStepBtn.addEventListener('click', () => {
+            stopAndRecordStepTimer(); 
             if (stepHistory.length > 0) { currentStepId = stepHistory.pop(); renderStep(); }
         });
-
         endCallBtn.addEventListener('click', () => {
+            stopAndRecordStepTimer(); 
             finishCall(false, "Ticket ended by agent"); 
         });
 
-        function startCallTimer() {
-            callTimerDiv.style.display = 'block'; 
-            let totalSeconds = 0;
-            callTimerInterval = setInterval(() => {
-                totalSeconds++;
+        function startStepTimer() {
+            callTimerDiv.style.display = 'inline-block'; 
+            if (stepTimerInterval) clearInterval(stepTimerInterval);
+            if (callStartTimeISO) stepStartTime = new Date(callStartTimeISO).getTime();
+            else stepStartTime = Date.now();
+            
+            const timerUpdate = () => {
+                const elapsed = Date.now() - stepStartTime;
+                const totalSeconds = Math.floor(elapsed / 1000);
                 const minutes = String(Math.floor(totalSeconds / 60)).padStart(2, '0');
                 const seconds = String(totalSeconds % 60).padStart(2, '0');
                 callTimerDiv.textContent = `${minutes}:${seconds}`;
-            }, 1000);
+            };
+            timerUpdate();
+            stepTimerInterval = setInterval(timerUpdate, 1000);
         }
 
-        function stopCallTimer() {
-            if (callTimerInterval) clearInterval(callTimerInterval);
-            callTimerInterval = null;
+        function stopAndRecordStepTimer() {
+            if (stepTimerInterval) clearInterval(stepTimerInterval);
+            stepTimerInterval = null;
         }
         
-        async function finishCall(isCompleted, reason) { 
-            stopCallTimer(); 
+        async function finishCall(completed, reason) { 
+            stopAndRecordStepTimer(); 
             const endTimeISO = new Date().toISOString();
-            const duration = callStartTimeISO ? Math.floor((new Date(endTimeISO) - new Date(callStartTimeISO)) / 1000) : 0;
+            let duration = 0;
+            if (callStartTimeISO) duration = Math.floor((new Date(endTimeISO) - new Date(callStartTimeISO)) / 1000);
             
-            const quality = isCompleted ? 'Good' : 'Bad';
+            const quality = completed ? 'Good' : (duration > 0 ? 'Bad' : 'N/A');
             
             if (callSessionId) {
-                // The DB trigger handles setting 'completed' flag to true when end_time is updated.
-                // We just need to update the end time.
                 const { error } = await supabase.from('call_sessions').update({
-                    end_time: endTimeISO, 
-                    duration, 
-                    call_quality: quality, 
-                    quality_reason: reason
+                    end_time: endTimeISO, duration, completed, call_quality: quality, quality_reason: reason
                 }).eq('id', callSessionId);
                 if (error) console.error("Failed to update ticket session:", error);
             }
             
             displayPostCallSummary(quality, reason, duration);
-            resetCallState();
+            clearCallState(); 
         }
 
         function displayPostCallSummary(quality, reason, totalDuration) {
@@ -508,8 +613,27 @@
             await loadActiveScenarios();
         });
 
+        function saveCallState() {
+            if (!callSessionId) return;
+            sessionStorage.setItem(SESSION_STATE_KEY, JSON.stringify({
+                callSessionId, currentScenario, currentStepId, stepHistory, callStartTimeISO
+            }));
+        }
+
+        function restoreCallState() {
+            const stateJSON = sessionStorage.getItem(SESSION_STATE_KEY);
+            if (!stateJSON) return false;
+            const state = JSON.parse(stateJSON);
+            if (!state.callSessionId || !state.currentStepId) { clearCallState(); return false; }
+            Object.assign(this, state);
+            return true;
+        }
+
+        function clearCallState() { sessionStorage.removeItem(SESSION_STATE_KEY); }
+
         function resetCallState(switchToInitial = false) {
-            stopCallTimer(); 
+            stopAndRecordStepTimer(); 
+            clearCallState();         
             currentScenario = null; currentStepId = null; stepHistory = []; callSessionId = null; callStartTimeISO = null;
             if (switchToInitial) switchToInitialView();
         }
@@ -525,111 +649,116 @@
             receiveCallBtn.disabled = !scenarioDropdown.value;
         });
         
+        window.addEventListener('beforeunload', () => { if (callSessionId) saveCallState(); });
+        
         if (supabase) initializeApp();
     </script>
 
-    <!-- Fallback/Helper Scripts From Original File -->
-    <script>
-    (function(){
-      const safe = typeof supabase !== 'undefined';
-      // Populate placeholders with safe defaults or from views if available
-      async function fetchKpis() {
-        try {
-          if (!safe) {
-            // default demo values when supabase missing
-            document.getElementById('kpi-fastest')?.textContent = '0m 0s';
-            document.getElementById('kpi-longest')?.textContent = '0m 0s';
-            document.getElementById('kpi-top-scenario')?.textContent = '-';
-            document.getElementById('topAgentsList')?.innerHTML = '<li>No data yet <span>—</span></li>';
-            document.getElementById('delayedList')?.innerHTML = '<li>No delayed tickets.</li>';
-            document.getElementById('ins-total')?.textContent = '0';
-            document.getElementById('ins-avg')?.textContent = '0m 0s';
-            document.getElementById('ins-completion')?.textContent = '0%';
-            return;
-          }
-          // Attempt to call views if supabase exists
-          const { data: kpi } = await supabase.from('kpi_today').select('*').limit(1).single();
-          if (kpi) {
-            document.getElementById('ins-total')?.textContent = kpi.tickets_started_today || 0;
-            document.getElementById('ins-completion')?.textContent = (kpi.completion_rate || 0) + '%';
-            document.getElementById('ins-avg')?.textContent = (kpi.avg_handling_time_minutes || 0) + 'm';
-            document.getElementById('kpi-fastest')?.textContent = '—';
-            document.getElementById('kpi-longest')?.textContent = '—';
-          }
-          // top agents
-          const { data: top } = await supabase.rpc('top_agents_today'); // optional if exists
-          if (top && top.length) {
-            const html = top.slice(0,5).map(t => `<li>${t.agent_name}<span>${t.count}</span></li>`).join('');
-            document.getElementById('topAgentsList').innerHTML = html;
-          }
-          // delayed
-          const { data: delayed } = await supabase.from('delayed_tickets').select('*');
-          if (delayed && delayed.length) {
-            document.getElementById('delayedList').innerHTML = delayed.map(d=>`<li>${d.agent_name} — ${Math.floor(d.seconds_open/60)}m ${d.seconds_open%60}s</li>`).join('');
-          }
-        } catch(e){
-          console.warn('KPI placeholders error', e);
-        }
+<script>
+(function(){
+  const safe = typeof supabase !== 'undefined';
+  // Populate placeholders with safe defaults or from views if available
+  async function fetchKpis() {
+    try {
+      if (!safe) {
+        // default demo values when supabase missing
+        document.getElementById('kpi-fastest')?.textContent = '0m 0s';
+        document.getElementById('kpi-longest')?.textContent = '0m 0s';
+        document.getElementById('kpi-top-scenario')?.textContent = '-';
+        document.getElementById('topAgentsList')?.innerHTML = '<li>No data yet <span>—</span></li>';
+        document.getElementById('delayedList')?.innerHTML = '<li>No delayed tickets.</li>';
+        document.getElementById('ins-total')?.textContent = '0';
+        document.getElementById('ins-avg')?.textContent = '0m 0s';
+        document.getElementById('ins-completion')?.textContent = '0%';
+        return;
       }
-      // call once
-      fetchKpis();
-    })();
-    </script>
-    <script>
-    (function(){
-      try{
-        const sel = document.querySelector('select[name="scenario"]') || document.querySelector('select');
-        function markScenario(){ 
-          if(!sel) return;
-          const opt = sel.options[sel.selectedIndex];
-          const el = document.querySelector('.scenario-name') || document.getElementById('selectedScenarioName') || document.querySelector('.scenario-selected');
-          if(opt && el){ el.textContent = opt.text; el.classList.add('scenario-selected'); }
-        }
-        if(sel){ sel.addEventListener('change', markScenario); markScenario(); }
-      }catch(e){ console.warn(e); }
-    })();
-    
-    function exportTableToCSV(filename = 'report.csv') {
-      const table = document.querySelector('#recentSessionsTable') || document.querySelector('table');
-      if(!table) return alert('No table found to export');
-      const rows = Array.from(table.querySelectorAll('tr')).map(tr => 
-        Array.from(tr.querySelectorAll('th,td')).map(td => '"' + td.innerText.replace(/"/g,'""') + '"').join(',')
-      ).join('\n');
-      const blob = new Blob([rows], { type: 'text/csv;charset=utf-8;' });
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
-      link.download = filename;
-      link.style.display='none';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      // Attempt to call views if supabase exists
+      const { data: kpi } = await supabase.from('kpi_today').select('*').limit(1).single();
+      if (kpi) {
+        document.getElementById('ins-total')?.textContent = kpi.tickets_started_today || 0;
+        document.getElementById('ins-completion')?.textContent = (kpi.completion_rate || 0) + '%';
+        document.getElementById('ins-avg')?.textContent = (kpi.avg_handling_time_minutes || 0) + 'm';
+        document.getElementById('kpi-fastest')?.textContent = '—';
+        document.getElementById('kpi-longest')?.textContent = '—';
+      }
+      // top agents
+      const { data: top } = await supabase.rpc('top_agents_today'); // optional if exists
+      if (top && top.length) {
+        const html = top.slice(0,5).map(t => `<li>${t.agent_name}<span>${t.count}</span></li>`).join('');
+        document.getElementById('topAgentsList').innerHTML = html;
+      }
+      // delayed
+      const { data: delayed } = await supabase.from('delayed_tickets').select('*');
+      if (delayed && delayed.length) {
+        document.getElementById('delayedList').innerHTML = delayed.map(d=>`<li>${d.agent_name} — ${Math.floor(d.seconds_open/60)}m ${d.seconds_open%60}s</li>`).join('');
+      }
+    } catch(e){
+      console.warn('KPI placeholders error', e);
     }
-    </script>
-    <script>
-    // Scenario colorizer: mark select option text green when selected
-    (function(){
-      try{
-        const sel = document.querySelector('select[name="scenario"]') || document.querySelector('select#scenario') || document.querySelector('select');
-        function markScenario(){
-          if(!sel) return;
-          const opt = sel.options[sel.selectedIndex];
-          const el = document.getElementById('selectedScenarioName') || document.querySelector('.scenario-name') || sel;
-          if(opt && el){
-             el.textContent = opt.text || '';
-             el.classList.add('scenario-selected');
-             el.style.color = 'var(--accent-success,#22c55e)';
-          }
-        }
-        if(sel){
-          sel.addEventListener('change', markScenario);
-          markScenario();
-        }
-        // ensure receive button visible
-        const btn = document.querySelector('button.receive-ticket') || document.querySelector('.btn-receive') || document.querySelector('button');
-        if(btn){ btn.classList.add('btn-receive'); btn.style.fontSize='1rem'; btn.style.padding='10px 18px'; }
-      }catch(e){ console.warn('scenario script', e); }
-    })();
-    </script>
+  }
+  // call once
+  fetchKpis();
+})();
+</script>
+
+
+<script>
+(function(){
+  try{
+    const sel = document.querySelector('select[name="scenario"]') || document.querySelector('select');
+    function markScenario(){ 
+      if(!sel) return;
+      const opt = sel.options[sel.selectedIndex];
+      const el = document.querySelector('.scenario-name') || document.getElementById('selectedScenarioName') || document.querySelector('.scenario-selected');
+      if(opt && el){ el.textContent = opt.text; el.classList.add('scenario-selected'); }
+    }
+    if(sel){ sel.addEventListener('change', markScenario); markScenario(); }
+  }catch(e){ console.warn(e); }
+})();
+
+function exportTableToCSV(filename = 'report.csv') {
+  const table = document.querySelector('#recentSessionsTable') || document.querySelector('table');
+  if(!table) return alert('No table found to export');
+  const rows = Array.from(table.querySelectorAll('tr')).map(tr => 
+    Array.from(tr.querySelectorAll('th,td')).map(td => '"' + td.innerText.replace(/"/g,'""') + '"').join(',')
+  ).join('\n');
+  const blob = new Blob([rows], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = filename;
+  link.style.display='none';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+</script>
+
+
+<script>
+// Scenario colorizer: mark select option text green when selected
+(function(){
+  try{
+    const sel = document.querySelector('select[name="scenario"]') || document.querySelector('select#scenario') || document.querySelector('select');
+    function markScenario(){
+      if(!sel) return;
+      const opt = sel.options[sel.selectedIndex];
+      const el = document.getElementById('selectedScenarioName') || document.querySelector('.scenario-name') || sel;
+      if(opt && el){
+         el.textContent = opt.text || '';
+         el.classList.add('scenario-selected');
+         el.style.color = 'var(--accent-success,#22c55e)';
+      }
+    }
+    if(sel){
+      sel.addEventListener('change', markScenario);
+      markScenario();
+    }
+    // ensure receive button visible
+    const btn = document.querySelector('button.receive-ticket') || document.querySelector('.btn-receive') || document.querySelector('button');
+    if(btn){ btn.classList.add('btn-receive'); btn.style.fontSize='1rem'; btn.style.padding='10px 18px'; }
+  }catch(e){ console.warn('scenario script', e); }
+})();
+</script>
 
 </body>
 </html>
