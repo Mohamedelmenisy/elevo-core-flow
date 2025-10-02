@@ -296,7 +296,7 @@
             try {
                 const [agentsRes, sessionsRes] = await Promise.all([
                     supabase.from('users').select('id, name, email').order('name', { ascending: true }),
-                    supabase.from('call_sessions').select(`*, scenario:call_scenarios(id, title)`).order('start_time', { ascending: false })
+                    supabase.from('call_sessions').select(`*, scenario:call_scenarios(id, title)`).order('start_time_egypt', { ascending: false })
                 ]);
                 if (agentsRes.error) throw agentsRes.error;
                 if (sessionsRes.error) throw sessionsRes.error;
@@ -330,8 +330,8 @@
                 return ((s.scenario?.title || '').toLowerCase().includes(searchTerm) || (s.quality_reason || '').toLowerCase().includes(searchTerm) || (agent?.name || '').toLowerCase().includes(searchTerm) || (agent?.email || '').toLowerCase().includes(searchTerm));
             });
             if (selectedQuality) tempFiltered = tempFiltered.filter(s => (selectedQuality === "N/A" ? !s.call_quality : s.call_quality === selectedQuality));
-            if (startDate) tempFiltered = tempFiltered.filter(s => s.start_time && new Date(s.start_time) >= new Date(startDate + "T00:00:00.000Z"));
-            if (endDate) tempFiltered = tempFiltered.filter(s => s.start_time && new Date(s.start_time) <= new Date(endDate + "T23:59:59.999Z"));
+            if (startDate) tempFiltered = tempFiltered.filter(s => s.start_time_egypt && new Date(s.start_time_egypt) >= new Date(startDate + "T00:00:00.000Z"));
+            if (endDate) tempFiltered = tempFiltered.filter(s => s.start_time_egypt && new Date(s.start_time_egypt) <= new Date(endDate + "T23:59:59.999Z"));
             filteredCallSessions = tempFiltered;
             currentPage = 1;
             renderTable();
@@ -352,7 +352,7 @@
                 const dur = session.duration || 0;
                 const row = `<tr>
                     <td>${agent?.name || 'Unknown'}</td><td>${agent?.email || 'N/A'}</td>
-                    <td>${session.scenario?.title || 'N/A'}</td><td>${formatDateTimeEgypt(session.start_time)}</td>
+                    <td>${session.scenario?.title || 'N/A'}</td><td>${formatDateTimeEgypt(session.start_time_egypt)}</td>
                     <td>${Math.floor(dur / 60)}m ${dur % 60}s</td><td>${session.completed ? '✅ Yes' : '❌ No'}</td>
                     <td class="quality-cell quality-${(session.call_quality || 'na').toLowerCase()}">${session.call_quality || 'N/A'}</td>
                     <td>${session.quality_reason || '-'}</td>
@@ -377,7 +377,7 @@
                 const avgDuration = sessionsWithDuration.length > 0 ? Math.round(totalDuration / sessionsWithDuration.length) : 0;
                 avgCallDurationEl.textContent = `${Math.floor(avgDuration / 60)}m ${avgDuration % 60}s`;
 
-                const sessionsWithEndTime = sessionsToAnalyze.filter(s => s.end_time);
+                const sessionsWithEndTime = sessionsToAnalyze.filter(s => s.end_time_egypt);
                 const completedCount = sessionsWithEndTime.filter(s => s.completed).length;
                 completionRateEl.textContent = sessionsWithEndTime.length > 0 ? `${Math.round((completedCount / sessionsWithEndTime.length) * 100)}%` : 'N/A';
                 
@@ -429,7 +429,7 @@
             });
 
             // 3. Daily Ticket Volume
-            const volumeByDay = filteredCallSessions.reduce((a, s) => { const d = new Date(s.start_time).toLocaleDateString('en-CA', { timeZone: EGYPT_TIMEZONE }); a[d] = (a[d] || 0) + 1; return a; }, {});
+            const volumeByDay = filteredCallSessions.reduce((a, s) => { const d = new Date(s.start_time_egypt).toLocaleDateString('en-CA', { timeZone: EGYPT_TIMEZONE }); a[d] = (a[d] || 0) + 1; return a; }, {});
             const sortedDates = Object.keys(volumeByDay).sort((a,b) => new Date(a) - new Date(b)).slice(-10);
             if (ticketVolumeChart) ticketVolumeChart.destroy();
             ticketVolumeChart = new Chart(document.getElementById('ticketVolumeChart').getContext('2d'), {
@@ -510,8 +510,8 @@
                     `"${agent?.name || 'Unknown'}"`,
                     `"${agent?.email || 'N/A'}"`,
                     `"${session.scenario?.title?.replace(/"/g, '""') || 'N/A'}"`,
-                    `"${formatDateForCSVEgypt(session.start_time)}"`,
-                    `"${formatDateForCSVEgypt(session.end_time)}"`,
+                    `"${formatDateForCSVEgypt(session.start_time_egypt)}"`,
+                    `"${formatDateForCSVEgypt(session.end_time_egypt)}"`,
                     session.duration || 0,
                     session.completed ? 'Yes' : 'No',
                     session.call_quality || 'N/A',
@@ -536,8 +536,8 @@
                     "Agent Name": agent?.name || 'Unknown',
                     "Agent Email": agent?.email || 'N/A',
                     "Scenario": session.scenario?.title || 'N/A',
-                    "Start Time (EET)": formatDateForCSVEgypt(session.start_time),
-                    "End Time (EET)": formatDateForCSVEgypt(session.end_time),
+                    "Start Time (EET)": formatDateForCSVEgypt(session.start_time_egypt),
+                    "End Time (EET)": formatDateForCSVEgypt(session.end_time_egypt),
                     "Duration (s)": session.duration || 0,
                     "Completed": session.completed ? 'Yes' : 'No',
                     "Quality": session.call_quality || 'N/A',
@@ -554,10 +554,9 @@
         async function fetchAndRenderLiveCalls() {
             try {
                 const { data, error } = await supabase
-                    .from('call_sessions')
-                    .select('id, agent_name, start_time, scenario:call_scenarios(title)')
-                    .is('end_time', null) // Correctly fetches only active calls
-                    .order('start_time', { ascending: false });
+                    .from('call_sessions_egypt').select('id, agent_name, start_time_egypt, end_time_egypt, duration_interval, completed, call_quality, quality_reason, scenario_id')
+                    .is('end_time_egypt', null) // Correctly fetches only active calls
+                    .order('start_time_egypt', { ascending: false });
 
                 if (error) throw error;
                 
@@ -574,7 +573,7 @@
                 noLiveCallsMessage.style.display = 'none';
                 
                 data.forEach(call => {
-                    const duration = Math.floor((new Date() - new Date(call.start_time)) / 1000);
+                    const duration = Math.floor((new Date() - new Date(call.start_time_egypt)) / 1000);
                     const isDelayed = duration > 300; // 5 minutes threshold
                     
                     const item = document.createElement('div');
@@ -583,7 +582,7 @@
                     item.innerHTML = `
                         <div><strong class="live-call-item-agent">${call.agent_name || 'Unknown'}</strong> on "${call.scenario?.title || 'a ticket'}"</div>
                         <div class="live-call-item-time">
-                            <span class="text-color-light">Started: ${formatDateTimeEgypt(call.start_time, { hour: '2-digit', minute: '2-digit' })}</span>
+                            <span class="text-color-light">Started: ${formatDateTimeEgypt(call.start_time_egypt, { hour: '2-digit', minute: '2-digit' })}</span>
                             <span class="live-call-duration">Now: ${Math.floor(duration/60)}m ${duration%60}s ${isDelayed ? '<span class="long-call-indicator">DELAYED</span>' : ''}</span>
                         </div>
                     `;
@@ -730,5 +729,53 @@ function exportTableToCSV(filename = 'report.csv') {
 })();
 </script>
 
+<script>
+
+/* --- Shared helpers (inserted by assistant) --- */
+const EGYPT_TIMEZONE = 'Africa/Cairo';
+function formatDateTimeEgypt(isoOrDate, options = { year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', second:'2-digit' }) {
+  if(!isoOrDate) return '—';
+  const d = (typeof isoOrDate === 'string') ? new Date(isoOrDate) : isoOrDate;
+  try {
+    return new Intl.DateTimeFormat('en-GB', {...options, timeZone: EGYPT_TIMEZONE}).format(d);
+  } catch(e) {
+    return d.toLocaleString();
+  }
+}
+function formatDateForCSVEgypt(isoOrDate) {
+  if(!isoOrDate) return '';
+  const d = (typeof isoOrDate === 'string') ? new Date(isoOrDate) : isoOrDate;
+  return new Intl.DateTimeFormat('en-CA', {year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', timeZone: EGYPT_TIMEZONE}).format(d);
+}
+
+/* Safe chart init helper to avoid Chart.js errors when canvas missing or empty data */
+function safeInitChart(ctx, cfg) {
+  if(!ctx) return null;
+  try {
+    return new Chart(ctx, cfg);
+  } catch(e) {
+    console.warn('chart init failed', e);
+    return null;
+  }
+}
+
+/* Realtime subscription helper for supabase */
+async function setupCallSessionsRealtime(supabase, handlePayload) {
+  try {
+    const channel = supabase.channel('public:call_sessions')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'call_sessions' }, payload => {
+        // payload.record contains the new/updated/deleted row from call_sessions
+        handlePayload && handlePayload(payload);
+      })
+      .subscribe();
+    return channel;
+  } catch(e) {
+    console.warn('Realtime setup failed', e);
+    return null;
+  }
+}
+/* --- End shared helpers --- */
+
+</script>
 </body>
 </html>
