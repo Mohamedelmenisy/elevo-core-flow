@@ -334,9 +334,8 @@
             const oneHourAgo = new Date(Date.now() - TICKET_VOLUME_TIMESPAN_MINUTES * 60 * 1000).toISOString();
 
             const { data, error } = await supabase
-                .from('call_sessions')
-                .select('id, start_time, end_time, completed, agent_name, scenario:call_scenarios(title)')
-                .gte('start_time', oneHourAgo);
+                .from('call_sessions_egypt').select('id, agent_name, start_time_egypt, end_time_egypt, duration_interval, completed, call_quality, quality_reason, scenario_id')
+                .gte('start_time_egypt', oneHourAgo);
 
             if (error) {
                 console.error("Error fetching initial data:", error);
@@ -345,10 +344,10 @@
             
             const now = new Date();
             data.forEach(ticket => {
-                if (ticket.end_time === null) {
+                if (ticket.end_time_egypt === null) {
                     liveTickets.set(ticket.id, ticket);
                 }
-                const startTime = new Date(ticket.start_time);
+                const startTime = new Date(ticket.start_time_egypt);
                 const minutesAgo = (now - startTime) / (60 * 1000);
                 if (minutesAgo < TICKET_VOLUME_TIMESPAN_MINUTES) {
                     const bucketIndex = Math.floor(minutesAgo / TICKET_VOLUME_BUCKET_MINUTES);
@@ -380,17 +379,16 @@
             
             if (eventType === 'INSERT') {
                 const { data, error } = await supabase
-                    .from('call_sessions')
-                    .select('id, start_time, end_time, completed, agent_name, scenario:call_scenarios(title)')
+                    .from('call_sessions_egypt').select('id, agent_name, start_time_egypt, end_time_egypt, duration_interval, completed, call_quality, quality_reason, scenario_id')
                     .eq('id', recordId)
                     .single();
-                if (!error && data && data.end_time === null) {
+                if (!error && data && data.end_time_egypt === null) {
                     liveTickets.set(data.id, data);
                     addActivityLog('created', data); // MODIFIED: Activity Log
                     updateTicketVolumeChart(newRecord, false); // MODIFIED: Volume Chart
                 }
             } else if (eventType === 'UPDATE') {
-                if (newRecord.end_time && liveTickets.has(recordId)) {
+                if (newRecord.end_time_egypt && liveTickets.has(recordId)) {
                     const endedTicket = { ...liveTickets.get(recordId), ...newRecord };
                     liveTickets.delete(recordId);
                     addActivityLog(newRecord.completed ? 'completed' : 'ended', endedTicket); // MODIFIED: Activity Log
@@ -414,7 +412,7 @@
             }
             noLiveTicketsMessage.style.display = 'none';
 
-            const sortedTickets = Array.from(liveTickets.values()).sort((a,b) => new Date(b.start_time) - new Date(a.start_time));
+            const sortedTickets = Array.from(liveTickets.values()).sort((a,b) => new Date(b.start_time_egypt) - new Date(a.start_time_egypt));
 
             sortedTickets.forEach(ticket => {
                 const item = document.createElement('div');
@@ -428,7 +426,7 @@
                         <div class="scenario-title">${ticket.scenario?.title || 'Loading...'}</div>
                     </div>
                     <div>
-                        <div class="start-time">${formatDateTimeEgypt(ticket.start_time)}</div>
+                        <div class="start-time">${formatDateTimeEgypt(ticket.start_time_egypt)}</div>
                     </div>
                     <div>
                         <div class="duration">0m 0s</div>
@@ -449,7 +447,7 @@
             
             liveTickets.forEach(ticket => {
                 const elem = document.getElementById(`ticket-${ticket.id}`);
-                const startTime = new Date(ticket.start_time).getTime();
+                const startTime = new Date(ticket.start_time_egypt).getTime();
                 if (elem && startTime) {
                     const durationMs = Date.now() - startTime;
                     totalDuration += durationMs;
@@ -477,7 +475,7 @@
             const { data, error, count } = await supabase
                 .from('call_sessions')
                 .select('*', { count: 'exact' })
-                .gte('start_time', startOfDay.toISOString());
+                .gte('start_time_egypt', startOfDay.toISOString());
             
             if (error) {
                 console.error("Error fetching today's stats:", error);
@@ -485,7 +483,7 @@
             }
             
             ticketsTodayEl.textContent = count || 0;
-            const finishedTickets = data.filter(d => d.end_time);
+            const finishedTickets = data.filter(d => d.end_time_egypt);
             const completedCount = finishedTickets.filter(d => d.completed).length;
             const endedCount = finishedTickets.length - completedCount;
 
@@ -677,5 +675,122 @@ function exportTableToCSV(filename = 'report.csv') {
 }
 </script>
 
+<script>
+
+/* --- Shared helpers (inserted by assistant) --- */
+const EGYPT_TIMEZONE = 'Africa/Cairo';
+function formatDateTimeEgypt(isoOrDate, options = { year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', second:'2-digit' }) {
+  if(!isoOrDate) return '—';
+  const d = (typeof isoOrDate === 'string') ? new Date(isoOrDate) : isoOrDate;
+  try {
+    return new Intl.DateTimeFormat('en-GB', {...options, timeZone: EGYPT_TIMEZONE}).format(d);
+  } catch(e) {
+    return d.toLocaleString();
+  }
+}
+function formatDateForCSVEgypt(isoOrDate) {
+  if(!isoOrDate) return '';
+  const d = (typeof isoOrDate === 'string') ? new Date(isoOrDate) : isoOrDate;
+  return new Intl.DateTimeFormat('en-CA', {year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', timeZone: EGYPT_TIMEZONE}).format(d);
+}
+
+/* Safe chart init helper to avoid Chart.js errors when canvas missing or empty data */
+function safeInitChart(ctx, cfg) {
+  if(!ctx) return null;
+  try {
+    return new Chart(ctx, cfg);
+  } catch(e) {
+    console.warn('chart init failed', e);
+    return null;
+  }
+}
+
+/* Realtime subscription helper for supabase */
+async function setupCallSessionsRealtime(supabase, handlePayload) {
+  try {
+    const channel = supabase.channel('public:call_sessions')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'call_sessions' }, payload => {
+        // payload.record contains the new/updated/deleted row from call_sessions
+        handlePayload && handlePayload(payload);
+      })
+      .subscribe();
+    return channel;
+  } catch(e) {
+    console.warn('Realtime setup failed', e);
+    return null;
+  }
+}
+/* --- End shared helpers --- */
+
+</script>
+
+<script>
+(async function(){
+  if(typeof createClient === 'undefined') return;
+  const supabaseUrl = window.SUPABASE_URL || '';
+  const supabaseKey = window.SUPABASE_ANON_KEY || '';
+  if(!supabaseUrl || !supabaseKey) { console.warn('Supabase keys not provided in page.'); return; }
+  const supabase = createClient(supabaseUrl, supabaseKey);
+  // basic KPIs fetch using kpi_today
+  try {
+    const { data: kpi } = await supabase.from('kpi_today').select('*').limit(1);
+    if(kpi && kpi[0]) {
+      document.getElementById('ticketsToday') && (document.getElementById('ticketsToday').textContent = kpi[0].tickets_started_today || 0);
+      document.getElementById('avgActiveDuration') && (document.getElementById('avgActiveDuration').textContent = (kpi[0].avg_handling_minutes ? (kpi[0].avg_handling_minutes + 'm') : '0m'));
+      document.getElementById('completionRateToday') && (document.getElementById('completionRateToday').textContent = (kpi[0].completion_rate ? Math.round(kpi[0].completion_rate) + '%' : '0%'));
+    }
+  } catch(e) { console.warn('KPIs fetch failed', e); }
+  // initial live tickets list from view
+  try {
+    const { data } = await supabase.from('live_tickets').select('id, agent_name, start_time_egypt, seconds_open, scenario:call_scenarios(title)').limit(50);
+    const list = document.getElementById('liveTicketsList');
+    if(list) {
+      list.innerHTML = '';
+      if(!data || data.length===0) {
+        document.getElementById('noLiveTicketsMessage') && (document.getElementById('noLiveTicketsMessage').style.display='block');
+      } else {
+        document.getElementById('noLiveTicketsMessage') && (document.getElementById('noLiveTicketsMessage').style.display='none');
+        data.forEach(t => {
+          const item = document.createElement('div');
+          item.className = 'live-ticket-item';
+          item.innerHTML = `<div class="agent-name">${t.agent_name||'—'}</div><div class="scenario-title">${t.scenario?.title||'—'}</div><div class="start-time">${formatDateTimeEgypt(t.start_time_egypt)}</div><div class="duration">${t.seconds_open? Math.floor(t.seconds_open/60)+'m '+(t.seconds_open%60)+'s' : '—'}</div>`;
+          list.appendChild(item);
+        });
+      }
+    }
+  } catch(e){ console.warn('Live tickets fetch failed', e); }
+
+  // subscribe to call_sessions realtime (local updates)
+  try {
+    setupCallSessionsRealtime(supabase, payload => {
+      // When a change happens, perform a small fetch for the affected id in live_tickets and update list
+      const rec = payload.record;
+      if(!rec) return;
+      (async () => {
+        try {
+          const { data } = await supabase.from('live_tickets').select('id, agent_name, start_time_egypt, seconds_open, scenario:call_scenarios(title)').eq('id', rec.id).limit(1);
+          // naive update: rebuild list item for that id
+          const list = document.getElementById('liveTicketsList');
+          if(list && data && data[0]) {
+            // find existing element by data-id
+            let found = list.querySelector('[data-id="'+data[0].id+'"]');
+            const itemHtml = `<div class="agent-name">${data[0].agent_name||'—'}</div><div class="scenario-title">${data[0].scenario?.title||'—'}</div><div class="start-time">${formatDateTimeEgypt(data[0].start_time_egypt)}</div><div class="duration">${data[0].seconds_open? Math.floor(data[0].seconds_open/60)+'m '+(data[0].seconds_open%60)+'s' : '—'}</div>`;
+            if(found) { found.innerHTML = itemHtml; } 
+            else {
+              const item = document.createElement('div');
+              item.className = 'live-ticket-item';
+              item.setAttribute('data-id', data[0].id);
+              item.innerHTML = itemHtml;
+              list.prepend(item);
+            }
+          } else {
+            // fallback: small refresh of list
+          }
+        } catch(e){ console.warn('realtime single fetch failed', e); }
+      })();
+    });
+  } catch(e) { console.warn('subscribe failed', e); }
+})();
+</script>
 </body>
 </html>
