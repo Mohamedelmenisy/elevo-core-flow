@@ -937,7 +937,7 @@
                 callStartTimeISO = new Date().toISOString(); 
                 const { data: newSession, error: sessionInsertError } = await supabase
                     .from('call_sessions')
-                    .insert({ user_id: currentUser.id, scenario_id: currentScenario.id, start_time: callStartTimeISO, agent_name: currentUser.name, agent_email: currentUser.email })
+                    .insert({ user_id: currentUser.id, scenario_id: currentScenario.id, start_time_egypt: callStartTimeISO, agent_name: currentUser.name, agent_email: currentUser.email })
                     .select('id') 
                     .single();
                 if (sessionInsertError) {
@@ -1220,7 +1220,7 @@
 
             if (callSessionId) {
                 const updatePayload = {
-                    end_time: endTimeISO,
+                    end_time_egypt: endTimeISO,
                    duration: durationInSecondsForSummary,
                     completed: completedAllSteps, 
                     call_quality: quality,
@@ -1409,5 +1409,53 @@
         }
         console.log("Elevo Core Flow script (v.with_decision_steps_v3.2_ui_revamp_2) loaded and initialized execution.");
     </script>
+<script>
+
+/* --- Shared helpers (inserted by assistant) --- */
+const EGYPT_TIMEZONE = 'Africa/Cairo';
+function formatDateTimeEgypt(isoOrDate, options = { year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', second:'2-digit' }) {
+  if(!isoOrDate) return '—';
+  const d = (typeof isoOrDate === 'string') ? new Date(isoOrDate) : isoOrDate;
+  try {
+    return new Intl.DateTimeFormat('en-GB', {...options, timeZone: EGYPT_TIMEZONE}).format(d);
+  } catch(e) {
+    return d.toLocaleString();
+  }
+}
+function formatDateForCSVEgypt(isoOrDate) {
+  if(!isoOrDate) return '';
+  const d = (typeof isoOrDate === 'string') ? new Date(isoOrDate) : isoOrDate;
+  return new Intl.DateTimeFormat('en-CA', {year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', timeZone: EGYPT_TIMEZONE}).format(d);
+}
+
+/* Safe chart init helper to avoid Chart.js errors when canvas missing or empty data */
+function safeInitChart(ctx, cfg) {
+  if(!ctx) return null;
+  try {
+    return new Chart(ctx, cfg);
+  } catch(e) {
+    console.warn('chart init failed', e);
+    return null;
+  }
+}
+
+/* Realtime subscription helper for supabase */
+async function setupCallSessionsRealtime(supabase, handlePayload) {
+  try {
+    const channel = supabase.channel('public:call_sessions')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'call_sessions' }, payload => {
+        // payload.record contains the new/updated/deleted row from call_sessions
+        handlePayload && handlePayload(payload);
+      })
+      .subscribe();
+    return channel;
+  } catch(e) {
+    console.warn('Realtime setup failed', e);
+    return null;
+  }
+}
+/* --- End shared helpers --- */
+
+</script>
 </body>
 </html>
