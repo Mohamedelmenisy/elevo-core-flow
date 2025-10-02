@@ -141,11 +141,9 @@
         let supabase;
         try {
             supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-            console.log('Supabase client initialized for core-flow.html');
         } catch (error) {
             console.error("Supabase client initialization failed:", error);
-            const authLoading = document.getElementById('auth-loading');
-            if(authLoading) authLoading.innerHTML = '<p style="color:var(--danger-color); text-align:center;">Error connecting to services. Core Flow is unavailable.</p>';
+            document.getElementById('auth-loading').innerHTML = '<p style="color:var(--danger-color); text-align:center;">Error connecting to services.</p>';
         }
 
         // --- DOM Elements ---
@@ -284,97 +282,51 @@
         }
 
         async function initializeApp() {
-            console.log("initializeApp: Starting core-flow initialization..."); 
             if (!supabase) { 
-                 authLoadingDiv.innerHTML = '<p style="color:var(--danger-color); text-align:center;">Critical Error: Services unavailable. Please try again later.</p>';
+                 authLoadingDiv.innerHTML = '<p style="color:var(--danger-color); text-align:center;">Services unavailable.</p>';
                  return;
             }
             const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-            if (sessionError) {
-                console.error("initializeApp: Error fetching session:", sessionError);
-                authLoadingDiv.innerHTML = '<p style="color:var(--danger-color);">Error verifying session. Try refreshing.</p>';
-                return;
-            }
-            if (!session) {
-                console.log("initializeApp: No active session. Redirecting to login page.");
+            if (sessionError || !session) {
                 window.location.replace('login.html'); 
                 return;
             }
 
-            // --- START: Resilient User Profile Handling ---
             const storedUserData = JSON.parse(localStorage.getItem('elevoCoreUserData'));
-            if (storedUserData && storedUserData.id === session.user.id && !storedUserData.profileError) {
+            if (storedUserData && storedUserData.id === session.user.id) {
                 currentUser = storedUserData;
             } else {
                 try {
-                    let { data: profile, error: profileError } = await supabase
-                        .from('users')
-                        .select('name, is_admin, role')
-                        .eq('id', session.user.id)
-                        .single();
-
-                    if (profileError && profileError.code === 'PGRST116') { // User not found in 'users' table
-                        console.log(`User ${session.user.id} not in 'users' table. Creating profile.`);
-                        const newUserProfile = {
-                            id: session.user.id,
-                            email: session.user.email,
-                            name: session.user.user_metadata?.full_name || session.user.email.split('@')[0],
-                            role: 'agent', // ✅ KEY FIX: Default role
-                            is_admin: false
-                        };
-                        const { error: insertError } = await supabase.from('users').insert(newUserProfile);
-                        if (insertError) throw insertError; // Throw error to be caught by the outer catch block
-                        profile = newUserProfile; // Use the newly created profile data
-                    } else if (profileError) {
-                        throw profileError; // Throw other DB errors
-                    }
-
-                    currentUser = {
-                        id: session.user.id,
-                        email: session.user.email,
-                        name: profile.name,
-                        isAdmin: profile.is_admin,
-                        role: profile.role
-                    };
+                    const { data: profile, error } = await supabase.from('users').select('name, is_admin').eq('id', session.user.id).single();
+                    if (error) throw error;
+                    currentUser = { id: session.user.id, email: session.user.email, name: profile.name, isAdmin: profile.is_admin };
                     localStorage.setItem('elevoCoreUserData', JSON.stringify(currentUser));
-                    console.log("Successfully fetched or created user profile.");
-
                 } catch (error) {
-                    console.error("CRITICAL: Failed to fetch or create user profile. Proceeding with basic info.", error);
-                    // Graceful Degradation: Don't block the app. Proceed with minimal data.
-                    currentUser = {
-                        id: session.user.id,
-                        email: session.user.email,
-                        name: (session.user.user_metadata?.full_name || session.user.email.split('@')[0]) + " (Profile Error)",
-                        isAdmin: false,
-                        role: 'agent', // Fallback role
-                        profileError: true // Flag to indicate something went wrong
-                    };
-                    // Do not save this partial/error state to localStorage
+                    console.error("Failed to fetch user profile:", error);
+                    currentUser = { id: session.user.id, email: session.user.email, name: session.user.email.split('@')[0], isAdmin: false, profileError: true };
                 }
             }
-            // --- END: Resilient User Profile Handling ---
 
-            if (userNameSpan) userNameSpan.textContent = currentUser.name;
-            if (userInfoDiv) userInfoDiv.style.display = 'flex';
-            if (dashboardLink) dashboardLink.style.display = currentUser.isAdmin ? 'inline-block' : 'none';
+            userNameSpan.textContent = currentUser.name;
+            userInfoDiv.style.display = 'flex';
+            
+            // MODIFIED: User Permissions
+            if (currentUser.isAdmin) {
+                if (dashboardLink) dashboardLink.style.display = 'inline-block';
+                if (rtmDashboardLink) rtmDashboardLink.style.display = 'inline-block';
+            }
+            agentPortalLink.style.display = 'inline-block'; // Visible for all users
             
             authLoadingDiv.style.display = 'none';
             
             if (restoreCallState()) { 
-                console.log("initializeApp: Restored active ticket session.");
                 switchToCallFlowView(false); 
                 renderStep(); 
                 updateSystemStatus("🟢 In Ticket (Restored)", "status-in-call");
             } else {
-                console.log("initializeApp: No active ticket state found or state invalid. Loading initial view.");
                 switchToInitialView();
                 await loadActiveScenarios();
-                showAssistantMessage("Welcome! Select a scenario to begin.", true, 7000, () => {
-                     if (initialViewDiv && initialViewDiv.style.display === 'block') { 
-                          showAssistantMessage("💡 Tip: Choose a scenario and click 'Receive Ticket'.", true, 0); 
-                     }
-                 });
+                showAssistantMessage("Welcome! Select a scenario to begin.", true, 7000);
             }
         }
 
