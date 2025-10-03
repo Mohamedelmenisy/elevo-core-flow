@@ -73,6 +73,37 @@
             gap: 1.25rem;
         }
         
+        /* MODIFICATION: Constrain height and enable scrolling for notes and training lists */
+        .saved-notes-list, .training-programs-list {
+            max-height: 450px; /* Adjust this value as needed */
+            overflow-y: auto;
+            padding-right: 0.75rem; /* Space for the scrollbar */
+        }
+
+        /* MODIFICATION: Custom scrollbar styling for better dark mode appearance */
+        .saved-notes-list::-webkit-scrollbar, 
+        .training-programs-list::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .saved-notes-list::-webkit-scrollbar-track,
+        .training-programs-list::-webkit-scrollbar-track {
+            background: var(--input-bg-color);
+            border-radius: 4px;
+        }
+
+        .saved-notes-list::-webkit-scrollbar-thumb,
+        .training-programs-list::-webkit-scrollbar-thumb {
+            background-color: var(--border-color);
+            border-radius: 4px;
+            border: 2px solid var(--input-bg-color);
+        }
+
+        .saved-notes-list::-webkit-scrollbar-thumb:hover,
+        .training-programs-list::-webkit-scrollbar-thumb:hover {
+            background-color: var(--primary-color);
+        }
+
         .note-card {
             background-color: var(--input-bg-color);
             border-radius: var(--border-radius-lg);
@@ -1111,25 +1142,30 @@
                 }
             });
 
+            // MODIFICATION START: Logic to always show the 'Bad Reasons' chart
             const badCalls = calls.filter(c => c.call_quality === 'Bad' && c.quality_reason);
-            const showBadChartWithData = badCalls.length > 0;
             
             if(badReasonsChartInstance) badReasonsChartInstance.destroy();
             
-            let badChartLabels, badChartData, badChartColors;
+            let badChartLabels, badChartData, badChartColors, chartTitle, placeholderOptions = {};
 
-            if(showBadChartWithData) {
+            // Always show the canvas and hide the message paragraph
+            badReasonsChartCanvas.style.display = 'block';
+            noBadCallsMessage.style.display = 'none';
+
+            if(badCalls.length > 0) {
+                // Data exists: Use original logic to process and display it
                 const reasonCounts = badCalls.reduce((acc, c) => { acc[c.quality_reason] = (acc[c.quality_reason] || 0) + 1; return acc; }, {});
                 badChartLabels = Object.keys(reasonCounts);
                 badChartData = Object.values(reasonCounts);
                 badChartColors = CHART_COLORS;
-                badReasonsChartCanvas.style.display = 'block';
-                noBadCallsMessage.style.display = 'none';
+                chartTitle = "Reasons for 'Bad' Calls";
             } else {
-                // If no bad calls, hide the canvas and show the message
-                badReasonsChartCanvas.style.display = 'none';
-                noBadCallsMessage.style.display = 'block';
-                return; // Stop here to not render an empty chart
+                // No data: Create placeholder data for a visually appealing empty state
+                badChartLabels = ["No 'Bad' Quality Calls Recorded"];
+                badChartData = [1]; // A single segment to fill the doughnut
+                badChartColors = ['#4b5563']; // A neutral dark-mode friendly grey color
+                chartTitle = "Reasons for 'Bad' Calls ✨";
             }
             
             badReasonsChartInstance = new Chart(badReasonsChartCanvas, {
@@ -1139,14 +1175,16 @@
                         label: 'Count',
                         data: badChartData, 
                         backgroundColor: badChartColors, 
-                        hoverOffset: 8, 
-                        borderColor: '#374151', // Darker border for contrast
+                        hoverOffset: (badCalls.length > 0) ? 8 : 0, // Disable hover animation for placeholder
+                        borderColor: '#374151', 
                         borderWidth: 3 
                     }] 
                 }, options: { 
                     responsive: true, maintainAspectRatio: false, 
                     plugins: { 
                         legend: { 
+                            // Only display the legend if there is actual data to show
+                            display: badCalls.length > 0,
                             position: 'bottom', 
                             labels: { 
                                 color: FONT_COLOR, 
@@ -1156,16 +1194,16 @@
                         }, 
                         title: { 
                             display: true, 
-                            text: "Reasons for 'Bad' Calls", 
+                            text: chartTitle, 
                             color: FONT_COLOR, 
                             font: { size: FONT_SIZE_TITLE }
                         },
-                        // *** IMPROVED TOOLTIP CONFIGURATION ***
                         tooltip: {
-                            enabled: true,
-                            backgroundColor: 'rgba(23, 31, 42, 0.9)', // Dark, slightly transparent background
-                            titleColor: '#ffffff', // White title
-                            bodyColor: '#E5E7EB', // Light grey body text
+                            // Only enable the rich tooltip when there's real data
+                            enabled: badCalls.length > 0,
+                            backgroundColor: 'rgba(23, 31, 42, 0.9)',
+                            titleColor: '#ffffff',
+                            bodyColor: '#E5E7EB',
                             titleFont: { size: 14, weight: 'bold' },
                             bodyFont: { size: 13 },
                             padding: 12,
@@ -1184,6 +1222,7 @@
                     } 
                 }
             });
+            // MODIFICATION END
         }
 
         function setupEventListeners() {
