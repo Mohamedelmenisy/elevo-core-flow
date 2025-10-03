@@ -254,6 +254,7 @@
             border-radius: var(--border-radius-lg);
             padding: 1.25rem;
             border-left: 4px solid var(--primary-color);
+            position: relative;
         }
          .training-card.completed { border-left-color: var(--success-color); }
         .training-card-header {
@@ -279,17 +280,26 @@
 
         .training-card-body {
             margin-top: 1rem;
-            font-size: 0.9em;
+            font-size: 0.95em; /* Increased font size */
             color: var(--text-color-light);
         }
         .training-card-body p { margin: 0.25rem 0; }
         .training-card-body strong { color: var(--text-color); }
+        
         .training-card-footer {
-            margin-top: 1rem;
-            font-size: 0.85em; /* Increased size */
+            margin-top: 1.25rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .training-card-date {
+            font-size: 0.9em; /* Increased size */
             font-weight: 500;   /* Increased weight */
             color: var(--text-color-subtle);
-            text-align: right;
+        }
+        .training-card-actions {
+            display: flex;
+            gap: 0.5rem;
         }
         
         /* NEW: Monthly Performance Comparison */
@@ -460,7 +470,7 @@
                             
                             <div id="monthlyPerfComparison" class="widget-card perf-comparison-card" style="display: none;">
                                 <h3>Monthly Performance Comparison</h3>
-                                <p class="text-color-light" style="font-size: 0.9em; margin-top: -0.5rem; margin-bottom: 1rem;">'Bad' Quality Calls</p>
+                                <p class="text-color-light" style="font-size: 0.9em; margin-top: -0.5rem; margin-bottom: 1rem;">'Bad' Quality Tickets</p>
                                 <div class="comparison-grid">
                                     <div class="comparison-metric">
                                         <h5>Last Month</h5>
@@ -477,7 +487,8 @@
                             </div>
                             
                             <div class="chart-container">
-                                <canvas id="badReasonsChart"></canvas>
+                                <canvas id="badReasonsChart" style="display: none;"></canvas>
+                                <p id="noBadCallsMessage" class="text-color-light" style="text-align: center; padding: 2rem; display: none;">No 'Bad' quality tickets recorded. Keep up the great work! ✨</p>
                             </div>
                         </div>
                         
@@ -512,6 +523,7 @@
         </footer>
     </div>
 
+    <!-- Notes Modals -->
     <div id="editNoteModal" class="modal">
         <div class="modal-content">
             <h3>Edit Note</h3>
@@ -530,6 +542,18 @@
             <div class="modal-actions">
                 <button id="cancelDeleteBtn" class="action-button secondary-button">Cancel</button>
                 <button id="confirmDeleteBtn" class="action-button danger-button">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Training Modals -->
+    <div id="deleteTrainingConfirmModal" class="modal">
+        <div class="modal-content">
+            <h3>Confirm Deletion</h3>
+            <p>Are you sure you want to delete this training program? This action cannot be undone.</p>
+            <div class="modal-actions">
+                <button id="cancelTrainingDeleteBtn" class="action-button secondary-button">Cancel</button>
+                <button id="confirmTrainingDeleteBtn" class="action-button danger-button">Delete</button>
             </div>
         </div>
     </div>
@@ -559,6 +583,7 @@
               resetFiltersBtn = document.getElementById('resetFiltersBtn');
         const tableBody = document.querySelector('#callsTable tbody'), noDataMessage = document.getElementById('noDataMessage');
         const qualityChartCanvas = document.getElementById('qualityChart'), badReasonsChartCanvas = document.getElementById('badReasonsChart');
+        const noBadCallsMessage = document.getElementById('noBadCallsMessage');
         const paginationControls = document.getElementById('paginationControls');
         const exportDataBtn = document.getElementById('exportDataBtn');
         const dashboardLink = document.getElementById('dashboardLink');
@@ -584,6 +609,10 @@
         const cancelDeleteBtn = document.getElementById('cancelDeleteBtn');
         const confirmDeleteBtn = document.getElementById('confirmDeleteBtn');
 
+        const deleteTrainingConfirmModal = document.getElementById('deleteTrainingConfirmModal');
+        const cancelTrainingDeleteBtn = document.getElementById('cancelTrainingDeleteBtn');
+        const confirmTrainingDeleteBtn = document.getElementById('confirmTrainingDeleteBtn');
+
         let qualityChartInstance, badReasonsChartInstance;
 
         // State
@@ -592,20 +621,21 @@
         let currentNotesPage = 1, NOTES_PER_PAGE = 5;
         let currentTrainingPage = 1, TRAININGS_PER_PAGE = 3;
         let noteToEditTimestamp = null, noteToDeleteTimestamp = null;
+        let trainingToDeleteIndex = null;
         const DAILY_TICKET_TARGET = 20;
         const NOTES_STORAGE_KEY_PREFIX = 'agentSavedNotes_';
         let NOTES_STORAGE_KEY = '';
         const EGYPT_TIMEZONE = 'Africa/Cairo';
         
         // Mock data for training programs
-        const mockTrainingPrograms = [
-             { title: 'Advanced Conflict Resolution', status: 'Completed', reason: 'Repeated "Bad" quality calls related to customer complaints.', assignedBy: 'Admin Supervisor', date: 'Oct 01, 2025' },
-             { title: 'Product Knowledge Update Q4', status: 'In Progress', reason: 'Mandatory quarterly update for all agents.', assignedBy: 'System', date: 'Oct 15, 2025' },
-             { title: 'Effective Communication Strategies', status: 'Completed', reason: 'Agent self-enrollment for skill improvement.', assignedBy: 'Self', date: 'Sep 20, 2025' },
-             { title: 'CRM Software Update v3.2', status: 'Completed', reason: 'System-wide software update training.', assignedBy: 'System', date: 'Aug 15, 2025' },
-             { title: 'Handling Difficult Customers', status: 'In Progress', reason: 'Assigned based on low customer satisfaction scores.', assignedBy: 'QA Team', date: 'Oct 25, 2025' },
-             { title: 'Data Privacy & Security Protocols', status: 'Completed', reason: 'Annual compliance training.', assignedBy: 'System', date: 'Jul 01, 2025' },
-             { title: 'Advanced Sales Techniques', status: 'Not Started', reason: 'Optional course for high-performing agents.', assignedBy: 'System', date: 'Nov 01, 2025' },
+        let mockTrainingPrograms = [
+             { id: 1, title: 'Advanced Conflict Resolution', status: 'Completed', reason: 'Repeated "Bad" quality calls related to customer complaints.', assignedBy: 'Admin Supervisor', date: 'Oct 01, 2025' },
+             { id: 2, title: 'Product Knowledge Update Q4', status: 'In Progress', reason: 'Mandatory quarterly update for all agents.', assignedBy: 'System', date: 'Oct 15, 2025' },
+             { id: 3, title: 'Effective Communication Strategies', status: 'Completed', reason: 'Agent self-enrollment for skill improvement.', assignedBy: 'Self', date: 'Sep 20, 2025' },
+             { id: 4, title: 'CRM Software Update v3.2', status: 'Completed', reason: 'System-wide software update training.', assignedBy: 'System', date: 'Aug 15, 2025' },
+             { id: 5, title: 'Handling Difficult Customers', status: 'In Progress', reason: 'Assigned based on low customer satisfaction scores.', assignedBy: 'QA Team', date: 'Oct 25, 2025' },
+             { id: 6, title: 'Data Privacy & Security Protocols', status: 'Completed', reason: 'Annual compliance training.', assignedBy: 'System', date: 'Jul 01, 2025' },
+             { id: 7, title: 'Advanced Sales Techniques', status: 'Not Started', reason: 'Optional course for high-performing agents.', assignedBy: 'System', date: 'Nov 01, 2025' },
         ];
 
 
@@ -712,6 +742,26 @@
             `;
             trainingPaginationControls.innerHTML = paginationHTML;
         }
+        
+        function openDeleteTrainingModal(trainingId) {
+            trainingToDeleteIndex = mockTrainingPrograms.findIndex(p => p.id === trainingId);
+            if (trainingToDeleteIndex > -1) {
+                deleteTrainingConfirmModal.classList.add('visible');
+            }
+        }
+        function closeDeleteTrainingModal() {
+            deleteTrainingConfirmModal.classList.remove('visible');
+            trainingToDeleteIndex = null;
+        }
+        function deleteTrainingProgram() {
+            if (trainingToDeleteIndex > -1) {
+                mockTrainingPrograms.splice(trainingToDeleteIndex, 1);
+                const totalPages = Math.ceil(mockTrainingPrograms.length / TRAININGS_PER_PAGE);
+                if(currentTrainingPage > totalPages) currentTrainingPage = totalPages || 1;
+                renderTrainingPrograms();
+            }
+            closeDeleteTrainingModal();
+        }
 
         function renderTrainingPrograms() {
             const programs = mockTrainingPrograms;
@@ -736,7 +786,20 @@
                             <p><strong>Assigned by:</strong> ${p.assignedBy}</p>
                         </div>
                         <div class="training-card-footer">
-                            ${isCompleted ? 'Completed on' : 'Due by'}: ${p.date}
+                            <span class="training-card-date">
+                                ${isCompleted ? 'Completed on' : 'Due by'}: ${p.date}
+                            </span>
+                            <div class="training-card-actions">
+                                <button class="note-action-btn" title="View Details" data-training-id="${p.id}" data-action="view">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                                </button>
+                                <button class="note-action-btn edit-note-btn" title="Edit Training" data-training-id="${p.id}" data-action="edit">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                                </button>
+                                <button class="note-action-btn delete-note-btn" title="Delete Training" data-training-id="${p.id}" data-action="delete">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                                </button>
+                            </div>
                         </div>
                     </div>`;
             });
@@ -881,20 +944,20 @@
                 const change = ((thisMonthBadCalls - lastMonthBadCalls) / lastMonthBadCalls) * 100;
                 if (change < 0) {
                     indicator.className = 'improvement';
-                    indicator.innerHTML = `<span>${Math.abs(change).toFixed(0)}% Improvement</span><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg>`;
+                    indicator.innerHTML = `📈 <span>${Math.abs(change).toFixed(0)}% Improvement</span><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg>`;
                 } else if (change > 0) {
                     indicator.className = 'decline';
-                    indicator.innerHTML = `<span>${change.toFixed(0)}% Decline</span><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><polyline points="19 12 12 19 5 12"></polyline></svg>`;
+                    indicator.innerHTML = `📉 <span>${change.toFixed(0)}% Decline</span><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><polyline points="19 12 12 19 5 12"></polyline></svg>`;
                 } else {
                      indicator.className = '';
                      indicator.textContent = 'No change from last month';
                 }
             } else if (thisMonthBadCalls > 0) {
                 indicator.className = 'decline';
-                indicator.textContent = 'Increase from zero';
+                indicator.textContent = '😟 Increase from zero';
             } else {
                 indicator.className = 'improvement';
-                indicator.textContent = 'Excellent! No "Bad" calls.';
+                indicator.textContent = '✅ Excellent! No "Bad" calls.';
             }
             document.getElementById('monthlyPerfComparison').style.display = 'block';
         }
@@ -918,7 +981,6 @@
             });
         }
         
-        // CORRECTED: This is the single, correct function for the main table's pagination
         function renderPagination() {
             paginationControls.innerHTML = '';
             const totalPages = Math.ceil(filteredCalls.length / ROWS_PER_PAGE);
@@ -948,7 +1010,7 @@
                     datasets: [{ 
                         data: [qualityCounts['Good'] || 0, qualityCounts['Bad'] || 0, qualityCounts['N/A'] || 0],
                         backgroundColor: ['#10b981', '#ef4444', '#6b7280'],
-                        borderColor: 'var(--card-bg-color)', borderWidth: 4, hoverOffset: 8
+                        borderColor: '#4A5568', borderWidth: 2, hoverOffset: 8
                     }] 
                 }, options: { responsive: true, maintainAspectRatio: false,
                     plugins: { 
@@ -961,6 +1023,7 @@
             const badCalls = calls.filter(c => c.call_quality === 'Bad' && c.quality_reason);
             const showBadChart = badCalls.length > 0;
             badReasonsChartCanvas.style.display = showBadChart ? 'block' : 'none';
+            noBadCallsMessage.style.display = showBadChart ? 'none' : 'block';
 
             if(badReasonsChartInstance) badReasonsChartInstance.destroy();
             if(showBadChart) {
@@ -969,7 +1032,7 @@
                     type: 'doughnut', data: { 
                         labels: Object.keys(reasonCounts), 
                         datasets: [{ data: Object.values(reasonCounts), backgroundColor: CHART_COLORS, 
-                            hoverOffset: 4, borderColor: 'var(--card-bg-color)', borderWidth: 3 }] 
+                            hoverOffset: 4, borderColor: '#4A5568', borderWidth: 2 }] 
                     }, options: { responsive: true, maintainAspectRatio: false, 
                         plugins: { 
                             legend: { position: 'bottom', labels: { color: FONT_COLOR, font: { size: FONT_SIZE_LEGEND } } }, 
@@ -994,6 +1057,24 @@
                 const deleteButton = e.target.closest('.delete-note-btn');
                 if (editButton) openEditModal(editButton.dataset.timestamp);
                 if (deleteButton) openDeleteConfirmModal(deleteButton.dataset.timestamp);
+            });
+
+            trainingProgramsList.addEventListener('click', (e) => {
+                const actionButton = e.target.closest('.note-action-btn');
+                if (!actionButton) return;
+                
+                const trainingId = parseInt(actionButton.dataset.trainingId);
+                const action = actionButton.dataset.action;
+
+                if (action === 'delete') {
+                    openDeleteTrainingModal(trainingId);
+                } else if (action === 'edit') {
+                    // Placeholder for edit functionality
+                    alert(`Edit functionality for training ID ${trainingId} is not yet implemented.`);
+                } else if (action === 'view') {
+                    // Placeholder for view functionality
+                    alert(`View details for training ID ${trainingId} is not yet implemented.`);
+                }
             });
             
             paginationControls.addEventListener('click', e => {
@@ -1030,8 +1111,11 @@
                 if(noteToDeleteTimestamp) deleteNote(noteToDeleteTimestamp);
                 closeDeleteConfirmModal();
             });
+
+            cancelTrainingDeleteBtn.addEventListener('click', closeDeleteTrainingModal);
+            confirmTrainingDeleteBtn.addEventListener('click', deleteTrainingProgram);
             
-            [editNoteModal, deleteConfirmModal].forEach(modal => {
+            [editNoteModal, deleteConfirmModal, deleteTrainingConfirmModal].forEach(modal => {
                 modal.addEventListener('click', (e) => { if(e.target === modal) e.target.classList.remove('visible'); });
             });
         }
