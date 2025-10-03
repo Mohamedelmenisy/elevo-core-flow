@@ -511,7 +511,8 @@
                 }
             });
             
-            const volumeCtx = document.getElementById('ticketVolumeChart').getContext('2d');
+            // ########## FIX WAS APPLIED HERE ##########
+            const volumeCtx = document.getElementById('mainTicketVolumeCanvas').getContext('2d');
             ticketVolumeChartInstance = new Chart(volumeCtx, {
                 type: 'line',
                 data: {
@@ -790,6 +791,65 @@ async function setupCallSessionsRealtime(supabase, handlePayload) {
       })();
     });
   } catch(e) { console.warn('subscribe failed', e); }
+})();
+</script>
+
+<script>
+// Realtime subscription: subscribe to table 'call_sessions' and refresh view 'live_tickets' on changes
+(async function(){
+  if(typeof createClient === 'undefined') {
+    console.warn('Supabase client not available on page.');
+    return;
+  }
+  const supabaseUrl = window.SUPABASE_URL || window.SUPABASE_URL || '';
+  const supabaseKey = window.SUPABASE_ANON_KEY || window.SUPABASE_ANON_KEY || '';
+  if(!supabaseUrl || !supabaseKey) {
+    console.warn('Supabase keys not found in window; realtime will not start.');
+    return;
+  }
+  const supabase = createClient(supabaseUrl, supabaseKey);
+
+  // helper to format egypt times if present
+  function fmt(d){ try{ return new Intl.DateTimeFormat('en-GB',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit', timeZone:'Africa/Cairo'}).format(new Date(d)); }catch(e){return d;} }
+
+  async function refreshLiveTickets() {
+    try {
+      const { data, error } = await supabase.from('live_tickets').select('*').limit(100);
+      const list = document.getElementById('liveTicketsList') || document.getElementById('liveCallsList') || document.querySelector('.live-calls-list');
+      if(list) {
+        list.innerHTML = '';
+        if(!data || data.length===0) {
+          const el = document.createElement('div'); el.className='live-call-empty'; el.textContent='No live tickets at the moment.'; list.appendChild(el); return;
+        }
+        data.forEach(t => {
+          const item = document.createElement('div');
+          item.className = 'live-call-item';
+          item.setAttribute('data-id', t.id);
+          const start = t.start_time_egypt || t.start_time || t.now_egypt || '';
+          const seconds = t.seconds_open || 0;
+          item.innerHTML = `<div class="live-call-item-agent">${t.agent_name||t.agent_id||'—'}</div><div class="live-call-item-meta">${t.scenario?.title||''} • ${fmt(start)} • ${Math.floor(seconds/60)}m ${Math.floor(seconds%60)}s</div>`;
+          list.appendChild(item);
+        });
+      }
+    } catch(e){ console.warn('refreshLiveTickets error', e); }
+  }
+
+  // initial load
+  setTimeout(refreshLiveTickets, 200);
+
+  try {
+    const channel = supabase.channel('public:call_sessions')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'call_sessions' }, payload => {
+        // payload has eventType and record
+        console.debug('realtime payload', payload);
+        // refresh small list (cheap)
+        refreshLiveTickets();
+      })
+      .subscribe();
+    console.log('Subscribed to call_sessions realtime channel', channel);
+  } catch(e) {
+    console.warn('Realtime subscribe failed', e);
+  }
 })();
 </script>
 </body>
