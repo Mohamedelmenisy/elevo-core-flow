@@ -32,6 +32,7 @@
 
         @media (min-width: 1024px) {
             .portal-layout-grid {
+                /* This creates the two-column layout you want, with the left column being wider */
                 grid-template-columns: minmax(0, 2.5fr) minmax(0, 1.5fr);
             }
         }
@@ -40,7 +41,7 @@
             max-width: none;
         }
         
-        #agentScratchpad, #editNoteTextarea {
+        #agentScratchpad, #editNoteTextarea, #editTrainingReason {
             width: 100%;
             min-height: 150px;
             background-color: var(--input-bg-color);
@@ -53,7 +54,7 @@
             resize: vertical;
             transition: border-color var(--transition-speed-fast) ease, box-shadow var(--transition-speed-fast) ease;
         }
-        #agentScratchpad:focus, #editNoteTextarea:focus {
+        #agentScratchpad:focus, #editNoteTextarea:focus, #editTrainingReason:focus {
             outline: none;
             border-color: var(--primary-color);
             box-shadow: 0 0 0 2px rgba(var(--primary-color-rgb), 0.25);
@@ -170,6 +171,13 @@
 
         .modal-content h3 { margin-top: 0; margin-bottom: 1rem; font-size: 1.4em; }
         .modal-content p { margin-bottom: 1.5rem; color: var(--text-color-light); line-height: 1.6; }
+        .modal-content .form-group { margin-bottom: 1rem; }
+        .modal-content .form-group label { display: block; margin-bottom: 0.5rem; font-weight: 500; color: var(--text-color-light); }
+        .modal-content .form-group input, .modal-content .form-group select {
+            width: 100%; padding: 0.75rem; background-color: var(--input-bg-color);
+            border: 1px solid var(--border-color); border-radius: var(--border-radius-md);
+            color: var(--text-color);
+        }
         
         .modal-actions { display: flex; justify-content: flex-end; gap: 0.75rem; }
 
@@ -329,7 +337,6 @@
         .comparison-result .improvement { color: var(--success-color); }
         .comparison-result .decline { color: var(--danger-color); }
         
-        /* NEW: Class for bordered widget-card */
         .widget-card-bordered {
             border-left: 4px solid var(--accent-color);
         }
@@ -550,6 +557,42 @@
     </div>
 
     <!-- Training Modals -->
+    <div id="viewTrainingModal" class="modal">
+        <div class="modal-content">
+            <h3 id="viewTrainingTitle">Training Details</h3>
+            <div id="viewTrainingBody" class="training-card-body" style="color: var(--text-color);"></div>
+            <div class="modal-actions">
+                <button id="closeViewTrainingBtn" class="action-button primary-button">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="editTrainingModal" class="modal">
+        <div class="modal-content">
+            <h3>Edit Training Program</h3>
+            <div class="form-group">
+                <label for="editTrainingTitleInput">Training Title</label>
+                <input type="text" id="editTrainingTitleInput" placeholder="Enter training title">
+            </div>
+            <div class="form-group">
+                <label for="editTrainingReason">Reason for Assignment</label>
+                <textarea id="editTrainingReason" placeholder="Enter reason..."></textarea>
+            </div>
+            <div class="form-group">
+                <label for="editTrainingStatus">Status</label>
+                <select id="editTrainingStatus">
+                    <option value="Not Started">Not Started</option>
+                    <option value="In Progress">In Progress</option>
+                    <option value="Completed">Completed</option>
+                </select>
+            </div>
+            <div class="modal-actions">
+                <button id="cancelEditTrainingBtn" class="action-button secondary-button">Cancel</button>
+                <button id="saveTrainingChangesBtn" class="action-button primary-button">Save Changes</button>
+            </div>
+        </div>
+    </div>
+
     <div id="deleteTrainingConfirmModal" class="modal">
         <div class="modal-content">
             <h3>Confirm Deletion</h3>
@@ -604,6 +647,7 @@
         const noTrainingMessage = document.getElementById('noTrainingMessage');
         const trainingPaginationControls = document.getElementById('trainingPaginationControls');
         
+        // Note Modals
         const editNoteModal = document.getElementById('editNoteModal');
         const deleteConfirmModal = document.getElementById('deleteConfirmModal');
         const editNoteTextarea = document.getElementById('editNoteTextarea');
@@ -612,7 +656,13 @@
         const cancelDeleteBtn = document.getElementById('cancelDeleteBtn');
         const confirmDeleteBtn = document.getElementById('confirmDeleteBtn');
 
+        // Training Modals
+        const viewTrainingModal = document.getElementById('viewTrainingModal');
+        const editTrainingModal = document.getElementById('editTrainingModal');
         const deleteTrainingConfirmModal = document.getElementById('deleteTrainingConfirmModal');
+        const closeViewTrainingBtn = document.getElementById('closeViewTrainingBtn');
+        const cancelEditTrainingBtn = document.getElementById('cancelEditTrainingBtn');
+        const saveTrainingChangesBtn = document.getElementById('saveTrainingChangesBtn');
         const cancelTrainingDeleteBtn = document.getElementById('cancelTrainingDeleteBtn');
         const confirmTrainingDeleteBtn = document.getElementById('confirmTrainingDeleteBtn');
 
@@ -624,7 +674,7 @@
         let currentNotesPage = 1, NOTES_PER_PAGE = 5;
         let currentTrainingPage = 1, TRAININGS_PER_PAGE = 3;
         let noteToEditTimestamp = null, noteToDeleteTimestamp = null;
-        let trainingToDeleteIndex = null;
+        let trainingToEditId = null, trainingToDeleteId = null;
         const DAILY_TICKET_TARGET = 20;
         const NOTES_STORAGE_KEY_PREFIX = 'agentSavedNotes_';
         let NOTES_STORAGE_KEY = '';
@@ -745,20 +795,58 @@
             `;
             trainingPaginationControls.innerHTML = paginationHTML;
         }
-        
-        function openDeleteTrainingModal(trainingId) {
-            trainingToDeleteIndex = mockTrainingPrograms.findIndex(p => p.id === trainingId);
-            if (trainingToDeleteIndex > -1) {
-                deleteTrainingConfirmModal.classList.add('visible');
+
+        function openViewTrainingModal(trainingId) {
+            const program = mockTrainingPrograms.find(p => p.id === trainingId);
+            if (program) {
+                document.getElementById('viewTrainingTitle').textContent = program.title;
+                document.getElementById('viewTrainingBody').innerHTML = `
+                    <p><strong>Status:</strong> <span class="training-status ${program.status.toLowerCase().replace(' ', '-')}">${program.status}</span></p>
+                    <p><strong>Reason:</strong> ${program.reason}</p>
+                    <p><strong>Assigned by:</strong> ${program.assignedBy}</p>
+                    <p><strong>Date:</strong> ${program.date}</p>
+                `;
+                viewTrainingModal.classList.add('visible');
             }
+        }
+        function closeViewTrainingModal() { viewTrainingModal.classList.remove('visible'); }
+
+        function openEditTrainingModal(trainingId) {
+            const program = mockTrainingPrograms.find(p => p.id === trainingId);
+            if (program) {
+                trainingToEditId = trainingId;
+                document.getElementById('editTrainingTitleInput').value = program.title;
+                document.getElementById('editTrainingReason').value = program.reason;
+                document.getElementById('editTrainingStatus').value = program.status;
+                editTrainingModal.classList.add('visible');
+            }
+        }
+        function closeEditTrainingModal() { editTrainingModal.classList.remove('visible'); trainingToEditId = null; }
+        
+        function saveTrainingChanges() {
+            if (trainingToEditId === null) return;
+            const programIndex = mockTrainingPrograms.findIndex(p => p.id === trainingToEditId);
+            if (programIndex > -1) {
+                mockTrainingPrograms[programIndex].title = document.getElementById('editTrainingTitleInput').value;
+                mockTrainingPrograms[programIndex].reason = document.getElementById('editTrainingReason').value;
+                mockTrainingPrograms[programIndex].status = document.getElementById('editTrainingStatus').value;
+                renderTrainingPrograms();
+            }
+            closeEditTrainingModal();
+        }
+
+        function openDeleteTrainingModal(trainingId) {
+            trainingToDeleteId = trainingId;
+            deleteTrainingConfirmModal.classList.add('visible');
         }
         function closeDeleteTrainingModal() {
             deleteTrainingConfirmModal.classList.remove('visible');
-            trainingToDeleteIndex = null;
+            trainingToDeleteId = null;
         }
+
         function deleteTrainingProgram() {
-            if (trainingToDeleteIndex > -1) {
-                mockTrainingPrograms.splice(trainingToDeleteIndex, 1);
+            if (trainingToDeleteId !== null) {
+                mockTrainingPrograms = mockTrainingPrograms.filter(p => p.id !== trainingToDeleteId);
                 const totalPages = Math.ceil(mockTrainingPrograms.length / TRAININGS_PER_PAGE);
                 if(currentTrainingPage > totalPages) currentTrainingPage = totalPages || 1;
                 renderTrainingPrograms();
@@ -809,7 +897,6 @@
             renderTrainingPagination(programs.length);
         }
         
-
         // --- Main Portal Logic ---
         async function initializePortal() {
             if (!supabase) return;
@@ -996,9 +1083,10 @@
         }
         
         function renderCharts(calls) {
-            const FONT_COLOR = '#D1D5DB'; // Using a light gray for better visibility
+            const FONT_COLOR = '#E5E7EB'; // A lighter gray for even better visibility
             const FONT_SIZE_TITLE = 16, FONT_SIZE_LEGEND = 13;
-            const CHART_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#6366f1', '#8b5cf6'];
+            // A more modern and vibrant color palette
+            const CHART_COLORS = ['#ef4444', '#f97316', '#eab308', '#84cc16', '#22c55e', '#14b8a6', '#06b6d4', '#3b82f6', '#8b5cf6'];
             
             if (qualityChartInstance) qualityChartInstance.destroy();
             const qualityCounts = calls.reduce((acc, call) => {
@@ -1012,12 +1100,12 @@
                     labels: ['Good', 'Bad', 'N/A'],
                     datasets: [{ 
                         data: [qualityCounts['Good'] || 0, qualityCounts['Bad'] || 0, qualityCounts['N/A'] || 0],
-                        backgroundColor: ['#10b981', '#ef4444', '#6b7280'],
-                        borderColor: '#4A5568', borderWidth: 2, hoverOffset: 8
+                        backgroundColor: ['#22c55e', '#ef4444', '#6b7280'],
+                        borderColor: '#374151', borderWidth: 3, hoverOffset: 10
                     }] 
                 }, options: { responsive: true, maintainAspectRatio: false,
                     plugins: { 
-                        legend: { position: 'bottom', labels: { color: FONT_COLOR, font: { size: FONT_SIZE_LEGEND } } }, 
+                        legend: { position: 'bottom', labels: { color: FONT_COLOR, font: { size: FONT_SIZE_LEGEND }, padding: 20 } }, 
                         title: { display: true, text: 'Your Call Quality Breakdown', color: FONT_COLOR, font: { size: FONT_SIZE_TITLE } } 
                     }
                 }
@@ -1025,9 +1113,7 @@
 
             const badCalls = calls.filter(c => c.call_quality === 'Bad' && c.quality_reason);
             const showBadChartWithData = badCalls.length > 0;
-            badReasonsChartCanvas.style.display = 'block';
-            noBadCallsMessage.style.display = 'none';
-
+            
             if(badReasonsChartInstance) badReasonsChartInstance.destroy();
             
             let badChartLabels, badChartData, badChartColors;
@@ -1037,24 +1123,64 @@
                 badChartLabels = Object.keys(reasonCounts);
                 badChartData = Object.values(reasonCounts);
                 badChartColors = CHART_COLORS;
+                badReasonsChartCanvas.style.display = 'block';
+                noBadCallsMessage.style.display = 'none';
             } else {
-                badChartLabels = ["No 'Bad' Quality Calls Recorded"];
-                badChartData = [1];
-                badChartColors = ['#4B5563'];
+                // If no bad calls, hide the canvas and show the message
+                badReasonsChartCanvas.style.display = 'none';
+                noBadCallsMessage.style.display = 'block';
+                return; // Stop here to not render an empty chart
             }
             
             badReasonsChartInstance = new Chart(badReasonsChartCanvas, {
                 type: 'doughnut', data: { 
                     labels: badChartLabels, 
-                    datasets: [{ data: badChartData, backgroundColor: badChartColors, 
-                        hoverOffset: 4, borderColor: '#4A5568', borderWidth: 2 }] 
-                }, options: { responsive: true, maintainAspectRatio: false, 
+                    datasets: [{ 
+                        label: 'Count',
+                        data: badChartData, 
+                        backgroundColor: badChartColors, 
+                        hoverOffset: 8, 
+                        borderColor: '#374151', // Darker border for contrast
+                        borderWidth: 3 
+                    }] 
+                }, options: { 
+                    responsive: true, maintainAspectRatio: false, 
                     plugins: { 
-                        legend: { position: 'bottom', labels: { color: FONT_COLOR, font: { size: FONT_SIZE_LEGEND },
-                          // Hide legend if there is no data
-                          filter: (legendItem, chartData) => showBadChartWithData
-                        } }, 
-                        title: { display: true, text: "Reasons for 'Bad' Calls", color: FONT_COLOR, font: { size: FONT_SIZE_TITLE } }
+                        legend: { 
+                            position: 'bottom', 
+                            labels: { 
+                                color: FONT_COLOR, 
+                                font: { size: FONT_SIZE_LEGEND },
+                                padding: 20
+                            }
+                        }, 
+                        title: { 
+                            display: true, 
+                            text: "Reasons for 'Bad' Calls", 
+                            color: FONT_COLOR, 
+                            font: { size: FONT_SIZE_TITLE }
+                        },
+                        // *** IMPROVED TOOLTIP CONFIGURATION ***
+                        tooltip: {
+                            enabled: true,
+                            backgroundColor: 'rgba(23, 31, 42, 0.9)', // Dark, slightly transparent background
+                            titleColor: '#ffffff', // White title
+                            bodyColor: '#E5E7EB', // Light grey body text
+                            titleFont: { size: 14, weight: 'bold' },
+                            bodyFont: { size: 13 },
+                            padding: 12,
+                            cornerRadius: 8,
+                            borderColor: 'rgba(113, 128, 150, 0.6)',
+                            borderWidth: 1,
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.dataset.label || '';
+                                    if (label) { label += ': '; }
+                                    if (context.parsed !== null) { label += context.parsed; }
+                                    return ' ' + label;
+                                }
+                            }
+                        }
                     } 
                 }
             });
@@ -1083,14 +1209,12 @@
                 const trainingId = parseInt(actionButton.dataset.trainingId);
                 const action = actionButton.dataset.action;
 
-                if (action === 'delete') {
-                    openDeleteTrainingModal(trainingId);
+                if (action === 'view') {
+                    openViewTrainingModal(trainingId);
                 } else if (action === 'edit') {
-                    // Placeholder for edit functionality - NO ALERT
-                    console.log(`Edit action for training ID ${trainingId}`);
-                } else if (action === 'view') {
-                    // Placeholder for view functionality - NO ALERT
-                    console.log(`View action for training ID ${trainingId}`);
+                    openEditTrainingModal(trainingId);
+                } else if (action === 'delete') {
+                    openDeleteTrainingModal(trainingId);
                 }
             });
             
@@ -1116,23 +1240,28 @@
                 }
             });
             
+            // Note Modal Events
             cancelEditBtn.addEventListener('click', closeEditModal);
             saveChangesBtn.addEventListener('click', () => {
                 const newText = editNoteTextarea.value.trim();
                 if(noteToEditTimestamp && newText) updateNote(noteToEditTimestamp, newText);
                 closeEditModal();
             });
-            
             cancelDeleteBtn.addEventListener('click', closeDeleteConfirmModal);
             confirmDeleteBtn.addEventListener('click', () => {
                 if(noteToDeleteTimestamp) deleteNote(noteToDeleteTimestamp);
                 closeDeleteConfirmModal();
             });
 
+            // Training Modal Events
+            closeViewTrainingBtn.addEventListener('click', closeViewTrainingModal);
+            cancelEditTrainingBtn.addEventListener('click', closeEditTrainingModal);
+            saveTrainingChangesBtn.addEventListener('click', saveTrainingChanges);
             cancelTrainingDeleteBtn.addEventListener('click', closeDeleteTrainingModal);
             confirmTrainingDeleteBtn.addEventListener('click', deleteTrainingProgram);
             
-            [editNoteModal, deleteConfirmModal, deleteTrainingConfirmModal].forEach(modal => {
+            // Generic Modal Close
+            [editNoteModal, deleteConfirmModal, viewTrainingModal, editTrainingModal, deleteTrainingConfirmModal].forEach(modal => {
                 modal.addEventListener('click', (e) => { if(e.target === modal) e.target.classList.remove('visible'); });
             });
         }
