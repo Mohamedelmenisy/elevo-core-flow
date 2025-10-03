@@ -131,6 +131,9 @@
             transition: background-color 0.2s ease;
         }
         
+        .view-note-btn { color: var(--text-color-light); }
+        .view-note-btn:hover { background-color: rgba(156, 163, 175, 0.1); }
+
         .edit-note-btn { color: var(--primary-color); }
         .edit-note-btn:hover { background-color: rgba(var(--primary-color-rgb), 0.1); }
         
@@ -487,7 +490,7 @@
                             </div>
                             
                             <div class="chart-container">
-                                <canvas id="badReasonsChart" style="display: none;"></canvas>
+                                <canvas id="badReasonsChart"></canvas>
                                 <p id="noBadCallsMessage" class="text-color-light" style="text-align: center; padding: 2rem; display: none;">No 'Bad' quality tickets recorded. Keep up the great work! ✨</p>
                             </div>
                         </div>
@@ -790,7 +793,7 @@
                                 ${isCompleted ? 'Completed on' : 'Due by'}: ${p.date}
                             </span>
                             <div class="training-card-actions">
-                                <button class="note-action-btn" title="View Details" data-training-id="${p.id}" data-action="view">
+                                <button class="note-action-btn view-note-btn" title="View Details" data-training-id="${p.id}" data-action="view">
                                     <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
                                 </button>
                                 <button class="note-action-btn edit-note-btn" title="Edit Training" data-training-id="${p.id}" data-action="edit">
@@ -993,7 +996,7 @@
         }
         
         function renderCharts(calls) {
-            const FONT_COLOR = 'var(--text-color)';
+            const FONT_COLOR = '#D1D5DB'; // Using a light gray for better visibility
             const FONT_SIZE_TITLE = 16, FONT_SIZE_LEGEND = 13;
             const CHART_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#6366f1', '#8b5cf6'];
             
@@ -1021,26 +1024,40 @@
             });
 
             const badCalls = calls.filter(c => c.call_quality === 'Bad' && c.quality_reason);
-            const showBadChart = badCalls.length > 0;
-            badReasonsChartCanvas.style.display = showBadChart ? 'block' : 'none';
-            noBadCallsMessage.style.display = showBadChart ? 'none' : 'block';
+            const showBadChartWithData = badCalls.length > 0;
+            badReasonsChartCanvas.style.display = 'block';
+            noBadCallsMessage.style.display = 'none';
 
             if(badReasonsChartInstance) badReasonsChartInstance.destroy();
-            if(showBadChart) {
+            
+            let badChartLabels, badChartData, badChartColors;
+
+            if(showBadChartWithData) {
                 const reasonCounts = badCalls.reduce((acc, c) => { acc[c.quality_reason] = (acc[c.quality_reason] || 0) + 1; return acc; }, {});
-                badReasonsChartInstance = new Chart(badReasonsChartCanvas, {
-                    type: 'doughnut', data: { 
-                        labels: Object.keys(reasonCounts), 
-                        datasets: [{ data: Object.values(reasonCounts), backgroundColor: CHART_COLORS, 
-                            hoverOffset: 4, borderColor: '#4A5568', borderWidth: 2 }] 
-                    }, options: { responsive: true, maintainAspectRatio: false, 
-                        plugins: { 
-                            legend: { position: 'bottom', labels: { color: FONT_COLOR, font: { size: FONT_SIZE_LEGEND } } }, 
-                            title: { display: true, text: "Reasons for 'Bad' Calls", color: FONT_COLOR, font: { size: FONT_SIZE_TITLE } }
-                        } 
-                    }
-                });
+                badChartLabels = Object.keys(reasonCounts);
+                badChartData = Object.values(reasonCounts);
+                badChartColors = CHART_COLORS;
+            } else {
+                badChartLabels = ["No 'Bad' Quality Calls Recorded"];
+                badChartData = [1];
+                badChartColors = ['#4B5563'];
             }
+            
+            badReasonsChartInstance = new Chart(badReasonsChartCanvas, {
+                type: 'doughnut', data: { 
+                    labels: badChartLabels, 
+                    datasets: [{ data: badChartData, backgroundColor: badChartColors, 
+                        hoverOffset: 4, borderColor: '#4A5568', borderWidth: 2 }] 
+                }, options: { responsive: true, maintainAspectRatio: false, 
+                    plugins: { 
+                        legend: { position: 'bottom', labels: { color: FONT_COLOR, font: { size: FONT_SIZE_LEGEND },
+                          // Hide legend if there is no data
+                          filter: (legendItem, chartData) => showBadChartWithData
+                        } }, 
+                        title: { display: true, text: "Reasons for 'Bad' Calls", color: FONT_COLOR, font: { size: FONT_SIZE_TITLE } }
+                    } 
+                }
+            });
         }
 
         function setupEventListeners() {
@@ -1069,11 +1086,11 @@
                 if (action === 'delete') {
                     openDeleteTrainingModal(trainingId);
                 } else if (action === 'edit') {
-                    // Placeholder for edit functionality
-                    alert(`Edit functionality for training ID ${trainingId} is not yet implemented.`);
+                    // Placeholder for edit functionality - NO ALERT
+                    console.log(`Edit action for training ID ${trainingId}`);
                 } else if (action === 'view') {
-                    // Placeholder for view functionality
-                    alert(`View details for training ID ${trainingId} is not yet implemented.`);
+                    // Placeholder for view functionality - NO ALERT
+                    console.log(`View action for training ID ${trainingId}`);
                 }
             });
             
