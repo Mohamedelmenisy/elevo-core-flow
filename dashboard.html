@@ -779,3 +779,55 @@ async function setupCallSessionsRealtime(supabase, handlePayload) {
 </script>
 </body>
 </html>
+
+<script>
+(async function(){
+  if(typeof createClient === 'undefined') return;
+  const supabaseUrl = window.SUPABASE_URL || '';
+  const supabaseKey = window.SUPABASE_ANON_KEY || '';
+  if(!supabaseUrl || !supabaseKey) { console.warn('Supabase keys missing'); return; }
+  const supabase = createClient(supabaseUrl, supabaseKey);
+
+  // format helper
+  function fmt(d){ try{ return new Intl.DateTimeFormat('en-GB',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit', timeZone:'Africa/Cairo'}).format(new Date(d)); }catch(e){return d;} }
+
+  // fetch kpis
+  try {
+    const { data } = await supabase.from('kpi_today').select('*').limit(1);
+    if(data && data[0]) {
+      document.getElementById('totalCalls') && (document.getElementById('totalCalls').textContent = data[0].total_completed || 0);
+      document.getElementById('avgCallDuration') && (document.getElementById('avgCallDuration').textContent = (data[0].avg_handling_minutes? (Math.round(data[0].avg_handling_minutes*100)/100+'m') : '0m'));
+      document.getElementById('completionRate') && (document.getElementById('completionRate').textContent = (data[0].completion_rate? Math.round(data[0].completion_rate)+'%' : '0%'));
+    }
+  } catch(e){ console.warn('kpi fetch failed', e); }
+
+  // draw completed tickets chart from completed_tickets view
+  try {
+    const { data } = await supabase.from('completed_tickets').select('*').limit(100);
+    // build small pie data
+    const completed = data? data.filter(r=>r.completed).length : 0;
+    const notCompleted = data? data.filter(r=>!r.completed).length : 0;
+    const canvas = document.querySelector('#completedChartCanvas');
+    if(canvas && window.Chart) {
+      try {
+        new Chart(canvas, {
+          type: 'doughnut',
+          data: { labels: ['Completed','Not Completed'], datasets:[{ data:[completed, notCompleted], backgroundColor:['#2ECC71','#FF4C4C'] }]},
+          options: { plugins:{ legend:{ labels:{ color: '#fff', font:{size:13}}}}}
+        });
+      } catch(e){ console.warn('chart draw failed', e); }
+    }
+  } catch(e){ console.warn('completed tickets fetch failed', e); }
+
+  // Subscribe to changes on call_sessions to refresh live tickets area
+  try {
+    const ch = supabase.channel('public:call_sessions')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'call_sessions' }, p => {
+        console.debug('dashboard realtime event', p);
+        // quick refresh of lists/charts
+        setTimeout(()=>{ location.reload(); }, 400); // lightweight: small reload to reflect changes (can be replaced with smarter updates)
+      })
+      .subscribe();
+  } catch(e){ console.warn('subscribe failed', e); }
+})();
+</script>
