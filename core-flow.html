@@ -811,7 +811,7 @@
         function switchToInitialView() {
             callFlowViewDiv.style.display = 'none';
             postCallSummaryDiv.style.display = 'none';
-            progressTrackerContainer.style.display = 'none';
+            // progressTrackerContainer.style.display = 'none'; // Already hidden by default now
             callTimerDiv.style.display = 'none';
             animateView(initialViewDiv);
             updateSystemStatus("🔴 Waiting for Ticket", "status-waiting");
@@ -831,7 +831,7 @@
         function switchToSummaryView() {
             initialViewDiv.style.display = 'none';
             callFlowViewDiv.style.display = 'none';
-            progressTrackerContainer.style.display = 'none';
+            // progressTrackerContainer.style.display = 'none'; // Already hidden by default
             callTimerDiv.style.display = 'none';
             animateView(postCallSummaryDiv);
             updateSystemStatus("📊 Review Ticket Summary", "status-summary");
@@ -865,9 +865,8 @@
                         scenarioDropdown.appendChild(option);
                     });
                     scenarioDropdown.disabled = false;
-                    // Button remains disabled until selection, re-enable text
                     setButtonLoadingState(receiveCallBtn, false, "Receive Ticket");
-                    receiveCallBtn.disabled = true; // Keep disabled until selection
+                    receiveCallBtn.disabled = true; 
                 } else {
                     scenarioDropdown.innerHTML = '<option value="" disabled>No scenarios available.</option>';
                     showAssistantMessage("⚠️ No active scenarios available.", true, 0); 
@@ -956,14 +955,14 @@
                 }
                 updateSystemStatus("🟢 In Ticket", "status-in-call");
                 renderStep(); 
-                setButtonLoadingState(receiveCallBtn, false, "Receive Ticket"); // Reset button state
-                receiveCallBtn.disabled = true; // Keep disabled as we are in call view
+                setButtonLoadingState(receiveCallBtn, false, "Receive Ticket"); 
+                receiveCallBtn.disabled = true;
             } catch (err) {
                 console.error("Error starting ticket:", err);
                 resetCallState(); 
                 switchToInitialView();
                 showAssistantMessage(`⚠️ Error starting ticket: ${err.message}. Please try again.`, true, 7000);
-                await loadActiveScenarios(); // Reload scenarios and button state will be handled by it
+                await loadActiveScenarios();
             }
         });
 
@@ -987,7 +986,7 @@
             
             const dynamicTitleElement = scenarioTitleElement.childNodes.length > 1 ? scenarioTitleElement.childNodes[1] : scenarioTitleElement; 
             if(dynamicTitleElement && dynamicTitleElement.nodeType === Node.TEXT_NODE) dynamicTitleElement.nodeValue = ` ${currentScenario.title}`; 
-            else if (dynamicTitleElement) dynamicTitleElement.textContent = ` ${currentScenario.title}`; // Fallback
+            else if (dynamicTitleElement) dynamicTitleElement.textContent = ` ${currentScenario.title}`; 
             
             const currentStepTypeIcon = document.getElementById('step-type-icon'); 
             if (currentStepTypeIcon) {
@@ -995,15 +994,9 @@
                  else if (stepObject.options && stepObject.options.length > 0) currentStepTypeIcon.textContent = '🤔'; 
                  else currentStepTypeIcon.textContent = '🗣️'; 
             }
-
-
-            currentStepIndexForProgressBar = currentScenario.steps.findIndex(s => s && s.id === currentStepId); 
-            if (currentStepIndexForProgressBar === -1) currentStepIndexForProgressBar = 0; 
-
+            
             stepsContainer.innerHTML = `<p>${stepObject.text.replace(/\n/g, '<br>')}</p>`; 
             decisionButtonsContainer.innerHTML = ''; 
-
-            renderProgressTracker(); 
 
             prevStepBtn.style.display = stepHistory.length > 0 ? 'inline-flex' : 'none';
             endCallBtn.style.display = 'inline-flex';
@@ -1051,7 +1044,7 @@
                     nextStepBtn.style.display = 'inline-flex';
                 } else { 
                     if(nextStepBtnText) nextStepBtnText.textContent = "Finish Scenario";
-                    if(nextStepBtnIcon) nextStepBtnIcon.style.display = 'none'; // Hide icon for finish
+                    if(nextStepBtnIcon) nextStepBtnIcon.style.display = 'none';
                     nextStepBtn.style.display = 'inline-flex';
                 }
             }
@@ -1100,58 +1093,12 @@
             renderStep();
         }
 
-
-        function renderProgressTracker() {
-            if (!progressTrackerContainer || !currentScenario || !currentScenario.steps || currentScenario.steps.length === 0) {
-                if(progressTrackerContainer) progressTrackerContainer.style.display = 'none';
-                return;
-            }
-            const stepperWrapper = progressTrackerContainer.querySelector('.stepper-wrapper');
-            if (!stepperWrapper) {
-                console.error("Progress tracker's stepper-wrapper not found.");
-                return;
-            }
-            
-            stepperWrapper.innerHTML = ''; 
-            const stepperUl = document.createElement('ul');
-            stepperUl.className = 'stepper';
-
-            const validSteps = currentScenario.steps.filter(step => step && typeof step.id !== 'undefined'); 
-
-            validSteps.forEach((step, index) => {
-                const stepLi = document.createElement('li');
-                stepLi.className = 'step';
-                
-                if (stepHistory.includes(step.id)) {
-                    stepLi.classList.add('completed');
-                } else if (step.id === currentStepId) {
-                    stepLi.classList.add('active');
-                }
-
-                const stepNumber = document.createElement('span');
-                stepNumber.className = 'step-number';
-                stepNumber.textContent = stepHistory.includes(step.id) ? '✓' : index + 1;
-                stepLi.appendChild(stepNumber);
-                stepperUl.appendChild(stepLi);
-
-                if (index < validSteps.length - 1) { 
-                    const separator = document.createElement('li');
-                    separator.className = 'step-separator';
-                    stepperUl.appendChild(separator);
-                }
-            });
-            stepperWrapper.appendChild(stepperUl);
-            // progressTrackerContainer.style.display = 'flex'; // This line is what showed the tracker
-        }
-
-
         nextStepBtn.addEventListener('click', () => {
             const stepObject = currentScenario.steps.find(s => s && s.id === currentStepId); 
             if (!stepObject) {
                 console.error("Next button clicked, but current step object not found for ID:", currentStepId);
                 return;
             }
-
             if (stepObject.next_id) { 
                 navigateToStep(stepObject.next_id);
             } else { 
@@ -1394,7 +1341,6 @@
 
         window.addEventListener('error', function(event) {
             console.error('Global error caught:', event.error, 'at', event.filename, ':', event.lineno);
-            // Optionally, show a user-friendly message or log to a remote service
         });
 
         window.addEventListener('beforeunload', () => {
@@ -1408,7 +1354,7 @@
         } else {
             authLoadingDiv.innerHTML = '<p style="color:var(--danger-color); text-align:center;">Core services could not be initialized. Application cannot start.</p>';
         }
-        console.log("Elevo Core Flow script (v.with_decision_steps_v3.2_ui_revamp_2) loaded and initialized execution.");
+        console.log("Elevo Core Flow script loaded and initialized execution.");
     </script>
 </body>
-</html>
+</html
