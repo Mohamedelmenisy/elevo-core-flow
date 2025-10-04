@@ -7,9 +7,330 @@
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2317a2b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M3 12h18M3 6h12M3 18h15'/><path d='M17 9l4 3l-4 3'/></svg>">
     <link rel="stylesheet" href="style.css"> 
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2">
+<!-- PATCH: improved live/delayed separation & helpers -->
+<script>
+async function fetchAndRenderLiveCalls() {
+    try {
+        const { data, error } = await supabase
+            .from('call_sessions_egypt').select('id, agent_name, start_time_egypt, end_time_egypt, scenario:call_scenarios(title)')
+            .is('end_time_egypt', null)
+            .order('start_time_egypt', { ascending: false });
+
+        if (error) throw error;
+
+        if (typeof liveCallsContainer !== 'undefined') {
+            liveCallsContainer.innerHTML = '';
+        }
+        if (typeof delayedTicketsContainer !== 'undefined') {
+            delayedTicketsContainer.innerHTML = '';
+        }
+        let delayedCount = 0;
+
+        (data || []).forEach(call => {
+            const duration = Math.floor((Date.now() - new Date(call.start_time_egypt)) / 1000);
+            const isDelayed = duration > 180; // 3 minutes
+            const item = document.createElement('div');
+            item.className = 'live-call-item';
+            item.innerHTML = `<div><strong>${call.agent_name || 'Unknown'}</strong> "${call.scenario?.title || 'ticket'}"</div>
+                <div class="live-call-item-time"><span>Started: ${call.start_time_egypt}</span> <span class="live-call-duration">${Math.floor(duration/60)}m ${duration%60}s ${isDelayed?'<span class="long-call-indicator">DELAYED</span>':''}</span></div>`;
+            if (isDelayed) {
+                if (typeof delayedTicketsContainer !== 'undefined') delayedTicketsContainer.appendChild(item);
+                delayedCount++;
+            } else {
+                if (typeof liveCallsContainer !== 'undefined') liveCallsContainer.appendChild(item);
+            }
+        });
+        if (typeof noDelayedTicketsMessage !== 'undefined') noDelayedTicketsMessage.style.display = (delayedCount === 0) ? 'block' : 'none';
+    } catch (error) {
+        console.error('Error fetching live calls (patched):', error);
+    }
+}
+
+function pgIntervalToMs(interval) {
+    if (!interval) return 0;
+    if (typeof interval === 'number') return interval * 1000;
+    let days = 0;
+    const dayMatch = String(interval).match(/(\d+)\s+day/);
+    if (dayMatch) days = parseInt(dayMatch[1], 10);
+    const hmsMatch = String(interval).match(/(\d{1,2}):(\d{2}):(\d{2})$/);
+    if (hmsMatch) {
+        const h = parseInt(hmsMatch[1],10), m = parseInt(hmsMatch[2],10), s = parseInt(hmsMatch[3],10);
+        return ((days * 24 + h) * 3600 + m * 60 + s) * 1000;
+    }
+    const msMatch = String(interval).match(/(\d{1,2}):(\d{2})$/);
+    if (msMatch) {
+        const m = parseInt(msMatch[1],10), s = parseInt(msMatch[2],10);
+        return ((days * 24 * 3600) + m * 60 + s) * 1000;
+    }
+    const num = parseFloat(interval);
+    if (!Number.isNaN(num)) return num * 1000;
+    return 0;
+}
+
+function formatMsToHuman(ms) {
+    if (!ms || ms <= 0) return '0m 0s';
+    const mins = Math.floor(ms / 60000);
+    const secs = Math.floor((ms % 60000) / 1000);
+    return `${mins}m ${secs}s`;
+}
+
+function updateAvgCallDuration(sessionsArray) {
+    try {
+        const finished = (sessionsArray || window.allCallSessions || []).filter(s => s.end_time_egypt);
+        const durationsMs = finished.map(s => {
+            if (s.duration) return Number(s.duration) * 1000;
+            return pgIntervalToMs(s.duration_interval || s.duration || s.duration_interval_text);
+        }).filter(d => d > 0);
+        const avgMs = durationsMs.length ? Math.round(durationsMs.reduce((a,b)=>a+b,0) / durationsMs.length) : 0;
+        const el = document.getElementById('avgCallDuration') || document.querySelector('.avg-call-duration');
+        if (el) el.textContent = formatMsToHuman(avgMs);
+    } catch(e){ console.warn('updateAvgCallDuration error', e); }
+}
+
+async function loadKpiBoxes() {
+  try {
+    const { data: top } = await supabase.from('top_5_agents').select('*').limit(5);
+    if (top) {
+      const el = document.getElementById('topAgentsList');
+      if (el) el.innerHTML = top.map(t => `<li>${t.agent_name}<span>${t.count}</span></li>`).join('');
+    }
+    const { data: f } = await supabase.from('fastest_ticket').select('duration_interval, scenario:call_scenarios(title)').limit(1);
+    if (f && f[0]) {
+      const el = document.getElementById('kpi-fastest');
+      if (el) el.textContent = formatMsToHuman(pgIntervalToMs(f[0].duration_interval));
+    }
+    const { data: l } = await supabase.from('longest_ticket').select('duration_interval, scenario:call_scenarios(title)').limit(1);
+    if (l && l[0]) {
+      const el = document.getElementById('kpi-longest');
+      if (el) el.textContent = formatMsToHuman(pgIntervalToMs(l[0].duration_interval));
+    }
+    const { data: ts } = await supabase.from('top_scenario').select('scenario:call_scenarios(title), count').limit(1);
+    if (ts && ts[0]) {
+      const el = document.getElementById('kpi-top-scenario');
+      if (el) el.textContent = ts[0].scenario?.title || '-';
+    }
+  } catch(e){ console.warn('loadKpiBoxes err', e); }
+}
+</script>
+
+</script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js">
+<!-- PATCH: improved live/delayed separation & helpers -->
+<script>
+async function fetchAndRenderLiveCalls() {
+    try {
+        const { data, error } = await supabase
+            .from('call_sessions_egypt').select('id, agent_name, start_time_egypt, end_time_egypt, scenario:call_scenarios(title)')
+            .is('end_time_egypt', null)
+            .order('start_time_egypt', { ascending: false });
+
+        if (error) throw error;
+
+        if (typeof liveCallsContainer !== 'undefined') {
+            liveCallsContainer.innerHTML = '';
+        }
+        if (typeof delayedTicketsContainer !== 'undefined') {
+            delayedTicketsContainer.innerHTML = '';
+        }
+        let delayedCount = 0;
+
+        (data || []).forEach(call => {
+            const duration = Math.floor((Date.now() - new Date(call.start_time_egypt)) / 1000);
+            const isDelayed = duration > 180; // 3 minutes
+            const item = document.createElement('div');
+            item.className = 'live-call-item';
+            item.innerHTML = `<div><strong>${call.agent_name || 'Unknown'}</strong> "${call.scenario?.title || 'ticket'}"</div>
+                <div class="live-call-item-time"><span>Started: ${call.start_time_egypt}</span> <span class="live-call-duration">${Math.floor(duration/60)}m ${duration%60}s ${isDelayed?'<span class="long-call-indicator">DELAYED</span>':''}</span></div>`;
+            if (isDelayed) {
+                if (typeof delayedTicketsContainer !== 'undefined') delayedTicketsContainer.appendChild(item);
+                delayedCount++;
+            } else {
+                if (typeof liveCallsContainer !== 'undefined') liveCallsContainer.appendChild(item);
+            }
+        });
+        if (typeof noDelayedTicketsMessage !== 'undefined') noDelayedTicketsMessage.style.display = (delayedCount === 0) ? 'block' : 'none';
+    } catch (error) {
+        console.error('Error fetching live calls (patched):', error);
+    }
+}
+
+function pgIntervalToMs(interval) {
+    if (!interval) return 0;
+    if (typeof interval === 'number') return interval * 1000;
+    let days = 0;
+    const dayMatch = String(interval).match(/(\d+)\s+day/);
+    if (dayMatch) days = parseInt(dayMatch[1], 10);
+    const hmsMatch = String(interval).match(/(\d{1,2}):(\d{2}):(\d{2})$/);
+    if (hmsMatch) {
+        const h = parseInt(hmsMatch[1],10), m = parseInt(hmsMatch[2],10), s = parseInt(hmsMatch[3],10);
+        return ((days * 24 + h) * 3600 + m * 60 + s) * 1000;
+    }
+    const msMatch = String(interval).match(/(\d{1,2}):(\d{2})$/);
+    if (msMatch) {
+        const m = parseInt(msMatch[1],10), s = parseInt(msMatch[2],10);
+        return ((days * 24 * 3600) + m * 60 + s) * 1000;
+    }
+    const num = parseFloat(interval);
+    if (!Number.isNaN(num)) return num * 1000;
+    return 0;
+}
+
+function formatMsToHuman(ms) {
+    if (!ms || ms <= 0) return '0m 0s';
+    const mins = Math.floor(ms / 60000);
+    const secs = Math.floor((ms % 60000) / 1000);
+    return `${mins}m ${secs}s`;
+}
+
+function updateAvgCallDuration(sessionsArray) {
+    try {
+        const finished = (sessionsArray || window.allCallSessions || []).filter(s => s.end_time_egypt);
+        const durationsMs = finished.map(s => {
+            if (s.duration) return Number(s.duration) * 1000;
+            return pgIntervalToMs(s.duration_interval || s.duration || s.duration_interval_text);
+        }).filter(d => d > 0);
+        const avgMs = durationsMs.length ? Math.round(durationsMs.reduce((a,b)=>a+b,0) / durationsMs.length) : 0;
+        const el = document.getElementById('avgCallDuration') || document.querySelector('.avg-call-duration');
+        if (el) el.textContent = formatMsToHuman(avgMs);
+    } catch(e){ console.warn('updateAvgCallDuration error', e); }
+}
+
+async function loadKpiBoxes() {
+  try {
+    const { data: top } = await supabase.from('top_5_agents').select('*').limit(5);
+    if (top) {
+      const el = document.getElementById('topAgentsList');
+      if (el) el.innerHTML = top.map(t => `<li>${t.agent_name}<span>${t.count}</span></li>`).join('');
+    }
+    const { data: f } = await supabase.from('fastest_ticket').select('duration_interval, scenario:call_scenarios(title)').limit(1);
+    if (f && f[0]) {
+      const el = document.getElementById('kpi-fastest');
+      if (el) el.textContent = formatMsToHuman(pgIntervalToMs(f[0].duration_interval));
+    }
+    const { data: l } = await supabase.from('longest_ticket').select('duration_interval, scenario:call_scenarios(title)').limit(1);
+    if (l && l[0]) {
+      const el = document.getElementById('kpi-longest');
+      if (el) el.textContent = formatMsToHuman(pgIntervalToMs(l[0].duration_interval));
+    }
+    const { data: ts } = await supabase.from('top_scenario').select('scenario:call_scenarios(title), count').limit(1);
+    if (ts && ts[0]) {
+      const el = document.getElementById('kpi-top-scenario');
+      if (el) el.textContent = ts[0].scenario?.title || '-';
+    }
+  } catch(e){ console.warn('loadKpiBoxes err', e); }
+}
+</script>
+
+</script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js">
+<!-- PATCH: improved live/delayed separation & helpers -->
+<script>
+async function fetchAndRenderLiveCalls() {
+    try {
+        const { data, error } = await supabase
+            .from('call_sessions_egypt').select('id, agent_name, start_time_egypt, end_time_egypt, scenario:call_scenarios(title)')
+            .is('end_time_egypt', null)
+            .order('start_time_egypt', { ascending: false });
+
+        if (error) throw error;
+
+        if (typeof liveCallsContainer !== 'undefined') {
+            liveCallsContainer.innerHTML = '';
+        }
+        if (typeof delayedTicketsContainer !== 'undefined') {
+            delayedTicketsContainer.innerHTML = '';
+        }
+        let delayedCount = 0;
+
+        (data || []).forEach(call => {
+            const duration = Math.floor((Date.now() - new Date(call.start_time_egypt)) / 1000);
+            const isDelayed = duration > 180; // 3 minutes
+            const item = document.createElement('div');
+            item.className = 'live-call-item';
+            item.innerHTML = `<div><strong>${call.agent_name || 'Unknown'}</strong> "${call.scenario?.title || 'ticket'}"</div>
+                <div class="live-call-item-time"><span>Started: ${call.start_time_egypt}</span> <span class="live-call-duration">${Math.floor(duration/60)}m ${duration%60}s ${isDelayed?'<span class="long-call-indicator">DELAYED</span>':''}</span></div>`;
+            if (isDelayed) {
+                if (typeof delayedTicketsContainer !== 'undefined') delayedTicketsContainer.appendChild(item);
+                delayedCount++;
+            } else {
+                if (typeof liveCallsContainer !== 'undefined') liveCallsContainer.appendChild(item);
+            }
+        });
+        if (typeof noDelayedTicketsMessage !== 'undefined') noDelayedTicketsMessage.style.display = (delayedCount === 0) ? 'block' : 'none';
+    } catch (error) {
+        console.error('Error fetching live calls (patched):', error);
+    }
+}
+
+function pgIntervalToMs(interval) {
+    if (!interval) return 0;
+    if (typeof interval === 'number') return interval * 1000;
+    let days = 0;
+    const dayMatch = String(interval).match(/(\d+)\s+day/);
+    if (dayMatch) days = parseInt(dayMatch[1], 10);
+    const hmsMatch = String(interval).match(/(\d{1,2}):(\d{2}):(\d{2})$/);
+    if (hmsMatch) {
+        const h = parseInt(hmsMatch[1],10), m = parseInt(hmsMatch[2],10), s = parseInt(hmsMatch[3],10);
+        return ((days * 24 + h) * 3600 + m * 60 + s) * 1000;
+    }
+    const msMatch = String(interval).match(/(\d{1,2}):(\d{2})$/);
+    if (msMatch) {
+        const m = parseInt(msMatch[1],10), s = parseInt(msMatch[2],10);
+        return ((days * 24 * 3600) + m * 60 + s) * 1000;
+    }
+    const num = parseFloat(interval);
+    if (!Number.isNaN(num)) return num * 1000;
+    return 0;
+}
+
+function formatMsToHuman(ms) {
+    if (!ms || ms <= 0) return '0m 0s';
+    const mins = Math.floor(ms / 60000);
+    const secs = Math.floor((ms % 60000) / 1000);
+    return `${mins}m ${secs}s`;
+}
+
+function updateAvgCallDuration(sessionsArray) {
+    try {
+        const finished = (sessionsArray || window.allCallSessions || []).filter(s => s.end_time_egypt);
+        const durationsMs = finished.map(s => {
+            if (s.duration) return Number(s.duration) * 1000;
+            return pgIntervalToMs(s.duration_interval || s.duration || s.duration_interval_text);
+        }).filter(d => d > 0);
+        const avgMs = durationsMs.length ? Math.round(durationsMs.reduce((a,b)=>a+b,0) / durationsMs.length) : 0;
+        const el = document.getElementById('avgCallDuration') || document.querySelector('.avg-call-duration');
+        if (el) el.textContent = formatMsToHuman(avgMs);
+    } catch(e){ console.warn('updateAvgCallDuration error', e); }
+}
+
+async function loadKpiBoxes() {
+  try {
+    const { data: top } = await supabase.from('top_5_agents').select('*').limit(5);
+    if (top) {
+      const el = document.getElementById('topAgentsList');
+      if (el) el.innerHTML = top.map(t => `<li>${t.agent_name}<span>${t.count}</span></li>`).join('');
+    }
+    const { data: f } = await supabase.from('fastest_ticket').select('duration_interval, scenario:call_scenarios(title)').limit(1);
+    if (f && f[0]) {
+      const el = document.getElementById('kpi-fastest');
+      if (el) el.textContent = formatMsToHuman(pgIntervalToMs(f[0].duration_interval));
+    }
+    const { data: l } = await supabase.from('longest_ticket').select('duration_interval, scenario:call_scenarios(title)').limit(1);
+    if (l && l[0]) {
+      const el = document.getElementById('kpi-longest');
+      if (el) el.textContent = formatMsToHuman(pgIntervalToMs(l[0].duration_interval));
+    }
+    const { data: ts } = await supabase.from('top_scenario').select('scenario:call_scenarios(title), count').limit(1);
+    if (ts && ts[0]) {
+      const el = document.getElementById('kpi-top-scenario');
+      if (el) el.textContent = ts[0].scenario?.title || '-';
+    }
+  } catch(e){ console.warn('loadKpiBoxes err', e); }
+}
+</script>
+
+</script>
     <style>
         :root {
             /* This theme is now primarily controlled by style.css */
@@ -271,60 +592,6 @@
         const FILTER_STORAGE_KEY = 'elevoCoreAdminFilters_v3';
         const EGYPT_TIMEZONE = 'Africa/Cairo';
 
-        // PATCH: improved live/delayed separation & helpers
-        function pgIntervalToMs(interval) {
-            if (!interval) return 0;
-            if (typeof interval === 'number') return interval * 1000;
-            let days = 0;
-            const dayMatch = String(interval).match(/(\d+)\s+day/);
-            if (dayMatch) days = parseInt(dayMatch[1], 10);
-            const hmsMatch = String(interval).match(/(\d{1,2}):(\d{2}):(\d{2})$/);
-            if (hmsMatch) {
-                const h = parseInt(hmsMatch[1],10), m = parseInt(hmsMatch[2],10), s = parseInt(hmsMatch[3],10);
-                return ((days * 24 + h) * 3600 + m * 60 + s) * 1000;
-            }
-            const msMatch = String(interval).match(/(\d{1,2}):(\d{2})$/);
-            if (msMatch) {
-                const m = parseInt(msMatch[1],10), s = parseInt(msMatch[2],10);
-                return ((days * 24 * 3600) + m * 60 + s) * 1000;
-            }
-            const num = parseFloat(interval);
-            if (!Number.isNaN(num)) return num * 1000;
-            return 0;
-        }
-
-        function formatMsToHuman(ms) {
-            if (!ms || ms <= 0) return '0m 0s';
-            const mins = Math.floor(ms / 60000);
-            const secs = Math.floor((ms % 60000) / 1000);
-            return `${mins}m ${secs}s`;
-        }
-
-        async function loadKpiBoxes() {
-          try {
-            const { data: top } = await supabase.from('top_5_agents').select('*').limit(5);
-            if (top) {
-              const el = document.getElementById('topAgentsList');
-              if (el) el.innerHTML = top.map(t => `<li>${t.agent_name}<span>${t.count}</span></li>`).join('');
-            }
-            const { data: f } = await supabase.from('fastest_ticket').select('duration_interval, scenario:call_scenarios(title)').limit(1);
-            if (f && f[0]) {
-              const el = document.getElementById('kpi-fastest');
-              if (el) el.textContent = formatMsToHuman(pgIntervalToMs(f[0].duration_interval));
-            }
-            const { data: l } = await supabase.from('longest_ticket').select('duration_interval, scenario:call_scenarios(title)').limit(1);
-            if (l && l[0]) {
-              const el = document.getElementById('kpi-longest');
-              if (el) el.textContent = formatMsToHuman(pgIntervalToMs(l[0].duration_interval));
-            }
-            const { data: ts } = await supabase.from('top_scenario').select('scenario:call_scenarios(title), count').limit(1);
-            if (ts && ts[0]) {
-              const el = document.getElementById('kpi-top-scenario');
-              if (el) el.textContent = ts[0].scenario?.title || '-';
-            }
-          } catch(e){ console.warn('loadKpiBoxes err', e); }
-        }
-
         function getChartColors() {
             const style = getComputedStyle(document.documentElement);
             return {
@@ -378,26 +645,6 @@
 
             setupAdminUI();
             await loadInitialData();
-            loadKpiBoxes(); // Load KPIs after initial data
-            (function fetchKpisToday(){
-                const safe = typeof supabase !== 'undefined';
-                async function fetchKpis() {
-                    try {
-                    if (!safe) {
-                        document.getElementById('topAgentsList')?.innerHTML = '<li>No data yet <span>—</span></li>';
-                        return;
-                    }
-                    const { data: top } = await supabase.rpc('top_agents_today');
-                    if (top && top.length) {
-                        const html = top.slice(0,5).map(t => `<li>${t.agent_name}<span>${t.count}</span></li>`).join('');
-                        document.getElementById('topAgentsList').innerHTML = html;
-                    }
-                    } catch(e){
-                    console.warn('KPI placeholders error', e);
-                    }
-                }
-                fetchKpis();
-            })();
             loadPersistedFilters();
             applyFiltersAndRender();
             setupEventListeners();
@@ -571,6 +818,7 @@
                     indexAxis: 'y', 
                     responsive: true, 
                     maintainAspectRatio: false,
+                    // MODIFICATION: Add layout padding to prevent label clipping
                     layout: {
                         padding: {
                             left: 30 
@@ -710,15 +958,23 @@
                 
                 liveCallsContainer.innerHTML = '';
                 delayedTicketsContainer.innerHTML = '';
-                let liveCount = 0;
                 let delayedCount = 0;
+
+                if (data.length === 0) {
+                    noLiveCallsMessage.style.display = 'block';
+                    noDelayedTicketsMessage.style.display = 'block';
+                    return;
+                }
                 
-                (data || []).forEach(call => {
-                    const duration = Math.floor((Date.now() - new Date(call.start_time_egypt)) / 1000);
-                    const isDelayed = duration > 180; // 3 minutes
+                noLiveCallsMessage.style.display = 'none';
+                
+                data.forEach(call => {
+                    const duration = Math.floor((new Date() - new Date(call.start_time_egypt)) / 1000);
+                    const isDelayed = duration > 300;
                     
                     const item = document.createElement('div');
                     item.className = 'live-call-item';
+                    if (isDelayed) item.classList.add('long-call-alert');
                     item.innerHTML = `
                         <div><strong class="live-call-item-agent">${call.agent_name || 'Unknown'}</strong> on "${call.scenario?.title || 'a ticket'}"</div>
                         <div class="live-call-item-time">
@@ -726,17 +982,14 @@
                             <span class="live-call-duration">Now: ${Math.floor(duration/60)}m ${duration%60}s ${isDelayed ? '<span class="long-call-indicator">DELAYED</span>' : ''}</span>
                         </div>
                     `;
+                    liveCallsContainer.appendChild(item);
 
                     if (isDelayed) {
-                        delayedTicketsContainer.appendChild(item);
+                        delayedTicketsContainer.appendChild(item.cloneNode(true));
                         delayedCount++;
-                    } else {
-                        liveCallsContainer.appendChild(item);
-                        liveCount++;
                     }
                 });
-                
-                noLiveCallsMessage.style.display = (liveCount === 0) ? 'block' : 'none';
+
                 noDelayedTicketsMessage.style.display = (delayedCount === 0) ? 'block' : 'none';
 
             } catch(error) {
@@ -748,12 +1001,11 @@
             }
         }
 
-
         async function setupLiveCallMonitoring() {
             await fetchAndRenderLiveCalls();
             liveCallsChannel = supabase
-                .channel('public:call_sessions_egypt')
-                .on('postgres_changes', { event: '*', schema: 'public', table: 'call_sessions_egypt' }, (payload) => {
+                .channel('public:call_sessions')
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'call_sessions' }, (payload) => {
                     fetchAndRenderLiveCalls(); 
                     loadInitialData().then(applyFiltersAndRender);
                 })
@@ -764,7 +1016,245 @@
 
         if(supabase) initializeDashboard();
     
-    </script>
+<!-- PATCH: improved live/delayed separation & helpers -->
+<script>
+async function fetchAndRenderLiveCalls() {
+    try {
+        const { data, error } = await supabase
+            .from('call_sessions_egypt').select('id, agent_name, start_time_egypt, end_time_egypt, scenario:call_scenarios(title)')
+            .is('end_time_egypt', null)
+            .order('start_time_egypt', { ascending: false });
+
+        if (error) throw error;
+
+        if (typeof liveCallsContainer !== 'undefined') {
+            liveCallsContainer.innerHTML = '';
+        }
+        if (typeof delayedTicketsContainer !== 'undefined') {
+            delayedTicketsContainer.innerHTML = '';
+        }
+        let delayedCount = 0;
+
+        (data || []).forEach(call => {
+            const duration = Math.floor((Date.now() - new Date(call.start_time_egypt)) / 1000);
+            const isDelayed = duration > 180; // 3 minutes
+            const item = document.createElement('div');
+            item.className = 'live-call-item';
+            item.innerHTML = `<div><strong>${call.agent_name || 'Unknown'}</strong> "${call.scenario?.title || 'ticket'}"</div>
+                <div class="live-call-item-time"><span>Started: ${call.start_time_egypt}</span> <span class="live-call-duration">${Math.floor(duration/60)}m ${duration%60}s ${isDelayed?'<span class="long-call-indicator">DELAYED</span>':''}</span></div>`;
+            if (isDelayed) {
+                if (typeof delayedTicketsContainer !== 'undefined') delayedTicketsContainer.appendChild(item);
+                delayedCount++;
+            } else {
+                if (typeof liveCallsContainer !== 'undefined') liveCallsContainer.appendChild(item);
+            }
+        });
+        if (typeof noDelayedTicketsMessage !== 'undefined') noDelayedTicketsMessage.style.display = (delayedCount === 0) ? 'block' : 'none';
+    } catch (error) {
+        console.error('Error fetching live calls (patched):', error);
+    }
+}
+
+function pgIntervalToMs(interval) {
+    if (!interval) return 0;
+    if (typeof interval === 'number') return interval * 1000;
+    let days = 0;
+    const dayMatch = String(interval).match(/(\d+)\s+day/);
+    if (dayMatch) days = parseInt(dayMatch[1], 10);
+    const hmsMatch = String(interval).match(/(\d{1,2}):(\d{2}):(\d{2})$/);
+    if (hmsMatch) {
+        const h = parseInt(hmsMatch[1],10), m = parseInt(hmsMatch[2],10), s = parseInt(hmsMatch[3],10);
+        return ((days * 24 + h) * 3600 + m * 60 + s) * 1000;
+    }
+    const msMatch = String(interval).match(/(\d{1,2}):(\d{2})$/);
+    if (msMatch) {
+        const m = parseInt(msMatch[1],10), s = parseInt(msMatch[2],10);
+        return ((days * 24 * 3600) + m * 60 + s) * 1000;
+    }
+    const num = parseFloat(interval);
+    if (!Number.isNaN(num)) return num * 1000;
+    return 0;
+}
+
+function formatMsToHuman(ms) {
+    if (!ms || ms <= 0) return '0m 0s';
+    const mins = Math.floor(ms / 60000);
+    const secs = Math.floor((ms % 60000) / 1000);
+    return `${mins}m ${secs}s`;
+}
+
+function updateAvgCallDuration(sessionsArray) {
+    try {
+        const finished = (sessionsArray || window.allCallSessions || []).filter(s => s.end_time_egypt);
+        const durationsMs = finished.map(s => {
+            if (s.duration) return Number(s.duration) * 1000;
+            return pgIntervalToMs(s.duration_interval || s.duration || s.duration_interval_text);
+        }).filter(d => d > 0);
+        const avgMs = durationsMs.length ? Math.round(durationsMs.reduce((a,b)=>a+b,0) / durationsMs.length) : 0;
+        const el = document.getElementById('avgCallDuration') || document.querySelector('.avg-call-duration');
+        if (el) el.textContent = formatMsToHuman(avgMs);
+    } catch(e){ console.warn('updateAvgCallDuration error', e); }
+}
+
+async function loadKpiBoxes() {
+  try {
+    const { data: top } = await supabase.from('top_5_agents').select('*').limit(5);
+    if (top) {
+      const el = document.getElementById('topAgentsList');
+      if (el) el.innerHTML = top.map(t => `<li>${t.agent_name}<span>${t.count}</span></li>`).join('');
+    }
+    const { data: f } = await supabase.from('fastest_ticket').select('duration_interval, scenario:call_scenarios(title)').limit(1);
+    if (f && f[0]) {
+      const el = document.getElementById('kpi-fastest');
+      if (el) el.textContent = formatMsToHuman(pgIntervalToMs(f[0].duration_interval));
+    }
+    const { data: l } = await supabase.from('longest_ticket').select('duration_interval, scenario:call_scenarios(title)').limit(1);
+    if (l && l[0]) {
+      const el = document.getElementById('kpi-longest');
+      if (el) el.textContent = formatMsToHuman(pgIntervalToMs(l[0].duration_interval));
+    }
+    const { data: ts } = await supabase.from('top_scenario').select('scenario:call_scenarios(title), count').limit(1);
+    if (ts && ts[0]) {
+      const el = document.getElementById('kpi-top-scenario');
+      if (el) el.textContent = ts[0].scenario?.title || '-';
+    }
+  } catch(e){ console.warn('loadKpiBoxes err', e); }
+}
+</script>
+
+</script>
+
+<script>
+(function(){
+  const safe = typeof supabase !== 'undefined';
+  async function fetchKpis() {
+    try {
+      if (!safe) {
+        document.getElementById('kpi-fastest')?.textContent = '0m 0s';
+        document.getElementById('kpi-longest')?.textContent = '0m 0s';
+        document.getElementById('kpi-top-scenario')?.textContent = '-';
+        document.getElementById('topAgentsList')?.innerHTML = '<li>No data yet <span>—</span></li>';
+        return;
+      }
+      const { data: top } = await supabase.rpc('top_agents_today');
+      if (top && top.length) {
+        const html = top.slice(0,5).map(t => `<li>${t.agent_name}<span>${t.count}</span></li>`).join('');
+        document.getElementById('topAgentsList').innerHTML = html;
+      }
+    } catch(e){
+      console.warn('KPI placeholders error', e);
+    }
+  }
+  fetchKpis();
+})();
+
+<!-- PATCH: improved live/delayed separation & helpers -->
+<script>
+async function fetchAndRenderLiveCalls() {
+    try {
+        const { data, error } = await supabase
+            .from('call_sessions_egypt').select('id, agent_name, start_time_egypt, end_time_egypt, scenario:call_scenarios(title)')
+            .is('end_time_egypt', null)
+            .order('start_time_egypt', { ascending: false });
+
+        if (error) throw error;
+
+        if (typeof liveCallsContainer !== 'undefined') {
+            liveCallsContainer.innerHTML = '';
+        }
+        if (typeof delayedTicketsContainer !== 'undefined') {
+            delayedTicketsContainer.innerHTML = '';
+        }
+        let delayedCount = 0;
+
+        (data || []).forEach(call => {
+            const duration = Math.floor((Date.now() - new Date(call.start_time_egypt)) / 1000);
+            const isDelayed = duration > 180; // 3 minutes
+            const item = document.createElement('div');
+            item.className = 'live-call-item';
+            item.innerHTML = `<div><strong>${call.agent_name || 'Unknown'}</strong> "${call.scenario?.title || 'ticket'}"</div>
+                <div class="live-call-item-time"><span>Started: ${call.start_time_egypt}</span> <span class="live-call-duration">${Math.floor(duration/60)}m ${duration%60}s ${isDelayed?'<span class="long-call-indicator">DELAYED</span>':''}</span></div>`;
+            if (isDelayed) {
+                if (typeof delayedTicketsContainer !== 'undefined') delayedTicketsContainer.appendChild(item);
+                delayedCount++;
+            } else {
+                if (typeof liveCallsContainer !== 'undefined') liveCallsContainer.appendChild(item);
+            }
+        });
+        if (typeof noDelayedTicketsMessage !== 'undefined') noDelayedTicketsMessage.style.display = (delayedCount === 0) ? 'block' : 'none';
+    } catch (error) {
+        console.error('Error fetching live calls (patched):', error);
+    }
+}
+
+function pgIntervalToMs(interval) {
+    if (!interval) return 0;
+    if (typeof interval === 'number') return interval * 1000;
+    let days = 0;
+    const dayMatch = String(interval).match(/(\d+)\s+day/);
+    if (dayMatch) days = parseInt(dayMatch[1], 10);
+    const hmsMatch = String(interval).match(/(\d{1,2}):(\d{2}):(\d{2})$/);
+    if (hmsMatch) {
+        const h = parseInt(hmsMatch[1],10), m = parseInt(hmsMatch[2],10), s = parseInt(hmsMatch[3],10);
+        return ((days * 24 + h) * 3600 + m * 60 + s) * 1000;
+    }
+    const msMatch = String(interval).match(/(\d{1,2}):(\d{2})$/);
+    if (msMatch) {
+        const m = parseInt(msMatch[1],10), s = parseInt(msMatch[2],10);
+        return ((days * 24 * 3600) + m * 60 + s) * 1000;
+    }
+    const num = parseFloat(interval);
+    if (!Number.isNaN(num)) return num * 1000;
+    return 0;
+}
+
+function formatMsToHuman(ms) {
+    if (!ms || ms <= 0) return '0m 0s';
+    const mins = Math.floor(ms / 60000);
+    const secs = Math.floor((ms % 60000) / 1000);
+    return `${mins}m ${secs}s`;
+}
+
+function updateAvgCallDuration(sessionsArray) {
+    try {
+        const finished = (sessionsArray || window.allCallSessions || []).filter(s => s.end_time_egypt);
+        const durationsMs = finished.map(s => {
+            if (s.duration) return Number(s.duration) * 1000;
+            return pgIntervalToMs(s.duration_interval || s.duration || s.duration_interval_text);
+        }).filter(d => d > 0);
+        const avgMs = durationsMs.length ? Math.round(durationsMs.reduce((a,b)=>a+b,0) / durationsMs.length) : 0;
+        const el = document.getElementById('avgCallDuration') || document.querySelector('.avg-call-duration');
+        if (el) el.textContent = formatMsToHuman(avgMs);
+    } catch(e){ console.warn('updateAvgCallDuration error', e); }
+}
+
+async function loadKpiBoxes() {
+  try {
+    const { data: top } = await supabase.from('top_5_agents').select('*').limit(5);
+    if (top) {
+      const el = document.getElementById('topAgentsList');
+      if (el) el.innerHTML = top.map(t => `<li>${t.agent_name}<span>${t.count}</span></li>`).join('');
+    }
+    const { data: f } = await supabase.from('fastest_ticket').select('duration_interval, scenario:call_scenarios(title)').limit(1);
+    if (f && f[0]) {
+      const el = document.getElementById('kpi-fastest');
+      if (el) el.textContent = formatMsToHuman(pgIntervalToMs(f[0].duration_interval));
+    }
+    const { data: l } = await supabase.from('longest_ticket').select('duration_interval, scenario:call_scenarios(title)').limit(1);
+    if (l && l[0]) {
+      const el = document.getElementById('kpi-longest');
+      if (el) el.textContent = formatMsToHuman(pgIntervalToMs(l[0].duration_interval));
+    }
+    const { data: ts } = await supabase.from('top_scenario').select('scenario:call_scenarios(title), count').limit(1);
+    if (ts && ts[0]) {
+      const el = document.getElementById('kpi-top-scenario');
+      if (el) el.textContent = ts[0].scenario?.title || '-';
+    }
+  } catch(e){ console.warn('loadKpiBoxes err', e); }
+}
+</script>
+
+</script>
 
 </body>
 </html>
