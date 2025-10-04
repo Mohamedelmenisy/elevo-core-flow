@@ -51,6 +51,14 @@
         #ticketVolumeChartContainer {
             grid-column: 1 / -1;
         }
+        
+        /* --- MODIFICATION START: Canvas height fix --- */
+        #mainTicketVolumeCanvas {
+            max-height: 350px !important; /* Limit the height of the main chart */
+            height: 350px !important;
+        }
+        /* --- MODIFICATION END --- */
+
 
         .live-tickets-container {
             grid-column: span 12;
@@ -135,7 +143,6 @@
                 <span class="app-title" style="font-size: 1.4rem;">Real-Time Management</span>
             </div>
             <div class="header-controls">
-                 <!-- MODIFIED: Links will be shown/hidden based on user role by JS -->
                  <a href="core-flow.html" class="nav-link">Core Flow</a>
                  <a href="dashboard.html" class="nav-link" id="adminDashboardLink" style="display: none;">Admin Dashboard</a>
                  <a href="agent-portal.html" class="nav-link" id="agentPortalLink" style="display: none;">Agent Portal</a>
@@ -172,17 +179,16 @@
                     <div id="ticketVolumeChartContainer" class="chart-container">
                         <h2>Ticket Volume (Last Hour)</h2>
                         <canvas id="mainTicketVolumeCanvas"></canvas>
-        <div class="charts-row" style="margin-top:1rem;">
-          <div class="live-kpi-graph">
-            <h4 style="margin:0 0 0.6rem 0;">Live Active Tickets (Last 5 min)</h4>
-            <canvas id="liveKpiGraph"></canvas>
-          </div>
-          <div class="delayed-box">
-            <h4 style="margin:0 0 0.6rem 0;">Delayed Tickets (over 3 min)</h4>
-            <ul id="delayedList" style="list-style:none;padding:0;margin:0;"><li>No delayed tickets.</li></ul>
-          </div>
-        </div>
-        
+                        <div class="charts-row" style="margin-top:1rem;">
+                          <div class="live-kpi-graph">
+                            <h4 style="margin:0 0 0.6rem 0;">Live Active Tickets (Last 5 min)</h4>
+                            <canvas id="liveKpiGraph"></canvas>
+                          </div>
+                          <div class="delayed-box">
+                            <h4 style="margin:0 0 0.6rem 0;">Delayed Tickets (over 3 min)</h4>
+                            <ul id="delayedList" style="list-style:none;padding:0;margin:0;"><li>No delayed tickets.</li></ul>
+                          </div>
+                        </div>
                     </div>
 
                     <div class="live-tickets-container chart-container">
@@ -200,7 +206,6 @@
                     <div class="activity-log-container chart-container">
                         <h2>Activity Log</h2>
                         <div id="activityLogList" class="activity-log-list">
-                            <!-- Logs will be prepended here -->
                         </div>
                     </div>
                 </div>
@@ -223,7 +228,6 @@
             document.getElementById('auth-loading').innerHTML = `<p style="color:red">Error connecting to services.</p>`;
         }
 
-        // DOM Elements
         const authLoadingDiv = document.getElementById('auth-loading');
         const dashboardContentDiv = document.getElementById('dashboardContent');
         const appContainerContent = document.getElementById('appContainerContent');
@@ -238,34 +242,27 @@
         const agentPortalLink = document.getElementById('agentPortalLink');
         document.getElementById('currentYear').textContent = new Date().getFullYear();
 
-        // Stats
         const activeTicketsEl = document.getElementById('activeTickets');
         const avgActiveDurationEl = document.getElementById('avgActiveDuration');
         const ticketsTodayEl = document.getElementById('ticketsToday');
         const completionRateTodayEl = document.getElementById('completionRateToday');
 
-        // Charts
         let ticketStatusChartInstance, ticketVolumeChartInstance;
         const TICKET_VOLUME_TIMESPAN_MINUTES = 60;
         const TICKET_VOLUME_BUCKET_MINUTES = 2;
         let ticketVolumeData = new Array(TICKET_VOLUME_TIMESPAN_MINUTES / TICKET_VOLUME_BUCKET_MINUTES).fill(0);
 
-        // State
         let currentUser = null;
         let liveTickets = new Map();
         let liveStatsInterval, periodicShiftInterval;
-        const EGYPT_TIMEZONE = 'Africa/Cairo'; // MODIFIED: Timezone constant
+        const EGYPT_TIMEZONE = 'Africa/Cairo';
 
-        // MODIFIED: Timezone formatting function
         function formatDateTimeEgypt(dateString) {
             if (!dateString) return 'N/A';
             const date = new Date(dateString);
             return date.toLocaleTimeString('en-GB', {
                 timeZone: EGYPT_TIMEZONE,
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit',
-                hour12: true
+                hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true
             });
         }
 
@@ -283,10 +280,8 @@
             } else {
                 const { data: profile } = await supabase.from('users').select('name, is_admin').eq('id', session.user.id).single();
                 currentUser = {
-                    id: session.user.id,
-                    email: session.user.email,
-                    name: profile?.name || session.user.email,
-                    isAdmin: profile?.is_admin || false
+                    id: session.user.id, email: session.user.email,
+                    name: profile?.name || session.user.email, isAdmin: profile?.is_admin || false
                 };
                 localStorage.setItem('elevoCoreUserData', JSON.stringify(currentUser));
             }
@@ -323,7 +318,6 @@
         function setupUI() {
             userNameSpan.textContent = currentUser.name;
             document.getElementById('userInfo').style.display = 'flex';
-            // MODIFIED: User Permissions
             if(currentUser.isAdmin) {
                 if (adminDashboardLink) adminDashboardLink.style.display = 'inline-block';
             }
@@ -332,9 +326,8 @@
 
         async function fetchInitialData() {
             const oneHourAgo = new Date(Date.now() - TICKET_VOLUME_TIMESPAN_MINUTES * 60 * 1000).toISOString();
-
             const { data, error } = await supabase
-                .from('call_sessions_egypt').select('id, agent_name, start_time_egypt, end_time_egypt, duration_interval, completed, call_quality, quality_reason, scenario_id')
+                .from('call_sessions_egypt').select('id, agent_name, start_time_egypt, end_time_egypt, scenario:call_scenarios(title)')
                 .gte('start_time_egypt', oneHourAgo);
 
             if (error) {
@@ -362,7 +355,6 @@
             await fetchTodayStats();
         }
 
-        // MODIFIED: Realtime Sync
         function setupRealtimeSubscription() {
             supabase
                 .channel('public:call_sessions')
@@ -379,29 +371,28 @@
             
             if (eventType === 'INSERT') {
                 const { data, error } = await supabase
-                    .from('call_sessions_egypt').select('id, agent_name, start_time_egypt, end_time_egypt, duration_interval, completed, call_quality, quality_reason, scenario_id')
-                    .eq('id', recordId)
-                    .single();
+                    .from('call_sessions_egypt').select('id, agent_name, start_time_egypt, end_time_egypt, scenario:call_scenarios(title)')
+                    .eq('id', recordId).single();
                 if (!error && data && data.end_time_egypt === null) {
                     liveTickets.set(data.id, data);
-                    addActivityLog('created', data); // MODIFIED: Activity Log
-                    updateTicketVolumeChart(newRecord, false); // MODIFIED: Volume Chart
+                    addActivityLog('created', data);
+                    updateTicketVolumeChart(newRecord, false);
                 }
             } else if (eventType === 'UPDATE') {
                 if (newRecord.end_time_egypt && liveTickets.has(recordId)) {
                     const endedTicket = { ...liveTickets.get(recordId), ...newRecord };
                     liveTickets.delete(recordId);
-                    addActivityLog(newRecord.completed ? 'completed' : 'ended', endedTicket); // MODIFIED: Activity Log
+                    addActivityLog(newRecord.completed ? 'completed' : 'ended', endedTicket);
                 }
             } else if (eventType === 'DELETE') {
                  if (liveTickets.has(recordId)) {
                     const deletedTicket = liveTickets.get(recordId);
                     liveTickets.delete(recordId);
-                    addActivityLog('ended', deletedTicket); // MODIFIED: Activity Log
+                    addActivityLog('ended', deletedTicket);
                 }
             }
             renderLiveTickets();
-            await fetchTodayStats(); // MODIFIED: Refresh stats on any change
+            await fetchTodayStats();
         }
 
         function renderLiveTickets() {
@@ -419,18 +410,10 @@
                 item.className = 'live-ticket-item';
                 item.id = `ticket-${ticket.id}`;
                 item.innerHTML = `
-                    <div>
-                        <div class="agent-name">${ticket.agent_name || 'Unknown'}</div>
-                    </div>
-                    <div>
-                        <div class="scenario-title">${ticket.scenario?.title || 'Loading...'}</div>
-                    </div>
-                    <div>
-                        <div class="start-time">${formatDateTimeEgypt(ticket.start_time_egypt)}</div>
-                    </div>
-                    <div>
-                        <div class="duration">0m 0s</div>
-                    </div>
+                    <div><div class="agent-name">${ticket.agent_name || 'Unknown'}</div></div>
+                    <div><div class="scenario-title">${ticket.scenario?.title || 'Loading...'}</div></div>
+                    <div><div class="start-time">${formatDateTimeEgypt(ticket.start_time_egypt)}</div></div>
+                    <div><div class="duration">0m 0s</div></div>
                 `;
                 liveTicketsList.appendChild(item);
             });
@@ -464,17 +447,12 @@
             avgActiveDurationEl.textContent = `${avgMins}m ${avgSecs}s`;
         }
 
-        // MODIFIED: Live Stats Fix
         async function fetchTodayStats() {
             const today = new Date();
-            const year = today.getFullYear();
-            const month = today.getMonth();
-            const day = today.getDate();
-            const startOfDay = new Date(Date.UTC(year, month, day, 0, 0, 0, 0) - (new Date().getTimezoneOffset() * 60000) + (3 * 3600000)); // Adjust for Egypt Time
-            
+            const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
             const { data, error, count } = await supabase
-                .from('call_sessions')
-                .select('*', { count: 'exact' })
+                .from('call_sessions_egypt').select('*', { count: 'exact' })
                 .gte('start_time_egypt', startOfDay.toISOString());
             
             if (error) {
@@ -487,12 +465,8 @@
             const completedCount = finishedTickets.filter(d => d.completed).length;
             const endedCount = finishedTickets.length - completedCount;
 
-            if (finishedTickets.length > 0) {
-                completionRateTodayEl.textContent = `${Math.round((completedCount / finishedTickets.length) * 100)}%`;
-            } else {
-                completionRateTodayEl.textContent = 'N/A';
-            }
-
+            completionRateTodayEl.textContent = finishedTickets.length > 0 ? `${Math.round((completedCount / finishedTickets.length) * 100)}%` : 'N/A';
+            
             updateTicketStatusChart(liveTickets.size, completedCount, endedCount);
         }
         
@@ -511,7 +485,6 @@
                 }
             });
             
-            // ########## FIX WAS APPLIED HERE ##########
             const volumeCtx = document.getElementById('mainTicketVolumeCanvas').getContext('2d');
             ticketVolumeChartInstance = new Chart(volumeCtx, {
                 type: 'line',
@@ -537,7 +510,6 @@
             ticketStatusChartInstance.update();
         }
         
-        // MODIFIED: Ticket Volume Chart fix
         function updateTicketVolumeChart(newRecord, shiftOnly = false) {
             if (!ticketVolumeChartInstance) return;
             if (shiftOnly) {
@@ -558,7 +530,6 @@
             ticketVolumeChartInstance.update('none');
         }
 
-        // MODIFIED: Activity Log activation
         function addActivityLog(type, ticket) {
             const logItem = document.createElement('div');
             logItem.className = 'log-item';
@@ -596,261 +567,5 @@
 
         if (supabase) initializeDashboard();
     </script>
-
-<script>
-(function(){
-  const safe = typeof supabase !== 'undefined';
-  // Populate placeholders with safe defaults or from views if available
-  async function fetchKpis() {
-    try {
-      if (!safe) {
-        // default demo values when supabase missing
-        document.getElementById('kpi-fastest')?.textContent = '0m 0s';
-        document.getElementById('kpi-longest')?.textContent = '0m 0s';
-        document.getElementById('kpi-top-scenario')?.textContent = '-';
-        document.getElementById('topAgentsList')?.innerHTML = '<li>No data yet <span>—</span></li>';
-        document.getElementById('delayedList')?.innerHTML = '<li>No delayed tickets.</li>';
-        document.getElementById('ins-total')?.textContent = '0';
-        document.getElementById('ins-avg')?.textContent = '0m 0s';
-        document.getElementById('ins-completion')?.textContent = '0%';
-        return;
-      }
-      // Attempt to call views if supabase exists
-      const { data: kpi } = await supabase.from('kpi_today').select('*').limit(1).single();
-      if (kpi) {
-        document.getElementById('ins-total')?.textContent = kpi.tickets_started_today || 0;
-        document.getElementById('ins-completion')?.textContent = (kpi.completion_rate || 0) + '%';
-        document.getElementById('ins-avg')?.textContent = (kpi.avg_handling_time_minutes || 0) + 'm';
-        document.getElementById('kpi-fastest')?.textContent = '—';
-        document.getElementById('kpi-longest')?.textContent = '—';
-      }
-      // top agents
-      const { data: top } = await supabase.rpc('top_agents_today'); // optional if exists
-      if (top && top.length) {
-        const html = top.slice(0,5).map(t => `<li>${t.agent_name}<span>${t.count}</span></li>`).join('');
-        document.getElementById('topAgentsList').innerHTML = html;
-      }
-      // delayed
-      const { data: delayed } = await supabase.from('delayed_tickets').select('*');
-      if (delayed && delayed.length) {
-        document.getElementById('delayedList').innerHTML = delayed.map(d=>`<li>${d.agent_name} — ${Math.floor(d.seconds_open/60)}m ${d.seconds_open%60}s</li>`).join('');
-      }
-    } catch(e){
-      console.warn('KPI placeholders error', e);
-    }
-  }
-  // call once
-  fetchKpis();
-})();
-</script>
-
-
-<script>
-(function(){
-  try{
-    const sel = document.querySelector('select[name="scenario"]') || document.querySelector('select');
-    function markScenario(){ 
-      if(!sel) return;
-      const opt = sel.options[sel.selectedIndex];
-      const el = document.querySelector('.scenario-name') || document.getElementById('selectedScenarioName') || document.querySelector('.scenario-selected');
-      if(opt && el){ el.textContent = opt.text; el.classList.add('scenario-selected'); }
-    }
-    if(sel){ sel.addEventListener('change', markScenario); markScenario(); }
-  }catch(e){ console.warn(e); }
-})();
-
-function exportTableToCSV(filename = 'report.csv') {
-  const table = document.querySelector('#recentSessionsTable') || document.querySelector('table');
-  if(!table) return alert('No table found to export');
-  const rows = Array.from(table.querySelectorAll('tr')).map(tr => 
-    Array.from(tr.querySelectorAll('th,td')).map(td => '"' + td.innerText.replace(/"/g,'""') + '"').join(',')
-  ).join('\n');
-  const blob = new Blob([rows], { type: 'text/csv;charset=utf-8;' });
-  const link = document.createElement('a');
-  link.href = URL.createObjectURL(blob);
-  link.download = filename;
-  link.style.display='none';
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-}
-</script>
-
-<script>
-
-/* --- Shared helpers (inserted by assistant) --- */
-const EGYPT_TIMEZONE = 'Africa/Cairo';
-function formatDateTimeEgypt(isoOrDate, options = { year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', second:'2-digit' }) {
-  if(!isoOrDate) return '—';
-  const d = (typeof isoOrDate === 'string') ? new Date(isoOrDate) : isoOrDate;
-  try {
-    return new Intl.DateTimeFormat('en-GB', {...options, timeZone: EGYPT_TIMEZONE}).format(d);
-  } catch(e) {
-    return d.toLocaleString();
-  }
-}
-function formatDateForCSVEgypt(isoOrDate) {
-  if(!isoOrDate) return '';
-  const d = (typeof isoOrDate === 'string') ? new Date(isoOrDate) : isoOrDate;
-  return new Intl.DateTimeFormat('en-CA', {year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', timeZone: EGYPT_TIMEZONE}).format(d);
-}
-
-/* Safe chart init helper to avoid Chart.js errors when canvas missing or empty data */
-function safeInitChart(ctx, cfg) {
-  if(!ctx) return null;
-  try {
-    return new Chart(ctx, cfg);
-  } catch(e) {
-    console.warn('chart init failed', e);
-    return null;
-  }
-}
-
-/* Realtime subscription helper for supabase */
-async function setupCallSessionsRealtime(supabase, handlePayload) {
-  try {
-    const channel = supabase.channel('public:call_sessions')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'call_sessions' }, payload => {
-        // payload.record contains the new/updated/deleted row from call_sessions
-        handlePayload && handlePayload(payload);
-      })
-      .subscribe();
-    return channel;
-  } catch(e) {
-    console.warn('Realtime setup failed', e);
-    return null;
-  }
-}
-/* --- End shared helpers --- */
-
-</script>
-
-<script>
-(async function(){
-  if(typeof createClient === 'undefined') return;
-  const supabaseUrl = window.SUPABASE_URL || '';
-  const supabaseKey = window.SUPABASE_ANON_KEY || '';
-  if(!supabaseUrl || !supabaseKey) { console.warn('Supabase keys not provided in page.'); return; }
-  const supabase = createClient(supabaseUrl, supabaseKey);
-  // basic KPIs fetch using kpi_today
-  try {
-    const { data: kpi } = await supabase.from('kpi_today').select('*').limit(1);
-    if(kpi && kpi[0]) {
-      document.getElementById('ticketsToday') && (document.getElementById('ticketsToday').textContent = kpi[0].tickets_started_today || 0);
-      document.getElementById('avgActiveDuration') && (document.getElementById('avgActiveDuration').textContent = (kpi[0].avg_handling_minutes ? (kpi[0].avg_handling_minutes + 'm') : '0m'));
-      document.getElementById('completionRateToday') && (document.getElementById('completionRateToday').textContent = (kpi[0].completion_rate ? Math.round(kpi[0].completion_rate) + '%' : '0%'));
-    }
-  } catch(e) { console.warn('KPIs fetch failed', e); }
-  // initial live tickets list from view
-  try {
-    const { data } = await supabase.from('live_tickets').select('id, agent_name, start_time_egypt, seconds_open, scenario:call_scenarios(title)').limit(50);
-    const list = document.getElementById('liveTicketsList');
-    if(list) {
-      list.innerHTML = '';
-      if(!data || data.length===0) {
-        document.getElementById('noLiveTicketsMessage') && (document.getElementById('noLiveTicketsMessage').style.display='block');
-      } else {
-        document.getElementById('noLiveTicketsMessage') && (document.getElementById('noLiveTicketsMessage').style.display='none');
-        data.forEach(t => {
-          const item = document.createElement('div');
-          item.className = 'live-ticket-item';
-          item.innerHTML = `<div class="agent-name">${t.agent_name||'—'}</div><div class="scenario-title">${t.scenario?.title||'—'}</div><div class="start-time">${formatDateTimeEgypt(t.start_time_egypt)}</div><div class="duration">${t.seconds_open? Math.floor(t.seconds_open/60)+'m '+(t.seconds_open%60)+'s' : '—'}</div>`;
-          list.appendChild(item);
-        });
-      }
-    }
-  } catch(e){ console.warn('Live tickets fetch failed', e); }
-
-  // subscribe to call_sessions realtime (local updates)
-  try {
-    setupCallSessionsRealtime(supabase, payload => {
-      // When a change happens, perform a small fetch for the affected id in live_tickets and update list
-      const rec = payload.record;
-      if(!rec) return;
-      (async () => {
-        try {
-          const { data } = await supabase.from('live_tickets').select('id, agent_name, start_time_egypt, seconds_open, scenario:call_scenarios(title)').eq('id', rec.id).limit(1);
-          // naive update: rebuild list item for that id
-          const list = document.getElementById('liveTicketsList');
-          if(list && data && data[0]) {
-            // find existing element by data-id
-            let found = list.querySelector('[data-id="'+data[0].id+'"]');
-            const itemHtml = `<div class="agent-name">${data[0].agent_name||'—'}</div><div class="scenario-title">${data[0].scenario?.title||'—'}</div><div class="start-time">${formatDateTimeEgypt(data[0].start_time_egypt)}</div><div class="duration">${data[0].seconds_open? Math.floor(data[0].seconds_open/60)+'m '+(data[0].seconds_open%60)+'s' : '—'}</div>`;
-            if(found) { found.innerHTML = itemHtml; } 
-            else {
-              const item = document.createElement('div');
-              item.className = 'live-ticket-item';
-              item.setAttribute('data-id', data[0].id);
-              item.innerHTML = itemHtml;
-              list.prepend(item);
-            }
-          } else {
-            // fallback: small refresh of list
-          }
-        } catch(e){ console.warn('realtime single fetch failed', e); }
-      })();
-    });
-  } catch(e) { console.warn('subscribe failed', e); }
-})();
-</script>
-
-<script>
-// Realtime subscription: subscribe to table 'call_sessions' and refresh view 'live_tickets' on changes
-(async function(){
-  if(typeof createClient === 'undefined') {
-    console.warn('Supabase client not available on page.');
-    return;
-  }
-  const supabaseUrl = window.SUPABASE_URL || window.SUPABASE_URL || '';
-  const supabaseKey = window.SUPABASE_ANON_KEY || window.SUPABASE_ANON_KEY || '';
-  if(!supabaseUrl || !supabaseKey) {
-    console.warn('Supabase keys not found in window; realtime will not start.');
-    return;
-  }
-  const supabase = createClient(supabaseUrl, supabaseKey);
-
-  // helper to format egypt times if present
-  function fmt(d){ try{ return new Intl.DateTimeFormat('en-GB',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit', timeZone:'Africa/Cairo'}).format(new Date(d)); }catch(e){return d;} }
-
-  async function refreshLiveTickets() {
-    try {
-      const { data, error } = await supabase.from('live_tickets').select('*').limit(100);
-      const list = document.getElementById('liveTicketsList') || document.getElementById('liveCallsList') || document.querySelector('.live-calls-list');
-      if(list) {
-        list.innerHTML = '';
-        if(!data || data.length===0) {
-          const el = document.createElement('div'); el.className='live-call-empty'; el.textContent='No live tickets at the moment.'; list.appendChild(el); return;
-        }
-        data.forEach(t => {
-          const item = document.createElement('div');
-          item.className = 'live-call-item';
-          item.setAttribute('data-id', t.id);
-          const start = t.start_time_egypt || t.start_time || t.now_egypt || '';
-          const seconds = t.seconds_open || 0;
-          item.innerHTML = `<div class="live-call-item-agent">${t.agent_name||t.agent_id||'—'}</div><div class="live-call-item-meta">${t.scenario?.title||''} • ${fmt(start)} • ${Math.floor(seconds/60)}m ${Math.floor(seconds%60)}s</div>`;
-          list.appendChild(item);
-        });
-      }
-    } catch(e){ console.warn('refreshLiveTickets error', e); }
-  }
-
-  // initial load
-  setTimeout(refreshLiveTickets, 200);
-
-  try {
-    const channel = supabase.channel('public:call_sessions')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'call_sessions' }, payload => {
-        // payload has eventType and record
-        console.debug('realtime payload', payload);
-        // refresh small list (cheap)
-        refreshLiveTickets();
-      })
-      .subscribe();
-    console.log('Subscribed to call_sessions realtime channel', channel);
-  } catch(e) {
-    console.warn('Realtime subscribe failed', e);
-  }
-})();
-</script>
 </body>
 </html>
