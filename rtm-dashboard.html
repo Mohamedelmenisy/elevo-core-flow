@@ -39,7 +39,6 @@
             box-shadow: var(--shadow-md);
             display: flex; 
             flex-direction: column;
-            min-height: 0; /* FINAL FIX: Prevents flex items from overflowing their grid container */
         }
         .chart-container h2 {
              margin-top: 0;
@@ -50,24 +49,33 @@
              text-align: center;
              flex-shrink: 0;
         }
+
+        /* FINAL FIX: Wrapper to constrain canvas elements inside flex containers */
+        .chart-wrapper {
+            position: relative;
+            flex-grow: 1;
+            width: 100%;
+            min-height: 280px; /* Default min-height for chart wrappers */
+        }
         
+        #ticketVolumeChartContainer .chart-wrapper {
+            min-height: 350px; /* Taller height for the main chart */
+        }
+        
+        .chart-wrapper > canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100% !important;
+            height: 100% !important;
+        }
+
         #ticketVolumeChartContainer {
             grid-column: 1 / -1;
         }
-        
-        #mainTicketVolumeCanvas {
-            height: 350px !important; /* FINAL FIX: Set a specific, non-flexible height */
-            max-height: 350px !important;
-        }
 
-        .live-tickets-container {
-            grid-column: span 12;
-        }
-        
-        #ticketStatusChartContainer {
-            grid-column: span 12;
-        }
-        
+        .live-tickets-container,
+        #ticketStatusChartContainer,
         .activity-log-container {
             grid-column: span 12;
         }
@@ -179,7 +187,10 @@
 
                     <div id="ticketVolumeChartContainer" class="chart-container">
                         <h2>Ticket Volume (Last Hour)</h2>
-                        <canvas id="mainTicketVolumeCanvas"></canvas>
+                        <!-- FINAL FIX: Added chart-wrapper -->
+                        <div class="chart-wrapper">
+                            <canvas id="mainTicketVolumeCanvas"></canvas>
+                        </div>
                         <div class="charts-row" style="margin-top:1rem;">
                           <div class="live-kpi-graph">
                             <h4 style="margin:0 0 0.6rem 0;">Live Active Tickets (Last 5 min)</h4>
@@ -201,7 +212,10 @@
                     
                     <div id="ticketStatusChartContainer" class="chart-container">
                         <h2>Today's Ticket Status</h2>
-                        <canvas id="ticketStatusChart"></canvas>
+                        <!-- FINAL FIX: Added chart-wrapper -->
+                        <div class="chart-wrapper">
+                            <canvas id="ticketStatusChart"></canvas>
+                        </div>
                     </div>
 
                     <div class="activity-log-container chart-container">
@@ -219,7 +233,7 @@
 
     <script type="module">
         const SUPABASE_URL = 'https://aefiigottnlcmjzilqnh.supabase.co';
-        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFlZmlpZ290dG5sY21qemlscW5oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcxNzY2MDQsImV4cCI6MjA2Mjc1MjYwNH0.FypB02v3tGMnxXV9ZmZMdMC0oQpREKOJWgHMPxUzwX4';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFlZmlpZ29TdG5sY21qemlscW5oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcxNzY2MDQsImV4cCI6MjA2Mjc1MjYwNH0.FypB02v3tGMnxXV9ZmZMdMC0oQpREKOJWgHMPxUzwX4';
         
         let supabase;
         try {
@@ -568,6 +582,31 @@
         });
 
         if (supabase) initializeDashboard();
+    </script>
+
+    <script>
+    (function(){
+      const safe = typeof supabase !== 'undefined';
+      // Populate placeholders with safe defaults or from views if available
+      async function fetchKpis() {
+        try {
+          if (!safe) {
+            // default demo values when supabase missing
+            document.getElementById('delayedList')?.innerHTML = '<li>No delayed tickets.</li>';
+            return;
+          }
+          // delayed
+          const { data: delayed } = await supabase.from('delayed_tickets').select('*');
+          if (delayed && delayed.length) {
+            document.getElementById('delayedList').innerHTML = delayed.map(d=>`<li>${d.agent_name} — ${Math.floor(d.seconds_open/60)}m ${d.seconds_open%60}s</li>`).join('');
+          }
+        } catch(e){
+          console.warn('KPI placeholders error', e);
+        }
+      }
+      // call once
+      fetchKpis();
+    })();
     </script>
 </body>
 </html>
