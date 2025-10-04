@@ -50,15 +50,14 @@
              flex-shrink: 0;
         }
 
-        /* FINAL FIX: Wrapper to constrain canvas elements */
         .chart-wrapper {
             position: relative;
             flex-grow: 1;
-            min-height: 280px; /* Default min-height for chart areas */
+            min-height: 280px;
         }
         
         #ticketVolumeChartContainer .chart-wrapper {
-            min-height: 350px; /* Taller height for the main chart */
+            min-height: 350px; 
         }
 
         .chart-wrapper > canvas {
@@ -79,11 +78,11 @@
         }
         
         #ticketStatusChartContainer {
-            grid-column: span 12; /* Default for mobile */
+            grid-column: span 12; 
         }
         
         .activity-log-container {
-            grid-column: span 12; /* Default for mobile */
+            grid-column: span 12; 
         }
 
         @media (min-width: 992px) {
@@ -158,7 +157,6 @@
                 <span class="app-title" style="font-size: 1.4rem;">Real-Time Management</span>
             </div>
             <div class="header-controls">
-                 <!-- MODIFIED: Links will be shown/hidden based on user role by JS -->
                  <a href="core-flow.html" class="nav-link">Core Flow</a>
                  <a href="dashboard.html" class="nav-link" id="adminDashboardLink" style="display: none;">Admin Dashboard</a>
                  <a href="agent-portal.html" class="nav-link" id="agentPortalLink" style="display: none;">Agent Portal</a>
@@ -194,18 +192,19 @@
 
                     <div id="ticketVolumeChartContainer" class="chart-container">
                         <h2>Ticket Volume (Last Hour)</h2>
-                        <!-- FINAL FIX: Added chart-wrapper div -->
                         <div class="chart-wrapper">
                             <canvas id="mainTicketVolumeCanvas"></canvas>
                         </div>
                         <div class="charts-row" style="margin-top:1rem;">
                             <div class="live-kpi-graph">
                                 <h4 style="margin:0 0 0.6rem 0;">Live Active Tickets (Last 5 min)</h4>
-                                <canvas id="liveKpiGraph"></canvas>
+                                <div class="chart-wrapper" style="min-height: 80px;">
+                                    <canvas id="liveKpiGraph"></canvas>
+                                </div>
                             </div>
                             <div class="delayed-box">
                                 <h4 style="margin:0 0 0.6rem 0;">Delayed Tickets (over 3 min)</h4>
-                                <ul id="delayedList" style="list-style:none;padding:0;margin:0;"><li>No delayed tickets.</li></ul>
+                                <ul id="delayedList" style="list-style:none;padding:0;margin:0; max-height: 80px; overflow-y: auto;"><li>No delayed tickets.</li></ul>
                             </div>
                         </div>
                     </div>
@@ -219,7 +218,6 @@
                     
                     <div id="ticketStatusChartContainer" class="chart-container">
                         <h2>Today's Ticket Status</h2>
-                        <!-- FINAL FIX: Added chart-wrapper div -->
                         <div class="chart-wrapper">
                             <canvas id="ticketStatusChart"></canvas>
                         </div>
@@ -273,7 +271,8 @@
         const completionRateTodayEl = document.getElementById('completionRateToday');
 
         // Charts
-        let ticketStatusChartInstance, ticketVolumeChartInstance;
+        let ticketStatusChartInstance, ticketVolumeChartInstance, liveKpiChartInstance;
+        let liveKpiData = new Array(15).fill(0); // 15 data points for 5 mins (20s interval)
         const TICKET_VOLUME_TIMESPAN_MINUTES = 60;
         const TICKET_VOLUME_BUCKET_MINUTES = 2;
         let ticketVolumeData = new Array(TICKET_VOLUME_TIMESPAN_MINUTES / TICKET_VOLUME_BUCKET_MINUTES).fill(0);
@@ -331,6 +330,7 @@
             setupRealtimeSubscription();
             
             liveStatsInterval = setInterval(updateLiveDurationsAndStats, 1000);
+            setInterval(updateLiveKpiChart, 20000); // MODIFICATION: Added interval for live KPI chart
             
             periodicShiftInterval = setInterval(() => {
                 updateTicketVolumeChart(null, true); 
@@ -356,20 +356,43 @@
             if (agentPortalLink) agentPortalLink.style.display = 'inline-block';
         }
 
+        // MODIFICATION: Rewritten to fetch initial logs
         async function fetchInitialData() {
-            const oneHourAgo = new Date(Date.now() - TICKET_VOLUME_TIMESPAN_MINUTES * 60 * 1000).toISOString();
+            const oneHourAgo = new Date(Date.now() - 3600 * 1000).toISOString();
 
-            const { data, error } = await supabase
-                .from('call_sessions_egypt').select('id, agent_name, start_time_egypt, end_time_egypt, duration_interval, completed, call_quality, quality_reason, scenario_id, scenario:call_scenarios(title)')
-                .gte('start_time_egypt', oneHourAgo);
+            const [
+                { data: sessionData, error: sessionError },
+                { data: initialLogData, error: logError }
+            ] = await Promise.all([
+                supabase
+                    .from('call_sessions_egypt')
+                    .select('id, agent_name, start_time_egypt, end_time_egypt, duration_interval, completed, call_quality, quality_reason, scenario_id, scenario:call_scenarios(title)')
+                    .gte('start_time_egypt', oneHourAgo),
+                supabase
+                    .from('call_sessions_egypt')
+                    .select('id, agent_name, start_time_egypt, end_time_egypt, completed, scenario:call_scenarios(title)')
+                    .order('start_time_egypt', { ascending: false })
+                    .limit(20) // Get last 20 events to populate log
+            ]);
 
-            if (error) {
-                console.error("Error fetching initial data:", error);
-                return;
-            }
+            if (sessionError) { console.error("Error fetching initial session data:", sessionError); return; }
+            if (logError) { console.error("Error fetching initial log data:", logError); return; }
             
+            // Populate initial activity log
+            activityLogList.innerHTML = '';
+            if (initialLogData) {
+                initialLogData.reverse().forEach(log => {
+                    let type = 'created';
+                    // Determine log type based on end_time and completed status
+                    if (log.end_time_egypt) {
+                        type = log.completed ? 'completed' : 'ended';
+                    }
+                    addActivityLog(type, log, true); // Pass true to prepend instead of append
+                });
+            }
+
             const now = new Date();
-            data.forEach(ticket => {
+            sessionData.forEach(ticket => {
                 if (ticket.end_time_egypt === null) {
                     liveTickets.set(ticket.id, ticket);
                 }
@@ -383,10 +406,12 @@
                     }
                 }
             });
+
             updateTicketVolumeChart(null, false);
             renderLiveTickets();
             await fetchTodayStats();
         }
+
 
         function setupRealtimeSubscription() {
             supabase
@@ -549,6 +574,29 @@
                 }
             });
             updateTicketVolumeChart(null, true);
+
+            // MODIFICATION: Initialize the live KPI chart
+            const liveKpiCtx = document.getElementById('liveKpiGraph').getContext('2d');
+            liveKpiChartInstance = new Chart(liveKpiCtx, {
+                type: 'line',
+                data: {
+                    labels: liveKpiData.map((_, i) => ''),
+                    datasets: [{
+                        label: 'Active Tickets',
+                        data: liveKpiData,
+                        borderColor: colors.primary,
+                        backgroundColor: `rgba(${colors.primaryRgb}, 0.1)`,
+                        fill: true,
+                        tension: 0.4,
+                        pointRadius: 0
+                    }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    scales: { y: { display: false }, x: { display: false } },
+                    plugins: { legend: { display: false }, tooltip: { enabled: false } }
+                }
+            });
         }
 
         function updateTicketStatusChart(active, completed, ended) {
@@ -577,7 +625,16 @@
             ticketVolumeChartInstance.update('none');
         }
 
-        function addActivityLog(type, ticket) {
+        // MODIFICATION: New function to update the live KPI chart
+        function updateLiveKpiChart() {
+            if (!liveKpiChartInstance) return;
+            liveKpiData.shift();
+            liveKpiData.push(liveTickets.size);
+            liveKpiChartInstance.data.datasets[0].data = [...liveKpiData];
+            liveKpiChartInstance.update('none');
+        }
+
+        function addActivityLog(type, ticket, prepend = false) {
             const logItem = document.createElement('div');
             logItem.className = 'log-item';
             
@@ -590,15 +647,23 @@
                 case 'completed': icon = '✅'; message = `<strong>${agentName}</strong> completed: <em>${scenarioTitle}</em>`; break;
                 case 'ended': icon = '❌'; message = `<strong>${agentName}</strong> ended: <em>${scenarioTitle}</em>`; break;
             }
+            
+            const timestamp = ticket.end_time_egypt || ticket.start_time_egypt || new Date().toISOString();
 
             logItem.innerHTML = `
                 <div class="log-icon ${type}">${icon}</div>
                 <div>
                     <div class="log-message">${message}</div>
-                    <div class="log-timestamp">${new Date().toLocaleString('en-GB', { timeZone: EGYPT_TIMEZONE, hour: '2-digit', minute:'2-digit', second: '2-digit', hour12: true })}</div>
+                    <div class="log-timestamp">${formatDateTimeEgypt(timestamp)}</div>
                 </div>
             `;
-            activityLogList.prepend(logItem);
+            
+            if (prepend) {
+                activityLogList.prepend(logItem);
+            } else {
+                activityLogList.insertBefore(logItem, activityLogList.firstChild);
+            }
+            
             while (activityLogList.children.length > 50) {
                 activityLogList.removeChild(activityLogList.lastChild);
             }
@@ -618,15 +683,12 @@
 <script>
 (function(){
   const safe = typeof supabase !== 'undefined';
-  // Populate placeholders with safe defaults or from views if available
   async function fetchKpis() {
     try {
       if (!safe) {
-        // default demo values when supabase missing
         document.getElementById('delayedList')?.innerHTML = '<li>No delayed tickets.</li>';
         return;
       }
-      // delayed
       const { data: delayed } = await supabase.from('delayed_tickets').select('*');
       if (delayed && delayed.length) {
         document.getElementById('delayedList').innerHTML = delayed.map(d=>`<li>${d.agent_name} — ${Math.floor(d.seconds_open/60)}m ${d.seconds_open%60}s</li>`).join('');
@@ -638,7 +700,7 @@
       document.getElementById('delayedList').innerHTML = '<li>Error loading data.</li>';
     }
   }
-  // call once
+  setInterval(fetchKpis, 10000); // Check for delayed tickets every 10 seconds
   fetchKpis();
 })();
 </script>
