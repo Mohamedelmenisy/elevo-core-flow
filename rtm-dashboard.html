@@ -24,7 +24,6 @@
         .master-grid {
             display: grid;
             grid-template-columns: repeat(12, 1fr);
-            /* MODIFICATION: Removed explicit row template to allow natural flow */
             gap: 1.5rem;
             margin-top: 1.5rem;
         }
@@ -38,8 +37,9 @@
             padding: 1.5rem;
             border-radius: var(--border-radius-lg);
             box-shadow: var(--shadow-md);
-            display: flex; /* MODIFICATION: Changed to Flexbox */
-            flex-direction: column; /* MODIFICATION: Set direction to vertical */
+            display: flex; 
+            flex-direction: column;
+            min-height: 0; /* FINAL FIX: Prevents flex items from overflowing their grid container */
         }
         .chart-container h2 {
              margin-top: 0;
@@ -48,17 +48,16 @@
              font-weight: 600;
              color: var(--text-color-light);
              text-align: center;
-             flex-shrink: 0; /* Prevent header from shrinking */
+             flex-shrink: 0;
         }
         
-        .chart-container > canvas {
-            flex-grow: 1; /* Allow canvas to fill space */
-            min-height: 250px; /* MODIFICATION: Set a minimum height for charts */
-        }
-
         #ticketVolumeChartContainer {
             grid-column: 1 / -1;
-            min-height: 400px; /* MODIFICATION: Give main chart container a min height */
+        }
+        
+        #mainTicketVolumeCanvas {
+            height: 350px !important; /* FINAL FIX: Set a specific, non-flexible height */
+            max-height: 350px !important;
         }
 
         .live-tickets-container {
@@ -88,7 +87,7 @@
         .live-tickets-list, .activity-log-list {
             max-height: 500px;
             overflow-y: auto;
-            flex-grow: 1; /* MODIFICATION: Allow lists to fill container space and become scrollable */
+            flex-grow: 1;
         }
         
         .live-ticket-item {
@@ -145,7 +144,6 @@
                 <span class="app-title" style="font-size: 1.4rem;">Real-Time Management</span>
             </div>
             <div class="header-controls">
-                 <!-- MODIFIED: Links will be shown/hidden based on user role by JS -->
                  <a href="core-flow.html" class="nav-link">Core Flow</a>
                  <a href="dashboard.html" class="nav-link" id="adminDashboardLink" style="display: none;">Admin Dashboard</a>
                  <a href="agent-portal.html" class="nav-link" id="agentPortalLink" style="display: none;">Agent Portal</a>
@@ -209,7 +207,6 @@
                     <div class="activity-log-container chart-container">
                         <h2>Activity Log</h2>
                         <div id="activityLogList" class="activity-log-list">
-                            <!-- Logs will be prepended here -->
                         </div>
                     </div>
                 </div>
@@ -232,7 +229,6 @@
             document.getElementById('auth-loading').innerHTML = `<p style="color:red">Error connecting to services.</p>`;
         }
 
-        // DOM Elements
         const authLoadingDiv = document.getElementById('auth-loading');
         const dashboardContentDiv = document.getElementById('dashboardContent');
         const appContainerContent = document.getElementById('appContainerContent');
@@ -247,19 +243,16 @@
         const agentPortalLink = document.getElementById('agentPortalLink');
         document.getElementById('currentYear').textContent = new Date().getFullYear();
 
-        // Stats
         const activeTicketsEl = document.getElementById('activeTickets');
         const avgActiveDurationEl = document.getElementById('avgActiveDuration');
         const ticketsTodayEl = document.getElementById('ticketsToday');
         const completionRateTodayEl = document.getElementById('completionRateToday');
 
-        // Charts
         let ticketStatusChartInstance, ticketVolumeChartInstance;
         const TICKET_VOLUME_TIMESPAN_MINUTES = 60;
         const TICKET_VOLUME_BUCKET_MINUTES = 2;
         let ticketVolumeData = new Array(TICKET_VOLUME_TIMESPAN_MINUTES / TICKET_VOLUME_BUCKET_MINUTES).fill(0);
 
-        // State
         let currentUser = null;
         let liveTickets = new Map();
         let liveStatsInterval, periodicShiftInterval;
@@ -270,10 +263,7 @@
             const date = new Date(dateString);
             return date.toLocaleTimeString('en-GB', {
                 timeZone: EGYPT_TIMEZONE,
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit',
-                hour12: true
+                hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true
             });
         }
 
@@ -291,10 +281,8 @@
             } else {
                 const { data: profile } = await supabase.from('users').select('name, is_admin').eq('id', session.user.id).single();
                 currentUser = {
-                    id: session.user.id,
-                    email: session.user.email,
-                    name: profile?.name || session.user.email,
-                    isAdmin: profile?.is_admin || false
+                    id: session.user.id, email: session.user.email,
+                    name: profile?.name || session.user.email, isAdmin: profile?.is_admin || false
                 };
                 localStorage.setItem('elevoCoreUserData', JSON.stringify(currentUser));
             }
@@ -339,9 +327,8 @@
 
         async function fetchInitialData() {
             const oneHourAgo = new Date(Date.now() - TICKET_VOLUME_TIMESPAN_MINUTES * 60 * 1000).toISOString();
-
             const { data, error } = await supabase
-                .from('call_sessions_egypt').select('id, agent_name, start_time_egypt, end_time_egypt, duration_interval, completed, call_quality, quality_reason, scenario_id, scenario:call_scenarios(title)')
+                .from('call_sessions_egypt').select('id, agent_name, start_time_egypt, end_time_egypt, scenario:call_scenarios(title)')
                 .gte('start_time_egypt', oneHourAgo);
 
             if (error) {
@@ -386,16 +373,14 @@
             if (eventType === 'INSERT') {
                 const { data, error } = await supabase
                     .from('call_sessions_egypt').select('id, agent_name, start_time_egypt, end_time_egypt, scenario:call_scenarios(title)')
-                    .eq('id', recordId)
-                    .single();
+                    .eq('id', recordId).single();
                 if (!error && data && data.end_time_egypt === null) {
                     liveTickets.set(data.id, data);
                     addActivityLog('created', data);
                     updateTicketVolumeChart(newRecord, false);
                 }
             } else if (eventType === 'UPDATE') {
-                 if (newRecord.end_time_egypt && liveTickets.has(recordId)) {
-                    // Fetch full ticket details for the log
+                if (newRecord.end_time_egypt && liveTickets.has(recordId)) {
                     const endedTicket = { ...liveTickets.get(recordId), ...newRecord };
                     liveTickets.delete(recordId);
                     addActivityLog(newRecord.completed ? 'completed' : 'ended', endedTicket);
@@ -426,18 +411,10 @@
                 item.className = 'live-ticket-item';
                 item.id = `ticket-${ticket.id}`;
                 item.innerHTML = `
-                    <div>
-                        <div class="agent-name">${ticket.agent_name || 'Unknown'}</div>
-                    </div>
-                    <div>
-                        <div class="scenario-title">${ticket.scenario?.title || 'Loading...'}</div>
-                    </div>
-                    <div>
-                        <div class="start-time">${formatDateTimeEgypt(ticket.start_time_egypt)}</div>
-                    </div>
-                    <div>
-                        <div class="duration">0m 0s</div>
-                    </div>
+                    <div><div class="agent-name">${ticket.agent_name || 'Unknown'}</div></div>
+                    <div><div class="scenario-title">${ticket.scenario?.title || 'Loading...'}</div></div>
+                    <div><div class="start-time">${formatDateTimeEgypt(ticket.start_time_egypt)}</div></div>
+                    <div><div class="duration">0m 0s</div></div>
                 `;
                 liveTicketsList.appendChild(item);
             });
@@ -473,11 +450,10 @@
 
         async function fetchTodayStats() {
             const today = new Date();
-            const startOfDay = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()));
+            const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
 
             const { data, error, count } = await supabase
-                .from('call_sessions_egypt')
-                .select('*', { count: 'exact' })
+                .from('call_sessions_egypt').select('*', { count: 'exact' })
                 .gte('start_time_egypt', startOfDay.toISOString());
             
             if (error) {
@@ -490,12 +466,8 @@
             const completedCount = finishedTickets.filter(d => d.completed).length;
             const endedCount = finishedTickets.length - completedCount;
 
-            if (finishedTickets.length > 0) {
-                completionRateTodayEl.textContent = `${Math.round((completedCount / finishedTickets.length) * 100)}%`;
-            } else {
-                completionRateTodayEl.textContent = 'N/A';
-            }
-
+            completionRateTodayEl.textContent = finishedTickets.length > 0 ? `${Math.round((completedCount / finishedTickets.length) * 100)}%` : 'N/A';
+            
             updateTicketStatusChart(liveTickets.size, completedCount, endedCount);
         }
         
@@ -540,7 +512,8 @@
         }
         
         function updateTicketVolumeChart(newRecord, shiftOnly = false) {
-            if (!ticketVolumeChartInstance) return;
+            if (!ticketVolumeChartInstance || !ticketVolumeChartInstance.canvas) return;
+            
             if (shiftOnly) {
                 ticketVolumeData.shift();
                 ticketVolumeData.push(0);
@@ -556,7 +529,7 @@
             }
             ticketVolumeChartInstance.data.labels = labels;
             ticketVolumeChartInstance.data.datasets[0].data = [...ticketVolumeData];
-            ticketVolumeChartInstance.update('none');
+            ticketVolumeChartInstance.update('none'); 
         }
 
         function addActivityLog(type, ticket) {
@@ -595,54 +568,6 @@
         });
 
         if (supabase) initializeDashboard();
-    </script>
-
-    <!-- Other scripts can remain as they are -->
-    <script>
-    (function(){
-      const safe = typeof supabase !== 'undefined';
-      // Populate placeholders with safe defaults or from views if available
-      async function fetchKpis() {
-        try {
-          if (!safe) {
-            // default demo values when supabase missing
-            document.getElementById('kpi-fastest')?.textContent = '0m 0s';
-            document.getElementById('kpi-longest')?.textContent = '0m 0s';
-            document.getElementById('kpi-top-scenario')?.textContent = '-';
-            document.getElementById('topAgentsList')?.innerHTML = '<li>No data yet <span>—</span></li>';
-            document.getElementById('delayedList')?.innerHTML = '<li>No delayed tickets.</li>';
-            document.getElementById('ins-total')?.textContent = '0';
-            document.getElementById('ins-avg')?.textContent = '0m 0s';
-            document.getElementById('ins-completion')?.textContent = '0%';
-            return;
-          }
-          // Attempt to call views if supabase exists
-          const { data: kpi } = await supabase.from('kpi_today').select('*').limit(1).single();
-          if (kpi) {
-            document.getElementById('ins-total')?.textContent = kpi.tickets_started_today || 0;
-            document.getElementById('ins-completion')?.textContent = (kpi.completion_rate || 0) + '%';
-            document.getElementById('ins-avg')?.textContent = (kpi.avg_handling_time_minutes || 0) + 'm';
-            document.getElementById('kpi-fastest')?.textContent = '—';
-            document.getElementById('kpi-longest')?.textContent = '—';
-          }
-          // top agents
-          const { data: top } = await supabase.rpc('top_agents_today'); // optional if exists
-          if (top && top.length) {
-            const html = top.slice(0,5).map(t => `<li>${t.agent_name}<span>${t.count}</span></li>`).join('');
-            document.getElementById('topAgentsList').innerHTML = html;
-          }
-          // delayed
-          const { data: delayed } = await supabase.from('delayed_tickets').select('*');
-          if (delayed && delayed.length) {
-            document.getElementById('delayedList').innerHTML = delayed.map(d=>`<li>${d.agent_name} — ${Math.floor(d.seconds_open/60)}m ${d.seconds_open%60}s</li>`).join('');
-          }
-        } catch(e){
-          console.warn('KPI placeholders error', e);
-        }
-      }
-      // call once
-      fetchKpis();
-    })();
     </script>
 </body>
 </html>
