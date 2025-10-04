@@ -37,7 +37,7 @@
             padding: 1.5rem;
             border-radius: var(--border-radius-lg);
             box-shadow: var(--shadow-md);
-            display: flex; 
+            display: flex;
             flex-direction: column;
         }
         .chart-container h2 {
@@ -50,18 +50,17 @@
              flex-shrink: 0;
         }
 
-        /* FINAL FIX: Wrapper to constrain canvas elements inside flex containers */
+        /* FINAL FIX: Wrapper to constrain canvas elements */
         .chart-wrapper {
             position: relative;
             flex-grow: 1;
-            width: 100%;
-            min-height: 280px; /* Default min-height for chart wrappers */
+            min-height: 280px; /* Default min-height for chart areas */
         }
         
         #ticketVolumeChartContainer .chart-wrapper {
             min-height: 350px; /* Taller height for the main chart */
         }
-        
+
         .chart-wrapper > canvas {
             position: absolute;
             top: 0;
@@ -70,14 +69,21 @@
             height: 100% !important;
         }
 
+
         #ticketVolumeChartContainer {
             grid-column: 1 / -1;
         }
 
-        .live-tickets-container,
-        #ticketStatusChartContainer,
-        .activity-log-container {
+        .live-tickets-container {
             grid-column: span 12;
+        }
+        
+        #ticketStatusChartContainer {
+            grid-column: span 12; /* Default for mobile */
+        }
+        
+        .activity-log-container {
+            grid-column: span 12; /* Default for mobile */
         }
 
         @media (min-width: 992px) {
@@ -152,6 +158,7 @@
                 <span class="app-title" style="font-size: 1.4rem;">Real-Time Management</span>
             </div>
             <div class="header-controls">
+                 <!-- MODIFIED: Links will be shown/hidden based on user role by JS -->
                  <a href="core-flow.html" class="nav-link">Core Flow</a>
                  <a href="dashboard.html" class="nav-link" id="adminDashboardLink" style="display: none;">Admin Dashboard</a>
                  <a href="agent-portal.html" class="nav-link" id="agentPortalLink" style="display: none;">Agent Portal</a>
@@ -187,19 +194,19 @@
 
                     <div id="ticketVolumeChartContainer" class="chart-container">
                         <h2>Ticket Volume (Last Hour)</h2>
-                        <!-- FINAL FIX: Added chart-wrapper -->
+                        <!-- FINAL FIX: Added chart-wrapper div -->
                         <div class="chart-wrapper">
                             <canvas id="mainTicketVolumeCanvas"></canvas>
                         </div>
                         <div class="charts-row" style="margin-top:1rem;">
-                          <div class="live-kpi-graph">
-                            <h4 style="margin:0 0 0.6rem 0;">Live Active Tickets (Last 5 min)</h4>
-                            <canvas id="liveKpiGraph"></canvas>
-                          </div>
-                          <div class="delayed-box">
-                            <h4 style="margin:0 0 0.6rem 0;">Delayed Tickets (over 3 min)</h4>
-                            <ul id="delayedList" style="list-style:none;padding:0;margin:0;"><li>No delayed tickets.</li></ul>
-                          </div>
+                            <div class="live-kpi-graph">
+                                <h4 style="margin:0 0 0.6rem 0;">Live Active Tickets (Last 5 min)</h4>
+                                <canvas id="liveKpiGraph"></canvas>
+                            </div>
+                            <div class="delayed-box">
+                                <h4 style="margin:0 0 0.6rem 0;">Delayed Tickets (over 3 min)</h4>
+                                <ul id="delayedList" style="list-style:none;padding:0;margin:0;"><li>No delayed tickets.</li></ul>
+                            </div>
                         </div>
                     </div>
 
@@ -212,7 +219,7 @@
                     
                     <div id="ticketStatusChartContainer" class="chart-container">
                         <h2>Today's Ticket Status</h2>
-                        <!-- FINAL FIX: Added chart-wrapper -->
+                        <!-- FINAL FIX: Added chart-wrapper div -->
                         <div class="chart-wrapper">
                             <canvas id="ticketStatusChart"></canvas>
                         </div>
@@ -221,6 +228,7 @@
                     <div class="activity-log-container chart-container">
                         <h2>Activity Log</h2>
                         <div id="activityLogList" class="activity-log-list">
+                            <!-- Logs will be prepended here -->
                         </div>
                     </div>
                 </div>
@@ -233,7 +241,7 @@
 
     <script type="module">
         const SUPABASE_URL = 'https://aefiigottnlcmjzilqnh.supabase.co';
-        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFlZmlpZ29TdG5sY21qemlscW5oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcxNzY2MDQsImV4cCI6MjA2Mjc1MjYwNH0.FypB02v3tGMnxXV9ZmZMdMC0oQpREKOJWgHMPxUzwX4';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFlZmlpZ290dG5sY21qemlscW5oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcxNzY2MDQsImV4cCI6MjA2Mjc1MjYwNH0.FypB02v3tGMnxXV9ZmZMdMC0oQpREKOJWgHMPxUzwX4';
         
         let supabase;
         try {
@@ -243,6 +251,7 @@
             document.getElementById('auth-loading').innerHTML = `<p style="color:red">Error connecting to services.</p>`;
         }
 
+        // DOM Elements
         const authLoadingDiv = document.getElementById('auth-loading');
         const dashboardContentDiv = document.getElementById('dashboardContent');
         const appContainerContent = document.getElementById('appContainerContent');
@@ -257,16 +266,19 @@
         const agentPortalLink = document.getElementById('agentPortalLink');
         document.getElementById('currentYear').textContent = new Date().getFullYear();
 
+        // Stats
         const activeTicketsEl = document.getElementById('activeTickets');
         const avgActiveDurationEl = document.getElementById('avgActiveDuration');
         const ticketsTodayEl = document.getElementById('ticketsToday');
         const completionRateTodayEl = document.getElementById('completionRateToday');
 
+        // Charts
         let ticketStatusChartInstance, ticketVolumeChartInstance;
         const TICKET_VOLUME_TIMESPAN_MINUTES = 60;
         const TICKET_VOLUME_BUCKET_MINUTES = 2;
         let ticketVolumeData = new Array(TICKET_VOLUME_TIMESPAN_MINUTES / TICKET_VOLUME_BUCKET_MINUTES).fill(0);
 
+        // State
         let currentUser = null;
         let liveTickets = new Map();
         let liveStatsInterval, periodicShiftInterval;
@@ -277,7 +289,10 @@
             const date = new Date(dateString);
             return date.toLocaleTimeString('en-GB', {
                 timeZone: EGYPT_TIMEZONE,
-                hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: true
             });
         }
 
@@ -295,8 +310,10 @@
             } else {
                 const { data: profile } = await supabase.from('users').select('name, is_admin').eq('id', session.user.id).single();
                 currentUser = {
-                    id: session.user.id, email: session.user.email,
-                    name: profile?.name || session.user.email, isAdmin: profile?.is_admin || false
+                    id: session.user.id,
+                    email: session.user.email,
+                    name: profile?.name || session.user.email,
+                    isAdmin: profile?.is_admin || false
                 };
                 localStorage.setItem('elevoCoreUserData', JSON.stringify(currentUser));
             }
@@ -341,8 +358,9 @@
 
         async function fetchInitialData() {
             const oneHourAgo = new Date(Date.now() - TICKET_VOLUME_TIMESPAN_MINUTES * 60 * 1000).toISOString();
+
             const { data, error } = await supabase
-                .from('call_sessions_egypt').select('id, agent_name, start_time_egypt, end_time_egypt, scenario:call_scenarios(title)')
+                .from('call_sessions_egypt').select('id, agent_name, start_time_egypt, end_time_egypt, duration_interval, completed, call_quality, quality_reason, scenario_id, scenario:call_scenarios(title)')
                 .gte('start_time_egypt', oneHourAgo);
 
             if (error) {
@@ -387,7 +405,8 @@
             if (eventType === 'INSERT') {
                 const { data, error } = await supabase
                     .from('call_sessions_egypt').select('id, agent_name, start_time_egypt, end_time_egypt, scenario:call_scenarios(title)')
-                    .eq('id', recordId).single();
+                    .eq('id', recordId)
+                    .single();
                 if (!error && data && data.end_time_egypt === null) {
                     liveTickets.set(data.id, data);
                     addActivityLog('created', data);
@@ -425,10 +444,18 @@
                 item.className = 'live-ticket-item';
                 item.id = `ticket-${ticket.id}`;
                 item.innerHTML = `
-                    <div><div class="agent-name">${ticket.agent_name || 'Unknown'}</div></div>
-                    <div><div class="scenario-title">${ticket.scenario?.title || 'Loading...'}</div></div>
-                    <div><div class="start-time">${formatDateTimeEgypt(ticket.start_time_egypt)}</div></div>
-                    <div><div class="duration">0m 0s</div></div>
+                    <div>
+                        <div class="agent-name">${ticket.agent_name || 'Unknown'}</div>
+                    </div>
+                    <div>
+                        <div class="scenario-title">${ticket.scenario?.title || 'Loading...'}</div>
+                    </div>
+                    <div>
+                        <div class="start-time">${formatDateTimeEgypt(ticket.start_time_egypt)}</div>
+                    </div>
+                    <div>
+                        <div class="duration">0m 0s</div>
+                    </div>
                 `;
                 liveTicketsList.appendChild(item);
             });
@@ -464,10 +491,11 @@
 
         async function fetchTodayStats() {
             const today = new Date();
-            const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-
+            const startOfDay = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()));
+            
             const { data, error, count } = await supabase
-                .from('call_sessions_egypt').select('*', { count: 'exact' })
+                .from('call_sessions_egypt')
+                .select('*', { count: 'exact' })
                 .gte('start_time_egypt', startOfDay.toISOString());
             
             if (error) {
@@ -480,8 +508,12 @@
             const completedCount = finishedTickets.filter(d => d.completed).length;
             const endedCount = finishedTickets.length - completedCount;
 
-            completionRateTodayEl.textContent = finishedTickets.length > 0 ? `${Math.round((completedCount / finishedTickets.length) * 100)}%` : 'N/A';
-            
+            if (finishedTickets.length > 0) {
+                completionRateTodayEl.textContent = `${Math.round((completedCount / finishedTickets.length) * 100)}%`;
+            } else {
+                completionRateTodayEl.textContent = 'N/A';
+            }
+
             updateTicketStatusChart(liveTickets.size, completedCount, endedCount);
         }
         
@@ -526,8 +558,7 @@
         }
         
         function updateTicketVolumeChart(newRecord, shiftOnly = false) {
-            if (!ticketVolumeChartInstance || !ticketVolumeChartInstance.canvas) return;
-            
+            if (!ticketVolumeChartInstance) return;
             if (shiftOnly) {
                 ticketVolumeData.shift();
                 ticketVolumeData.push(0);
@@ -543,7 +574,7 @@
             }
             ticketVolumeChartInstance.data.labels = labels;
             ticketVolumeChartInstance.data.datasets[0].data = [...ticketVolumeData];
-            ticketVolumeChartInstance.update('none'); 
+            ticketVolumeChartInstance.update('none');
         }
 
         function addActivityLog(type, ticket) {
@@ -584,29 +615,79 @@
         if (supabase) initializeDashboard();
     </script>
 
-    <script>
-    (function(){
-      const safe = typeof supabase !== 'undefined';
-      // Populate placeholders with safe defaults or from views if available
-      async function fetchKpis() {
-        try {
-          if (!safe) {
-            // default demo values when supabase missing
-            document.getElementById('delayedList')?.innerHTML = '<li>No delayed tickets.</li>';
-            return;
-          }
-          // delayed
-          const { data: delayed } = await supabase.from('delayed_tickets').select('*');
-          if (delayed && delayed.length) {
-            document.getElementById('delayedList').innerHTML = delayed.map(d=>`<li>${d.agent_name} — ${Math.floor(d.seconds_open/60)}m ${d.seconds_open%60}s</li>`).join('');
-          }
-        } catch(e){
-          console.warn('KPI placeholders error', e);
-        }
+<script>
+(function(){
+  const safe = typeof supabase !== 'undefined';
+  // Populate placeholders with safe defaults or from views if available
+  async function fetchKpis() {
+    try {
+      if (!safe) {
+        // default demo values when supabase missing
+        document.getElementById('delayedList')?.innerHTML = '<li>No delayed tickets.</li>';
+        return;
       }
-      // call once
-      fetchKpis();
-    })();
-    </script>
+      // delayed
+      const { data: delayed } = await supabase.from('delayed_tickets').select('*');
+      if (delayed && delayed.length) {
+        document.getElementById('delayedList').innerHTML = delayed.map(d=>`<li>${d.agent_name} — ${Math.floor(d.seconds_open/60)}m ${d.seconds_open%60}s</li>`).join('');
+      } else {
+        document.getElementById('delayedList').innerHTML = '<li>No delayed tickets.</li>';
+      }
+    } catch(e){
+      console.warn('KPI placeholders error', e);
+      document.getElementById('delayedList').innerHTML = '<li>Error loading data.</li>';
+    }
+  }
+  // call once
+  fetchKpis();
+})();
+</script>
+
+
+<script>
+(function(){
+  try{
+    const sel = document.querySelector('select[name="scenario"]') || document.querySelector('select');
+    function markScenario(){ 
+      if(!sel) return;
+      const opt = sel.options[sel.selectedIndex];
+      const el = document.querySelector('.scenario-name') || document.getElementById('selectedScenarioName') || document.querySelector('.scenario-selected');
+      if(opt && el){ el.textContent = opt.text; el.classList.add('scenario-selected'); }
+    }
+    if(sel){ sel.addEventListener('change', markScenario); markScenario(); }
+  }catch(e){ console.warn(e); }
+})();
+
+function exportTableToCSV(filename = 'report.csv') {
+  const table = document.querySelector('#recentSessionsTable') || document.querySelector('table');
+  if(!table) return alert('No table found to export');
+  const rows = Array.from(table.querySelectorAll('tr')).map(tr => 
+    Array.from(tr.querySelectorAll('th,td')).map(td => '"' + td.innerText.replace(/"/g,'""') + '"').join(',')
+  ).join('\n');
+  const blob = new Blob([rows], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = filename;
+  link.style.display='none';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+</script>
+
+<script>
+/* --- Shared helpers (inserted by assistant) --- */
+const EGYPT_TIMEZONE_HELPER = 'Africa/Cairo';
+function formatDateTimeEgyptHelper(isoOrDate, options = { year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', second:'2-digit' }) {
+  if(!isoOrDate) return '—';
+  const d = (typeof isoOrDate === 'string') ? new Date(isoOrDate) : isoOrDate;
+  try {
+    return new Intl.DateTimeFormat('en-GB', {...options, timeZone: EGYPT_TIMEZONE_HELPER}).format(d);
+  } catch(e) {
+    return d.toLocaleString();
+  }
+}
+</script>
+
 </body>
 </html>
