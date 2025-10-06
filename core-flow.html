@@ -506,6 +506,7 @@
         let stepStartTime = 0;      
         let accumulatedStepDurations = {}; 
         let stepVisitCount = {};
+        let realtimeSubscription = null; // To hold the realtime subscription
         const SESSION_STATE_KEY = 'elevoCoreActiveCallState_v4';
 
         // --- UI Helper Functions ---
@@ -567,7 +568,10 @@
             
             if (restoreCallState()) { 
                 switchToCallFlowView(false); 
-                renderStep(); 
+                renderStep();
+                if (currentScenario && currentScenario.case_slug) {
+                    subscribeToCaseUpdates(currentScenario.case_slug);
+                }
                 updateSystemStatus("🟢 In Ticket (Restored)", "status-in-call");
             } else {
                 switchToInitialView();
@@ -608,10 +612,10 @@
             scenarioValueInput.value = '';
 
             try {
-                // --- MODIFICATION START: Fixed the Supabase query ---
+                // --- MODIFICATION START: Updated query to include case_slug ---
                 const { data: scenarios, error } = await supabase
-                    .from('call_scenarios') // Using the base table 'call_scenarios' instead of the view
-                    .select('id, title, steps')
+                    .from('call_scenarios')
+                    .select('id, title, steps, case_slug') // Added case_slug
                     .eq('is_active', true)
                     .order('created_at', { ascending: false });
                 // --- MODIFICATION END ---
@@ -697,7 +701,9 @@
             scenarioTitleElement.innerHTML = `<span id="step-type-icon" class="step-type-icon"></span>Loading...`;
 
             try {
-                const { data: scenarioData, error } = await supabase.from('call_scenarios').select('id, title, steps').eq('id', selectedScenarioId).single();
+                // --- MODIFICATION START: Updated query to fetch case_slug ---
+                const { data: scenarioData, error } = await supabase.from('call_scenarios').select('id, title, steps, case_slug').eq('id', selectedScenarioId).single();
+                // --- MODIFICATION END ---
                 if (error) throw error;
                 if (!scenarioData || !Array.isArray(scenarioData.steps) || scenarioData.steps.length === 0) throw new Error("Scenario data is invalid.");
 
@@ -711,6 +717,12 @@
                 if (sessionError) throw sessionError;
                 callSessionId = newSession.id;
                 
+                // --- REALTIME ADDITION START ---
+                if (currentScenario.case_slug) {
+                    subscribeToCaseUpdates(currentScenario.case_slug);
+                }
+                // --- REALTIME ADDITION END ---
+
                 const selectedItem = document.querySelector(`.scenario-item[data-value="${selectedScenarioId}"]`);
                 if (selectedItem && selectedItem.classList.contains('compensation')) {
                     compensationScenarioSound.play().catch(e => console.warn("Compensation sound failed. Make sure compensation_alert.mp3 is in the correct folder.", e));
@@ -744,6 +756,14 @@
             
             const stepTextElement = document.createElement('p');
             stepTextElement.innerHTML = stepObject.text.replace(/\n/g, '<br>');
+
+            // --- REALTIME ADDITION START ---
+            // Add a data-attribute to the step container for easy selection
+            if (currentScenario.case_slug) {
+                stepsContainer.setAttribute('data-case-slug', currentScenario.case_slug);
+            }
+            // --- REALTIME ADDITION END ---
+            
             stepsContainer.appendChild(stepTextElement);
 
             decisionButtonsContainer.innerHTML = ''; 
@@ -883,7 +903,10 @@
         }
         
         async function finishCall(completed, reasonText) { 
-            stopAndRecordStepTimer(); 
+            stopAndRecordStepTimer();
+            // --- REALTIME ADDITION START ---
+            unsubscribeFromCaseUpdates();
+            // --- REALTIME ADDITION END ---
             const endTimeISO = new Date().toISOString();
             const durationInSeconds = callStartTimeISO ? Math.floor((new Date(endTimeISO) - new Date(callStartTimeISO)) / 1000) : 0;
             const quality = completed ? 'Good' : (durationInSeconds > 0 ? 'Bad' : 'N/A'); 
@@ -922,6 +945,68 @@
             await loadActiveScenarios();
         });
 
+        // --- REALTIME FUNCTIONS START ---
+        function subscribeToCaseUpdates(caseSlug) {
+            if (!supabase || !caseSlug) return;
+
+            // Unsubscribe from any existing channel first
+            unsubscribeFromCaseUpdates();
+            
+            console.log(`Subscribing to updates for case: ${caseSlug}`);
+            
+            realtimeSubscription = supabase
+                .channel('realtime-cases-flow')
+                .on(
+                    'postgres_changes',
+                    { 
+                        event: 'UPDATE', 
+                        schema: 'public', 
+                        table: 'cases',
+                        filter: `slug=eq.${caseSlug}` // Filter for the specific slug
+                    },
+                    (payload) => {
+                        const updatedCase = payload.new;
+                        console.log('✅ Detected update for current case:', updatedCase.slug);
+
+                        // Find the current step's display element using the data-attribute
+                        const stepElementContainer = document.querySelector(`[data-case-slug="${updatedCase.slug}"]`);
+                        
+                        if (stepElementContainer && updatedCase.content_en) {
+                            // Find the <p> tag inside the container and update its content
+                            const stepTextElement = stepElementContainer.querySelector('p');
+                            if (stepTextElement) {
+                                stepTextElement.innerHTML = updatedCase.content_en.replace(/\n/g, '<br>');
+                                console.log('✅ Updated step content in the flow');
+                                
+                                // Optional: Add a visual indicator for the update
+                                stepElementContainer.style.transition = 'background-color 0.3s ease';
+                                stepElementContainer.style.backgroundColor = 'rgba(var(--primary-color-rgb), 0.1)';
+                                setTimeout(() => {
+                                    stepElementContainer.style.backgroundColor = 'transparent';
+                                }, 1500);
+                            }
+                        }
+                    }
+                )
+                .subscribe((status, err) => {
+                    if (status === 'SUBSCRIBED') {
+                        console.log('Successfully subscribed to realtime updates!');
+                    }
+                    if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+                        console.error('Realtime subscription error:', err);
+                    }
+                });
+        }
+
+        function unsubscribeFromCaseUpdates() {
+            if (realtimeSubscription) {
+                console.log("Unsubscribing from case updates.");
+                supabase.removeChannel(realtimeSubscription);
+                realtimeSubscription = null;
+            }
+        }
+        // --- REALTIME FUNCTIONS END ---
+
         function saveCallState() {
             if (!callSessionId) return;
             const state = { callSessionId, currentScenario, currentStepId, stepHistory, accumulatedStepDurations, stepStartTime, callStartTimeISO, stepVisitCount };
@@ -949,6 +1034,7 @@
 
         function resetCallState(switchToInitial = false) {
             stopAndRecordStepTimer(); 
+            unsubscribeFromCaseUpdates(); // Make sure to unsubscribe on reset
             clearCallState();         
             callSessionId = currentStepId = currentScenario = null;
             stepHistory = [];
