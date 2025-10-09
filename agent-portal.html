@@ -402,6 +402,53 @@
 }
 </style>
 
+<!-- FIXES AND ENHANCEMENTS -->
+<style>
+    body {
+        /* Lighter dark background */
+        background-color: #111827; 
+    }
+    .app-header {
+        /* Sticky Header */
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        background-color: rgba(17, 24, 39, 0.8);
+        backdrop-filter: blur(10px);
+    }
+    
+    .charts-row {
+        /* Container to hold charts side-by-side */
+        display: flex;
+        flex-wrap: wrap; /* Allows wrapping on smaller screens */
+        gap: 2rem;
+        align-items: stretch;
+    }
+    
+    .chart-wrapper {
+        /* Wrapper for each chart canvas */
+        flex: 1 1 250px; /* Flex properties to allow shrinking and growing */
+        position: relative;
+        min-height: 250px; /* Minimum height */
+        max-width: 50%;
+    }
+    
+    canvas {
+        max-height: 250px;
+    }
+
+    .kpi-card, .widget-card, .training-card, .note-card {
+        /* Subtle animation on hover */
+        transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+    }
+
+    .kpi-card:hover, .widget-card:hover, .training-card:hover, .note-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+    }
+</style>
+<!-- END FIXES -->
+
 </head>
 <body>
     <div class="app-container">
@@ -503,7 +550,14 @@
                         </div>
                         
                         <div class="widget-card widget-card-bordered">
-                            <h3>My Saved Notes</h3>
+                            <h3>My Notes</h3>
+                             <textarea id="agentScratchpad" placeholder="Jot down temporary notes here..."></textarea>
+                             <div class="scratchpad-actions">
+                                 <button id="cancelNoteBtn" class="action-button secondary-button">Cancel</button>
+                                 <button id="saveNoteBtn" class="action-button primary-button">Save Note</button>
+                             </div>
+                             <hr style="border-color: var(--border-color); margin: 1.5rem 0;">
+                            <h4 style="margin-top:0; margin-bottom: 1rem;">Saved Notes</h4>
                             <div id="savedNotesList" class="saved-notes-list"></div>
                             <p id="noNotesMessage" style="text-align: center; padding: 1rem; display:none; color: var(--text-color-subtle);">No notes saved yet.</p>
                             <div id="notesPaginationControls" class="pagination-container"></div>
@@ -537,7 +591,14 @@
                         </div>
                         
                         <div class="charts-container" style="display: flex; flex-direction: column; gap: 2rem;">
-                            <div class="chart-container"><canvas id="qualityChart"></canvas></div>
+                            <!-- Charts Row: Side-by-side layout -->
+                            <div class="charts-row">
+                                <div class="chart-wrapper"><canvas id="qualityChart"></canvas></div>
+                                <div class="chart-wrapper">
+                                    <canvas id="badReasonsChart"></canvas>
+                                    <p id="noBadCallsMessage" class="text-color-light" style="text-align: center; padding: 2rem; display: none;">No 'Bad' quality tickets recorded. Keep up the great work! ✨</p>
+                                </div>
+                            </div>
                             
                             <div id="monthlyPerfComparison" class="widget-card perf-comparison-card" style="display: none;">
                                 <h3>Monthly Performance Comparison</h3>
@@ -556,20 +617,6 @@
                                     <p id="perfChangeIndicator">--</p>
                                 </div>
                             </div>
-                            
-                            <div class="chart-container">
-                                <canvas id="badReasonsChart"></canvas>
-                                <p id="noBadCallsMessage" class="text-color-light" style="text-align: center; padding: 2rem; display: none;">No 'Bad' quality tickets recorded. Keep up the great work! ✨</p>
-                            </div>
-                        </div>
-                        
-                        <div class="widget-card">
-                             <h3>Quick Scratchpad</h3>
-                             <textarea id="agentScratchpad" placeholder="Jot down temporary notes here..."></textarea>
-                             <div class="scratchpad-actions">
-                                 <button id="cancelNoteBtn" class="action-button secondary-button">Cancel</button>
-                                 <button id="saveNoteBtn" class="action-button primary-button">Save Note</button>
-                             </div>
                         </div>
                         
                         <div class="widget-card">
@@ -577,7 +624,7 @@
                              <ul class="achievements-list">
                                  <li class="achievement-item"><span class="achievement-icon">🏆</span> Fastest Call Today: <strong id="achFastestCall">--:--</strong></li>
                                  <li class="achievement-item"><span class="achievement-icon">✅</span> Tickets Completed: <strong id="achTicketsCompleted">0</strong></li>
-                                 <li class="achievement-item"><span class="achievement-icon">⭐</span> Top Quality Score</li>
+                                 <li class="achievement-item" title="Based on your excellent ratio of 'Good' quality calls."><span class="achievement-icon">⭐</span> Top Quality Score</li>
                              </ul>
                         </div>
                         <div class="widget-card">
@@ -730,7 +777,7 @@
         let qualityChartInstance, badReasonsChartInstance;
 
         // State
-        let currentUser = null, allUserCalls = [], filteredCalls = [], filterTimeout;
+        let currentUser = null, allUserCalls = [], filteredCalls = [], filterTimeout, realtimeChannel;
         let currentPage = 1, ROWS_PER_PAGE = 6;
         let currentNotesPage = 1, NOTES_PER_PAGE = 5;
         let currentTrainingPage = 1, TRAININGS_PER_PAGE = 3;
@@ -977,6 +1024,8 @@
             setupUI();
             await loadAgentData();
             setupEventListeners();
+            setupRealtimeSubscription(); // ACTIVATE REALTIME
+            
             authLoadingDiv.style.display = 'none';
             portalContentDiv.style.display = 'block';
         }
@@ -997,6 +1046,7 @@
 
         async function loadAgentData() {
             try {
+                // QUERY IS ALREADY OPTIMIZED FOR CURRENT USER
                 const { data, error } = await supabase.from('call_sessions').select('*, scenario:call_scenarios(title)').eq('user_id', currentUser.id).order('start_time_egypt', { ascending: false });
                 if (error) throw error;
                 allUserCalls = data;
@@ -1064,8 +1114,26 @@
             const targetPercent = Math.min(100, Math.round((todaysCalls.length / DAILY_TICKET_TARGET) * 100));
             dailyTargetPercentage.textContent = `${targetPercent}%`;
             dailyTargetProgressBar.style.width = `${targetPercent}%`;
-            document.getElementById('achTicketsCompleted').textContent = allUserCalls.filter(c => c.completed).length;
+            
+            updateAchievements(todaysCalls); // UPDATE DYNAMIC ACHIEVEMENTS
         }
+
+        function updateAchievements(todaysCalls) {
+            // Tickets completed today
+            const completedToday = todaysCalls.filter(c => c.completed).length;
+            document.getElementById('achTicketsCompleted').textContent = completedToday;
+            
+            // Fastest call today
+            const completedCallsWithDuration = todaysCalls.filter(c => c.completed && typeof c.duration === 'number' && c.duration > 0);
+            if(completedCallsWithDuration.length > 0) {
+                const fastestDuration = Math.min(...completedCallsWithDuration.map(c => c.duration));
+                const fastTimeText = `${Math.floor(fastestDuration / 60)}m ${String(fastestDuration % 60).padStart(2, '0')}s`;
+                document.getElementById('achFastestCall').textContent = fastTimeText;
+            } else {
+                 document.getElementById('achFastestCall').textContent = '--:--';
+            }
+        }
+
 
         function updateMonthlyComparison(allCalls) {
             const now = new Date();
@@ -1145,8 +1213,7 @@
         
         function renderCharts(calls) {
             const FONT_COLOR = '#E5E7EB'; // A lighter gray for even better visibility
-            const FONT_SIZE_TITLE = 16, FONT_SIZE_LEGEND = 13;
-            // A more modern and vibrant color palette
+            const FONT_SIZE_TITLE = 14, FONT_SIZE_LEGEND = 12;
             const CHART_COLORS = ['#ef4444', '#f97316', '#eab308', '#84cc16', '#22c55e', '#14b8a6', '#06b6d4', '#3b82f6', '#8b5cf6'];
             
             if (qualityChartInstance) qualityChartInstance.destroy();
@@ -1157,44 +1224,40 @@
             }, {});
 
             qualityChartInstance = new Chart(qualityChartCanvas, {
-                type: 'pie', data: { 
+                type: 'doughnut', data: { 
                     labels: ['Good', 'Bad', 'N/A'],
                     datasets: [{ 
                         data: [qualityCounts['Good'] || 0, qualityCounts['Bad'] || 0, qualityCounts['N/A'] || 0],
-                        backgroundColor: ['#22c55e', '#ef4444', '#6b7280'],
-                        borderColor: '#374151', borderWidth: 3, hoverOffset: 10
+                        backgroundColor: ['#22c55e', '#ef4444', '#6b7280'], // Green, Red, Gray
+                        borderColor: '#1f2937', borderWidth: 3, hoverOffset: 10
                     }] 
-                }, options: { responsive: true, maintainAspectRatio: false,
+                }, options: { responsive: true, maintainAspectRatio: false, cutout: '60%',
                     plugins: { 
-                        legend: { position: 'bottom', labels: { color: FONT_COLOR, font: { size: FONT_SIZE_LEGEND }, padding: 20 } }, 
-                        title: { display: true, text: 'Your Call Quality Breakdown', color: FONT_COLOR, font: { size: FONT_SIZE_TITLE } } 
+                        legend: { position: 'bottom', labels: { color: FONT_COLOR, font: { size: FONT_SIZE_LEGEND }, padding: 15 } }, 
+                        title: { display: true, text: 'Call Quality Breakdown', color: FONT_COLOR, font: { size: FONT_SIZE_TITLE } } 
                     }
                 }
             });
 
-            // MODIFICATION START: Logic to always show the 'Bad Reasons' chart
             const badCalls = calls.filter(c => c.call_quality === 'Bad' && c.quality_reason);
             
             if(badReasonsChartInstance) badReasonsChartInstance.destroy();
             
-            let badChartLabels, badChartData, badChartColors, chartTitle, placeholderOptions = {};
+            let badChartLabels, badChartData, badChartColors, chartTitle;
 
-            // Always show the canvas and hide the message paragraph
             badReasonsChartCanvas.style.display = 'block';
             noBadCallsMessage.style.display = 'none';
 
             if(badCalls.length > 0) {
-                // Data exists: Use original logic to process and display it
                 const reasonCounts = badCalls.reduce((acc, c) => { acc[c.quality_reason] = (acc[c.quality_reason] || 0) + 1; return acc; }, {});
                 badChartLabels = Object.keys(reasonCounts);
                 badChartData = Object.values(reasonCounts);
                 badChartColors = CHART_COLORS;
                 chartTitle = "Reasons for 'Bad' Calls";
             } else {
-                // No data: Create placeholder data for a visually appealing empty state
-                badChartLabels = ["No 'Bad' Quality Calls Recorded"];
-                badChartData = [1]; // A single segment to fill the doughnut
-                badChartColors = ['#4b5563']; // A neutral dark-mode friendly grey color
+                badChartLabels = ["No 'Bad' Quality Calls"];
+                badChartData = [1]; 
+                badChartColors = ['#4b5563']; 
                 chartTitle = "Reasons for 'Bad' Calls ✨";
             }
             
@@ -1202,61 +1265,52 @@
                 type: 'doughnut', data: { 
                     labels: badChartLabels, 
                     datasets: [{ 
-                        label: 'Count',
-                        data: badChartData, 
-                        backgroundColor: badChartColors, 
-                        hoverOffset: (badCalls.length > 0) ? 8 : 0, // Disable hover animation for placeholder
-                        borderColor: '#374151', 
-                        borderWidth: 3 
+                        label: 'Count', data: badChartData, backgroundColor: badChartColors, 
+                        hoverOffset: (badCalls.length > 0) ? 8 : 0, borderColor: '#1f2937', borderWidth: 3 
                     }] 
                 }, options: { 
-                    responsive: true, maintainAspectRatio: false, 
+                    responsive: true, maintainAspectRatio: false, cutout: '60%',
                     plugins: { 
-                        legend: { 
-                            // Only display the legend if there is actual data to show
-                            display: badCalls.length > 0,
-                            position: 'bottom', 
-                            labels: { 
-                                color: FONT_COLOR, 
-                                font: { size: FONT_SIZE_LEGEND },
-                                padding: 20
-                            }
+                        legend: { display: badCalls.length > 0, position: 'bottom', 
+                            labels: { color: FONT_COLOR, font: { size: FONT_SIZE_LEGEND }, padding: 15 }
                         }, 
-                        title: { 
-                            display: true, 
-                            text: chartTitle, 
-                            color: FONT_COLOR, 
-                            font: { size: FONT_SIZE_TITLE }
-                        },
-                        tooltip: {
-                            // Only enable the rich tooltip when there's real data
-                            enabled: badCalls.length > 0,
-                            backgroundColor: 'rgba(23, 31, 42, 0.9)',
-                            titleColor: '#ffffff',
-                            bodyColor: '#E5E7EB',
-                            titleFont: { size: 14, weight: 'bold' },
-                            bodyFont: { size: 13 },
-                            padding: 12,
-                            cornerRadius: 8,
-                            borderColor: 'rgba(113, 128, 150, 0.6)',
-                            borderWidth: 1,
-                            callbacks: {
-                                label: function(context) {
-                                    let label = context.dataset.label || '';
-                                    if (label) { label += ': '; }
-                                    if (context.parsed !== null) { label += context.parsed; }
-                                    return ' ' + label;
-                                }
-                            }
-                        }
+                        title: { display: true, text: chartTitle, color: FONT_COLOR, font: { size: FONT_SIZE_TITLE } },
+                        tooltip: { enabled: badCalls.length > 0 }
                     } 
                 }
             });
-            // MODIFICATION END
+        }
+
+        function setupRealtimeSubscription() {
+            if (realtimeChannel) {
+                supabase.removeChannel(realtimeChannel);
+            }
+            realtimeChannel = supabase.channel(`public:call_sessions:user_id=eq.${currentUser.id}`)
+                .on('postgres_changes', 
+                    { event: '*', schema: 'public', table: 'call_sessions', filter: `user_id=eq.${currentUser.id}` },
+                    (payload) => {
+                        console.log('Realtime update received!', payload);
+                        // Re-fetch all data to ensure UI consistency
+                        loadAgentData();
+                    }
+                )
+                .subscribe((status, err) => {
+                    if (status === 'SUBSCRIBED') {
+                        console.log('Realtime subscription for call history is active.');
+                    }
+                     if (status === 'CHANNEL_ERROR') {
+                        console.error('Realtime subscription error:', err);
+                    }
+                });
         }
 
         function setupEventListeners() {
-            logoutButton.addEventListener('click', async () => { await supabase.auth.signOut(); localStorage.clear(); window.location.replace("login.html"); });
+            logoutButton.addEventListener('click', async () => { 
+                if(realtimeChannel) await supabase.removeChannel(realtimeChannel);
+                await supabase.auth.signOut(); 
+                localStorage.clear(); 
+                window.location.replace("login.html"); 
+            });
             [searchInput, qualityFilter, startDateFilter, endDateFilter].forEach(el => { el.addEventListener('input', () => { clearTimeout(filterTimeout); filterTimeout = setTimeout(applyFiltersAndRender, 400); }); });
             resetFiltersBtn.addEventListener('click', resetFilters);
             exportDataBtn.addEventListener('click', () => exportTableToCSV('my_call_history.csv'));
