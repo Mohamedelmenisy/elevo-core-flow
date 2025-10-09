@@ -348,6 +348,7 @@
             await loadInitialData();
             loadPersistedFilters();
             applyFiltersAndRender();
+            fetchKpis(); // Initial KPI fetch
             setupEventListeners();
             setupLiveCallMonitoring();
         }
@@ -418,7 +419,6 @@
             updateAnalyticsCharts();
         }
         
-        // MODIFICATION: Removed duration from table
         function renderTable() { 
             recentCallsTableBody.innerHTML = '';
             if (filteredCallSessions.length === 0) {
@@ -439,7 +439,6 @@
             });
         }
         
-        // MODIFICATION: Fixed Avg. Time calculation logic
         function updateStats() {
             const sessionsToAnalyze = filteredCallSessions;
             const count = sessionsToAnalyze.length;
@@ -648,7 +647,6 @@
             XLSX.writeFile(workbook, "elevo_core_sessions.xlsx");
         }
         
-        // MODIFICATION: Replaced with logic to separate live and delayed tickets
         async function fetchAndRenderLiveCalls() {
             try {
                 const { data, error } = await supabase
@@ -705,86 +703,79 @@
             liveCallsChannel = supabase
                 .channel('public:call_sessions')
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'call_sessions' }, (payload) => {
+                    // This now triggers all data refreshes
                     fetchAndRenderLiveCalls(); 
                     loadInitialData().then(applyFiltersAndRender);
+                    fetchKpis(); // Refresh KPIs on change
                 })
                 .subscribe();
 
             setInterval(fetchAndRenderLiveCalls, 5000);
         }
 
+        // --- KPI Fetching Logic (MODIFIED) ---
+        function formatDuration(seconds) {
+            if (seconds === null || typeof seconds === 'undefined' || isNaN(seconds)) return '—';
+            const mins = Math.floor(seconds / 60);
+            const secs = seconds % 60;
+            return `${mins}m ${secs}s`;
+        }
+
+        async function fetchKpis() {
+            if (!supabase) {
+                document.getElementById('kpi-fastest')?.textContent = 'N/A';
+                document.getElementById('kpi-longest')?.textContent = 'N/A';
+                document.getElementById('kpi-top-scenario')?.textContent = 'N/A';
+                document.getElementById('topAgentsList')?.innerHTML = '<li>No data available</li>';
+                return;
+            }
+
+            try {
+                const [
+                    { data: topAgents, error: topAgentsError },
+                    { data: fastestTicket, error: fastestTicketError },
+                    { data: longestTicket, error: longestTicketError },
+                    { data: topScenario, error: topScenarioError }
+                ] = await Promise.all([
+                    supabase.rpc('top_agents_today'),
+                    supabase.rpc('fastest_ticket_today').single(),
+                    supabase.rpc('longest_ticket_today').single(),
+                    supabase.rpc('top_scenario_today').single()
+                ]);
+
+                if (topAgentsError) console.error('Top Agents Error:', topAgentsError);
+                if (fastestTicketError) console.error('Fastest Ticket Error:', fastestTicketError);
+                if (longestTicketError) console.error('Longest Ticket Error:', longestTicketError);
+                if (topScenarioError) console.error('Top Scenario Error:', topScenarioError);
+
+                // Top 5 Agents
+                if (topAgents && topAgents.length) {
+                    const html = topAgents.slice(0, 5).map(t => `<li>${t.agent_name || 'Unknown'}<span>${t.count} tickets</span></li>`).join('');
+                    document.getElementById('topAgentsList').innerHTML = html;
+                } else {
+                    document.getElementById('topAgentsList').innerHTML = '<li>No agent data today.</li>';
+                }
+
+                // Fastest Ticket
+                document.getElementById('kpi-fastest').textContent = fastestTicket ? formatDuration(fastestTicket.duration_seconds) : '—';
+                
+                // Longest Ticket
+                document.getElementById('kpi-longest').textContent = longestTicket ? formatDuration(longestTicket.duration_seconds) : '—';
+
+                // Top Scenario
+                document.getElementById('kpi-top-scenario').textContent = topScenario ? topScenario.scenario_title : '—';
+
+            } catch(e) {
+                console.error('Error fetching KPIs:', e);
+                document.getElementById('kpi-fastest').textContent = 'Error';
+                document.getElementById('kpi-longest').textContent = 'Error';
+                document.getElementById('kpi-top-scenario').textContent = 'Error';
+                document.getElementById('topAgentsList').innerHTML = '<li>Error loading data.</li>';
+            }
+        }
+
         if(supabase) initializeDashboard();
     </script>
-
-<!-- MODIFICATION: Updated KPI fetching script -->
-<script>
-(function(){
-  const safe = typeof supabase !== 'undefined';
-  
-  function formatDuration(seconds) {
-      if (seconds === null || typeof seconds === 'undefined' || isNaN(seconds)) return '—';
-      const mins = Math.floor(seconds / 60);
-      const secs = seconds % 60;
-      return `${mins}m ${secs}s`;
-  }
-
-  async function fetchKpis() {
-    if (!safe) {
-        document.getElementById('kpi-fastest')?.textContent = 'N/A';
-        document.getElementById('kpi-longest')?.textContent = 'N/A';
-        document.getElementById('kpi-top-scenario')?.textContent = 'N/A';
-        document.getElementById('topAgentsList')?.innerHTML = '<li>No data available</li>';
-        return;
-    }
-
-    try {
-      // Assuming these RPC functions or Views exist in Supabase
-      const [
-          { data: topAgents, error: topAgentsError },
-          { data: fastestTicket, error: fastestTicketError },
-          { data: longestTicket, error: longestTicketError },
-          { data: topScenario, error: topScenarioError }
-      ] = await Promise.all([
-          supabase.rpc('top_agents_today'),
-          supabase.rpc('fastest_ticket_today').single(),
-          supabase.rpc('longest_ticket_today').single(),
-          supabase.rpc('top_scenario_today').single()
-      ]);
-
-      if (topAgentsError) console.error('Top Agents Error:', topAgentsError);
-      if (fastestTicketError) console.error('Fastest Ticket Error:', fastestTicketError);
-      if (longestTicketError) console.error('Longest Ticket Error:', longestTicketError);
-      if (topScenarioError) console.error('Top Scenario Error:', topScenarioError);
-
-      // Top 5 Agents
-      if (topAgents && topAgents.length) {
-        const html = topAgents.slice(0, 5).map(t => `<li>${t.agent_name || 'Unknown'}<span>${t.count} tickets</span></li>`).join('');
-        document.getElementById('topAgentsList').innerHTML = html;
-      } else {
-        document.getElementById('topAgentsList').innerHTML = '<li>No agent data today.</li>';
-      }
-
-      // Fastest Ticket
-      document.getElementById('kpi-fastest').textContent = fastestTicket ? formatDuration(fastestTicket.duration_seconds) : '—';
-      
-      // Longest Ticket
-      document.getElementById('kpi-longest').textContent = longestTicket ? formatDuration(longestTicket.duration_seconds) : '—';
-
-      // Top Scenario
-      document.getElementById('kpi-top-scenario').textContent = topScenario ? topScenario.scenario_title : '—';
-
-    } catch(e){
-      console.error('Error fetching KPIs:', e);
-      document.getElementById('kpi-fastest').textContent = 'Error';
-      document.getElementById('kpi-longest').textContent = 'Error';
-      document.getElementById('kpi-top-scenario').textContent = 'Error';
-      document.getElementById('topAgentsList').innerHTML = '<li>Error loading data.</li>';
-    }
-  }
-  
-  fetchKpis();
-})();
-</script>
 
 </body>
 </html>
