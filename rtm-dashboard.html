@@ -40,8 +40,6 @@
 
         .stats-grid {
             grid-column: 1 / -1;
-            /* MODIFICATION: Adjusted grid for 5 columns */
-            grid-template-columns: repeat(5, 1fr);
         }
 
         .chart-container {
@@ -51,6 +49,9 @@
             box-shadow: var(--shadow-md);
             display: flex;
             flex-direction: column;
+            /* MODIFICATION: Ensure container has defined layout properties */
+            overflow: hidden; 
+            position: relative;
         }
         .chart-container h2 {
              margin-top: 0;
@@ -65,11 +66,12 @@
         .chart-wrapper {
             position: relative;
             flex-grow: 1;
-            min-height: 300px; /* MODIFICATION: Standardized chart height */
         }
         
-        #ticketVolumeChartContainer .chart-wrapper {
-            min-height: 350px; 
+        /* MODIFICATION: Set a fixed height for the main chart wrapper to prevent overflow */
+        #ticketVolumeChartContainer {
+            grid-column: 1 / -1;
+            height: 450px; /* Standardized height */
         }
 
         .chart-wrapper > canvas {
@@ -80,12 +82,14 @@
             height: 100% !important;
         }
 
-        #ticketVolumeChartContainer {
-            grid-column: 1 / -1;
-        }
-
         .unified-table-container {
             grid-column: 1 / -1;
+        }
+        
+        /* MODIFICATION: Make table container scrollable */
+        .table-responsive {
+            overflow-y: auto;
+            max-height: 600px; /* Table will scroll after this height */
         }
 
         #liveUnifiedTable {
@@ -119,13 +123,12 @@
             font-weight: 600;
             text-align: center;
             display: inline-block;
-            min-width: 90px; /* MODIFICATION: Increased min-width */
+            min-width: 90px;
         }
-        /* MODIFICATION: New color-coded statuses */
-        .status-live { background-color: var(--success-color); color: white; } /* Green */
-        .status-delayed { background-color: #f59e0b; color: white; } /* Yellow */
-        .status-completed { background-color: var(--primary-color); color: white; } /* Blue */
-        .status-ended { background-color: var(--danger-color); color: white; } /* Red */
+        .status-live { background-color: var(--success-color); color: white; }
+        .status-delayed { background-color: #f59e0b; color: white; }
+        .status-completed { background-color: var(--primary-color); color: white; }
+        .status-ended { background-color: var(--danger-color); color: white; }
 
         /* Row animations */
         @keyframes fadeIn {
@@ -195,8 +198,7 @@
                 
                 <div class="master-grid">
                     <div class="stats-grid">
-                         <!-- MODIFICATION: Renamed and added new stat card -->
-                         <div class="stat-card"><h3><i class="icon">🟢</i> Live Tickets</h3><p id="liveTickets">0</p></div>
+                         <div class="stat-card"><h3><i class="icon">⚡</i> Active Tickets</h3><p id="activeTickets">0</p></div>
                          <div class="stat-card"><h3><i class="icon">🟡</i> Delayed Tickets</h3><p id="delayedTickets">0</p></div>
                          <div class="stat-card"><h3><i class="icon">⏱️</i> Avg. Active Duration</h3><p id="avgActiveDuration">0m 0s</p></div>
                          <div class="stat-card"><h3><i class="icon">📈</i> Tickets Today</h3><p id="ticketsToday">0</p></div>
@@ -208,19 +210,11 @@
                         <div class="chart-wrapper">
                             <canvas id="mainTicketVolumeCanvas"></canvas>
                         </div>
-                        <div class="charts-row" style="margin-top:1rem;">
-                            <div class="live-kpi-graph">
-                                <h4 style="margin:0 0 0.6rem 0;">Live Active Tickets (Last 5 min)</h4>
-                                <div class="chart-wrapper" style="min-height: 80px;">
-                                    <canvas id="liveKpiGraph"></canvas>
-                                </div>
-                            </div>
-                        </div>
                     </div>
 
                     <div class="unified-table-container chart-container">
                         <h2>Live Activity Log</h2>
-                        <div class="table-responsive" style="overflow-y: auto; max-height: 600px;">
+                        <div class="table-responsive">
                             <table id="liveUnifiedTable">
                                 <thead>
                                     <tr>
@@ -274,15 +268,14 @@
         const noLiveActivityMessage = document.getElementById('noLiveActivityMessage');
 
         // Stats
-        const liveTicketsEl = document.getElementById('liveTickets');
-        const delayedTicketsEl = document.getElementById('delayedTickets'); // New stat
+        const activeTicketsEl = document.getElementById('activeTickets');
+        const delayedTicketsEl = document.getElementById('delayedTickets');
         const avgActiveDurationEl = document.getElementById('avgActiveDuration');
         const ticketsTodayEl = document.getElementById('ticketsToday');
         const completionRateTodayEl = document.getElementById('completionRateToday');
 
         // Charts
-        let ticketVolumeChartInstance, liveKpiChartInstance;
-        let liveKpiData = new Array(15).fill(0); 
+        let ticketVolumeChartInstance;
         const TICKET_VOLUME_TIMESPAN_MINUTES = 60;
         const TICKET_VOLUME_BUCKET_MINUTES = 2;
         let ticketVolumeData = new Array(TICKET_VOLUME_TIMESPAN_MINUTES / TICKET_VOLUME_BUCKET_MINUTES).fill(0);
@@ -345,9 +338,10 @@
             await fetchInitialData();
             setupRealtimeSubscription();
             
+            // This interval updates the duration of live tickets every second.
             liveStatsInterval = setInterval(updateLiveDurationsAndStats, 1000);
-            setInterval(updateLiveKpiChart, 20000); 
             
+            // This interval shifts the time window for the volume chart.
             periodicShiftInterval = setInterval(() => {
                 updateTicketVolumeChart(null, true); 
             }, TICKET_VOLUME_BUCKET_MINUTES * 60 * 1000);
@@ -373,6 +367,7 @@
         }
 
         async function fetchInitialData() {
+            // Fetch recent sessions to populate the dashboard initially
             const fiveHoursAgo = new Date(Date.now() - 5 * 3600 * 1000).toISOString();
 
             const { data: sessionData, error: sessionError } = await supabase
@@ -386,13 +381,14 @@
             liveUnifiedTableBody.innerHTML = '';
             
             const liveTickets = sessionData.filter(t => t.end_time_egypt === null);
-            const recentFinished = sessionData.filter(t => t.end_time_egypt !== null).slice(0, 15);
+            const recentFinished = sessionData.filter(t => t.end_time_egypt !== null).slice(0, 15); // Limit finished tickets
             
             const allTickets = [...liveTickets, ...recentFinished]
                 .sort((a, b) => new Date(b.start_time_egypt) - new Date(a.start_time_egypt));
 
             allTickets.forEach(ticket => addOrUpdateTableRow(ticket));
 
+            // Populate volume chart with historical data
             const now = new Date();
             sessionData.forEach(ticket => {
                 const startTime = new Date(ticket.start_time_egypt);
@@ -413,7 +409,7 @@
 
         function setupRealtimeSubscription() {
             supabase
-                .channel('public:call_sessions_egypt_rtm')
+                .channel('realtime_tickets') // Unique channel name
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'call_sessions_egypt' }, payload => {
                     handleRealtimeUpdate(payload);
                 })
@@ -425,10 +421,12 @@
             const recordId = newRecord?.id || oldRecord?.id;
             if (!recordId) return;
             
-            // For DELETE event, remove the row directly
             if (eventType === 'DELETE') {
                 const row = document.getElementById(`ticket-row-${recordId}`);
-                if (row) row.remove();
+                if (row) {
+                     row.classList.add('fading-out');
+                     row.addEventListener('animationend', () => row.remove());
+                }
                 updateLiveDurationsAndStats();
                 return;
             }
@@ -459,19 +457,12 @@
                 row = document.createElement('tr');
                 row.id = `ticket-row-${ticket.id}`;
                 
-                // Insert in correct chronological order
-                const existingRows = Array.from(liveUnifiedTableBody.children);
                 const ticketStartTime = new Date(ticket.start_time_egypt).getTime();
-                const insertBeforeRow = existingRows.find(r => {
-                    const rStartTime = new Date(r.dataset.startTime).getTime();
-                    return rStartTime < ticketStartTime;
-                });
+                const insertBeforeRow = Array.from(liveUnifiedTableBody.children).find(r => 
+                    new Date(r.dataset.startTime).getTime() < ticketStartTime
+                );
 
-                if (insertBeforeRow) {
-                    liveUnifiedTableBody.insertBefore(row, insertBeforeRow);
-                } else {
-                    liveUnifiedTableBody.appendChild(row);
-                }
+                liveUnifiedTableBody.insertBefore(row, insertBeforeRow || null);
                 
                 if (isNew) {
                     row.classList.add('new-row');
@@ -485,13 +476,8 @@
             if (isLive) {
                 const durationSec = Math.floor((Date.now() - new Date(ticket.start_time_egypt).getTime()) / 1000);
                 durationText = formatDuration(durationSec);
-                if (durationSec > DELAYED_THRESHOLD_SECONDS) {
-                    status = 'Delayed';
-                    statusClass = 'status-delayed';
-                } else {
-                    status = 'Live';
-                    statusClass = 'status-live';
-                }
+                status = durationSec > DELAYED_THRESHOLD_SECONDS ? 'Delayed' : 'Live';
+                statusClass = `status-${status.toLowerCase()}`;
                 row.dataset.status = status.toLowerCase();
             } else {
                 status = ticket.completed ? 'Completed' : 'Ended';
@@ -515,7 +501,7 @@
                         row.classList.add('fading-out');
                         row.addEventListener('animationend', () => row.remove());
                     }
-                }, 30000);
+                }, 30000); // Fade out finished tickets after 30 seconds
             }
             updateTableVisibility();
         }
@@ -527,7 +513,7 @@
 
         function updateLiveDurationsAndStats() {
             let totalDuration = 0;
-            let liveCount = 0;
+            let activeCount = 0;
             let delayedCount = 0;
             const activeRows = liveUnifiedTableBody.querySelectorAll('tr[data-status="live"], tr[data-status="delayed"]');
 
@@ -548,21 +534,16 @@
                         }
                         delayedCount++;
                     } else {
-                        if (row.dataset.status !== 'live') {
-                           row.dataset.status = 'live';
-                           statusCell.textContent = 'Live';
-                           statusCell.className = 'status-badge status-live';
-                        }
-                        liveCount++;
+                         // This part is implicit, as Delayed tickets will not meet this condition.
                     }
                 }
             });
             
-            liveTicketsEl.textContent = liveCount;
+            activeCount = activeRows.length;
+            activeTicketsEl.textContent = activeCount;
             delayedTicketsEl.textContent = delayedCount;
             
-            const totalActive = liveCount + delayedCount;
-            const avgDurationMs = totalDuration > 0 ? totalDuration / totalActive : 0;
+            const avgDurationMs = totalDuration > 0 ? totalDuration / activeCount : 0;
             avgActiveDurationEl.textContent = formatDuration(Math.floor(avgDurationMs / 1000));
             
             updateTableVisibility();
@@ -601,28 +582,6 @@
                 }
             });
             updateTicketVolumeChart(null, true);
-
-            const liveKpiCtx = document.getElementById('liveKpiGraph').getContext('2d');
-            liveKpiChartInstance = new Chart(liveKpiCtx, {
-                type: 'line',
-                data: {
-                    labels: liveKpiData.map((_, i) => ''),
-                    datasets: [{
-                        label: 'Active Tickets',
-                        data: liveKpiData,
-                        borderColor: colors.primary,
-                        backgroundColor: `rgba(${colors.primaryRgb}, 0.1)`,
-                        fill: true,
-                        tension: 0.4,
-                        pointRadius: 0
-                    }]
-                },
-                options: {
-                    responsive: true, maintainAspectRatio: false,
-                    scales: { y: { display: false }, x: { display: false } },
-                    plugins: { legend: { display: false }, tooltip: { enabled: false } }
-                }
-            });
         }
         
         function updateTicketVolumeChart(newRecord, shiftOnly = false) {
@@ -643,15 +602,6 @@
             ticketVolumeChartInstance.data.labels = labels;
             ticketVolumeChartInstance.data.datasets[0].data = [...ticketVolumeData];
             ticketVolumeChartInstance.update('none');
-        }
-
-        function updateLiveKpiChart() {
-            if (!liveKpiChartInstance) return;
-            liveKpiData.shift();
-            const liveCount = liveUnifiedTableBody.querySelectorAll('tr[data-status="live"], tr[data-status="delayed"]').length;
-            liveKpiData.push(liveCount);
-            liveKpiChartInstance.data.datasets[0].data = [...liveKpiData];
-            liveKpiChartInstance.update('none');
         }
         
         logoutButton.addEventListener('click', async () => {
