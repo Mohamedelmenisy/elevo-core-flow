@@ -257,7 +257,7 @@
             if(authLoading) authLoading.innerHTML = '<p style="color:red; text-align:center;">Critical Error: Services unavailable. Dashboard cannot be loaded.</p>';
         }
 
-        // --- DOM Elements (MODIFIED: Refactored for clarity) ---
+        // --- DOM Elements ---
         const appContainerContent = document.getElementById('appContainerContent');
         const authLoadingMessageDiv = document.getElementById('authLoadingMessage');
         const dashboardContentDiv = document.getElementById('dashboardContent');
@@ -422,24 +422,41 @@
         function applyFiltersAndRender() {
             saveFiltersToLocalStorage();
             let tempFiltered = [...allCallSessions];
+            
+            // CORRECTED: Declaring each const on its own line for safety and clarity
             const searchTerm = searchInput.value.toLowerCase().trim();
             const selectedAgentId = userFilterDropdown.value;
             const selectedQuality = qualityFilter.value;
             const startDate = startDateFilter.value;
             const endDate = endDateFilter.value;
 
-            if (selectedAgentId) tempFiltered = tempFiltered.filter(s => s.user_id === selectedAgentId);
+            if (selectedAgentId) {
+                tempFiltered = tempFiltered.filter(s => s.user_id === selectedAgentId);
+            }
             
-            if (searchTerm) tempFiltered = tempFiltered.filter(s => {
-                const agent = allAgents.find(a => a.id === s.user_id);
-                return ((s.scenario?.title || '').toLowerCase().includes(searchTerm) || (s.quality_reason || '').toLowerCase().includes(searchTerm) || (agent?.name || '').toLowerCase().includes(searchTerm) || (agent?.email || '').toLowerCase().includes(searchTerm));
-            });
+            if (searchTerm) {
+                tempFiltered = tempFiltered.filter(s => {
+                    const agent = allAgents.find(a => a.id === s.user_id);
+                    return (
+                        (s.scenario?.title || '').toLowerCase().includes(searchTerm) ||
+                        (s.quality_reason || '').toLowerCase().includes(searchTerm) ||
+                        (agent?.name || '').toLowerCase().includes(searchTerm) ||
+                        (agent?.email || '').toLowerCase().includes(searchTerm)
+                    );
+                });
+            }
 
-            if (selectedQuality) tempFiltered = tempFiltered.filter(s => (selectedQuality === "N/A" ? !s.call_quality : s.call_quality === selectedQuality));
+            if (selectedQuality) {
+                tempFiltered = tempFiltered.filter(s => (selectedQuality === "N/A" ? !s.call_quality : s.call_quality === selectedQuality));
+            }
             
-            if (startDate) tempFiltered = tempFiltered.filter(s => s.start_time_egypt && new Date(s.start_time_egypt) >= new Date(startDate + "T00:00:00.000Z"));
+            if (startDate) {
+                tempFiltered = tempFiltered.filter(s => s.start_time_egypt && new Date(s.start_time_egypt) >= new Date(startDate + "T00:00:00.000Z"));
+            }
             
-            if (endDate) tempFiltered = tempFiltered.filter(s => s.start_time_egypt && new Date(s.start_time_egypt) <= new Date(endDate + "T23:59:59.999Z"));
+            if (endDate) {
+                tempFiltered = tempFiltered.filter(s => s.start_time_egypt && new Date(s.start_time_egypt) <= new Date(endDate + "T23:59:59.999Z"));
+            }
             
             filteredCallSessions = tempFiltered;
             currentPage = 1;
@@ -475,7 +492,9 @@
             totalCallsEl.textContent = count;
             const agent = allAgents.find(a => a.id === userFilterDropdown.value);
             const statsPeriodText = agent ? (agent.name || agent.email) : 'All Agents';
-            [statsPeriodEl, statsPeriodDurationEl, statsPeriodCompletionEl].forEach(el => el.textContent = statsPeriodText);
+            statsPeriodEl.textContent = statsPeriodText;
+            statsPeriodDurationEl.textContent = statsPeriodText;
+            statsPeriodCompletionEl.textContent = statsPeriodText;
             recentCallsTitleEl.textContent = agent ? `Ticket Sessions for ${agent.name || agent.email}` : 'Recent Ticket Sessions';
 
             if (count > 0) {
@@ -488,20 +507,26 @@
                 const completedCount = sessionsWithEndTime.filter(s => s.completed).length;
                 completionRateEl.textContent = sessionsWithEndTime.length > 0 ? `${Math.round((completedCount / sessionsWithEndTime.length) * 100)}%` : 'N/A';
                 
-                const q = sessionsToAnalyze.reduce((a, s) => { if(s.call_quality) { a[s.call_quality.toLowerCase()]++; a.rated++; } return a; }, {good:0, normal:0, bad:0, rated:0});
+                const q = sessionsToAnalyze.reduce((a, s) => { if(s.call_quality) { a[s.call_quality.toLowerCase()] = (a[s.call_quality.toLowerCase()] || 0) + 1; a.rated = (a.rated || 0) + 1; } return a; }, {});
                 if (q.rated > 0) {
-                    gaugeGoodEl.style.width = `${(q.good / q.rated) * 100}%`;
-                    gaugeNormalEl.style.width = `${(q.normal / q.rated) * 100}%`;
-                    gaugeBadEl.style.width = `${(q.bad / q.rated) * 100}%`;
-                    avgQualityTextEl.textContent = q.bad/q.rated > 0.3 ? "Needs Improvement" : (q.good/q.rated >= 0.7 ? "Excellent" : "Good");
+                    gaugeGoodEl.style.width = `${((q.good || 0) / q.rated) * 100}%`;
+                    gaugeNormalEl.style.width = `${((q.normal || 0) / q.rated) * 100}%`;
+                    gaugeBadEl.style.width = `${((q.bad || 0) / q.rated) * 100}%`;
+                    const badRate = (q.bad || 0) / q.rated;
+                    const goodRate = (q.good || 0) / q.rated;
+                    avgQualityTextEl.textContent = badRate > 0.3 ? "Needs Improvement" : (goodRate >= 0.7 ? "Excellent" : "Good");
                 } else {
-                    [gaugeGoodEl, gaugeNormalEl, gaugeBadEl].forEach(el => el.style.width = '0%');
+                    gaugeGoodEl.style.width = '0%';
+                    gaugeNormalEl.style.width = '0%';
+                    gaugeBadEl.style.width = '0%';
                     avgQualityTextEl.textContent = 'No Rated Tickets';
                 }
             } else {
                 avgCallDurationEl.textContent = 'N/A';
                 completionRateEl.textContent = 'N/A';
-                [gaugeGoodEl, gaugeNormalEl, gaugeBadEl].forEach(el => el.style.width = '0%');
+                gaugeGoodEl.style.width = '0%';
+                gaugeNormalEl.style.width = '0%';
+                gaugeBadEl.style.width = '0%';
                 avgQualityTextEl.textContent = 'No Tickets';
             }
         }
@@ -549,11 +574,7 @@
                     indexAxis: 'y', 
                     responsive: true, 
                     maintainAspectRatio: false,
-                    layout: {
-                        padding: {
-                            left: 30 
-                        }
-                    },
+                    layout: { padding: { left: 30 } },
                     scales: { x: { beginAtZero: true, grid: { color: colors.gridColor }, ticks:{color: colors.textColor, font: { size: FONT_SIZE_AXIS }} }, y: { grid: { display: false }, ticks:{color: colors.textColor, font: { size: FONT_SIZE_AXIS }} } }, 
                     plugins: { legend: { display: false }, tooltip: tooltipOptions, title: titleOptions("Top 'Bad' Quality Reasons") } 
                 }
@@ -615,8 +636,28 @@
             paginationControlsContainer.appendChild(nextButton);
         }
 
-        function saveFiltersToLocalStorage() { /* Unchanged */ }
-        function loadPersistedFilters() { /* Unchanged */ }
+        function saveFiltersToLocalStorage() {
+            const filters = {
+                agent: userFilterDropdown.value,
+                search: searchInput.value,
+                quality: qualityFilter.value,
+                start: startDateFilter.value,
+                end: endDateFilter.value,
+            };
+            localStorage.setItem(FILTER_STORAGE_KEY, JSON.stringify(filters));
+        }
+
+        function loadPersistedFilters() {
+            const savedFilters = localStorage.getItem(FILTER_STORAGE_KEY);
+            if(savedFilters) {
+                const filters = JSON.parse(savedFilters);
+                userFilterDropdown.value = filters.agent || '';
+                searchInput.value = filters.search || '';
+                qualityFilter.value = filters.quality || '';
+                startDateFilter.value = filters.start || '';
+                endDateFilter.value = filters.end || '';
+            }
+        }
 
         function setupEventListeners() {
             const filterInputs = [userFilterDropdown, searchInput, qualityFilter, startDateFilter, endDateFilter];
@@ -626,6 +667,7 @@
             }));
             resetFiltersBtn.addEventListener('click', () => {
                 filterInputs.forEach(input => input.value = '');
+                localStorage.removeItem(FILTER_STORAGE_KEY);
                 applyFiltersAndRender();
             });
             logoutButton.addEventListener('click', async () => {
@@ -733,8 +775,8 @@
         async function setupLiveCallMonitoring() {
             await fetchAndRenderLiveCalls();
             liveCallsChannel = supabase
-                .channel('public:call_sessions')
-                .on('postgres_changes', { event: '*', schema: 'public', table: 'call_sessions' }, (payload) => {
+                .channel('public:call_sessions_egypt')
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'call_sessions_egypt' }, (payload) => {
                     // This now triggers all data refreshes
                     fetchAndRenderLiveCalls(); 
                     loadInitialData().then(applyFiltersAndRender);
@@ -742,56 +784,52 @@
                 })
                 .subscribe();
 
-            setInterval(fetchAndRenderLiveCalls, 5000);
+            setInterval(fetchAndRenderLiveCalls, 30000); // 30 seconds is a reasonable interval
         }
 
         // --- KPI Fetching Logic ---
         function formatDuration(seconds) {
             if (seconds === null || typeof seconds === 'undefined' || isNaN(seconds)) return '—';
             const mins = Math.floor(seconds / 60);
-            const secs = seconds % 60;
+            const secs = Math.floor(seconds % 60); // Use Math.floor to avoid decimals
             return `${mins}m ${secs}s`;
         }
 
         async function fetchKpis() {
-            if (!supabase) {
-                document.getElementById('kpi-fastest')?.textContent = 'N/A';
-                document.getElementById('kpi-longest')?.textContent = 'N/A';
-                document.getElementById('kpi-top-scenario')?.textContent = 'N/A';
-                document.getElementById('topAgentsList')?.innerHTML = '<li>No data available</li>';
-                return;
-            }
+            if (!supabase) return;
 
             try {
-                const [
-                    { data: topAgents, error: topAgentsError },
-                    { data: fastestTicket, error: fastestTicketError },
-                    { data: longestTicket, error: longestTicketError },
-                    { data: topScenario, error: topScenarioError }
-                ] = await Promise.all([
+                // MODIFICATION: Simplified promise handling for better stability
+                const results = await Promise.all([
                     supabase.rpc('top_agents_today'),
                     supabase.rpc('fastest_ticket_today').single(),
                     supabase.rpc('longest_ticket_today').single(),
                     supabase.rpc('top_scenario_today').single()
                 ]);
 
-                if (topAgentsError) console.error('Top Agents Error:', topAgentsError);
-                if (fastestTicketError) console.error('Fastest Ticket Error:', fastestTicketError);
-                if (longestTicketError) console.error('Longest Ticket Error:', longestTicketError);
-                if (topScenarioError) console.error('Top Scenario Error:', topScenarioError);
+                const { data: topAgents, error: topAgentsError } = results[0];
+                const { data: fastestTicket, error: fastestTicketError } = results[1];
+                const { data: longestTicket, error: longestTicketError } = results[2];
+                const { data: topScenario, error: topScenarioError } = results[3];
+
+                if (topAgentsError) console.error('Top Agents Error:', topAgentsError.message);
+                if (fastestTicketError) console.error('Fastest Ticket Error:', fastestTicketError.message);
+                if (longestTicketError) console.error('Longest Ticket Error:', longestTicketError.message);
+                if (topScenarioError) console.error('Top Scenario Error:', topScenarioError.message);
 
                 // Top 5 Agents
-                if (topAgents && topAgents.length) {
-                    const html = topAgents.slice(0, 5).map(t => `<li>${t.agent_name || 'Unknown'}<span>${t.count} tickets</span></li>`).join('');
-                    document.getElementById('topAgentsList').innerHTML = html;
+                const topAgentsList = document.getElementById('topAgentsList');
+                if (topAgents && topAgents.length > 0) {
+                    topAgentsList.innerHTML = topAgents
+                        .slice(0, 5)
+                        .map(t => `<li>${t.agent_name || 'Unknown'}<span>${t.count} tickets</span></li>`)
+                        .join('');
                 } else {
-                    document.getElementById('topAgentsList').innerHTML = '<li>No agent data today.</li>';
+                    topAgentsList.innerHTML = '<li>No agent data today.</li>';
                 }
 
-                // Fastest Ticket
+                // Fastest & Longest Ticket
                 document.getElementById('kpi-fastest').textContent = fastestTicket ? formatDuration(fastestTicket.duration_seconds) : '—';
-                
-                // Longest Ticket
                 document.getElementById('kpi-longest').textContent = longestTicket ? formatDuration(longestTicket.duration_seconds) : '—';
 
                 // Top Scenario
@@ -806,7 +844,9 @@
             }
         }
 
-        if(supabase) initializeDashboard();
+        if(supabase) {
+            initializeDashboard();
+        }
     </script>
 
 </body>
