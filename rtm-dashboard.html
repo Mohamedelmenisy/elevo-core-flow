@@ -1,5 +1,3 @@
-de
-Html
 <!DOCTYPE html>
 <html lang="en" class="dark">
 <head>
@@ -42,6 +40,8 @@ Html
 
         .stats-grid {
             grid-column: 1 / -1;
+            /* MODIFICATION: Adjusted grid for 5 columns */
+            grid-template-columns: repeat(5, 1fr);
         }
 
         .chart-container {
@@ -65,7 +65,7 @@ Html
         .chart-wrapper {
             position: relative;
             flex-grow: 1;
-            min-height: 280px;
+            min-height: 300px; /* MODIFICATION: Standardized chart height */
         }
         
         #ticketVolumeChartContainer .chart-wrapper {
@@ -84,12 +84,10 @@ Html
             grid-column: 1 / -1;
         }
 
-        /* MODIFICATION: Unified table container takes full width */
         .unified-table-container {
             grid-column: 1 / -1;
         }
 
-        /* MODIFICATION: Styles for the new unified table */
         #liveUnifiedTable {
             width: 100%;
             border-collapse: collapse;
@@ -115,17 +113,19 @@ Html
         #liveUnifiedTable .scenario-title { color: var(--text-color-light); }
         #liveUnifiedTable .duration-cell { font-family: 'Roboto Mono', monospace; font-weight: 500; }
         #liveUnifiedTable .status-badge {
-            padding: 0.25em 0.75em;
+            padding: 0.3em 0.8em;
             border-radius: 1em;
             font-size: 0.8em;
             font-weight: 600;
             text-align: center;
             display: inline-block;
-            min-width: 80px;
+            min-width: 90px; /* MODIFICATION: Increased min-width */
         }
-        .status-live { background-color: var(--primary-color); color: white; }
-        .status-completed { background-color: var(--success-color); color: white; }
-        .status-ended { background-color: var(--danger-color); color: white; }
+        /* MODIFICATION: New color-coded statuses */
+        .status-live { background-color: var(--success-color); color: white; } /* Green */
+        .status-delayed { background-color: #f59e0b; color: white; } /* Yellow */
+        .status-completed { background-color: var(--primary-color); color: white; } /* Blue */
+        .status-ended { background-color: var(--danger-color); color: white; } /* Red */
 
         /* Row animations */
         @keyframes fadeIn {
@@ -146,7 +146,7 @@ Html
             padding-top: 0 !important;
             padding-bottom: 0 !important;
             border: 0;
-            font-size: 0; /* Hide text during collapse */
+            font-size: 0;
         }
     </style>
 </head>
@@ -195,10 +195,12 @@ Html
                 
                 <div class="master-grid">
                     <div class="stats-grid">
-                         <div class="stat-card"><h3><i class="icon">⚡</i> Active Tickets</h3><p id="activeTickets">0</p></div>
+                         <!-- MODIFICATION: Renamed and added new stat card -->
+                         <div class="stat-card"><h3><i class="icon">🟢</i> Live Tickets</h3><p id="liveTickets">0</p></div>
+                         <div class="stat-card"><h3><i class="icon">🟡</i> Delayed Tickets</h3><p id="delayedTickets">0</p></div>
                          <div class="stat-card"><h3><i class="icon">⏱️</i> Avg. Active Duration</h3><p id="avgActiveDuration">0m 0s</p></div>
                          <div class="stat-card"><h3><i class="icon">📈</i> Tickets Today</h3><p id="ticketsToday">0</p></div>
-                         <div class="stat-card"><h3><i class="icon">🎯</i> Completion Rate (Today)</h3><p id="completionRateToday">0%</p></div>
+                         <div class="stat-card"><h3><i class="icon">🎯</i> Completion Rate</h3><p id="completionRateToday">0%</p></div>
                     </div>
 
                     <div id="ticketVolumeChartContainer" class="chart-container">
@@ -216,10 +218,9 @@ Html
                         </div>
                     </div>
 
-                    <!-- MODIFICATION: Unified live table replaces the old card layout -->
                     <div class="unified-table-container chart-container">
-                        <h2>Live Activity</h2>
-                        <div class="table-responsive" style="overflow-y: auto; min-height: 400px;">
+                        <h2>Live Activity Log</h2>
+                        <div class="table-responsive" style="overflow-y: auto; max-height: 600px;">
                             <table id="liveUnifiedTable">
                                 <thead>
                                     <tr>
@@ -269,19 +270,19 @@ Html
         const agentPortalLink = document.getElementById('agentPortalLink');
         document.getElementById('currentYear').textContent = new Date().getFullYear();
 
-        // MODIFICATION: New elements for the unified table
         const liveUnifiedTableBody = document.getElementById('liveUnifiedTableBody');
         const noLiveActivityMessage = document.getElementById('noLiveActivityMessage');
 
         // Stats
-        const activeTicketsEl = document.getElementById('activeTickets');
+        const liveTicketsEl = document.getElementById('liveTickets');
+        const delayedTicketsEl = document.getElementById('delayedTickets'); // New stat
         const avgActiveDurationEl = document.getElementById('avgActiveDuration');
         const ticketsTodayEl = document.getElementById('ticketsToday');
         const completionRateTodayEl = document.getElementById('completionRateToday');
 
         // Charts
         let ticketVolumeChartInstance, liveKpiChartInstance;
-        let liveKpiData = new Array(15).fill(0); // 15 data points for 5 mins (20s interval)
+        let liveKpiData = new Array(15).fill(0); 
         const TICKET_VOLUME_TIMESPAN_MINUTES = 60;
         const TICKET_VOLUME_BUCKET_MINUTES = 2;
         let ticketVolumeData = new Array(TICKET_VOLUME_TIMESPAN_MINUTES / TICKET_VOLUME_BUCKET_MINUTES).fill(0);
@@ -290,6 +291,7 @@ Html
         let currentUser = null;
         let liveStatsInterval, periodicShiftInterval;
         const EGYPT_TIMEZONE = 'Africa/Cairo';
+        const DELAYED_THRESHOLD_SECONDS = 180; // 3 minutes
 
         function formatDateTimeEgypt(dateString) {
             if (!dateString) return 'N/A';
@@ -384,11 +386,12 @@ Html
             liveUnifiedTableBody.innerHTML = '';
             
             const liveTickets = sessionData.filter(t => t.end_time_egypt === null);
-            const recentFinished = sessionData.filter(t => t.end_time_egypt !== null).slice(0, 10);
+            const recentFinished = sessionData.filter(t => t.end_time_egypt !== null).slice(0, 15);
             
-            [...liveTickets, ...recentFinished].forEach(ticket => {
-                addOrUpdateTableRow(ticket);
-            });
+            const allTickets = [...liveTickets, ...recentFinished]
+                .sort((a, b) => new Date(b.start_time_egypt) - new Date(a.start_time_egypt));
+
+            allTickets.forEach(ticket => addOrUpdateTableRow(ticket));
 
             const now = new Date();
             sessionData.forEach(ticket => {
@@ -410,7 +413,7 @@ Html
 
         function setupRealtimeSubscription() {
             supabase
-                .channel('public:call_sessions_egypt_rtm') // Using a unique channel name
+                .channel('public:call_sessions_egypt_rtm')
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'call_sessions_egypt' }, payload => {
                     handleRealtimeUpdate(payload);
                 })
@@ -419,9 +422,17 @@ Html
 
         async function handleRealtimeUpdate(payload) {
             const { eventType, new: newRecord, old: oldRecord } = payload;
-            const recordId = newRecord.id || oldRecord?.id;
+            const recordId = newRecord?.id || oldRecord?.id;
             if (!recordId) return;
             
+            // For DELETE event, remove the row directly
+            if (eventType === 'DELETE') {
+                const row = document.getElementById(`ticket-row-${recordId}`);
+                if (row) row.remove();
+                updateLiveDurationsAndStats();
+                return;
+            }
+
             const { data, error } = await supabase
                 .from('call_sessions_egypt').select('id, agent_name, start_time_egypt, end_time_egypt, duration, completed, scenario:call_scenarios(title)')
                 .eq('id', recordId)
@@ -443,44 +454,68 @@ Html
         function addOrUpdateTableRow(ticket, isNew = false) {
             let row = document.getElementById(`ticket-row-${ticket.id}`);
             const isLive = ticket.end_time_egypt === null;
-            
-            if (row) { // Update existing row
-                // Row exists, update its content
-            } else { // Create new row
-                if (!isLive && !isNew) { // Don't add old, finished tickets unless they are new
-                    const finishedRows = liveUnifiedTableBody.querySelectorAll('tr[data-status="completed"], tr[data-status="ended"]').length;
-                    if (finishedRows >= 10) return; // Limit historical rows
-                }
+
+            if (!row) {
                 row = document.createElement('tr');
                 row.id = `ticket-row-${ticket.id}`;
-                liveUnifiedTableBody.prepend(row);
+                
+                // Insert in correct chronological order
+                const existingRows = Array.from(liveUnifiedTableBody.children);
+                const ticketStartTime = new Date(ticket.start_time_egypt).getTime();
+                const insertBeforeRow = existingRows.find(r => {
+                    const rStartTime = new Date(r.dataset.startTime).getTime();
+                    return rStartTime < ticketStartTime;
+                });
+
+                if (insertBeforeRow) {
+                    liveUnifiedTableBody.insertBefore(row, insertBeforeRow);
+                } else {
+                    liveUnifiedTableBody.appendChild(row);
+                }
+                
                 if (isNew) {
                     row.classList.add('new-row');
                 }
             }
             
-            const status = isLive ? 'Live' : (ticket.completed ? 'Completed' : 'Ended');
-            const statusClass = `status-${status.toLowerCase()}`;
-            
-            row.dataset.status = status.toLowerCase();
             row.dataset.startTime = ticket.start_time_egypt;
+            
+            let status, statusClass, durationText;
+
+            if (isLive) {
+                const durationSec = Math.floor((Date.now() - new Date(ticket.start_time_egypt).getTime()) / 1000);
+                durationText = formatDuration(durationSec);
+                if (durationSec > DELAYED_THRESHOLD_SECONDS) {
+                    status = 'Delayed';
+                    statusClass = 'status-delayed';
+                } else {
+                    status = 'Live';
+                    statusClass = 'status-live';
+                }
+                row.dataset.status = status.toLowerCase();
+            } else {
+                status = ticket.completed ? 'Completed' : 'Ended';
+                statusClass = `status-${status.toLowerCase()}`;
+                durationText = formatDuration(ticket.duration);
+                row.dataset.status = status.toLowerCase();
+            }
 
             row.innerHTML = `
                 <td class="agent-name">${ticket.agent_name || 'Unknown'}</td>
                 <td class="scenario-title">${ticket.scenario?.title || 'Loading...'}</td>
                 <td><span class="status-badge ${statusClass}">${status}</span></td>
                 <td>${formatDateTimeEgypt(ticket.start_time_egypt)}</td>
-                <td class="duration-cell">${isLive ? '...' : formatDuration(ticket.duration)}</td>
+                <td class="duration-cell">${durationText}</td>
             `;
 
-            if (!isLive) {
-                // If the ticket is finished, start a timer to fade it out
+            if (!isLive && !row.dataset.fading) {
+                row.dataset.fading = 'true';
                 setTimeout(() => {
-                    if (row.parentElement) { // Check if row still exists
+                    if (row.parentElement) {
                         row.classList.add('fading-out');
                         row.addEventListener('animationend', () => row.remove());
                     }
-                }, 30000); // Remove after 30 seconds
+                }, 30000);
             }
             updateTableVisibility();
         }
@@ -492,22 +527,44 @@ Html
 
         function updateLiveDurationsAndStats() {
             let totalDuration = 0;
-            const liveRows = liveUnifiedTableBody.querySelectorAll('tr[data-status="live"]');
+            let liveCount = 0;
+            let delayedCount = 0;
+            const activeRows = liveUnifiedTableBody.querySelectorAll('tr[data-status="live"], tr[data-status="delayed"]');
 
-            liveRows.forEach(row => {
+            activeRows.forEach(row => {
                 const startTime = new Date(row.dataset.startTime).getTime();
                 if (startTime) {
                     const durationMs = Date.now() - startTime;
                     totalDuration += durationMs;
                     const durationSec = Math.floor(durationMs / 1000);
                     row.querySelector('.duration-cell').textContent = formatDuration(durationSec);
+                    
+                    const statusCell = row.querySelector('.status-badge');
+                    if (durationSec > DELAYED_THRESHOLD_SECONDS) {
+                        if (row.dataset.status !== 'delayed') {
+                           row.dataset.status = 'delayed';
+                           statusCell.textContent = 'Delayed';
+                           statusCell.className = 'status-badge status-delayed';
+                        }
+                        delayedCount++;
+                    } else {
+                        if (row.dataset.status !== 'live') {
+                           row.dataset.status = 'live';
+                           statusCell.textContent = 'Live';
+                           statusCell.className = 'status-badge status-live';
+                        }
+                        liveCount++;
+                    }
                 }
             });
             
-            activeTicketsEl.textContent = liveRows.length;
-            const avgDurationMs = totalDuration > 0 ? totalDuration / liveRows.length : 0;
-            const avgSecs = Math.floor(avgDurationMs / 1000);
-            avgActiveDurationEl.textContent = formatDuration(avgSecs);
+            liveTicketsEl.textContent = liveCount;
+            delayedTicketsEl.textContent = delayedCount;
+            
+            const totalActive = liveCount + delayedCount;
+            const avgDurationMs = totalDuration > 0 ? totalDuration / totalActive : 0;
+            avgActiveDurationEl.textContent = formatDuration(Math.floor(avgDurationMs / 1000));
+            
             updateTableVisibility();
         }
 
@@ -591,7 +648,7 @@ Html
         function updateLiveKpiChart() {
             if (!liveKpiChartInstance) return;
             liveKpiData.shift();
-            const liveCount = liveUnifiedTableBody.querySelectorAll('tr[data-status="live"]').length;
+            const liveCount = liveUnifiedTableBody.querySelectorAll('tr[data-status="live"], tr[data-status="delayed"]').length;
             liveKpiData.push(liveCount);
             liveKpiChartInstance.data.datasets[0].data = [...liveKpiData];
             liveKpiChartInstance.update('none');
