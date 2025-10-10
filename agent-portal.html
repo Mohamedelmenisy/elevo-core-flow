@@ -447,8 +447,6 @@
         flex: 1 1 250px; 
         position: relative;
         min-height: 250px; 
-        max-width: 50%;
-        margin-right: 20px; /* FIX: Added margin */
     }
     
     canvas {
@@ -570,7 +568,7 @@
                             <div class="filter-controls">
                                 <div class="filter-grid">
                                     <div><label for="searchInput">Search Scenario:</label><input type="text" id="searchInput" placeholder="Enter scenario name..."></div>
-                                    <div><label for="qualityFilter">Filter by Quality:</label><select id="qualityFilter"><option value="">All</option><option value="Good">Good</option><option value="Bad">Bad</option><option value="N/A">N/A</option></select></div>
+                                    <div><label for="qualityFilter">Filter by Quality:</label><select id="qualityFilter"><option value="">All</option><option value="Good">Good</option><option value="Normal">Normal</option><option value="Bad">Bad</option><option value="NA">N/A</option></select></div>
                                     <div><label for="startDateFilter">From Date:</label><input type="date" id="startDateFilter"></div>
                                     <div><label for="endDateFilter">To Date:</label><input type="date" id="endDateFilter"></div>
                                     <button id="resetFiltersBtn" class="action-button secondary-button">Reset Filters</button>
@@ -1139,9 +1137,9 @@
 
         async function loadAgentData() {
             try {
-                const { data, error } = await supabase.from('v_call_sessions_egypt').select('*').eq('user_id', currentUser.id).order('start_time_egypt', { ascending: false });
+                const { data, error } = await supabase.from('call_sessions_egypt').select('*, scenario:call_scenarios(title)').eq('user_id', currentUser.id).order('start_time_egypt', { ascending: false });
                 if (error) throw error;
-                allUserCalls = data.map(call => ({...call, scenario: { title: call.scenario_name } }));
+                allUserCalls = data;
                 applyFiltersAndRender();
             } catch (err) {
                 console.error('Failed to load agent call data:', err);
@@ -1149,6 +1147,11 @@
                 noDataMessage.style.display = 'block';
                 tableBody.innerHTML = '';
             }
+        }
+        
+        function getDurationInSeconds(call) {
+            if (!call.duration_interval) return 0;
+            return (call.duration_interval.minutes || 0) * 60 + (call.duration_interval.seconds || 0);
         }
 
         function applyFiltersAndRender() {
@@ -1160,7 +1163,7 @@
             filteredCalls = allUserCalls.filter(call => {
                 const callDate = new Date(call.start_time_egypt);
                 const matchesSearch = !searchTerm || (call.scenario?.title || '').toLowerCase().includes(searchTerm);
-                const matchesQuality = !quality || call.call_quality === quality;
+                const matchesQuality = !quality || (call.call_quality || 'NA') === quality;
                 const matchesStartDate = !startDate || callDate >= new Date(startDate + "T00:00:00.000Z");
                 const matchesEndDate = !endDate || callDate <= new Date(endDate + "T23:59:59.999Z");
                 return matchesSearch && matchesQuality && matchesStartDate && matchesEndDate;
@@ -1189,8 +1192,8 @@
             kpiTotalCalls.textContent = totalCompletedCalls;
             document.getElementById('ins-total').textContent = calls.length;
 
-            const callsWithDuration = calls.filter(call => typeof call.duration === 'number');
-            const totalDuration = callsWithDuration.reduce((acc, call) => acc + call.duration, 0);
+            const callsWithDuration = calls.filter(call => call.duration_interval);
+            const totalDuration = callsWithDuration.reduce((acc, call) => acc + getDurationInSeconds(call), 0);
             
             let avgTimeText = '0m 00s';
             if (callsWithDuration.length > 0) {
@@ -1206,7 +1209,7 @@
             
             const callsWithRating = allUserCalls.filter(c => typeof c.customer_rating === 'number' && c.customer_rating > 0);
             if (callsWithRating.length > 0) {
-                const totalRating = callsWithRating.reduce((acc, call) => acc + call.customer_rating, 0);
+                const totalRating = callsWithRating.reduce((acc, call) => acc + c.customer_rating, 0);
                 const avgRating = (totalRating / callsWithRating.length).toFixed(1);
                 kpiAvgRating.textContent = `⭐ ${avgRating} / 5`;
             } else {
@@ -1224,9 +1227,9 @@
             const completedToday = todaysCalls.filter(c => c.completed).length;
             document.getElementById('achTicketsCompleted').textContent = completedToday;
             
-            const completedCallsWithDuration = todaysCalls.filter(c => c.completed && typeof c.duration === 'number' && c.duration > 0);
+            const completedCallsWithDuration = todaysCalls.filter(c => c.completed && c.duration_interval && getDurationInSeconds(c) > 0);
             if(completedCallsWithDuration.length > 0) {
-                const fastestDuration = Math.min(...completedCallsWithDuration.map(c => c.duration));
+                const fastestDuration = Math.min(...completedCallsWithDuration.map(c => getDurationInSeconds(c)));
                 const fastTimeText = `${Math.floor(fastestDuration / 60)}m ${String(fastestDuration % 60).padStart(2, '0')}s`;
                 document.getElementById('achFastestCall').textContent = fastTimeText;
             } else {
@@ -1287,7 +1290,7 @@
             
             const paginatedCalls = filteredCalls.slice((currentPage - 1) * ROWS_PER_PAGE, currentPage * ROWS_PER_PAGE);
             paginatedCalls.forEach(call => {
-                const dur = call.duration_interval?.minutes * 60 + call.duration_interval?.seconds || 0;
+                const dur = getDurationInSeconds(call);
                 tableBody.innerHTML += `<tr>
                     <td>${new Date(call.start_time_egypt).toLocaleDateString('en-GB', { timeZone: EGYPT_TIMEZONE })}</td>
                     <td>${call.scenario?.title || 'N/A'}</td>
@@ -1317,17 +1320,17 @@
             
             if (qualityChartInstance) qualityChartInstance.destroy();
             const qualityCounts = calls.reduce((acc, call) => {
-                const quality = call.call_quality || 'N/A';
+                const quality = call.call_quality || 'NA';
                 acc[quality] = (acc[quality] || 0) + 1;
                 return acc;
             }, {});
 
             qualityChartInstance = new Chart(qualityChartCanvas, {
                 type: 'doughnut', data: { 
-                    labels: ['Good', 'Bad', 'N/A'],
+                    labels: ['Good', 'Normal', 'Bad', 'NA'],
                     datasets: [{ 
-                        data: [qualityCounts['Good'] || 0, qualityCounts['Bad'] || 0, qualityCounts['N/A'] || 0],
-                        backgroundColor: ['#22c55e', '#ef4444', '#6b7280'], 
+                        data: [qualityCounts['Good'] || 0, qualityCounts['Normal'] || 0, qualityCounts['Bad'] || 0, qualityCounts['NA'] || 0],
+                        backgroundColor: ['#22c55e', '#f59e0b', '#ef4444', '#6b7280'], 
                         borderColor: '#1f2937', borderWidth: 3, hoverOffset: 10
                     }] 
                 }, options: { responsive: true, maintainAspectRatio: false, cutout: '60%',
@@ -1384,9 +1387,9 @@
             if (realtimeChannel) {
                 supabase.removeChannel(realtimeChannel);
             }
-            realtimeChannel = supabase.channel(`public:call_sessions:user_id=eq.${currentUser.id}`)
+            realtimeChannel = supabase.channel(`public:call_sessions_egypt:user_id=eq.${currentUser.id}`)
                 .on('postgres_changes', 
-                    { event: '*', schema: 'public', table: 'call_sessions', filter: `user_id=eq.${currentUser.id}` },
+                    { event: '*', schema: 'public', table: 'call_sessions_egypt', filter: `user_id=eq.${currentUser.id}` },
                     (payload) => {
                         console.log('Realtime update received!', payload);
                         loadAgentData();
