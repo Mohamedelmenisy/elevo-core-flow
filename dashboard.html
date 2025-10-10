@@ -1,4 +1,3 @@
-``html
 <!DOCTYPE html>
 <html lang="en" class="dark">
 <head>
@@ -180,6 +179,7 @@
                 <a href="core-flow.html" class="nav-link">Core Flow</a>
                 <a href="rtm-dashboard.html" class="nav-link" id="rtmDashboardLink" style="display: none;">RTM Dashboard</a>
                 <a href="agent-portal.html" class="nav-link" id="agentPortalLink" style="display: none;">Agent Portal</a>
+                <div id="liveStatusBox" class="nav-link" style="font-weight: 600; transition: color 0.3s ease;"></div>
                 <div class="user-info" id="userInfo" style="display: none;">
                     <span id="userNameDisplay" class="user-name-display"></span>
                     <button id="logoutButton" class="logout-btn"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg><span>Logout</span></button>
@@ -443,7 +443,7 @@
             setupAdminUI();
             await refreshAllData(); // Initial load
             loadPersistedFilters();
-            applyFiltersAndRender(); // Apply saved filters on first load
+            await applyFiltersAndRender(); // Apply saved filters on first load
             setupEventListeners();
             setupLiveCallMonitoring();
             
@@ -471,7 +471,7 @@
         async function refreshAllData() {
             console.log("Refreshing all dashboard data...");
             await loadInitialData();
-            applyFiltersAndRender();
+            await applyFiltersAndRender();
             await loadMainStats();
             await fetchKpis();
             await updateMonitoringTabs();
@@ -508,7 +508,7 @@
             });
         }
 
-        function applyFiltersAndRender() {
+        async function applyFiltersAndRender() {
             saveFiltersToLocalStorage();
             let tempFiltered = [...allCallSessions];
             
@@ -534,7 +534,7 @@
             renderTable();
             updateStats();
             renderPagination();
-            updateAnalyticsCharts();
+            await updateAnalyticsCharts();
         }
         
         function renderTable() { 
@@ -591,7 +591,7 @@
             }
         }
         
-        function updateAnalyticsCharts() {
+        async function updateAnalyticsCharts() {
             const colors = getChartColors();
             const FONT_SIZE_TITLE = 16, FONT_SIZE_LEGEND = 12, FONT_SIZE_AXIS = 12; 
             
@@ -605,9 +605,21 @@
             if (statusChart) statusChart.destroy();
             statusChart = new Chart(document.getElementById('statusChart').getContext('2d'), { type: 'doughnut', data: { labels: ['Completed', 'Not Completed'], datasets: [{ data: [completed, filteredCallSessions.length - completed], backgroundColor: [colors.good, colors.bad], borderColor: colors.tooltipBg, borderWidth: 4, hoverOffset: 8 }] }, options: { responsive: true, maintainAspectRatio: false, cutout: '70%', plugins: { legend: legendOptions, tooltip: tooltipOptions, title: titleOptions('Completion Status') } } });
 
-            const qualityCounts = filteredCallSessions.reduce((a, s) => { a[s.call_quality || 'N/A'] = (a[s.call_quality || 'N/A'] || 0) + 1; return a; }, {});
             if (qualityScoreChart) qualityScoreChart.destroy();
-            qualityScoreChart = new Chart(document.getElementById('qualityScoreChart').getContext('2d'), { type: 'pie', data: { labels: ['Good', 'Normal', 'Bad', 'N/A'], datasets: [{ data: [qualityCounts['Good']||0, qualityCounts['Normal']||0, qualityCounts['Bad']||0, qualityCounts['N/A']||0], backgroundColor: [colors.good, colors.normal, colors.bad, colors.na], borderColor: colors.tooltipBg, borderWidth: 4, hoverOffset: 8 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: legendOptions, tooltip: tooltipOptions, title: titleOptions('Ticket Quality Breakdown') } } });
+            try {
+                const { data: qualityData, error } = await supabase.from('v_call_quality_summary').select('call_quality, quality_count');
+                if (error) throw error;
+                
+                const qualityCounts = { 'Good': 0, 'Normal': 0, 'Bad': 0, 'N/A': 0 };
+                qualityData.forEach(item => {
+                    qualityCounts[item.call_quality || 'N/A'] = item.quality_count;
+                });
+                
+                qualityScoreChart = new Chart(document.getElementById('qualityScoreChart').getContext('2d'), { type: 'pie', data: { labels: ['Good', 'Normal', 'Bad', 'N/A'], datasets: [{ data: [qualityCounts['Good'], qualityCounts['Normal'], qualityCounts['Bad'], qualityCounts['N/A']], backgroundColor: [colors.good, colors.normal, colors.bad, colors.na], borderColor: colors.tooltipBg, borderWidth: 4, hoverOffset: 8 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: legendOptions, tooltip: tooltipOptions, title: titleOptions('Ticket Quality Breakdown (Overall)') } } });
+            } catch(e) {
+                console.error("Error fetching quality summary for chart:", e);
+                qualityScoreChart = new Chart(document.getElementById('qualityScoreChart').getContext('2d'), { type: 'pie', data: { labels:['Error'], datasets:[{data:[1]}] }, options: { plugins: { title: titleOptions('Could not load quality data') } } });
+            }
 
             const volumeByDay = filteredCallSessions.reduce((a, s) => { const d = new Date(s.start_time_egypt).toLocaleDateString('en-CA', { timeZone: EGYPT_TIMEZONE }); a[d] = (a[d] || 0) + 1; return a; }, {});
             const sortedDates = Object.keys(volumeByDay).sort((a,b) => new Date(a) - new Date(b)).slice(-10);
@@ -722,13 +734,19 @@
         async function updateMonitoringTabs() {
             try {
                 const [liveRes, delayedRes, completedRes] = await Promise.all([
-                    supabase.from('view_live_sessions').select('agent_name, scenario_title, start_time_egypt').order('start_time_egypt', { ascending: false }),
-                    supabase.from('view_delayed_sessions').select('agent_name, scenario_title, start_time_egypt').order('start_time_egypt', { ascending: false }),
-                    supabase.from('call_sessions_egypt').select('user_id, scenario:call_scenarios(title), end_time_egypt, duration_interval').eq('completed', true).order('end_time_egypt', { ascending: false }).limit(15)
+                    supabase.from('live_tickets').select('agent_name, scenario_title, start_time_egypt').order('start_time_egypt', { ascending: false }),
+                    supabase.from('delayed_tickets').select('agent_name, scenario_title, start_time_egypt').order('start_time_egypt', { ascending: false }),
+                    supabase.from('recent_sessions').select('agent_name, scenario_title, end_time_egypt, duration_interval').order('end_time_egypt', { ascending: false }).limit(15)
                 ]);
 
                 if (liveRes.error) throw liveRes.error; if (delayedRes.error) throw delayedRes.error; if (completedRes.error) throw completedRes.error;
                 const liveCalls = liveRes.data || [], delayedCalls = delayedRes.data || [], completedCalls = completedRes.data || [];
+
+                const liveStatusBox = document.getElementById('liveStatusBox');
+                if (liveStatusBox) {
+                    liveStatusBox.innerText = liveCalls.length > 0 ? `${liveCalls.length} Active Ticket(s)` : 'No Live Tickets';
+                    liveStatusBox.style.color = liveCalls.length > 0 ? 'var(--success-color)' : 'var(--text-color-light)';
+                }
 
                 liveCountEl.textContent = liveCalls.length; delayedCountEl.textContent = delayedCalls.length; completedCountEl.textContent = completedCalls.length;
 
@@ -739,7 +757,10 @@
                 delayedCalls.forEach(call => { const d = Math.floor((new Date() - new Date(call.start_time_egypt)) / 1000); delayedTicketsContainer.insertAdjacentHTML('beforeend', `<div class="live-call-item long-call-alert"><div><strong class="live-call-item-agent">${call.agent_name || 'Unknown'}</strong> on "${call.scenario_title || 'a ticket'}"</div><div class="live-call-item-time"><span class="text-color-light">Started: ${formatDateTimeEgypt(call.start_time_egypt, { hour: '2-digit', minute: '2-digit' })}</span><span class="live-call-duration">Now: ${Math.floor(d/60)}m ${d%60}s <span class="long-call-indicator">DELAYED</span></span></div></div>`); });
 
                 completedTicketsContainer.innerHTML = ''; noCompletedTicketsMessage.style.display = completedCalls.length === 0 ? 'block' : 'none';
-                completedCalls.forEach(call => { const agent = allAgents.find(a => a.id === call.user_id); const dur = call.duration_interval?.minutes * 60 + call.duration_interval?.seconds || 0; completedTicketsContainer.insertAdjacentHTML('beforeend', `<div class="live-call-item"><div><strong class="live-call-item-agent">${agent?.name || 'Unknown'}</strong> completed "${call.scenario?.title || 'a ticket'}"</div><div class="live-call-item-time"><span class="text-color-light">Finished: ${formatDateTimeEgypt(call.end_time_egypt, { hour: '2-digit', minute: '2-digit' })}</span><span class="live-call-duration" style="color: var(--success-color)">Took: ${formatDuration(dur)}</span></div></div>`); });
+                completedCalls.forEach(call => { 
+                    const dur = (call.duration_interval?.minutes || 0) * 60 + (call.duration_interval?.seconds || 0); 
+                    completedTicketsContainer.insertAdjacentHTML('beforeend', `<div class="live-call-item"><div><strong class="live-call-item-agent">${call.agent_name || 'Unknown'}</strong> completed "${call.scenario_title || 'a ticket'}"</div><div class="live-call-item-time"><span class="text-color-light">Finished: ${formatDateTimeEgypt(call.end_time_egypt, { hour: '2-digit', minute: '2-digit' })}</span><span class="live-call-duration" style="color: var(--success-color)">Took: ${formatDuration(dur)}</span></div></div>`); 
+                });
 
             } catch(error) {
                 console.error("Error fetching monitoring data from views:", error);
