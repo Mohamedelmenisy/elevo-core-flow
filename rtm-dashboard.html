@@ -320,7 +320,7 @@
     <script type="module">
         const SUPABASE_URL = 'https://aefiigottnlcmjzilqnh.supabase.co';
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFlZmlpZ290dG5sY21qemlscW5oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcxNzY2MDQsImV4cCI6MjA2Mjc1MjYwNH0.FypB02v3tGMnxXV9ZmZMdMC0oQpREKOJWgHMPxUzw4Y';
-        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
         // Global variables
         let currentUser = null;
@@ -328,7 +328,6 @@
         let agentActivityChart = null;
         let autoRefreshInterval = null;
         let isAutoRefreshEnabled = true;
-        let durationUpdateInterval = null;
 
         // Initialize the application
         document.addEventListener('DOMContentLoaded', async function() {
@@ -339,15 +338,14 @@
             await checkAuth();
             setupEventListeners();
             
-            // Start auto-refresh and duration updates
+            // Start auto-refresh
             startAutoRefresh();
-            startDurationUpdates();
         });
 
         // Authentication check
         async function checkAuth() {
             try {
-                const { data, error } = await supabaseClient.auth.getUser();
+                const { data, error } = await supabase.auth.getUser();
                 if (error || !data.user) {
                     window.location.href = 'index.html';
                     return;
@@ -372,7 +370,7 @@
         function setupEventListeners() {
             // Logout button
             document.getElementById('logoutButton').addEventListener('click', async () => {
-                await supabaseClient.auth.signOut();
+                await supabase.auth.signOut();
                 window.location.href = 'index.html';
             });
             
@@ -441,7 +439,7 @@
         async function loadTicketMetrics() {
             try {
                 // Load live tickets count
-                const { data: liveData, error: liveError } = await supabaseClient
+                const { data: liveData, error: liveError } = await supabase
                     .from('live_tickets')
                     .select('id', { count: 'exact' });
                     
@@ -450,7 +448,7 @@
                 }
                 
                 // Load delayed tickets count
-                const { data: delayedData, error: delayedError } = await supabaseClient
+                const { data: delayedData, error: delayedError } = await supabase
                     .from('delayed_tickets')
                     .select('id', { count: 'exact' });
                     
@@ -459,7 +457,7 @@
                 }
                 
                 // Load recent tickets count
-                const { data: recentData, error: recentError } = await supabaseClient
+                const { data: recentData, error: recentError } = await supabase
                     .from('recent_tickets')
                     .select('id', { count: 'exact' });
                     
@@ -468,7 +466,7 @@
                 }
                 
                 // Count active agents (from live tickets)
-                const { data: agentsData, error: agentsError } = await supabaseClient
+                const { data: agentsData, error: agentsError } = await supabase
                     .from('live_tickets')
                     .select('agent_name');
                     
@@ -490,7 +488,7 @@
         // Load live tickets from live_tickets view
         async function loadLiveTickets() {
             try {
-                const { data, error } = await supabaseClient
+                const { data, error } = await supabase
                     .from('live_tickets')
                     .select('*')
                     .order('start_time_egypt', { ascending: false });
@@ -512,7 +510,7 @@
                         <div class="ticket-info">
                             <div class="ticket-agent">${ticket.agent_name || 'Unknown Agent'}</div>
                             <div class="ticket-scenario">${ticket.scenario_id || 'Unknown Scenario'}</div>
-                            <div class="ticket-time" data-start-time="${ticket.start_time_egypt}">Duration: ...</div>
+                            <div class="ticket-time">Started: ${formatTime(ticket.start_time_egypt)}</div>
                         </div>
                         <div class="ticket-status">
                             <span class="status-badge status-live">Live</span>
@@ -520,8 +518,6 @@
                     </div>
                 `).join('');
                 
-                updateLiveDurations();
-
             } catch (error) {
                 console.error('Error loading live tickets:', error);
             }
@@ -530,7 +526,7 @@
         // Load delayed tickets from delayed_tickets view
         async function loadDelayedTickets() {
             try {
-                const { data, error } = await supabaseClient
+                const { data, error } = await supabase
                     .from('delayed_tickets')
                     .select('*')
                     .order('start_time_egypt', { ascending: false });
@@ -568,7 +564,7 @@
         // Load recent tickets from recent_tickets view
         async function loadRecentTickets() {
             try {
-                const { data, error } = await supabaseClient
+                const { data, error } = await supabase
                     .from('recent_tickets')
                     .select('*')
                     .order('end_time_egypt', { ascending: false });
@@ -611,7 +607,7 @@
                 const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
                 
                 // Get tickets from the last hour
-                const { data, error } = await supabaseClient
+                const { data, error } = await supabase
                     .from('call_sessions_egypt')
                     .select('start_time_egypt')
                     .gte('start_time_egypt', oneHourAgo.toISOString())
@@ -718,7 +714,7 @@
         async function loadAgentActivityChart() {
             try {
                 // Get active agents from live tickets
-                const { data, error } = await supabaseClient
+                const { data, error } = await supabase
                     .from('live_tickets')
                     .select('agent_name');
                     
@@ -796,43 +792,6 @@
             }
         }
 
-        // Update live ticket durations
-        function updateLiveDurations() {
-            const liveTicketElements = document.querySelectorAll('#liveTicketsList .ticket-time[data-start-time]');
-            liveTicketElements.forEach(el => {
-                const startTime = el.getAttribute('data-start-time');
-                if (startTime) {
-                    const start = new Date(startTime);
-                    const now = new Date();
-                    const diffMs = now - start;
-
-                    if (diffMs < 0) {
-                        el.textContent = 'Duration: 0m 0s';
-                        return;
-                    }
-
-                    const totalSeconds = Math.floor(diffMs / 1000);
-                    const minutes = Math.floor(totalSeconds / 60);
-                    const seconds = totalSeconds % 60;
-                    el.textContent = `Duration: ${minutes}m ${seconds}s`;
-                }
-            });
-        }
-
-        // Start duration updates
-        function startDurationUpdates() {
-            if (durationUpdateInterval) clearInterval(durationUpdateInterval);
-            durationUpdateInterval = setInterval(updateLiveDurations, 1000);
-        }
-
-        // Stop duration updates
-        function stopDurationUpdates() {
-            if (durationUpdateInterval) {
-                clearInterval(durationUpdateInterval);
-                durationUpdateInterval = null;
-            }
-        }
-
         // Start auto-refresh
         function startAutoRefresh() {
             // Refresh data every 10 seconds
@@ -869,7 +828,6 @@
         // Clean up on page unload
         window.addEventListener('beforeunload', () => {
             stopAutoRefresh();
-            stopDurationUpdates();
         });
     </script>
 </body>
