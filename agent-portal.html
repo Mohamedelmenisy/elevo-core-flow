@@ -832,32 +832,37 @@
 
         // State
         let currentUser = null, allUserCalls = [], filteredCalls = [], filterTimeout, realtimeChannel;
+        let userNotes = [], userTrainingPrograms = [];
         let currentPage = 1, ROWS_PER_PAGE = 6;
         let currentNotesPage = 1, NOTES_PER_PAGE = 5;
         let currentTrainingPage = 1, TRAININGS_PER_PAGE = 3;
-        let noteToEditTimestamp = null, noteToDeleteTimestamp = null;
+        let noteToEditId = null, noteToDeleteId = null;
         let trainingToEditId = null, trainingToDeleteId = null;
         const DAILY_TICKET_TARGET = 20;
-        const NOTES_STORAGE_KEY_PREFIX = 'agentSavedNotes_';
-        let NOTES_STORAGE_KEY = '';
         const EGYPT_TIMEZONE = 'Africa/Cairo';
-        
-        let mockTrainingPrograms = [
-             { id: 1, title: 'Advanced Conflict Resolution', status: 'Completed', reason: 'Repeated "Bad" quality calls related to customer complaints.', assignedBy: 'Admin Supervisor', date: 'Oct 01, 2025' },
-             { id: 2, title: 'Product Knowledge Update Q4', status: 'In Progress', reason: 'Mandatory quarterly update for all agents.', assignedBy: 'System', date: 'Oct 15, 2025' },
-             { id: 3, title: 'Effective Communication Strategies', status: 'Completed', reason: 'Agent self-enrollment for skill improvement.', assignedBy: 'Self', date: 'Sep 20, 2025' },
-             { id: 4, title: 'CRM Software Update v3.2', status: 'Completed', reason: 'System-wide software update training.', assignedBy: 'System', date: 'Aug 15, 2025' },
-             { id: 5, title: 'Handling Difficult Customers', status: 'In Progress', reason: 'Assigned based on low customer satisfaction scores.', assignedBy: 'QA Team', date: 'Oct 25, 2025' },
-             { id: 6, title: 'Data Privacy & Security Protocols', status: 'Completed', reason: 'Annual compliance training.', assignedBy: 'System', date: 'Jul 01, 2025' },
-             { id: 7, title: 'Advanced Sales Techniques', status: 'Not Started', reason: 'Optional course for high-performing agents.', assignedBy: 'System', date: 'Nov 01, 2025' },
-        ];
-
 
         function formatDateTimeEgypt(dateString, options = {}) {
             if (!dateString) return 'N/A';
             const date = new Date(dateString);
             const defaultOptions = { timeZone: EGYPT_TIMEZONE, year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute:'2-digit', hour12: true };
             return date.toLocaleString('en-US', { ...defaultOptions, ...options });
+        }
+        
+        // --- NOTES INTEGRATION START ---
+        async function loadSavedNotes() {
+            if (!currentUser) return;
+            const { data, error } = await supabase
+                .from('notes')
+                .select('*')
+                .eq('user_id', currentUser.id)
+                .order('timestamp', { ascending: false });
+
+            if (error) {
+                console.error('Error fetching notes:', error);
+                return;
+            }
+            userNotes = data;
+            renderSavedNotes();
         }
         
         function renderNotesPagination(totalNotes) {
@@ -873,13 +878,11 @@
         }
 
         function renderSavedNotes() {
-            const notes = JSON.parse(localStorage.getItem(NOTES_STORAGE_KEY) || '[]');
+            const notes = userNotes;
             savedNotesList.innerHTML = '';
 
             noNotesMessage.style.display = notes.length === 0 ? 'block' : 'none';
             if(notes.length === 0) { notesPaginationControls.innerHTML = ''; return; }
-            
-            notes.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
             
             const startIndex = (currentNotesPage - 1) * NOTES_PER_PAGE;
             const paginatedNotes = notes.slice(startIndex, startIndex + NOTES_PER_PAGE);
@@ -894,8 +897,8 @@
                         <div class="note-header">
                              <div class="note-timestamp"><span>${formattedDateTime}</span></div>
                             <div class="note-actions">
-                                 <button class="note-action-btn edit-note-btn" title="Edit Note" data-timestamp="${note.timestamp}"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg></button>
-                                <button class="note-action-btn delete-note-btn" title="Delete Note" data-timestamp="${note.timestamp}"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg></button>
+                                 <button class="note-action-btn edit-note-btn" title="Edit Note" data-id="${note.id}"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg></button>
+                                <button class="note-action-btn delete-note-btn" title="Delete Note" data-id="${note.id}"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg></button>
                             </div>
                         </div>
                         <div class="note-content"><p>${sanitizedText.innerHTML.replace(/\n/g, '<br>')}</p></div>
@@ -904,44 +907,68 @@
             renderNotesPagination(notes.length);
         }
 
-        function saveCurrentNote() {
+        async function saveCurrentNote() {
             const noteText = agentScratchpad.value.trim();
-            if (!noteText) return;
-            const notes = JSON.parse(localStorage.getItem(NOTES_STORAGE_KEY) || '[]');
-            notes.push({ text: noteText, timestamp: new Date().toISOString() });
-            localStorage.setItem(NOTES_STORAGE_KEY, JSON.stringify(notes));
+            if (!noteText || !currentUser) return;
+            
+            const { error } = await supabase
+                .from('notes')
+                .insert([{ text: noteText, user_id: currentUser.id, timestamp: new Date().toISOString() }]);
+            
+            if (error) { console.error('Error saving note:', error); return; }
+
             agentScratchpad.value = '';
             currentNotesPage = 1;
-            renderSavedNotes(); 
+            await loadSavedNotes();
         }
 
-        function updateNote(timestamp, newText) {
-            let notes = JSON.parse(localStorage.getItem(NOTES_STORAGE_KEY) || '[]');
-            const noteIndex = notes.findIndex(note => note.timestamp === timestamp);
-            if (noteIndex > -1) {
-                notes[noteIndex].text = newText;
-                localStorage.setItem(NOTES_STORAGE_KEY, JSON.stringify(notes));
-                renderSavedNotes();
-            }
+        async function updateNote(id, newText) {
+            const { error } = await supabase
+                .from('notes')
+                .update({ text: newText })
+                .eq('id', id)
+                .eq('user_id', currentUser.id);
+
+            if (error) { console.error('Error updating note:', error); return; }
+            await loadSavedNotes();
         }
 
-        function deleteNote(timestamp) {
-            let notes = JSON.parse(localStorage.getItem(NOTES_STORAGE_KEY) || '[]');
-            notes = notes.filter(note => note.timestamp !== timestamp);
-            const totalPages = Math.ceil(notes.length / NOTES_PER_PAGE);
+        async function deleteNote(id) {
+             const { error } = await supabase
+                .from('notes')
+                .delete()
+                .eq('id', id)
+                .eq('user_id', currentUser.id);
+            
+            if (error) { console.error('Error deleting note:', error); return; }
+            
+            const totalPages = Math.ceil((userNotes.length - 1) / NOTES_PER_PAGE);
             if(currentNotesPage > totalPages) currentNotesPage = totalPages || 1;
-            localStorage.setItem(NOTES_STORAGE_KEY, JSON.stringify(notes));
-            renderSavedNotes();
+            await loadSavedNotes();
         }
         
-        function openEditModal(timestamp) {
-            const note = JSON.parse(localStorage.getItem(NOTES_STORAGE_KEY) || '[]').find(n => n.timestamp === timestamp);
-            if(note) { noteToEditTimestamp = timestamp; editNoteTextarea.value = note.text; editNoteModal.classList.add('visible'); }
+        function openEditModal(id) {
+            const note = userNotes.find(n => n.id === id);
+            if(note) { noteToEditId = id; editNoteTextarea.value = note.text; editNoteModal.classList.add('visible'); }
         }
-        function closeEditModal() { editNoteModal.classList.remove('visible'); noteToEditTimestamp = null; }
-        function openDeleteConfirmModal(timestamp) { noteToDeleteTimestamp = timestamp; deleteConfirmModal.classList.add('visible'); }
-        function closeDeleteConfirmModal() { deleteConfirmModal.classList.remove('visible'); noteToDeleteTimestamp = null; }
-        
+        function closeEditModal() { editNoteModal.classList.remove('visible'); noteToEditId = null; }
+        function openDeleteConfirmModal(id) { noteToDeleteId = id; deleteConfirmModal.classList.add('visible'); }
+        function closeDeleteConfirmModal() { deleteConfirmModal.classList.remove('visible'); noteToDeleteId = null; }
+        // --- NOTES INTEGRATION END ---
+
+        // --- TRAINING INTEGRATION START ---
+        async function loadTrainingPrograms() {
+            if (!currentUser) return;
+            const { data, error } = await supabase
+                .from('training_programs')
+                .select('*')
+                .eq('user_id', currentUser.id)
+                .order('date', { ascending: false });
+
+            if (error) { console.error('Error fetching training programs:', error); return; }
+            userTrainingPrograms = data;
+            renderTrainingPrograms();
+        }
         
         function renderTrainingPagination(totalTrainings) {
             trainingPaginationControls.innerHTML = '';
@@ -956,14 +983,14 @@
         }
 
         function openViewTrainingModal(trainingId) {
-            const program = mockTrainingPrograms.find(p => p.id === trainingId);
+            const program = userTrainingPrograms.find(p => p.id === trainingId);
             if (program) {
                 document.getElementById('viewTrainingTitle').textContent = program.title;
                 document.getElementById('viewTrainingBody').innerHTML = `
                     <p><strong>Status:</strong> <span class="training-status ${program.status.toLowerCase().replace(' ', '-')}">${program.status}</span></p>
                     <p><strong>Reason:</strong> ${program.reason}</p>
-                    <p><strong>Assigned by:</strong> ${program.assignedBy}</p>
-                    <p><strong>Date:</strong> ${program.date}</p>
+                    <p><strong>Assigned by:</strong> ${program.assigned_by}</p>
+                    <p><strong>Date:</strong> ${new Date(program.date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</p>
                 `;
                 viewTrainingModal.classList.add('visible');
             }
@@ -971,7 +998,7 @@
         function closeViewTrainingModal() { viewTrainingModal.classList.remove('visible'); }
 
         function openEditTrainingModal(trainingId) {
-            const program = mockTrainingPrograms.find(p => p.id === trainingId);
+            const program = userTrainingPrograms.find(p => p.id === trainingId);
             if (program) {
                 trainingToEditId = trainingId;
                 document.getElementById('editTrainingTitleInput').value = program.title;
@@ -982,15 +1009,22 @@
         }
         function closeEditTrainingModal() { editTrainingModal.classList.remove('visible'); trainingToEditId = null; }
         
-        function saveTrainingChanges() {
-            if (trainingToEditId === null) return;
-            const programIndex = mockTrainingPrograms.findIndex(p => p.id === trainingToEditId);
-            if (programIndex > -1) {
-                mockTrainingPrograms[programIndex].title = document.getElementById('editTrainingTitleInput').value;
-                mockTrainingPrograms[programIndex].reason = document.getElementById('editTrainingReason').value;
-                mockTrainingPrograms[programIndex].status = document.getElementById('editTrainingStatus').value;
-                renderTrainingPrograms();
-            }
+        async function saveTrainingChanges() {
+            if (trainingToEditId === null || !currentUser) return;
+            const updatedProgram = {
+                title: document.getElementById('editTrainingTitleInput').value,
+                reason: document.getElementById('editTrainingReason').value,
+                status: document.getElementById('editTrainingStatus').value,
+            };
+
+            const { error } = await supabase
+                .from('training_programs')
+                .update(updatedProgram)
+                .eq('id', trainingToEditId)
+                .eq('user_id', currentUser.id);
+
+            if (error) { console.error('Error saving training changes:', error); }
+            else { await loadTrainingPrograms(); }
             closeEditTrainingModal();
         }
 
@@ -1003,18 +1037,26 @@
             trainingToDeleteId = null;
         }
 
-        function deleteTrainingProgram() {
-            if (trainingToDeleteId !== null) {
-                mockTrainingPrograms = mockTrainingPrograms.filter(p => p.id !== trainingToDeleteId);
-                const totalPages = Math.ceil(mockTrainingPrograms.length / TRAININGS_PER_PAGE);
-                if(currentTrainingPage > totalPages) currentTrainingPage = totalPages || 1;
-                renderTrainingPrograms();
+        async function deleteTrainingProgram() {
+            if (trainingToDeleteId !== null && currentUser) {
+                const { error } = await supabase
+                    .from('training_programs')
+                    .delete()
+                    .eq('id', trainingToDeleteId)
+                    .eq('user_id', currentUser.id);
+                
+                if (error) { console.error('Error deleting training program:', error); }
+                else {
+                    const totalPages = Math.ceil((userTrainingPrograms.length - 1) / TRAININGS_PER_PAGE);
+                    if(currentTrainingPage > totalPages) currentTrainingPage = totalPages || 1;
+                    await loadTrainingPrograms();
+                }
             }
             closeDeleteTrainingModal();
         }
 
         function renderTrainingPrograms() {
-            const programs = mockTrainingPrograms;
+            const programs = userTrainingPrograms;
             trainingProgramsList.innerHTML = '';
             noTrainingMessage.style.display = programs.length === 0 ? 'block' : 'none';
             if(programs.length === 0) { trainingPaginationControls.innerHTML = ''; return; }
@@ -1025,6 +1067,7 @@
             paginatedPrograms.forEach(p => {
                 const isCompleted = p.status === 'Completed';
                 const statusClass = p.status.toLowerCase().replace(' ', '-');
+                const formattedDate = new Date(p.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
                 trainingProgramsList.innerHTML += `
                     <div class="training-card ${isCompleted ? 'completed' : ''}">
                         <div class="training-card-header">
@@ -1033,11 +1076,11 @@
                         </div>
                         <div class="training-card-body">
                             <p><strong>Reason:</strong> ${p.reason}</p>
-                            <p><strong>Assigned by:</strong> ${p.assignedBy}</p>
+                            <p><strong>Assigned by:</strong> ${p.assigned_by}</p>
                         </div>
                         <div class="training-card-footer">
                             <span class="training-card-date">
-                                ${isCompleted ? 'Completed on' : 'Due by'}: ${p.date}
+                                ${isCompleted ? 'Completed on' : 'Due by'}: ${formattedDate}
                             </span>
                             <div class="training-card-actions">
                                 <button class="note-action-btn view-note-btn" title="View Details" data-training-id="${p.id}" data-action="view">
@@ -1055,7 +1098,8 @@
             });
             renderTrainingPagination(programs.length);
         }
-        
+        // --- TRAINING INTEGRATION END ---
+
         async function initializePortal() {
             if (!supabase) return;
             const { data: { session } } = await supabase.auth.getSession();
@@ -1069,10 +1113,11 @@
                 currentUser = { id: session.user.id, email: session.user.email, name: profile?.name || session.user.email, isAdmin: profile?.is_admin || false };
                 localStorage.setItem('elevoCoreUserData', JSON.stringify(currentUser));
             }
-            NOTES_STORAGE_KEY = `${NOTES_STORAGE_KEY_PREFIX}${currentUser.id}`;
 
             setupUI();
             await loadAgentData();
+            await loadSavedNotes();
+            await loadTrainingPrograms();
             setupEventListeners();
             setupRealtimeSubscription(); 
             
@@ -1090,16 +1135,13 @@
                 if(dashboardLink) dashboardLink.style.display = 'inline-block';
                 if(rtmDashboardLink) rtmDashboardLink.style.display = 'inline-block';
             }
-            renderSavedNotes();
-            renderTrainingPrograms();
         }
 
         async function loadAgentData() {
             try {
-                // FIX: Added 'customer_rating' to the select query
-                const { data, error } = await supabase.from('call_sessions').select('*, customer_rating, scenario:call_scenarios(title)').eq('user_id', currentUser.id).order('start_time_egypt', { ascending: false });
+                const { data, error } = await supabase.from('v_call_sessions_egypt').select('*').eq('user_id', currentUser.id).order('start_time_egypt', { ascending: false });
                 if (error) throw error;
-                allUserCalls = data;
+                allUserCalls = data.map(call => ({...call, scenario: { title: call.scenario_name } }));
                 applyFiltersAndRender();
             } catch (err) {
                 console.error('Failed to load agent call data:', err);
@@ -1161,7 +1203,6 @@
             const completionRate = calls.length > 0 ? Math.round((completedCalls / calls.length) * 100) : 0;
             document.getElementById('ins-completion').textContent = `${completionRate}%`;
             
-            // FIX: DYNAMIC CUSTOMER RATING
             const callsWithRating = allUserCalls.filter(c => typeof c.customer_rating === 'number' && c.customer_rating > 0);
             if (callsWithRating.length > 0) {
                 const totalRating = callsWithRating.reduce((acc, call) => acc + call.customer_rating, 0);
@@ -1191,7 +1232,6 @@
                  document.getElementById('achFastestCall').textContent = '--:--';
             }
         }
-
 
         function updateMonthlyComparison(allCalls) {
             const now = new Date();
@@ -1246,7 +1286,7 @@
             
             const paginatedCalls = filteredCalls.slice((currentPage - 1) * ROWS_PER_PAGE, currentPage * ROWS_PER_PAGE);
             paginatedCalls.forEach(call => {
-                const dur = call.duration || 0;
+                const dur = call.duration_interval?.minutes * 60 + call.duration_interval?.seconds || 0;
                 tableBody.innerHTML += `<tr>
                     <td>${new Date(call.start_time_egypt).toLocaleDateString('en-GB', { timeZone: EGYPT_TIMEZONE })}</td>
                     <td>${call.scenario?.title || 'N/A'}</td>
@@ -1378,8 +1418,8 @@
             savedNotesList.addEventListener('click', (e) => {
                 const editButton = e.target.closest('.edit-note-btn');
                 const deleteButton = e.target.closest('.delete-note-btn');
-                if (editButton) openEditModal(editButton.dataset.timestamp);
-                if (deleteButton) openDeleteConfirmModal(deleteButton.dataset.timestamp);
+                if (editButton) openEditModal(parseInt(editButton.dataset.id));
+                if (deleteButton) openDeleteConfirmModal(parseInt(deleteButton.dataset.id));
             });
 
             trainingProgramsList.addEventListener('click', (e) => {
@@ -1427,12 +1467,12 @@
             cancelEditBtn.addEventListener('click', closeEditModal);
             saveChangesBtn.addEventListener('click', () => {
                 const newText = editNoteTextarea.value.trim();
-                if(noteToEditTimestamp && newText) updateNote(noteToEditTimestamp, newText);
+                if(noteToEditId && newText) updateNote(noteToEditId, newText);
                 closeEditModal();
             });
             cancelDeleteBtn.addEventListener('click', closeDeleteConfirmModal);
             confirmDeleteBtn.addEventListener('click', () => {
-                if(noteToDeleteTimestamp) deleteNote(noteToDeleteTimestamp);
+                if(noteToDeleteId) deleteNote(noteToDeleteId);
                 closeDeleteConfirmModal();
             });
 
