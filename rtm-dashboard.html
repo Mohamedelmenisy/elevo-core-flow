@@ -24,8 +24,11 @@
             margin-top: 1.5rem;
         }
         
-        /* FIX: Removed the media query that created a two-column layout,
-           ensuring the activity log and charts are always in a single, full-width column. */
+        @media (min-width: 1024px) {
+            .rtm-grid {
+                grid-template-columns: 2fr 1fr;
+            }
+        }
         
         .activity-log {
             background-color: var(--card-bg-color);
@@ -152,12 +155,6 @@
             grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
             gap: 1rem;
             margin-bottom: 1.5rem;
-        }
-
-        @media (min-width: 768px) {
-            .metrics-grid {
-                grid-template-columns: repeat(4, 1fr);
-            }
         }
         
         .metric-card {
@@ -331,6 +328,7 @@
         let agentActivityChart = null;
         let autoRefreshInterval = null;
         let isAutoRefreshEnabled = true;
+        let durationUpdateInterval = null;
 
         // Initialize the application
         document.addEventListener('DOMContentLoaded', async function() {
@@ -341,8 +339,9 @@
             await checkAuth();
             setupEventListeners();
             
-            // Start auto-refresh
+            // Start auto-refresh and duration updates
             startAutoRefresh();
+            startDurationUpdates();
         });
 
         // Authentication check
@@ -512,8 +511,8 @@
                     <div class="ticket-item">
                         <div class="ticket-info">
                             <div class="ticket-agent">${ticket.agent_name || 'Unknown Agent'}</div>
-                            <div class="ticket-scenario">${ticket.scenario_title || 'Unknown Scenario'}</div>
-                            <div class="ticket-time">Started: ${formatTime(ticket.start_time_egypt)}</div>
+                            <div class="ticket-scenario">${ticket.scenario_id || 'Unknown Scenario'}</div>
+                            <div class="ticket-time" data-start-time="${ticket.start_time_egypt}">Duration: ...</div>
                         </div>
                         <div class="ticket-status">
                             <span class="status-badge status-live">Live</span>
@@ -521,6 +520,8 @@
                     </div>
                 `).join('');
                 
+                updateLiveDurations();
+
             } catch (error) {
                 console.error('Error loading live tickets:', error);
             }
@@ -550,7 +551,7 @@
                     <div class="ticket-item">
                         <div class="ticket-info">
                             <div class="ticket-agent">${ticket.agent_name || 'Unknown Agent'}</div>
-                            <div class="ticket-scenario">${ticket.scenario_title || 'Unknown Scenario'}</div>
+                            <div class="ticket-scenario">${ticket.scenario_id || 'Unknown Scenario'}</div>
                             <div class="ticket-time">Started: ${formatTime(ticket.start_time_egypt)}</div>
                         </div>
                         <div class="ticket-status">
@@ -588,7 +589,7 @@
                     <div class="ticket-item">
                         <div class="ticket-info">
                             <div class="ticket-agent">${ticket.agent_name || 'Unknown Agent'}</div>
-                            <div class="ticket-scenario">${ticket.scenario_title || 'Unknown Scenario'}</div>
+                            <div class="ticket-scenario">${ticket.scenario_id || 'Unknown Scenario'}</div>
                             <div class="ticket-time">Completed: ${formatTime(ticket.end_time_egypt)}</div>
                         </div>
                         <div class="ticket-status">
@@ -795,6 +796,43 @@
             }
         }
 
+        // Update live ticket durations
+        function updateLiveDurations() {
+            const liveTicketElements = document.querySelectorAll('#liveTicketsList .ticket-time[data-start-time]');
+            liveTicketElements.forEach(el => {
+                const startTime = el.getAttribute('data-start-time');
+                if (startTime) {
+                    const start = new Date(startTime);
+                    const now = new Date();
+                    const diffMs = now - start;
+
+                    if (diffMs < 0) {
+                        el.textContent = 'Duration: 0m 0s';
+                        return;
+                    }
+
+                    const totalSeconds = Math.floor(diffMs / 1000);
+                    const minutes = Math.floor(totalSeconds / 60);
+                    const seconds = totalSeconds % 60;
+                    el.textContent = `Duration: ${minutes}m ${seconds}s`;
+                }
+            });
+        }
+
+        // Start duration updates
+        function startDurationUpdates() {
+            if (durationUpdateInterval) clearInterval(durationUpdateInterval);
+            durationUpdateInterval = setInterval(updateLiveDurations, 1000);
+        }
+
+        // Stop duration updates
+        function stopDurationUpdates() {
+            if (durationUpdateInterval) {
+                clearInterval(durationUpdateInterval);
+                durationUpdateInterval = null;
+            }
+        }
+
         // Start auto-refresh
         function startAutoRefresh() {
             // Refresh data every 10 seconds
@@ -831,6 +869,7 @@
         // Clean up on page unload
         window.addEventListener('beforeunload', () => {
             stopAutoRefresh();
+            stopDurationUpdates();
         });
     </script>
 </body>
