@@ -140,6 +140,54 @@
             color: var(--primary-color);
         }
         
+        /* New styles for recent tickets table */
+        .recent-tickets-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+        }
+        
+        .recent-tickets-table th,
+        .recent-tickets-table td {
+            padding: 0.75rem 1rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .recent-tickets-table th {
+            background-color: var(--input-bg-color);
+            color: var(--text-color-light);
+            font-weight: 500;
+            font-size: 0.9em;
+        }
+        
+        .recent-tickets-table tr:hover {
+            background-color: var(--input-bg-color);
+        }
+        
+        .status-badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 1rem;
+            font-size: 0.8em;
+            font-weight: 500;
+        }
+        
+        .status-completed {
+            background-color: rgba(16, 185, 129, 0.1);
+            color: var(--success-color);
+        }
+        
+        .status-pending {
+            background-color: rgba(245, 158, 11, 0.1);
+            color: var(--warning-color);
+        }
+        
+        .status-failed {
+            background-color: rgba(239, 68, 68, 0.1);
+            color: var(--danger-color);
+        }
+        
         @media (max-width: 768px) {
             .dashboard-grid {
                 grid-template-columns: 1fr;
@@ -147,6 +195,11 @@
             
             .card-large, .card-full {
                 grid-column: 1;
+            }
+            
+            .recent-tickets-table {
+                display: block;
+                overflow-x: auto;
             }
         }
     </style>
@@ -218,7 +271,7 @@
                         </div>
                     </div>
                     
-                    <div class="dashboard-card card-full" style="border-left: 4px solid var(--success-color);">
+                    <div class="dashboard-card" style="border-left: 4px solid var(--success-color);">
                         <h3>Recent Tickets</h3>
                         <div class="value" id="recentTicketsCount">0</div>
                         <div class="trend" id="recentTicketsTrend">
@@ -271,6 +324,31 @@
                         <h3>Call Volume Trends (Last 7 Days)</h3>
                         <div class="chart-container">
                             <canvas id="volumeTrendChart"></canvas>
+                        </div>
+                    </div>
+                    
+                    <!-- Recent Ticket Sessions - Full Width -->
+                    <div class="dashboard-card card-full">
+                        <h3>Recent Ticket Sessions</h3>
+                        <div id="recentTicketsContainer">
+                            <table class="recent-tickets-table">
+                                <thead>
+                                    <tr>
+                                        <th>Ticket ID</th>
+                                        <th>Agent Name</th>
+                                        <th>Scenario</th>
+                                        <th>Start Time</th>
+                                        <th>Duration</th>
+                                        <th>Status</th>
+                                        <th>Quality</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="recentTicketsTableBody">
+                                    <tr>
+                                        <td colspan="7" style="text-align: center;">Loading recent tickets...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                     
@@ -392,7 +470,8 @@
                     loadTopScenario(),
                     loadVolumeTrends(),
                     loadAgentPerformance(),
-                    loadQuickStats()
+                    loadQuickStats(),
+                    loadRecentTickets() // New function for recent tickets table
                 ]);
                 
                 // Hide loading and show content
@@ -788,6 +867,76 @@
             }
         }
 
+        // Load recent tickets for the table
+        async function loadRecentTickets() {
+            try {
+                // Get recent tickets (last 20)
+                const { data, error } = await supabase
+                    .from('call_sessions_egypt')
+                    .select('*')
+                    .order('start_time_egypt', { ascending: false })
+                    .limit(20);
+                    
+                if (error) {
+                    console.error('Error fetching recent tickets:', error);
+                    document.getElementById('recentTicketsTableBody').innerHTML = `
+                        <tr>
+                            <td colspan="7" style="text-align: center;">Error loading recent tickets</td>
+                        </tr>
+                    `;
+                    return;
+                }
+                
+                const tableBody = document.getElementById('recentTicketsTableBody');
+                
+                if (data.length === 0) {
+                    tableBody.innerHTML = `
+                        <tr>
+                            <td colspan="7" style="text-align: center;">No recent tickets found</td>
+                        </tr>
+                    `;
+                    return;
+                }
+                
+                // Format the data for the table
+                tableBody.innerHTML = data.map(ticket => {
+                    // Format start time
+                    const startTime = new Date(ticket.start_time_egypt);
+                    const formattedTime = startTime.toLocaleString();
+                    
+                    // Determine status badge
+                    let statusClass = 'status-pending';
+                    let statusText = 'Pending';
+                    
+                    if (ticket.completed) {
+                        statusClass = 'status-completed';
+                        statusText = 'Completed';
+                    } else if (ticket.call_quality === 'bad') {
+                        statusClass = 'status-failed';
+                        statusText = 'Failed';
+                    }
+                    
+                    // Format duration
+                    const duration = ticket.duration_interval || '00:00:00';
+                    
+                    return `
+                        <tr>
+                            <td>${ticket.id || 'N/A'}</td>
+                            <td>${ticket.agent_name || 'Unknown'}</td>
+                            <td>${ticket.scenario_title || 'N/A'}</td>
+                            <td>${formattedTime}</td>
+                            <td>${duration}</td>
+                            <td><span class="status-badge ${statusClass}">${statusText}</span></td>
+                            <td>${ticket.call_quality ? ticket.call_quality.charAt(0).toUpperCase() + ticket.call_quality.slice(1) : 'N/A'}</td>
+                        </tr>
+                    `;
+                }).join('');
+                
+            } catch (error) {
+                console.error('Error loading recent tickets:', error);
+            }
+        }
+
         // Load quick stats
         async function loadQuickStats() {
             try {
@@ -832,77 +981,45 @@
                 document.getElementById('completionRate').textContent = `${completionRate}%`;
                 
                 // Calculate good quality rate
-                const goodCalls = todayCalls.filter(call => 
-                    call.call_quality && call.call_quality.toLowerCase() === 'good').length;
+                const goodQualityCalls = todayCalls.filter(call => call.call_quality === 'good').length;
                 const goodQualityRate = todayCalls.length > 0 ? 
-                    Math.round((goodCalls / todayCalls.length) * 100) : 0;
+                    Math.round((goodQualityCalls / todayCalls.length) * 100) : 0;
                 document.getElementById('goodQualityRate').textContent = `${goodQualityRate}%`;
                 
-                // Count active agents (agents with calls today)
-                const activeAgents = new Set();
-                todayCalls.forEach(call => {
-                    if (call.agent_name) {
-                        activeAgents.add(call.agent_name);
-                    }
-                });
-                document.getElementById('activeAgents').textContent = activeAgents.size;
+                // Count active agents (unique agents with calls today)
+                const activeAgents = new Set(todayCalls.map(call => call.agent_name)).size;
+                document.getElementById('activeAgents').textContent = activeAgents;
                 
             } catch (error) {
                 console.error('Error loading quick stats:', error);
             }
         }
 
-        // Start auto-refresh
-        function startAutoRefresh() {
-            // Refresh data every 30 seconds
-            autoRefreshInterval = setInterval(async () => {
-                await loadDashboardData();
-            }, 30000);
-        }
-
-        // Stop auto-refresh
-        function stopAutoRefresh() {
-            if (autoRefreshInterval) {
-                clearInterval(autoRefreshInterval);
-                autoRefreshInterval = null;
-            }
-        }
-
         // Export dashboard report
         function exportDashboardReport() {
-            // Create CSV content with current dashboard data
-            let csvContent = "Elevo Core Dashboard Report\n";
-            csvContent += `Generated: ${new Date().toLocaleString()}\n\n`;
+            // Create a simple CSV report
+            const date = new Date().toISOString().split('T')[0];
+            const filename = `dashboard-report-${date}.csv`;
             
-            // Add ticket counts
-            csvContent += "Ticket Counts\n";
-            csvContent += `Live Tickets,${document.getElementById('liveTicketsCount').textContent}\n`;
-            csvContent += `Delayed Tickets,${document.getElementById('delayedTicketsCount').textContent}\n`;
-            csvContent += `Recent Tickets,${document.getElementById('recentTicketsCount').textContent}\n`;
-            csvContent += `Total Calls Today,${document.getElementById('totalCallsToday').textContent}\n\n`;
-            
-            // Add quick stats
-            csvContent += "Performance Metrics\n";
-            csvContent += `Average Handle Time,${document.getElementById('avgHandleTime').textContent}\n`;
-            csvContent += `Completion Rate,${document.getElementById('completionRate').textContent}\n`;
-            csvContent += `Good Quality Rate,${document.getElementById('goodQualityRate').textContent}\n`;
-            csvContent += `Active Agents,${document.getElementById('activeAgents').textContent}\n`;
-            
-            // Create and download file
-            const blob = new Blob([csvContent], { type: 'text/csv' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `elevo-dashboard-report-${new Date().toISOString().split('T')[0]}.csv`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
+            // In a real implementation, this would generate a more comprehensive report
+            alert(`Exporting dashboard report as ${filename}`);
         }
 
-        // Clean up on page unload
-        window.addEventListener('beforeunload', () => {
-            stopAutoRefresh();
+        // Start auto-refresh
+        function startAutoRefresh() {
+            // Refresh data every 2 minutes
+            autoRefreshInterval = setInterval(async () => {
+                await loadDashboardData();
+            }, 120000); // 2 minutes
+        }
+
+        // Stop auto-refresh when page is hidden
+        document.addEventListener('visibilitychange', function() {
+            if (document.hidden) {
+                clearInterval(autoRefreshInterval);
+            } else {
+                startAutoRefresh();
+            }
         });
     </script>
 </body>
