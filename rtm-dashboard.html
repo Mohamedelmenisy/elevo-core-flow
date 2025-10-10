@@ -284,7 +284,7 @@
         let currentUser = null;
         let liveStatsInterval;
         const EGYPT_TIMEZONE = 'Africa/Cairo';
-        const DELAYED_THRESHOLD_SECONDS = 180; // 3 minutes
+        const DELAYED_THRESHOLD_SECONDS = 300; // 5 minutes
 
         function formatDateTimeEgypt(dateString) {
             if (!dateString) return 'N/A';
@@ -310,9 +310,9 @@
         async function refreshDashboard() {
             try {
                 // ✅ Fetch data from views
-                const { data: live } = await supabase.from('live_tickets').select('*');
-                const { data: delayed } = await supabase.from('delayed_tickets').select('*');
-                const { data: recent } = await supabase.from('recent_sessions').select('*');
+                const { data: live } = await supabase.from('live_tickets').select('*, scenario:call_scenarios(title)');
+                const { data: delayed } = await supabase.from('delayed_tickets').select('*, scenario:call_scenarios(title)');
+                const { data: recent } = await supabase.from('recent_tickets').select('*, scenario:call_scenarios(title)');
 
                 const liveTickets = live || [];
                 const delayedTickets = delayed || [];
@@ -325,12 +325,25 @@
                 // Combine all tickets for the table view
                 const allTickets = [...liveTickets, ...delayedTickets, ...recentTickets]
                     .sort((a, b) => new Date(b.start_time_egypt) - new Date(a.start_time_egypt));
+                
+                const existingIds = new Set(Array.from(liveUnifiedTableBody.children).map(row => row.id));
+                const currentIds = new Set(allTickets.map(t => `ticket-row-${t.id}`));
 
-                // Re-render the activity table
-                liveUnifiedTableBody.innerHTML = '';
+                // Remove rows that are no longer in the data
+                existingIds.forEach(id => {
+                    if (!currentIds.has(id)) {
+                        const row = document.getElementById(id);
+                        if (row) {
+                           row.classList.add('fading-out');
+                           row.addEventListener('animationend', () => row.remove());
+                        }
+                    }
+                });
+
+                // Add or update rows
                 allTickets.forEach(ticket => addOrUpdateTableRow(ticket));
                 
-                // Update other stats and chart
+                // Update other stats
                 updateLiveDurationsAndStats();
                 await fetchTodayStats();
 
@@ -376,6 +389,7 @@
             
             // This interval keeps the "Duration" column ticking every second for live calls
             liveStatsInterval = setInterval(updateLiveDurationsAndStats, 1000);
+            setInterval(refreshDashboard, 10000); // Polling every 10 seconds as a fallback
 
             authLoadingDiv.style.display = 'none';
             dashboardContentDiv.style.display = 'block';
@@ -393,8 +407,8 @@
             document.getElementById('userInfo').style.display = 'flex';
             if(currentUser.isAdmin) {
                 if (adminDashboardLink) adminDashboardLink.style.display = 'inline-block';
+                 if (agentPortalLink) agentPortalLink.style.display = 'inline-block';
             }
-            if (agentPortalLink) agentPortalLink.style.display = 'inline-block';
         }
         
         // This function now fetches the chart's historical data and then calls the main refresh function.
@@ -403,7 +417,7 @@
 
              // Fetch historical data for the chart from the main table
              const { data: chartData, error: chartError } = await supabase
-                 .from('call_sessions')
+                 .from('call_sessions_egypt')
                  .select('start_time_egypt')
                  .gte('start_time_egypt', oneHourAgo);
 
@@ -442,20 +456,22 @@
         }
         
         function addOrUpdateTableRow(ticket) {
-            // This function is now simplified, as refreshDashboard rebuilds the table from scratch.
-            // It just creates and appends rows. The isNew animation is a nice touch to keep.
-            let row = document.createElement('tr');
-            row.id = `ticket-row-${ticket.id}`;
-            row.classList.add('new-row');
-            
-            liveUnifiedTableBody.appendChild(row);
+            let row = document.getElementById(`ticket-row-${ticket.id}`);
+            const isNew = !row;
+
+            if (isNew) {
+                row = document.createElement('tr');
+                row.id = `ticket-row-${ticket.id}`;
+                row.classList.add('new-row');
+                liveUnifiedTableBody.prepend(row); // Prepend to show newest on top
+            }
             
             row.dataset.startTime = ticket.start_time_egypt;
             
             let status, statusClass, durationText;
             const isLive = ticket.end_time_egypt === null;
             const durationSecsFromInterval = ticket.duration_interval ? (ticket.duration_interval.minutes * 60 + ticket.duration_interval.seconds) : null;
-
+            
             if (isLive) {
                 const durationSec = Math.floor((Date.now() - new Date(ticket.start_time_egypt).getTime()) / 1000);
                 durationText = formatDuration(durationSec);
@@ -471,7 +487,7 @@
 
             row.innerHTML = `
                 <td class="agent-name">${ticket.agent_name || 'Unknown'}</td>
-                <td class="scenario-title">${ticket.scenario?.title || 'Loading...'}</td>
+                <td class="scenario-title">${ticket.scenario?.title || ticket.scenario_title || 'Loading...'}</td>
                 <td><span class="status-badge ${statusClass}">${status}</span></td>
                 <td>${formatDateTimeEgypt(ticket.start_time_egypt)}</td>
                 <td class="duration-cell">${durationText}</td>
@@ -583,4 +599,3 @@
         if (supabase) initializeDashboard();
     </script>
 </body>
-</html>
