@@ -282,7 +282,7 @@
 
         // State
         let currentUser = null;
-        let liveStatsInterval, periodicShiftInterval;
+        let liveStatsInterval;
         const EGYPT_TIMEZONE = 'Africa/Cairo';
         const DELAYED_THRESHOLD_SECONDS = 180; // 3 minutes
 
@@ -303,6 +303,42 @@
              const secs = Math.floor(seconds % 60);
              return `${mins}m ${secs}s`;
         }
+        
+        /**
+         * Main function to refresh all dashboard data from Supabase views.
+         */
+        async function refreshDashboard() {
+            try {
+                // ✅ Fetch data from views
+                const { data: live } = await supabase.from('live_tickets').select('*');
+                const { data: delayed } = await supabase.from('delayed_tickets').select('*');
+                const { data: recent } = await supabase.from('recent_sessions').select('*');
+
+                const liveTickets = live || [];
+                const delayedTickets = delayed || [];
+                const recentTickets = recent || [];
+                
+                // ✅ Update stat cards
+                activeTicketsEl.textContent = liveTickets.length + delayedTickets.length;
+                delayedTicketsEl.textContent = delayedTickets.length;
+
+                // Combine all tickets for the table view
+                const allTickets = [...liveTickets, ...delayedTickets, ...recentTickets]
+                    .sort((a, b) => new Date(b.start_time_egypt) - new Date(a.start_time_egypt));
+
+                // Re-render the activity table
+                liveUnifiedTableBody.innerHTML = '';
+                allTickets.forEach(ticket => addOrUpdateTableRow(ticket));
+                
+                // Update other stats and chart
+                updateLiveDurationsAndStats();
+                await fetchTodayStats();
+
+            } catch (error) {
+                console.error("Error refreshing dashboard:", error);
+            }
+        }
+
 
         async function initializeDashboard() {
             if (!supabase) return;
@@ -335,14 +371,11 @@
 
             setupUI();
             initializeCharts();
-            await fetchInitialData();
-            setupRealtimeSubscription();
+            await fetchInitialDataAndChart(); // Initial data load
+            setupRealtimeSubscription(); // Set up listener
             
+            // This interval keeps the "Duration" column ticking every second for live calls
             liveStatsInterval = setInterval(updateLiveDurationsAndStats, 1000);
-            
-            periodicShiftInterval = setInterval(() => {
-                updateTicketVolumeChart(null, true); 
-            }, TICKET_VOLUME_BUCKET_MINUTES * 60 * 1000);
 
             authLoadingDiv.style.display = 'none';
             dashboardContentDiv.style.display = 'block';
@@ -363,134 +396,65 @@
             }
             if (agentPortalLink) agentPortalLink.style.display = 'inline-block';
         }
-
-        async function fetchInitialData() {
-            const fiveHoursAgo = new Date(Date.now() - 5 * 3600 * 1000).toISOString();
-
-            const { data: sessionData, error: sessionError } = await supabase
-                .from('call_sessions_egypt')
-                .select('id, agent_name, start_time_egypt, end_time_egypt, duration_interval, completed, scenario:call_scenarios(title)')
-                .gte('start_time_egypt', fiveHoursAgo)
-                .order('start_time_egypt', { ascending: false });
-
-            if (sessionError) { console.error("Error fetching initial session data:", sessionError); return; }
-            
-            liveUnifiedTableBody.innerHTML = '';
-            
-            const liveTickets = sessionData.filter(t => t.end_time_egypt === null);
-            const recentFinished = sessionData.filter(t => t.end_time_egypt !== null).slice(0, 15);
-            
-            const allTickets = [...liveTickets, ...recentFinished]
-                .sort((a, b) => new Date(b.start_time_egypt) - new Date(a.start_time_egypt));
-
-            allTickets.forEach(ticket => addOrUpdateTableRow(ticket));
-
-            const now = new Date();
-            sessionData.forEach(ticket => {
-                const startTime = new Date(ticket.start_time_egypt);
-                const minutesAgo = (now - startTime) / (60 * 1000);
-                if (minutesAgo < TICKET_VOLUME_TIMESPAN_MINUTES) {
-                    const bucketIndex = Math.floor(minutesAgo / TICKET_VOLUME_BUCKET_MINUTES);
-                    const finalIndex = ticketVolumeData.length - 1 - bucketIndex;
-                    if (finalIndex >= 0 && finalIndex < ticketVolumeData.length) {
-                         ticketVolumeData[finalIndex]++;
-                    }
-                }
-            });
-
-            updateTicketVolumeChart(null, false);
-            updateLiveDurationsAndStats();
-            await fetchTodayStats();
-        }
         
-        // FIX: Function to fetch live stats directly from views
-        async function fetchLiveStatsFromViews() {
-            try {
-                const [liveRes, delayedRes] = await Promise.all([
-                    supabase.from('view_live_sessions').select('*', { count: 'exact', head: true }),
-                    supabase.from('view_delayed_sessions').select('*', { count: 'exact', head: true })
-                ]);
+        // This function now fetches the chart's historical data and then calls the main refresh function.
+        async function fetchInitialDataAndChart() {
+             const oneHourAgo = new Date(Date.now() - TICKET_VOLUME_TIMESPAN_MINUTES * 60 * 1000).toISOString();
 
-                if (liveRes.error) throw liveRes.error;
-                if (delayedRes.error) throw delayedRes.error;
+             // Fetch historical data for the chart from the main table
+             const { data: chartData, error: chartError } = await supabase
+                 .from('call_sessions')
+                 .select('start_time_egypt')
+                 .gte('start_time_egypt', oneHourAgo);
 
-                activeTicketsEl.textContent = liveRes.count ?? 0;
-                delayedTicketsEl.textContent = delayedRes.count ?? 0;
-            } catch (error) {
-                console.error("Error fetching live stats from views:", error);
-                activeTicketsEl.textContent = 'N/A';
-                delayedTicketsEl.textContent = 'N/A';
-            }
+             if (chartError) { console.error("Error fetching chart data:", chartError); }
+            
+             // Reset and populate chart data
+             ticketVolumeData.fill(0);
+             if (chartData) {
+                 const now = new Date();
+                 chartData.forEach(ticket => {
+                     const startTime = new Date(ticket.start_time_egypt);
+                     const minutesAgo = (now - startTime) / (60 * 1000);
+                     if (minutesAgo < TICKET_VOLUME_TIMESPAN_MINUTES) {
+                         const bucketIndex = Math.floor(minutesAgo / TICKET_VOLUME_BUCKET_MINUTES);
+                         const finalIndex = ticketVolumeData.length - 1 - bucketIndex;
+                         if (finalIndex >= 0 && finalIndex < ticketVolumeData.length) {
+                              ticketVolumeData[finalIndex]++;
+                         }
+                     }
+                 });
+             }
+             updateTicketVolumeChart(null, false);
+            
+             // Now, fetch the main dashboard data using the new method
+             await refreshDashboard();
         }
 
         function setupRealtimeSubscription() {
-            supabase
-                .channel('realtime_tickets')
-                .on('postgres_changes', { event: '*', schema: 'public', table: 'call_sessions_egypt' }, payload => {
-                    handleRealtimeUpdate(payload);
-                })
-                .subscribe();
-        }
-
-        async function handleRealtimeUpdate(payload) {
-            const { eventType, new: newRecord, old: oldRecord } = payload;
-            const recordId = newRecord?.id || oldRecord?.id;
-            if (!recordId) return;
-            
-            if (eventType === 'DELETE') {
-                const row = document.getElementById(`ticket-row-${recordId}`);
-                if (row) {
-                     row.classList.add('fading-out');
-                     row.addEventListener('animationend', () => row.remove());
-                }
-                updateLiveDurationsAndStats();
-                return;
-            }
-
-            const { data, error } = await supabase
-                .from('call_sessions_egypt').select('id, agent_name, start_time_egypt, end_time_egypt, duration_interval, completed, scenario:call_scenarios(title)')
-                .eq('id', recordId)
-                .single();
-
-            if (error) { console.error('Error fetching changed record', error); return; }
-
-            if (data) {
-                addOrUpdateTableRow(data, eventType === 'INSERT');
-            }
-            
-            if (eventType === 'INSERT') {
-                updateTicketVolumeChart(newRecord, false);
-            }
-            
-            await fetchTodayStats();
-            await fetchLiveStatsFromViews(); // Refresh stats on every change
+             supabase
+               .channel('public:call_sessions')
+               .on('postgres_changes', { event: '*', schema: 'public', table: 'call_sessions' }, payload => {
+                 console.log('Realtime change detected, refreshing dashboard:', payload);
+                 refreshDashboard(); // Reload data from views
+               })
+               .subscribe();
         }
         
-        function addOrUpdateTableRow(ticket, isNew = false) {
-            let row = document.getElementById(`ticket-row-${ticket.id}`);
-            const isLive = ticket.end_time_egypt === null;
-
-            if (!row) {
-                row = document.createElement('tr');
-                row.id = `ticket-row-${ticket.id}`;
-                
-                const ticketStartTime = new Date(ticket.start_time_egypt).getTime();
-                const insertBeforeRow = Array.from(liveUnifiedTableBody.children).find(r => 
-                    new Date(r.dataset.startTime).getTime() < ticketStartTime
-                );
-
-                liveUnifiedTableBody.insertBefore(row, insertBeforeRow || null);
-                
-                if (isNew) {
-                    row.classList.add('new-row');
-                }
-            }
+        function addOrUpdateTableRow(ticket) {
+            // This function is now simplified, as refreshDashboard rebuilds the table from scratch.
+            // It just creates and appends rows. The isNew animation is a nice touch to keep.
+            let row = document.createElement('tr');
+            row.id = `ticket-row-${ticket.id}`;
+            row.classList.add('new-row');
+            
+            liveUnifiedTableBody.appendChild(row);
             
             row.dataset.startTime = ticket.start_time_egypt;
             
             let status, statusClass, durationText;
+            const isLive = ticket.end_time_egypt === null;
             const durationSecsFromInterval = ticket.duration_interval ? (ticket.duration_interval.minutes * 60 + ticket.duration_interval.seconds) : null;
-
 
             if (isLive) {
                 const durationSec = Math.floor((Date.now() - new Date(ticket.start_time_egypt).getTime()) / 1000);
@@ -512,7 +476,8 @@
                 <td>${formatDateTimeEgypt(ticket.start_time_egypt)}</td>
                 <td class="duration-cell">${durationText}</td>
             `;
-
+            
+            // Logic to fade out non-live tickets after a while
             if (!isLive && !row.dataset.fading) {
                 row.dataset.fading = 'true';
                 setTimeout(() => {
@@ -520,7 +485,7 @@
                         row.classList.add('fading-out');
                         row.addEventListener('animationend', () => row.remove());
                     }
-                }, 30000);
+                }, 30000); 
             }
             updateTableVisibility();
         }
@@ -532,7 +497,6 @@
 
         function updateLiveDurationsAndStats() {
             let totalDuration = 0;
-            let activeCount = 0;
             const activeRows = liveUnifiedTableBody.querySelectorAll('tr[data-status="live"], tr[data-status="delayed"]');
 
             activeRows.forEach(row => {
@@ -554,9 +518,7 @@
                 }
             });
             
-            activeCount = activeRows.length;
-            
-            // Stats are now fetched from views, but average duration is calculated locally
+            const activeCount = activeRows.length;
             const avgDurationMs = totalDuration > 0 ? totalDuration / activeCount : 0;
             avgActiveDurationEl.textContent = formatDuration(Math.floor(avgDurationMs / 1000));
             
@@ -584,7 +546,7 @@
                 type: 'line',
                 data: {
                     labels: [],
-                    datasets: [{ label: 'Tickets Created', data: ticketVolumeData, borderColor: colors.primary, backgroundColor: `rgba(${colors.primaryRgb}, 0.2)`, fill: true, tension: 0.4 }]
+                    datasets: [{ label: 'Tickets Created', data: [], borderColor: colors.primary, backgroundColor: `rgba(${colors.primaryRgb}, 0.2)`, fill: true, tension: 0.4 }]
                 },
                 options: {
                     responsive: true, maintainAspectRatio: false,
@@ -595,17 +557,10 @@
                     plugins: { legend: { display: false } }
                 }
             });
-            updateTicketVolumeChart(null, true);
         }
         
-        function updateTicketVolumeChart(newRecord, shiftOnly = false) {
+        function updateTicketVolumeChart() {
             if (!ticketVolumeChartInstance) return;
-            if (shiftOnly) {
-                ticketVolumeData.shift();
-                ticketVolumeData.push(0);
-            } else if (newRecord) {
-                ticketVolumeData[ticketVolumeData.length - 1]++;
-            }
 
             const labels = [];
             const now = new Date();
@@ -620,7 +575,6 @@
         
         logoutButton.addEventListener('click', async () => {
             clearInterval(liveStatsInterval);
-            clearInterval(periodicShiftInterval);
             await supabase.auth.signOut();
             localStorage.removeItem('elevoCoreUserData');
             window.location.replace("login.html");
