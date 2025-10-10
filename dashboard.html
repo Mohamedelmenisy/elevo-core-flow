@@ -1,3 +1,4 @@
+``html
 <!DOCTYPE html>
 <html lang="en" class="dark">
 <head>
@@ -445,8 +446,7 @@
             applyFiltersAndRender(); // Apply saved filters on first load
             setupEventListeners();
             setupLiveCallMonitoring();
-
-            // MODIFICATION: Added polling interval as requested, though real-time subscription is generally sufficient.
+            
             setInterval(refreshAllData, 15000); // Refresh data every 15 seconds
         }
         
@@ -468,7 +468,6 @@
             }
         }
         
-        // MODIFICATION: Wrapper function for all data refreshes
         async function refreshAllData() {
             console.log("Refreshing all dashboard data...");
             await loadInitialData();
@@ -480,7 +479,6 @@
 
         async function loadInitialData() {
             try {
-                // We only need to fetch agents once, but sessions need to be fresh
                 const [agentsRes, sessionsRes] = await Promise.all([
                     allAgents.length > 0 ? Promise.resolve({ data: allAgents, error: null }) : supabase.from('users').select('id, name, email').order('name', { ascending: true }),
                     supabase.from('call_sessions_egypt').select(`*, scenario:call_scenarios(id, title)`).order('start_time_egypt', { ascending: false })
@@ -595,7 +593,7 @@
         
         function updateAnalyticsCharts() {
             const colors = getChartColors();
-            const FONT_SIZE_TITLE = 16, FONT_SIZE_LEGEND = 12, FONT_SIZE_AXIS = 12; // Adjusted sizes
+            const FONT_SIZE_TITLE = 16, FONT_SIZE_LEGEND = 12, FONT_SIZE_AXIS = 12; 
             
             Chart.defaults.color = colors.textColor;
             Chart.defaults.font.family = "'Poppins', sans-serif";
@@ -620,9 +618,26 @@
             const sortedBadReasons = Object.entries(badReasons).sort(([,a],[,b]) => b-a).slice(0, 5);
             if (badReasonsChart) badReasonsChart.destroy();
             badReasonsChart = new Chart(document.getElementById('badReasonsChart').getContext('2d'), { type: 'bar', data: { labels: sortedBadReasons.map(i => i[0]), datasets: [{ label: 'Count', data: sortedBadReasons.map(i => i[1]), backgroundColor: colors.bad, borderRadius: 4 }] }, options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, scales: { x: { beginAtZero: true, grid: { color: colors.gridColor }, ticks:{color: colors.textColor, font: { size: FONT_SIZE_AXIS }} }, y: { grid: { display: false }, ticks:{color: colors.textColor, font: { size: FONT_SIZE_AXIS }} } }, plugins: { legend: { display: false }, tooltip: tooltipOptions, title: titleOptions("Top 'Bad' Quality Reasons") } } });
+            
+            // FIX: DYNAMIC PROGRESS CHART
+            const now = new Date();
+            const thisMonth = now.getMonth();
+            const lastMonth = now.getMonth() - 1;
+            const thisYear = now.getFullYear();
+            const lastMonthYear = lastMonth < 0 ? thisYear - 1 : thisYear;
 
+            const thisMonthCount = filteredCallSessions.filter(s => {
+                const date = new Date(s.start_time_egypt);
+                return date.getMonth() === thisMonth && date.getFullYear() === thisYear;
+            }).length;
+
+            const lastMonthCount = filteredCallSessions.filter(s => {
+                const date = new Date(s.start_time_egypt);
+                return date.getMonth() === (lastMonth < 0 ? 11 : lastMonth) && date.getFullYear() === lastMonthYear;
+            }).length;
+            
             if(progressChart) progressChart.destroy();
-            progressChart = new Chart(document.getElementById('progressChart').getContext('2d'), { type: 'bar', data: { labels: ['This Month', 'Last Month'], datasets: [{ label: 'Sessions Count', data: [12, 8], backgroundColor: ['#4CAF50', '#FF9800'], borderRadius: 4 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, title: titleOptions('Sessions Growth Comparison') }, scales: { y: { grid: { color: colors.gridColor }, ticks: { color: colors.textColor, font: { size: FONT_SIZE_AXIS } } }, x: { grid: { color: colors.gridColor }, ticks: { color: colors.textColor, font: { size: FONT_SIZE_AXIS } } } } } });
+            progressChart = new Chart(document.getElementById('progressChart').getContext('2d'), { type: 'bar', data: { labels: ['This Month', 'Last Month'], datasets: [{ label: 'Sessions Count', data: [thisMonthCount, lastMonthCount], backgroundColor: ['#4CAF50', '#FF9800'], borderRadius: 4 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, title: titleOptions('Sessions Growth Comparison') }, scales: { y: { grid: { color: colors.gridColor }, ticks: { color: colors.textColor, font: { size: FONT_SIZE_AXIS }, stepSize: 1 } }, x: { grid: { color: colors.gridColor }, ticks: { color: colors.textColor, font: { size: FONT_SIZE_AXIS } } } } } });
         }
         
         function renderPagination() {
@@ -685,7 +700,8 @@
             csvContent += ["Agent Name", "Agent Email", "Scenario", "Start Time (EET)", "End Time (EET)", "Duration (s)", "Completed", "Quality", "Reason"].join(",") + "\r\n";
             filteredCallSessions.forEach(session => {
                 const agent = allAgents.find(a => a.id === session.user_id);
-                const row = [`"${agent?.name || 'Unknown'}"`, `"${agent?.email || 'N/A'}"`, `"${session.scenario?.title?.replace(/"/g, '""') || 'N/A'}"`, `"${formatDateForCSVEgypt(session.start_time_egypt)}"`, `"${formatDateForCSVEgypt(session.end_time_egypt)}"`, session.duration || 0, session.completed ? 'Yes' : 'No', session.call_quality || 'N/A', `"${session.quality_reason?.replace(/"/g, '""') || ''}"`];
+                const dur = session.duration_interval?.minutes * 60 + session.duration_interval?.seconds || 0;
+                const row = [`"${agent?.name || 'Unknown'}"`, `"${agent?.email || 'N/A'}"`, `"${session.scenario?.title?.replace(/"/g, '""') || 'N/A'}"`, `"${formatDateForCSVEgypt(session.start_time_egypt)}"`, `"${formatDateForCSVEgypt(session.end_time_egypt)}"`, dur, session.completed ? 'Yes' : 'No', session.call_quality || 'N/A', `"${session.quality_reason?.replace(/"/g, '""') || ''}"`];
                 csvContent += row.join(",") + "\r\n";
             });
             const link = document.createElement("a"); link.setAttribute("href", encodeURI(csvContent)); link.setAttribute("download", "elevo_core_sessions.csv");
@@ -696,7 +712,8 @@
             if (filteredCallSessions.length === 0) { alert("No data to export."); return; }
             const dataToExport = filteredCallSessions.map(session => {
                 const agent = allAgents.find(a => a.id === session.user_id);
-                return { "Agent Name": agent?.name || 'Unknown', "Agent Email": agent?.email || 'N/A', "Scenario": session.scenario?.title || 'N/A', "Start Time (EET)": formatDateForCSVEgypt(session.start_time_egypt), "End Time (EET)": formatDateForCSVEgypt(session.end_time_egypt), "Duration (s)": session.duration || 0, "Completed": session.completed ? 'Yes' : 'No', "Quality": session.call_quality || 'N/A', "Reason": session.quality_reason || '' };
+                const dur = session.duration_interval?.minutes * 60 + session.duration_interval?.seconds || 0;
+                return { "Agent Name": agent?.name || 'Unknown', "Agent Email": agent?.email || 'N/A', "Scenario": session.scenario?.title || 'N/A', "Start Time (EET)": formatDateForCSVEgypt(session.start_time_egypt), "End Time (EET)": formatDateForCSVEgypt(session.end_time_egypt), "Duration (s)": dur, "Completed": session.completed ? 'Yes' : 'No', "Quality": session.call_quality || 'N/A', "Reason": session.quality_reason || '' };
             });
             const ws = XLSX.utils.json_to_sheet(dataToExport); const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, "Ticket Sessions"); XLSX.writeFile(wb, "elevo_core_sessions.xlsx");
@@ -704,11 +721,10 @@
         
         async function updateMonitoringTabs() {
             try {
-                // MODIFICATION: Using the corrected view names as requested
                 const [liveRes, delayedRes, completedRes] = await Promise.all([
                     supabase.from('view_live_sessions').select('agent_name, scenario_title, start_time_egypt').order('start_time_egypt', { ascending: false }),
                     supabase.from('view_delayed_sessions').select('agent_name, scenario_title, start_time_egypt').order('start_time_egypt', { ascending: false }),
-                    supabase.from('call_sessions_egypt').select('user_id, scenario:call_scenarios(title), end_time_egypt, duration').eq('completed', true).order('end_time_egypt', { ascending: false }).limit(15)
+                    supabase.from('call_sessions_egypt').select('user_id, scenario:call_scenarios(title), end_time_egypt, duration_interval').eq('completed', true).order('end_time_egypt', { ascending: false }).limit(15)
                 ]);
 
                 if (liveRes.error) throw liveRes.error; if (delayedRes.error) throw delayedRes.error; if (completedRes.error) throw completedRes.error;
@@ -723,7 +739,7 @@
                 delayedCalls.forEach(call => { const d = Math.floor((new Date() - new Date(call.start_time_egypt)) / 1000); delayedTicketsContainer.insertAdjacentHTML('beforeend', `<div class="live-call-item long-call-alert"><div><strong class="live-call-item-agent">${call.agent_name || 'Unknown'}</strong> on "${call.scenario_title || 'a ticket'}"</div><div class="live-call-item-time"><span class="text-color-light">Started: ${formatDateTimeEgypt(call.start_time_egypt, { hour: '2-digit', minute: '2-digit' })}</span><span class="live-call-duration">Now: ${Math.floor(d/60)}m ${d%60}s <span class="long-call-indicator">DELAYED</span></span></div></div>`); });
 
                 completedTicketsContainer.innerHTML = ''; noCompletedTicketsMessage.style.display = completedCalls.length === 0 ? 'block' : 'none';
-                completedCalls.forEach(call => { const agent = allAgents.find(a => a.id === call.user_id); completedTicketsContainer.insertAdjacentHTML('beforeend', `<div class="live-call-item"><div><strong class="live-call-item-agent">${agent?.name || 'Unknown'}</strong> completed "${call.scenario?.title || 'a ticket'}"</div><div class="live-call-item-time"><span class="text-color-light">Finished: ${formatDateTimeEgypt(call.end_time_egypt, { hour: '2-digit', minute: '2-digit' })}</span><span class="live-call-duration" style="color: var(--success-color)">Took: ${formatDuration(call.duration)}</span></div></div>`); });
+                completedCalls.forEach(call => { const agent = allAgents.find(a => a.id === call.user_id); const dur = call.duration_interval?.minutes * 60 + call.duration_interval?.seconds || 0; completedTicketsContainer.insertAdjacentHTML('beforeend', `<div class="live-call-item"><div><strong class="live-call-item-agent">${agent?.name || 'Unknown'}</strong> completed "${call.scenario?.title || 'a ticket'}"</div><div class="live-call-item-time"><span class="text-color-light">Finished: ${formatDateTimeEgypt(call.end_time_egypt, { hour: '2-digit', minute: '2-digit' })}</span><span class="live-call-duration" style="color: var(--success-color)">Took: ${formatDuration(dur)}</span></div></div>`); });
 
             } catch(error) {
                 console.error("Error fetching monitoring data from views:", error);
