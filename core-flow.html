@@ -1,0 +1,1106 @@
+<!DOCTYPE html>
+<html lang="ar" class="dark" dir="ltr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Elevo Core Assistant</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234e8cff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M3 12h18M3 6h12M3 18h15'/><path d='M17 9l4 3l-4 3'/></svg>">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        :root {
+            --background-color: #1c1c28;
+            --card-background-color: #2b2b3d;
+            --text-color: #f0f0f0;
+            --text-color-secondary: #a0a0b0;
+            --primary-color: #4e8cff;
+            --primary-color-rgb: 78, 140, 255;
+            --primary-color-dark: #3d7eff;
+            --secondary-color: #3a3a50;
+            --border-color: #444444;
+            --input-background-color: #242436;
+            --input-border-color: #444444;
+            --button-text-color: #ffffff;
+            --success-color: #4CAF50;
+            --danger-color: #F44336;
+            --warning-color: #FFC107;
+            --border-radius: 12px;
+            --font-family-main: 'Poppins', 'Roboto', sans-serif;
+        }
+
+        html.dark {
+            background-color: var(--background-color);
+        }
+
+        body {
+            background-color: var(--background-color);
+            color: var(--text-color);
+            font-family: var(--font-family-main);
+            margin: 0; padding: 0; line-height: 1.6;
+        }
+
+        .app-container {
+            display: flex; flex-direction: column; min-height: 100vh;
+        }
+
+        .app-main {
+            padding: 1.5rem; flex-grow: 1; display: flex;
+            flex-direction: column; align-items: center; justify-content: center;
+        }
+
+        .app-header {
+            background-color: var(--card-background-color); color: var(--text-color);
+            padding: 1rem 1.5rem; display: flex; justify-content: space-between;
+            align-items: center; border-bottom: 1px solid var(--border-color);
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2); width: 100%;
+            box-sizing: border-box;
+        }
+        .app-title { font-weight: 600; color: var(--primary-color); }
+        .header-controls { display: flex; align-items: center; gap: 1rem; }
+        .nav-link { color: var(--text-color-secondary); text-decoration: none; transition: color 0.2s; font-weight: 500; }
+        .nav-link:hover { color: var(--primary-color); }
+        .user-info { display: flex; align-items: center; gap: 1rem; }
+        
+        .user-name-display { 
+            color: var(--text-color-secondary);
+            white-space: nowrap; 
+        }
+        
+        .logout-btn {
+            background-color: transparent; color: var(--primary-color);
+            border: 1px solid var(--primary-color); border-radius: 12px; padding: 0.6rem 1.2rem;
+            display: inline-flex; align-items: center; gap: 0.5em; cursor: pointer;
+            transition: all 0.2s ease-in-out; font-size: 0.9rem;
+        }
+        .logout-btn:hover {
+            background-color: rgba(var(--primary-color-rgb), 0.1);
+            color: var(--primary-color-dark); transform: translateY(-1px);
+        }
+        .logout-btn svg { margin-right: 0.3em; }
+
+        .card {
+            background-color: var(--card-background-color);
+            padding: 2.5rem;
+            border-radius: var(--border-radius);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.25);
+            border: 1px solid var(--border-color);
+            margin-bottom: 1.5rem;
+            width: 100%;
+            max-width: 1100px;
+            box-sizing: border-box;
+        }
+        
+        .initial-card {
+          display: grid;
+          grid-template-columns: 1fr 1.5fr;
+          gap: 3.5rem;
+          max-width: 1200px;
+          padding: 3rem; 
+          align-items: center;
+        }
+
+        .call-flow-card {
+            background: linear-gradient(145deg, var(--card-background-color), #242436);
+            position: relative; border-radius: 16px;
+        }
+
+        @keyframes cardDecisionPulse {
+            0% { box-shadow: 0 5px 15px rgba(0, 0, 0, 0.25), 0 0 0 0px rgba(var(--primary-color-rgb), 0.5); }
+            50% { box-shadow: 0 5px 15px rgba(0, 0, 0, 0.25), 0 0 0 8px rgba(var(--primary-color-rgb), 0); }
+            100% { box-shadow: 0 5px 15px rgba(0, 0, 0, 0.25), 0 0 0 0px rgba(var(--primary-color-rgb), 0); }
+        }
+        .decision-made-animation { animation: cardDecisionPulse 0.7s ease-out; }
+
+        .card-title {
+          color: #f0f0f0;
+          font-size: 1.6rem;
+          font-weight: 600; 
+        }
+
+        /* --- MODIFICATION START: Added margin-bottom to step title --- */
+        .scenario-title-dynamic {
+            margin-bottom: 0.75rem;
+        }
+        /* --- MODIFICATION END --- */
+
+        .scenario-title-dynamic .step-type-icon {
+            margin-right: 0.5em; font-size: 1.1em; display: inline-block; transform: translateY(0.1em);
+        }
+        .card-subtitle { color: #a0a0b0; font-size: 1.1rem; margin-top: 0.25rem; }
+
+        .action-button, .nav-button, .decision-button {
+            padding: 0.7rem 1.4rem; 
+            border-radius: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease-in-out;
+            border: none;
+            font-size: 0.95rem;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5em;
+            width: auto;
+            box-sizing: border-box;
+        }
+        .action-button:active, .nav-button:active, .decision-button:active { 
+            transform: translateY(1px) scale(0.98); 
+        }
+
+        .primary-button {
+          background-color: var(--primary-color); color: white;
+        }
+        .primary-button:hover {
+          background-color: var(--primary-color-dark); transform: translateY(-2px);
+          box-shadow: 0 4px 10px rgba(var(--primary-color-rgb), 0.3);
+        }
+        .primary-button:disabled {
+            background-color: var(--secondary-color); cursor: not-allowed;
+            transform: none; box-shadow: none;
+        }
+        .primary-button .btn-spinner {
+            width: 1em; height: 1em; border: 2px solid rgba(255,255,255,0.3);
+            border-top-color: white; border-radius: 50%;
+            animation: spin 0.8s linear infinite; margin-right: 0.5em;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .secondary-button {
+            background-color: var(--secondary-color); color: var(--button-text-color);
+        }
+        .secondary-button:hover {
+            background-color: #4a4a60; transform: translateY(-1px);
+            box-shadow: 0 2px 8px rgba(0,0,0, 0.2);
+        }
+        
+        .danger-button {
+            background-color: transparent; color: var(--danger-color);
+            border: 1px solid var(--danger-color);
+        }
+        .danger-button:hover {
+            background-color: rgba(244, 67, 54, 0.1); transform: translateY(-1px);
+            box-shadow: 0 2px 8px rgba(244,67,54, 0.2);
+        }
+
+        .highlight-scenario-title-animation { animation: pulse-title 0.6s 2 ease-in-out; }
+        @keyframes pulse-title {
+            0%, 100% { transform: scale(1); opacity: 1; color: var(--warning-color); }
+            50% { transform: scale(1.03); opacity: 0.8; color: var(--warning-color); }
+        }
+
+        .step-actions {
+            margin-top: 1.5rem; 
+            display: flex; 
+            flex-direction: column; 
+            gap: 0.75rem;
+            align-items: stretch; 
+        }
+        
+        /* --- MODIFICATION START: Made button wider --- */
+        .decision-button {
+            border: 1px solid var(--border-color); 
+            background-color: var(--input-background-color);
+            color: var(--text-color); 
+            text-align: center;
+            width: 100%;
+        }
+        /* --- MODIFICATION END --- */
+
+        /* --- MODIFICATION START: Lightened hover shadow --- */
+        .decision-button:hover {
+            border-color: var(--primary-color);
+            background-color: rgba(var(--primary-color-rgb), 0.1);
+            box-shadow: 0 0 6px rgba(var(--primary-color-rgb), 0.15); 
+            transform: translateY(-2px);
+        }
+        /* --- MODIFICATION END --- */
+        
+        .decision-button:focus { outline: 2px solid var(--primary-color-dark); outline-offset: 2px; }
+
+        .decision-button.positive:hover { background-color: #388e3c; border-color: #4caf50; box-shadow: 0 0 8px rgba(76, 175, 80, 0.4); }
+        .decision-button.negative:hover { background-color: #d32f2f; border-color: #f44336; box-shadow: 0 0 8px rgba(244, 67, 54, 0.4); }
+        .decision-button.neutral:hover { background-color: var(--primary-color-dark); border-color: var(--primary-color); box-shadow: 0 0 8px rgba(var(--primary-color-rgb), 0.4); }
+        
+        .navigation-buttons {
+            margin-top: 1.5rem;
+            display: flex;
+            gap: 0.75rem;
+            justify-content: center;
+        }
+        
+        .status-bar {
+            background-color: #242436; color: var(--text-color); padding: 0.5rem 1.5rem;
+            font-size: 0.9rem; border-bottom: 1px solid var(--border-color); width: 100%;
+            box-sizing: border-box; text-align: center;
+        }
+        .status-indicator.status-waiting { color: var(--danger-color); }
+        .status-indicator.status-loading { color: var(--warning-color); }
+        .status-indicator.status-in-call { color: var(--success-color); }
+        .status-indicator.status-completed { color: var(--success-color); }
+        .status-indicator.status-ended { color: #aaa; }
+        .status-indicator.status-summary { color: var(--primary-color); }
+
+        #timer-container { position: fixed; top: 110px; left: 50%; transform: translateX(-50%); z-index: 1000; }
+        #callTimer {
+            font-size: 1.2em; font-weight: 500; color: var(--primary-color);
+            background-color: rgba(28, 28, 40, 0.85);
+            backdrop-filter: blur(5px);
+            padding: 0.5rem 1.2rem;
+            border-radius: 12px; display: inline-block; min-width: 80px;
+            text-align: center; border: 1px solid var(--border-color);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        }
+
+        .fade-in { animation: fadeInAnimation 0.5s ease-in-out forwards; }
+        @keyframes fadeInAnimation {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .app-footer {
+            text-align: center; padding: 1.5rem; font-size: 0.85rem;
+            color: var(--text-color-secondary); background-color: transparent;
+            margin-top: auto; width: 100%; box-sizing: border-box;
+        }
+        
+        #callSummaryContent p {
+            font-size: 1.2rem;
+        }
+        #callSummaryContent strong { color: var(--primary-color); font-weight: 600; }
+        #callSummaryContent .quality-text.quality-good { color: var(--success-color); font-weight: bold; }
+        #callSummaryContent .quality-text.quality-bad { color: var(--danger-color); font-weight: bold; }
+        #callSummaryContent .quality-text.quality-na { color: var(--text-color-secondary); font-style: italic; }
+        
+        .initial-card-left { text-align: left; }
+        
+        .search-scenario-input {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            background-color: var(--input-background-color);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--text-color);
+            font-size: 0.95rem;
+            margin-bottom: 1rem;
+            box-sizing: border-box;
+        }
+        .search-scenario-input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 8px rgba(var(--primary-color-rgb), 0.3);
+        }
+
+        .custom-scenario-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            max-height: 280px;
+            overflow-y: auto;
+            padding-right: 0.5rem;
+        }
+
+        .scenario-item {
+            padding: 0.8rem 1rem;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            font-weight: 500;
+            border: 1px solid var(--secondary-color);
+            background-color: var(--secondary-color);
+            position: relative;
+        }
+
+        .scenario-item:hover {
+            background-color: rgba(var(--primary-color-rgb), 0.1);
+            border-color: var(--primary-color);
+            transform: translateX(5px);
+        }
+        
+        .scenario-item:focus, .scenario-item.selected:focus {
+             outline: 2px solid var(--primary-color-dark);
+             outline-offset: 2px;
+        }
+
+        .scenario-item.selected {
+            background-color: var(--primary-color);
+            color: white;
+            font-weight: 600;
+            border-color: var(--primary-color-dark);
+        }
+
+        .scenario-item .icon { font-size: 1.2em; }
+
+        .scenario-item.compensation { border-left: 3px solid var(--warning-color); }
+
+        #scenario-preview-tooltip {
+            position: absolute;
+            background-color: #242436;
+            border: 1px solid var(--primary-color);
+            border-radius: 8px;
+            padding: 0.75rem;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            z-index: 100;
+            width: 200px;
+            font-size: 0.85rem;
+            color: var(--text-color-secondary);
+            display: none;
+            pointer-events: none;
+        }
+        #scenario-preview-tooltip strong { color: var(--text-color); }
+        
+        .form-step-container { margin-top: 1rem; }
+        .form-field { margin-bottom: 1rem; }
+        .form-field label { display: block; margin-bottom: 0.5rem; font-weight: 500; color: var(--text-color-secondary); }
+        .form-field input, .form-field textarea {
+            width: 100%;
+            padding: 0.75rem;
+            background-color: var(--input-background-color);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--text-color);
+            box-sizing: border-box;
+        }
+
+        /* --- MODIFICATION START: Repositioned Toast to bottom-right --- */
+        .custom-toast {
+            position: fixed;
+            right: 2rem;
+            bottom: 2rem;
+            transform: translateY(100%);
+            background-color: rgba(var(--primary-color-rgb), 0.15);
+            backdrop-filter: blur(5px);
+            color: var(--text-color);
+            padding: 1.25rem 2rem;
+            border-radius: var(--border-radius);
+            border: 1px solid var(--primary-color);
+            box-shadow: 0 5px 20px rgba(0,0,0,0.4);
+            z-index: 9999;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            font-size: 1.1rem;
+            font-weight: 500;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s ease, visibility 0.3s ease, transform 0.3s ease;
+        }
+        .custom-toast.show {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0);
+        }
+        .custom-toast.hide {
+             opacity: 0;
+             transform: translateY(100%);
+        }
+        /* --- MODIFICATION END --- */
+
+        .custom-toast .toast-icon {
+            font-size: 1.8rem;
+        }
+    </style>
+
+<!-- Access Denied Modal CSS (Inserted) -->
+<style>
+.access-denied-modal { position: fixed; inset: 0; background-color: rgba(0,0,0,0.6); display: none; align-items: center; justify-content: center; z-index: 99999; }
+.access-denied-modal.visible { display: flex; }
+.access-denied-content { background: var(--card-bg-color); padding: 1.75rem; border-radius: 12px; text-align: center; max-width: 420px; box-shadow: 0 12px 40px rgba(0,0,0,0.5); }
+.access-denied-content svg { margin-bottom: 0.5rem; color: var(--primary-color); }
+.access-denied-content h3 { margin: 0.5rem 0; color: var(--text-color); }
+.access-denied-content p { margin: 0.5rem 0 1rem; color: var(--text-color-light); }
+</style>
+
+</head>
+<body>
+
+    <div class="app-container">
+        <header class="app-header">
+            <div class="logo-container" style="display: flex; align-items: center; gap: 0.75rem;">
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="color: var(--primary-color); width: 28px; height: 28px;">
+                    <path d="M6 17L10 17M6 12L12 12M6 7L14 7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    <path d="M15 6L19 10L15 14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <rect x="3" y="3" width="18" height="18" rx="3" stroke="currentColor" stroke-width="1.5" fill="transparent" opacity="0.6"/>
+                </svg>
+                <span class="app-title" style="font-size: 1.2rem;">Elevo Core</span>
+            </div>
+            <div class="header-controls">
+                 <a href="dashboard.html" class="nav-link" id="dashboardLink" style="display: none; color: var(--primary-color); margin-right: 1rem; font-weight: 500;">Dashboard</a>
+                <div class="user-info" id="userInfo" style="display: none;">
+                    <span id="userName" class="user-name-display"></span>
+                    <button id="logoutButton" class="logout-btn">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+                        <span>Logout</span>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <div class="status-bar">
+            <div id="systemStatus" class="status-indicator status-waiting">🔴 Waiting for Ticket</div>
+        </div>
+
+        <div id="timer-container">
+             <div id="callTimer" style="display: none;">00:00</div>
+        </div>
+
+        <main class="app-main">
+            <div id="auth-loading" class="loading-container" style="display: none; flex-direction: column; align-items: center; justify-content: center; height: 50vh;">
+                <div class="spinner" style="width: 40px; height: 40px; border-top-color: var(--primary-color);"></div>
+                <p style="color: var(--text-color-secondary); margin-top: 1rem;">Initializing Assistant...</p>
+            </div>
+
+            <div id="initial-view" class="card initial-card fade-in" style="display: none;">
+                <div class="initial-card-left">
+                    <div class="card-icon" style="margin-bottom: 1rem;">
+                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="var(--primary-color)" width="48" height="48"><path d="M12 2C6.486 2 2 6.486 2 12C2 17.514 6.486 22 12 22C17.514 22 22 17.514 22 12C22 6.486 17.514 2 12 2ZM12 20C7.589 20 4 16.411 4 12C4 7.589 7.589 4 12 4C16.411 4 20 7.589 20 12C20 16.411 16.411 20 12 20Z"/><path d="M12 11C10.897 11 10 10.103 10 9C10 7.897 10.897 7 12 7C13.103 7 14 7.897 14 9C14 10.103 13.103 11 12 11Z"/><path d="M16.002 16.246C15.483 15.219 14.544 14.5 13.333 14.5H10.667C9.456 14.5 8.517 15.219 7.998 16.246C7.933 16.386 7.996 16.553 8.114 16.641C8.657 17.053 9.737 17.5 12 17.5C14.263 17.5 15.343 17.053 15.886 16.641C16.004 16.553 16.067 16.386 16.002 16.246Z"/></svg>
+                    </div>
+                    <h2 class="card-title" style="font-size: 2rem;">Core Flow Assistant</h2>
+                    <p class="card-subtitle">Your dedicated assistant for streamlined ticket resolution. Please select a scenario to begin.</p>
+                </div>
+                
+                <div class="initial-card-right">
+                    <div class="scenario-selector-container">
+                        <label for="searchScenarioInput" style="display: block; margin-bottom: 0.5rem; font-weight: 500; color: var(--text-color-secondary);">Select Scenario:</label>
+                        <input type="search" id="searchScenarioInput" class="search-scenario-input" placeholder="Search scenarios...">
+                        <div id="customScenarioList" class="custom-scenario-list" role="listbox">
+                            <!-- Scenarios will be loaded here by JS -->
+                        </div>
+                        <input type="hidden" id="scenarioDropdownValue" name="scenarioId">
+                    </div>
+                    <div style="display: flex; justify-content: flex-start; margin-top: 1.5rem;">
+                        <button id="receive-call-btn" class="action-button primary-button" disabled>
+                            <span class="btn-text">Start Ticket</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Note: The audio files below must be in the same folder as this HTML file to work correctly. -->
+                <audio id="callStartSound" src="call_sound.mp3" preload="auto"></audio>
+                <audio id="compensationScenarioSound" src="compensation_alert.mp3" preload="auto"></audio>
+            </div>
+
+            <div id="call-flow-view" class="card call-flow-card fade-in" style="display: none;">
+                <h3 id="scenario-title" class="card-title scenario-title-dynamic"><span id="step-type-icon" class="step-type-icon"></span>Ticket Scenario</h3>
+                <div id="steps-container" class="steps-area" style="margin-top: 1rem; font-size: 1.2rem; line-height: 1.7; color: var(--text-color);">
+                    <p class="placeholder-text">Loading ticket steps...</p>
+                </div>
+                <div id="decision-buttons-container" class="step-actions"></div>
+
+                <div class="navigation-buttons">
+                    <button id="prev-step-btn" class="nav-button secondary-button" style="display: none;">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 0.5em;"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                        <span>Previous</span>
+                    </button>
+                    <button id="next-step-btn" class="nav-button primary-button">
+                        <span class="btn-text">Next Step</span>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-left: 0.5em;"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                    </button>
+                </div>
+                 <div style="display: flex; justify-content: center; margin-top: 1rem;">
+                    <button id="end-call-btn" class="nav-button danger-button" style="display: none;">
+                        <span>End Ticket</span>
+                    </button>
+                 </div>
+            </div>
+
+            <div id="postCallSummary" class="card post-call-summary-card fade-in" style="display: none;">
+                <h3 class="card-title">Ticket Summary</h3>
+                <div id="callSummaryContent"></div>
+                <div style="display: flex; justify-content: center; margin-top: 1.5rem;">
+                    <button id="returnToInitialViewBtn" class="action-button primary-button">
+                        <span>New Ticket</span>
+                    </button>
+                </div>
+            </div>
+            
+            <div id="scenario-preview-tooltip"></div>
+        </main>
+
+        <div id="custom-toast-notification" class="custom-toast">
+            <span class="toast-icon">⚠️</span>
+            <span id="toast-message" class="toast-message"></span>
+        </div>
+
+        <footer class="app-footer">
+            <p>© <span id="currentYear"></span> Mohamed Elmenisy - Elevo Core. All rights reserved.</p>
+        </footer>
+    </div>
+
+    <script type="module">
+        // --- Supabase Client Setup ---
+        const SUPABASE_URL = 'https://aefiigottnlcmjzilqnh.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFlZmlpZ290dG5sY21qemlscW5oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcxNzY2MDQsImV4cCI6MjA2Mjc1MjYwNH0.FypB02v3tGMnxXV9ZmZMdMC0oQpREKOJWgHMPxUzwX4';
+        
+        let supabase;
+        try {
+            supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        } catch (error) {
+            console.error("Supabase client initialization failed:", error);
+            document.getElementById('auth-loading').innerHTML = '<p style="color:var(--danger-color); text-align:center;">Error connecting to services. Core Flow is unavailable.</p>';
+        }
+
+        // --- DOM Elements ---
+        const authLoadingDiv = document.getElementById('auth-loading');
+        const initialViewDiv = document.getElementById('initial-view');
+        const callFlowViewDiv = document.getElementById('call-flow-view');
+        const postCallSummaryDiv = document.getElementById('postCallSummary');
+        const receiveCallBtn = document.getElementById('receive-call-btn');
+        const scenarioTitleElement = document.getElementById('scenario-title');
+        const stepTypeIconElement = document.getElementById('step-type-icon'); 
+        const stepsContainer = document.getElementById('steps-container'); 
+        const decisionButtonsContainer = document.getElementById('decision-buttons-container'); 
+        const prevStepBtn = document.getElementById('prev-step-btn');
+        const nextStepBtn = document.getElementById('next-step-btn'); 
+        const endCallBtn = document.getElementById('end-call-btn');
+        const userInfoDiv = document.getElementById('userInfo');
+        const userNameSpan = document.getElementById('userName');
+        const logoutButton = document.getElementById('logoutButton');
+        const dashboardLink = document.getElementById('dashboardLink');
+        const systemStatusDiv = document.getElementById('systemStatus');
+        const callTimerDiv = document.getElementById('callTimer');
+        const callSummaryContentDiv = document.getElementById('callSummaryContent');
+        const returnToInitialViewBtn = document.getElementById('returnToInitialViewBtn');
+        const callStartSound = document.getElementById('callStartSound'); 
+        const compensationScenarioSound = document.getElementById('compensationScenarioSound');
+        const searchScenarioInput = document.getElementById('searchScenarioInput');
+        const scenarioPreviewTooltip = document.getElementById('scenario-preview-tooltip');
+        document.getElementById('currentYear').textContent = new Date().getFullYear();
+
+        // --- State Variables ---
+        let currentUser = null; 
+        let currentScenario = null; 
+        let currentStepId = null;   
+        let stepHistory = [];       
+        let callSessionId = null;    
+        let callStartTimeISO = null; 
+        let stepTimerInterval = null;
+        let stepStartTime = 0;      
+        let accumulatedStepDurations = {}; 
+        let stepVisitCount = {};
+        const SESSION_STATE_KEY = 'elevoCoreActiveCallState_v4';
+
+        // --- UI Helper Functions ---
+        function setButtonLoadingState(button, isLoading, defaultText = "Submit") {
+            const btnText = button.querySelector('.btn-text');
+            button.disabled = isLoading;
+            if (isLoading) {
+                if(btnText) btnText.textContent = "Loading...";
+                button.insertAdjacentHTML('afterbegin', '<span class="btn-spinner"></span>');
+            } else {
+                if(btnText) btnText.textContent = defaultText;
+                const spinner = button.querySelector('.btn-spinner');
+                if(spinner) spinner.remove();
+            }
+        }
+
+        function updateSystemStatus(text, statusClass = 'status-waiting') {
+            if (systemStatusDiv) {
+                systemStatusDiv.textContent = text;
+                systemStatusDiv.className = `status-indicator ${statusClass}`;
+            }
+        }
+
+        function animateView(viewElement) {
+            if (viewElement) {
+                viewElement.classList.remove('fade-in');
+                void viewElement.offsetWidth; 
+                viewElement.classList.add('fade-in');
+                viewElement.style.display = viewElement.classList.contains('initial-card') ? 'grid' : 'block';
+            }
+        }
+
+        let toastTimeout;
+        function showCustomToast(message) {
+            const toastElement = document.getElementById('custom-toast-notification');
+            const toastMessage = document.getElementById('toast-message');
+
+            if (toastElement && toastMessage) {
+                clearTimeout(toastTimeout);
+                
+                toastMessage.textContent = message;
+                toastElement.classList.remove('hide');
+                toastElement.classList.add('show');
+                
+                toastTimeout = setTimeout(() => {
+                    toastElement.classList.remove('show');
+                    toastElement.classList.add('hide');
+                }, 3000);
+            }
+        }
+
+        // --- Authentication & Initialization ---
+        async function initializeApp() {
+            if (!supabase) { 
+                 authLoadingDiv.style.display = 'flex';
+                 authLoadingDiv.innerHTML = '<p style="color:var(--danger-color); text-align:center;">Critical Error: Services unavailable.</p>';
+                 return;
+            }
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) {
+                window.location.replace('login.html'); 
+                return;
+            }
+
+            const storedUserData = JSON.parse(localStorage.getItem('elevoCoreUserData'));
+            if (storedUserData && storedUserData.id === session.user.id) {
+                currentUser = storedUserData;
+            } else {
+                let { data: profile, error } = await supabase.from('users').select('name, is_admin, role').eq('id', session.user.id).single();
+                if (error && error.code !== 'PGRST116') { 
+                    console.error("Error fetching user profile:", error);
+                    // FIX: If profile doesn't exist, log out to prevent issues
+                    await supabase.auth.signOut();
+                    window.location.replace('login.html');
+                    return;
+                }
+                // FIX: Check for valid roles before proceeding
+                if (!profile || (profile.role !== 'admin' && profile.role !== 'agent')) {
+                    await supabase.auth.signOut();
+                    window.location.replace('login.html');
+                    return;
+                }
+                currentUser = { id: session.user.id, email: session.user.email, name: profile?.name || session.user.email.split('@')[0], isAdmin: profile?.role === 'admin', role: profile?.role || 'agent' };
+                localStorage.setItem('elevoCoreUserData', JSON.stringify(currentUser));
+            }
+
+            if (userNameSpan) userNameSpan.textContent = currentUser.name;
+            if (userInfoDiv) userInfoDiv.style.display = 'flex';
+            if (dashboardLink) dashboardLink.style.display = currentUser.isAdmin ? 'inline-block' : 'none';
+            
+            if (restoreCallState()) { 
+                switchToCallFlowView(false); 
+                renderStep(); 
+                updateSystemStatus("🟢 In Ticket (Restored)", "status-in-call");
+            } else {
+                switchToInitialView();
+                await loadActiveScenarios();
+            }
+            authLoadingDiv.style.display = 'none';
+        }
+
+        function switchToInitialView() {
+            callFlowViewDiv.style.display = 'none';
+            postCallSummaryDiv.style.display = 'none';
+            callTimerDiv.style.display = 'none';
+            animateView(initialViewDiv);
+            updateSystemStatus("🔴 Waiting for Ticket", "status-waiting");
+        }
+
+        function switchToCallFlowView(animate = true) {
+            initialViewDiv.style.display = 'none';
+            postCallSummaryDiv.style.display = 'none';
+            if (animate) animateView(callFlowViewDiv);
+            else callFlowViewDiv.style.display = 'block';
+            updateSystemStatus("🟢 In Ticket", "status-in-call");
+        }
+
+        function switchToSummaryView() {
+            initialViewDiv.style.display = 'none';
+            callFlowViewDiv.style.display = 'none';
+            callTimerDiv.style.display = 'none';
+            animateView(postCallSummaryDiv);
+            updateSystemStatus("📊 Review Ticket Summary", "status-summary");
+        }
+        
+        async function loadActiveScenarios() {
+            setButtonLoadingState(receiveCallBtn, true, "Start Ticket");
+            const customList = document.getElementById('customScenarioList');
+            const scenarioValueInput = document.getElementById('scenarioDropdownValue');
+            customList.innerHTML = '<div class="scenario-item" role="option">Loading scenarios...</div>';
+            scenarioValueInput.value = '';
+
+            try {
+                const { data: scenarios, error } = await supabase
+                    .from('call_scenarios')
+                    .select('id, title, steps')
+                    .eq('is_active', true)
+                    .order('created_at', { ascending: false });
+                
+                if (error) throw error;
+
+                customList.innerHTML = '';
+                if (scenarios && scenarios.length > 0) {
+                    scenarios.forEach(s => {
+                        const item = document.createElement('div');
+                        item.className = 'scenario-item';
+                        item.dataset.value = s.id;
+                        item.setAttribute('role', 'option');
+                        item.setAttribute('tabindex', '0');
+                        item.setAttribute('aria-label', s.title);
+                        item.dataset.stepCount = s.steps?.length || 0;
+                        item.dataset.avgTime = "2-3 min"; // Placeholder
+
+                        let icon = '📝';
+                        const titleLower = s.title.toLowerCase();
+                        if (titleLower.includes('compensation')) { icon = '⭐'; item.classList.add('compensation'); } 
+                        else if (titleLower.includes('inquiry')) { icon = '❓'; } 
+                        else if (titleLower.includes('complaint')) { icon = '😠'; }
+
+                        item.innerHTML = `<span class="icon">${icon}</span> <span>${s.title}</span>`;
+                        
+                        const selectScenario = () => {
+                            const currentlySelected = customList.querySelector('.selected');
+                            if (currentlySelected) currentlySelected.classList.remove('selected');
+                            item.classList.add('selected');
+                            scenarioValueInput.value = s.id;
+                            receiveCallBtn.disabled = false;
+                        };
+
+                        item.addEventListener('click', selectScenario);
+                        item.addEventListener('keydown', (e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                selectScenario();
+                            }
+                        });
+
+                        item.addEventListener('mousemove', (e) => {
+                            scenarioPreviewTooltip.style.display = 'block';
+                            scenarioPreviewTooltip.innerHTML = `<strong>${s.title}</strong><br>Steps: ${item.dataset.stepCount}<br>Avg. Time: ${item.dataset.avgTime}`;
+                            scenarioPreviewTooltip.style.left = `${e.pageX + 15}px`;
+                            scenarioPreviewTooltip.style.top = `${e.pageY + 15}px`;
+                        });
+                        item.addEventListener('mouseleave', () => {
+                            scenarioPreviewTooltip.style.display = 'none';
+                        });
+
+                        customList.appendChild(item);
+                    });
+                    receiveCallBtn.disabled = true;
+                } else {
+                    customList.innerHTML = '<div class="scenario-item" role="option">No scenarios available.</div>';
+                    receiveCallBtn.disabled = true;
+                }
+            } catch (err) {
+                console.error("Error loading scenarios:", err);
+                customList.innerHTML = `<div class="scenario-item" role="option">⚠️ Failed to load scenarios.</div>`;
+                receiveCallBtn.disabled = true;
+            } finally {
+                setButtonLoadingState(receiveCallBtn, false, "Start Ticket");
+            }
+        }
+        
+        receiveCallBtn.addEventListener('click', async () => {
+            const selectedScenarioId = document.getElementById('scenarioDropdownValue').value;
+            if (!selectedScenarioId) {
+                showCustomToast("Please select a scenario first.");
+                return;
+            }
+            setButtonLoadingState(receiveCallBtn, true, "Start Ticket");
+            callStartSound.play().catch(e => console.warn("Audio play failed. Make sure call_sound.mp3 is in the correct folder.", e));
+
+            resetCallState(); 
+            switchToCallFlowView();
+            updateSystemStatus("🟡 Loading Scenario...", "status-loading");
+            stepsContainer.innerHTML = '<p class="placeholder-text">Loading...</p>';
+            decisionButtonsContainer.innerHTML = ''; 
+            scenarioTitleElement.innerHTML = `<span id="step-type-icon" class="step-type-icon"></span>Loading...`;
+
+            try {
+                const { data: scenarioData, error } = await supabase.from('call_scenarios').select('id, title, steps').eq('id', selectedScenarioId).single();
+                if (error) throw error;
+                if (!scenarioData || !Array.isArray(scenarioData.steps) || scenarioData.steps.length === 0) throw new Error("Scenario data is invalid.");
+
+                currentScenario = scenarioData; 
+                currentStepId = currentScenario.steps[0].id; 
+                accumulatedStepDurations = {}; 
+                currentScenario.steps.forEach(step => { if(step?.id) accumulatedStepDurations[step.id] = 0; });
+
+                callStartTimeISO = new Date().toISOString(); 
+                const { data: newSession, error: sessionError } = await supabase.from('call_sessions').insert({ user_id: currentUser.id, scenario_id: currentScenario.id, start_time: callStartTimeISO, agent_name: currentUser.name, agent_email: currentUser.email }).select('id').single();
+                if (sessionError) throw sessionError;
+                callSessionId = newSession.id;
+                
+                const selectedItem = document.querySelector(`.scenario-item[data-value="${selectedScenarioId}"]`);
+                if (selectedItem && selectedItem.classList.contains('compensation')) {
+                    compensationScenarioSound.play().catch(e => console.warn("Compensation sound failed. Make sure compensation_alert.mp3 is in the correct folder.", e));
+                    scenarioTitleElement.classList.add('highlight-scenario-title-animation');
+                    setTimeout(() => scenarioTitleElement.classList.remove('highlight-scenario-title-animation'), 1200);
+                }
+                
+                updateSystemStatus("🟢 In Ticket", "status-in-call");
+                renderStep();
+            } catch (err) {
+                console.error("Error starting ticket:", err);
+                resetCallState(); 
+                switchToInitialView();
+                await loadActiveScenarios();
+            } finally {
+                setButtonLoadingState(receiveCallBtn, false, "Start Ticket");
+            }
+        });
+
+        function renderStep() {
+            if (!currentScenario || !currentStepId) return;
+
+            const stepObject = currentScenario.steps.find(s => s?.id === currentStepId); 
+            if (!stepObject) {
+                finishCall(false, `Error: Step ${currentStepId} not found`);
+                return;
+            }
+            
+            scenarioTitleElement.innerHTML = `<span id="step-type-icon">${(stepObject.type === 'decision' || stepObject.type === 'form') ? '🤔' : '🗣️'}</span> ${currentScenario.title}`;
+            stepsContainer.innerHTML = '';
+            
+            const stepTextElement = document.createElement('p');
+            stepTextElement.innerHTML = stepObject.text.replace(/\n/g, '<br>');
+            stepsContainer.appendChild(stepTextElement);
+
+            decisionButtonsContainer.innerHTML = ''; 
+
+            prevStepBtn.style.display = stepHistory.length > 0 ? 'inline-flex' : 'none';
+            endCallBtn.style.display = 'inline-flex';
+            nextStepBtn.style.display = 'none';
+
+            if (stepObject.type === 'decision' && Array.isArray(stepObject.options)) {
+                stepObject.options.forEach(option => {
+                    const button = document.createElement('button');
+                    button.className = 'decision-button'; 
+                    button.textContent = option.label;
+                    button.addEventListener('click', () => navigateToStep(option.next_id));
+                    decisionButtonsContainer.appendChild(button);
+                });
+            } else if (stepObject.type === 'form' && Array.isArray(stepObject.fields)) {
+                const formContainer = document.createElement('div');
+                formContainer.className = 'form-step-container';
+                formContainer.id = 'current-step-form';
+                
+                stepObject.fields.forEach(field => {
+                    const fieldDiv = document.createElement('div');
+                    fieldDiv.className = 'form-field';
+                    const label = document.createElement('label');
+                    label.setAttribute('for', `field-${field.id}`);
+                    label.textContent = field.label;
+                    fieldDiv.appendChild(label);
+
+                    const input = document.createElement(field.type === 'textarea' ? 'textarea' : 'input');
+                    input.id = `field-${field.id}`;
+                    input.name = field.id;
+                    input.type = field.type || 'text';
+                    if (field.required) input.required = true;
+                    fieldDiv.appendChild(input);
+                    formContainer.appendChild(fieldDiv);
+                });
+                stepsContainer.appendChild(formContainer);
+                nextStepBtn.style.display = 'inline-flex';
+            } else { 
+                const nextStepBtnText = nextStepBtn.querySelector('.btn-text');
+                if (stepObject.next_id) {
+                    if (nextStepBtnText) nextStepBtnText.textContent = "Next Step";
+                } else { 
+                    if (nextStepBtnText) nextStepBtnText.textContent = "Finish Scenario";
+                }
+                nextStepBtn.style.display = 'inline-flex';
+            }
+
+            startStepTimer(); 
+            saveCallState();
+        }
+        
+        function navigateToStep(nextId) {
+            stepVisitCount[nextId] = (stepVisitCount[nextId] || 0) + 1;
+            if (stepVisitCount[nextId] > 5) {
+                finishCall(false, "Error: Potential infinite loop detected. Ticket terminated.");
+                return;
+            }
+
+            document.getElementById('call-flow-view').classList.add('decision-made-animation');
+            setTimeout(() => document.getElementById('call-flow-view').classList.remove('decision-made-animation'), 700);
+
+            stopAndRecordStepTimer();
+            if (nextId === null || typeof nextId === 'undefined' || nextId === "") { 
+                finishCall(true, "Reached end of scenario path."); 
+                return;
+            }
+
+            const targetStep = currentScenario.steps.find(s => s?.id === nextId); 
+            if (!targetStep) {
+                finishCall(false, `Error: Path broken, step ${nextId} not found.`);
+                return;
+            }
+
+            if (currentStepId) stepHistory.push(currentStepId); 
+            currentStepId = nextId;
+            renderStep();
+        }
+
+        nextStepBtn.addEventListener('click', () => {
+            const stepObject = currentScenario.steps.find(s => s?.id === currentStepId); 
+            if (!stepObject) return;
+            
+            if (stepObject.type === 'form') {
+                const form = document.getElementById('current-step-form');
+                const inputs = form.querySelectorAll('input, textarea');
+                let formData = {};
+                let isValid = true;
+                inputs.forEach(input => {
+                    if(input.required && !input.value) isValid = false;
+                    formData[input.name] = input.value;
+                });
+
+                if(!isValid) { 
+                    showCustomToast("Please fill all required fields."); 
+                    return; 
+                }
+
+                console.log("Form Data Collected:", formData);
+            }
+
+            if (stepObject.next_id) navigateToStep(stepObject.next_id);
+            else { stopAndRecordStepTimer(); finishCall(true, "Scenario finished via button."); }
+        });
+
+        prevStepBtn.addEventListener('click', () => {
+            stopAndRecordStepTimer(); 
+            if (stepHistory.length > 0) { 
+                currentStepId = stepHistory.pop();
+                if(stepVisitCount[currentStepId]) stepVisitCount[currentStepId] = 0;
+                renderStep(); 
+            }
+        });
+        
+        endCallBtn.addEventListener('click', () => { stopAndRecordStepTimer(); finishCall(false, "Ticket ended by agent"); });
+
+        function startStepTimer() {
+            callTimerDiv.style.display = 'inline-block'; 
+            if (stepTimerInterval) clearInterval(stepTimerInterval);
+            if (stepStartTime === 0) stepStartTime = Date.now(); 
+            
+            const updateTimerDisplay = () => {
+                const totalSeconds = callStartTimeISO ? Math.floor((Date.now() - new Date(callStartTimeISO).getTime()) / 1000) : 0;
+                const minutes = String(Math.floor(totalSeconds / 60)).padStart(2, '0');
+                const seconds = String(totalSeconds % 60).padStart(2, '0');
+                callTimerDiv.textContent = `${minutes}:${seconds}`;
+            };
+            updateTimerDisplay(); 
+            stepTimerInterval = setInterval(updateTimerDisplay, 1000);
+        }
+
+        function stopAndRecordStepTimer() {
+            if (stepTimerInterval) clearInterval(stepTimerInterval);
+            stepTimerInterval = null;
+            if (stepStartTime > 0 && currentStepId && accumulatedStepDurations.hasOwnProperty(currentStepId)) {
+                accumulatedStepDurations[currentStepId] += Math.floor((Date.now() - stepStartTime) / 1000);
+            }
+            stepStartTime = 0; 
+        }
+        
+        async function finishCall(completed, reasonText) { 
+            stopAndRecordStepTimer(); 
+            const endTimeISO = new Date().toISOString();
+            const durationInSeconds = callStartTimeISO ? Math.floor((new Date(endTimeISO) - new Date(callStartTimeISO)) / 1000) : 0;
+            const quality = completed ? 'Good' : (durationInSeconds > 0 ? 'Bad' : 'N/A'); 
+            const reason = reasonText || (completed ? 'Scenario completed.' : 'Ticket ended prematurely.');
+            
+            updateSystemStatus(completed ? "✅ Completed" : "⚪ Ended", completed ? "status-completed" : "status-ended");
+
+            if (callSessionId) {
+                await supabase.from('call_sessions').update({ end_time: endTimeISO, duration: durationInSeconds, completed: completed, call_quality: quality, quality_reason: reason }).eq('id', callSessionId);
+            }
+            
+            displayPostCallSummary(quality, reason, durationInSeconds);
+            clearCallState(); 
+        }
+
+        function displayPostCallSummary(quality, reason, totalDurationSeconds) {
+            let summaryHTML = `<p><strong>Ticket Quality:</strong> <span class="quality-text quality-${quality?.toLowerCase() || 'na'}">${quality || 'N/A'}</span></p> <p><strong>Reason:</strong> ${reason || "N/A"}</p> <p><strong>Total Handle Time:</strong> ${Math.floor(totalDurationSeconds / 60)}m ${totalDurationSeconds % 60}s</p><hr style="margin: 1rem 0; border-color: var(--border-color);"><p><strong>Time Spent on Steps:</strong></p><ul style="list-style: none; padding-left: 0;">`;
+
+            if (currentScenario?.steps) {
+                let visitedSteps = [...new Set([...stepHistory, currentStepId])].filter(id => id != null);
+                visitedSteps.forEach(stepId => {
+                    const stepObject = currentScenario.steps.find(s => s?.id === stepId); 
+                    const duration = accumulatedStepDurations[stepId] || 0;
+                    if (stepObject && duration > 0) {
+                        summaryHTML += `<li style="margin-bottom: 0.3rem;">"${stepObject.text.substring(0,50)}...": <strong>${duration}s</strong></li>`;
+                    }
+                });
+            } else { summaryHTML += `<li>No step data available.</li>`; }
+            summaryHTML += `</ul>`;
+            callSummaryContentDiv.innerHTML = summaryHTML;
+            switchToSummaryView();
+        }
+        
+        returnToInitialViewBtn.addEventListener('click', async () => {
+            resetCallState(true); 
+            await loadActiveScenarios();
+        });
+
+        function saveCallState() {
+            if (!callSessionId) return;
+            const state = { callSessionId, currentScenario, currentStepId, stepHistory, accumulatedStepDurations, stepStartTime, callStartTimeISO, stepVisitCount };
+            sessionStorage.setItem(SESSION_STATE_KEY, JSON.stringify(state));
+        }
+
+        function restoreCallState() {
+            const savedState = JSON.parse(sessionStorage.getItem(SESSION_STATE_KEY));
+            if (!savedState || !savedState.callSessionId) return false;
+            
+            callSessionId = savedState.callSessionId;
+            currentScenario = savedState.currentScenario; 
+            currentStepId = savedState.currentStepId;
+            stepHistory = savedState.stepHistory;
+            accumulatedStepDurations = savedState.accumulatedStepDurations;
+            stepStartTime = savedState.stepStartTime || Date.now(); 
+            callStartTimeISO = savedState.callStartTimeISO; 
+            stepVisitCount = savedState.stepVisitCount || {};
+            return true;
+        }
+
+        function clearCallState() {
+            sessionStorage.removeItem(SESSION_STATE_KEY);
+        }
+
+        function resetCallState(switchToInitial = false) {
+            stopAndRecordStepTimer(); 
+            clearCallState();         
+            callSessionId = currentStepId = currentScenario = null;
+            stepHistory = [];
+            accumulatedStepDurations = {}; 
+            stepVisitCount = {};
+            stepStartTime = 0;
+            if (switchToInitial) switchToInitialView();
+        }
+
+        logoutButton.addEventListener('click', async () => {
+            resetCallState(); 
+            localStorage.removeItem('elevoCoreUserData'); 
+            if (supabase) await supabase.auth.signOut();
+            window.location.replace("login.html");
+        });
+        
+        searchScenarioInput.addEventListener('input', (e) => {
+            const searchTerm = e.target.value.toLowerCase();
+            const scenarios = document.querySelectorAll('.scenario-item');
+            scenarios.forEach(scenario => {
+                const title = scenario.textContent.toLowerCase();
+                scenario.style.display = title.includes(searchTerm) ? 'flex' : 'none';
+            });
+        });
+
+        window.addEventListener('beforeunload', () => { if (callSessionId) saveCallState(); });
+        
+        if (supabase) initializeApp();
+        else authLoadingDiv.innerHTML = '<p style="color:var(--danger-color);">Core services could not be initialized.</p>';
+    </script>
+
+<!-- Access Denied Modal (Inserted) -->
+<div id="accessDeniedModal" class="access-denied-modal" aria-hidden="true">
+  <div class="access-denied-content" role="dialog" aria-labelledby="accessDeniedTitle" aria-describedby="accessDeniedDesc">
+    <svg xmlns="http://www.w3.org/2000/svg" width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="10"></circle>
+      <line x1="12" y1="8" x2="12" y2="12"></line>
+      <line x1="12" y1="16" x2="12.01" y2="16"></line>
+    </svg>
+    <h3 id="accessDeniedTitle">Access Restricted</h3>
+    <p id="accessDeniedDesc">You don’t have permission to view this page. This section is available for <strong>Admins</strong> only.</p>
+    <button id="returnToAppBtn" class="action-button primary-button">🔙 Back to My Dashboard</button>
+  </div>
+</div>
+
+
+<script>document.addEventListener('DOMContentLoaded', function(){ if (typeof checkAuth === 'function') { checkAuth(); } });</script>
+</body>
+</html>

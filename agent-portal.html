@@ -1,0 +1,918 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agent Portal - Elevo Core</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234e8cff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M12 22V12M9 19l3-3 3 3M12 2a4 4 0 0 0-4 4v0a4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4z'/></svg>">
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+    <style>
+        /* Hide scrollbar but keep scrolling */
+        ::-webkit-scrollbar {
+          display: none;
+        }
+
+        html, body {
+          scrollbar-width: none; /* For Firefox */
+          -ms-overflow-style: none; /* For Internet Explorer and Edge */
+        }
+
+        .dashboard-main {
+            width: 100%;
+            max-width: none; 
+            padding: 1.5rem 2rem; 
+            text-align: left;
+        }
+
+        .portal-layout-grid {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr);
+            gap: 1.5rem; /* FIX: Reduced gap */
+            margin-top: 1.5rem;
+        }
+
+        .main-content-column, .sidebar-column {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem; /* FIX: Reduced gap */
+        }
+
+        @media (min-width: 1024px) {
+            .portal-layout-grid {
+                grid-template-columns: minmax(0, 2.5fr) minmax(0, 1.5fr);
+            }
+        }
+        
+        .call-history-container.card {
+            max-width: none;
+        }
+        
+        #agentScratchpad, #editNoteTextarea, #editTrainingReason {
+            width: 100%;
+            min-height: 150px;
+            background-color: var(--input-bg-color);
+            border: 1px solid var(--border-color);
+            border-radius: var(--border-radius-md);
+            color: var(--text-color);
+            padding: 0.75rem;
+            font-family: inherit;
+            font-size: 0.9em;
+            resize: vertical;
+            transition: border-color var(--transition-speed-fast) ease, box-shadow var(--transition-speed-fast) ease;
+        }
+        #agentScratchpad:focus, #editNoteTextarea:focus, #editTrainingReason:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 2px rgba(var(--primary-color-rgb), 0.25);
+        }
+
+        .scratchpad-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 0.75rem;
+            margin-top: 0.75rem;
+        }
+
+        .saved-notes-list {
+            display: flex;
+            flex-direction: column;
+            gap: 1.25rem;
+        }
+        
+        .saved-notes-list, .training-programs-list {
+            max-height: 450px; 
+            overflow-y: auto;
+            padding-right: 0.75rem; 
+        }
+
+        .saved-notes-list::-webkit-scrollbar, 
+        .training-programs-list::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .saved-notes-list::-webkit-scrollbar-track,
+        .training-programs-list::-webkit-scrollbar-track {
+            background: var(--input-bg-color);
+            border-radius: 4px;
+        }
+
+        .saved-notes-list::-webkit-scrollbar-thumb,
+        .training-programs-list::-webkit-scrollbar-thumb {
+            background-color: var(--border-color);
+            border-radius: 4px;
+            border: 2px solid var(--input-bg-color);
+        }
+
+        .saved-notes-list::-webkit-scrollbar-thumb:hover,
+        .training-programs-list::-webkit-scrollbar-thumb:hover {
+            background-color: var(--primary-color);
+        }
+
+        .note-card {
+            background-color: var(--input-bg-color);
+            border-radius: var(--border-radius-lg);
+            border-left: 4px solid var(--accent-color);
+            padding: 1rem 1.25rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+        
+        .note-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 1rem;
+            font-size: 0.85em;
+            color: var(--text-color-light);
+        }
+
+        .note-author, .note-timestamp {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .note-author span:first-child, .note-timestamp span:first-child {
+            font-weight: 600;
+            color: var(--text-color);
+            margin-bottom: 2px;
+        }
+
+        .note-content p {
+            margin: 0.5rem 0;
+            color: var(--text-color);
+            word-break: break-word;
+            white-space: pre-wrap;
+            font-size: 0.95em;
+            line-height: 1.6;
+        }
+
+        .note-actions {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .note-action-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 0.35rem;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background-color 0.2s ease;
+        }
+        
+        .view-note-btn { color: var(--text-color-light); }
+        .view-note-btn:hover { background-color: rgba(156, 163, 175, 0.1); }
+
+        .edit-note-btn { color: var(--primary-color); }
+        .edit-note-btn:hover { background-color: rgba(var(--primary-color-rgb), 0.1); }
+        
+        .delete-note-btn { color: var(--danger-color); }
+        .delete-note-btn:hover { background-color: rgba(var(--danger-color-rgb), 0.1); }
+        
+        #notesPaginationControls, #trainingPaginationControls {
+             margin-top: 1.5rem;
+             padding-top: 1rem;
+             border-top: 1px solid var(--border-color);
+        }
+
+        .modal {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: none; align-items: center; justify-content: center;
+            z-index: 1000; opacity: 0; visibility: hidden;
+            transition: opacity 0.3s ease, visibility 0s 0.3s;
+        }
+        .modal.visible {
+            display: flex;
+            opacity: 1;
+            visibility: visible;
+            transition-delay: 0s;
+        }
+        
+        .modal-content {
+            background-color: var(--card-bg-color); padding: 2rem;
+            border-radius: var(--border-radius-lg); width: 90%;
+            max-width: 500px; box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            transform: scale(0.95); transition: transform 0.3s ease;
+        }
+        .modal.visible .modal-content { transform: scale(1); }
+
+        .modal-content h3 { margin-top: 0; margin-bottom: 1rem; font-size: 1.4em; }
+        .modal-content p { margin-bottom: 1.5rem; color: var(--text-color-light); line-height: 1.6; }
+        .modal-content .form-group { margin-bottom: 1rem; }
+        .modal-content .form-group label { display: block; margin-bottom: 0.5rem; font-weight: 500; color: var(--text-color-light); }
+        .modal-content .form-group input, .modal-content .form-group select {
+            width: 100%; padding: 0.75rem; background-color: var(--input-bg-color);
+            border: 1px solid var(--border-color); border-radius: var(--border-radius-md);
+            color: var(--text-color);
+        }
+        
+        .modal-actions { display: flex; justify-content: flex-end; gap: 0.75rem; }
+
+        .card h2, .card .card-header {
+            display: flex; justify-content: space-between; align-items: center;
+        }
+
+        .scorecard {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.5rem;
+        }
+        .kpi-card {
+            background-color: var(--card-bg-color); padding: 1.25rem;
+            border-radius: var(--border-radius-lg); border-left: 4px solid var(--primary-color);
+        }
+        .kpi-card h4 {
+            font-size: 0.9em; color: var(--text-color-light);
+            margin-bottom: 0.5rem; font-weight: 500;
+        }
+        .kpi-value {
+            font-size: 1.75em; font-weight: 600; color: var(--text-color);
+            display: flex; align-items: center; gap: 0.5rem;
+        }
+        
+        .progress-card {
+            background-color: var(--card-bg-color); padding: 1.25rem;
+            border-radius: var(--border-radius-lg);
+        }
+        .progress-title {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 0.75rem; font-size: 0.9em; font-weight: 500;
+            color: var(--text-color-light);
+        }
+        .progress-bar-container {
+            width: 100%; height: 12px; background-color: var(--input-bg-color);
+            border-radius: 6px; overflow: hidden;
+        }
+        .progress-bar {
+            height: 100%; width: 0%; background-color: var(--accent-color);
+            border-radius: 6px; transition: width 0.5s ease-in-out;
+        }
+
+        .widget-card {
+            background-color: var(--card-bg-color); padding: 1.5rem;
+            border-radius: var(--border-radius-lg);
+        }
+        .widget-card h3 { margin-top: 0; font-size: 1.1em; margin-bottom: 1rem; }
+        .achievements-list { list-style: none; padding: 0; }
+        .achievement-item {
+            display: flex; align-items: center; gap: 1rem;
+            padding: 0.75rem 0; font-size: 0.95em;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .achievement-item:last-child { border-bottom: none; }
+        .achievement-icon { font-size: 1.5em; }
+        
+        .performance-summary-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+        .performance-summary-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.95em;
+        }
+        .performance-summary-item span {
+            color: var(--text-color-light);
+        }
+         .performance-summary-item strong {
+            font-weight: 600;
+            font-size: 1.1em;
+            color: var(--text-color);
+        }
+        .training-programs-list {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+        .training-card {
+            background-color: var(--input-bg-color);
+            border-radius: var(--border-radius-lg);
+            padding: 1.25rem;
+            border-left: 4px solid var(--primary-color);
+            position: relative;
+        }
+         .training-card.completed { border-left-color: var(--success-color); }
+        .training-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 1rem;
+        }
+        .training-card-header h4 {
+            margin: 0;
+            font-size: 1.1em;
+            font-weight: 600;
+        }
+        .training-status {
+            font-size: 0.8em;
+            font-weight: 600;
+            padding: 0.25rem 0.6rem;
+            border-radius: var(--border-radius-full);
+            color: #fff;
+        }
+        .training-status.completed { background-color: var(--success-color); }
+        .training-status.in-progress { background-color: var(--primary-color); }
+
+        .training-card-body {
+            margin-top: 1rem;
+            font-size: 0.95em; 
+            color: var(--text-color-light);
+        }
+        .training-card-body p { margin: 0.25rem 0; }
+        .training-card-body strong { color: var(--text-color); }
+        
+        .training-card-footer {
+            margin-top: 1.25rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .training-card-date {
+            font-size: 0.9em; 
+            font-weight: 500;   
+            color: var(--text-color-subtle);
+        }
+        .training-card-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+        
+        .perf-comparison-card { text-align: center; }
+        .comparison-grid {
+            display: grid; grid-template-columns: 1fr 1fr;
+            gap: 1.5rem; margin: 1rem 0;
+        }
+        .comparison-metric h5 {
+            margin: 0 0 0.25rem 0; font-size: 0.9em;
+            color: var(--text-color-light); font-weight: 500;
+        }
+        .comparison-metric p {
+            margin: 0; font-size: 1.8em; font-weight: 700;
+        }
+        .comparison-result {
+            margin-top: 1rem; padding-top: 1rem;
+            border-top: 1px solid var(--border-color);
+        }
+        .comparison-result p {
+            margin: 0; font-size: 1.1em; font-weight: 600;
+            display: flex; align-items: center; justify-content: center; gap: 0.5rem;
+        }
+        .comparison-result .improvement { color: var(--success-color); }
+        .comparison-result .decline { color: var(--danger-color); }
+        
+        .widget-card-bordered {
+            border-left: 4px solid var(--accent-color);
+        }
+    </style>
+
+<style>
+/* Ensure call history, notes, and training are consistent */
+.call-history-container.card,
+.widget-card.widget-card-bordered,
+.widget-card.training-programs {
+    width: 100% !important;
+    max-width: none !important;
+    min-height: 300px;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+}
+.main-content-column {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem; 
+}
+</style>
+
+<!-- FIXES AND ENHANCEMENTS V2 -->
+<style>
+    :root {
+        --sidebar-card-bg-color: #1f2937; /* Lighter gray for sidebar cards */
+    }
+
+    html, body {
+        height: 100%;
+    }
+
+    body {
+        background-color: #111827; 
+    }
+
+    .app-container {
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .app-main {
+        flex-grow: 1;
+    }
+
+    .app-header {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        background-color: rgba(17, 24, 39, 0.8);
+        backdrop-filter: blur(10px);
+    }
+
+    .app-footer {
+        position: sticky;
+        bottom: 0;
+        z-index: 10;
+    }
+    
+    .charts-row {
+        display: flex;
+        flex-wrap: wrap; 
+        gap: 1.5rem;
+        align-items: stretch;
+    }
+    
+    .chart-wrapper {
+        flex: 1 1 250px; 
+        position: relative;
+        min-height: 250px; 
+        max-width: 50%;
+        margin-right: 20px; /* FIX: Added margin */
+    }
+    
+    canvas {
+        max-height: 250px;
+    }
+
+    .sidebar-column .widget-card {
+        background-color: var(--sidebar-card-bg-color); /* FIX: Lighter card color */
+    }
+
+    .kpi-card, .widget-card, .training-card, .note-card {
+        transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+    }
+
+    .kpi-card:hover, .widget-card:hover, .training-card:hover, .note-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+    }
+    
+    /* Collapsible Training Section */
+    .collapsible-header {
+        cursor: pointer;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    .collapsible-header .toggle-icon {
+        transition: transform 0.3s ease;
+    }
+    .collapsible-content {
+        overflow: hidden;
+        transition: max-height 0.4s ease-out, padding 0.4s ease-out;
+        max-height: 1000px; /* Arbitrary large value */
+        padding-top: 1.5rem;
+    }
+    .collapsible-content.collapsed {
+        max-height: 0;
+        padding-top: 0;
+        border-top: none;
+    }
+    .is-collapsed .toggle-icon {
+        transform: rotate(-90deg);
+    }
+</style>
+<!-- END FIXES -->
+
+
+<!-- Access Denied Modal CSS (Inserted) -->
+<style>
+.access-denied-modal { position: fixed; inset: 0; background-color: rgba(0,0,0,0.6); display: none; align-items: center; justify-content: center; z-index: 99999; }
+.access-denied-modal.visible { display: flex; }
+.access-denied-content { background: var(--card-bg-color); padding: 1.75rem; border-radius: 12px; text-align: center; max-width: 420px; box-shadow: 0 12px 40px rgba(0,0,0,0.5); }
+.access-denied-content svg { margin-bottom: 0.5rem; color: var(--primary-color); }
+.access-denied-content h3 { margin: 0.5rem 0; color: var(--text-color); }
+.access-denied-content p { margin: 0.5rem 0 1rem; color: var(--text-color-light); }
+</style>
+
+</head>
+<body>
+    <div class="app-container">
+        <header class="app-header">
+            <div class="logo-container">
+                <svg class="company-logo" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="color: var(--primary-color); width: 28px; height: 28px;">
+                     <path d="M12 22V12M9 19l3-3 3 3M12 2a4 4 0 0 0-4 4v0a4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                <span class="app-title" style="font-size: 1.4rem;">Elevo Core - Agent Portal</span>
+            </div>
+            <div class="header-controls">
+                 <a href="core-flow.html" class="nav-link">Go to Call App</a>
+                 <a href="dashboard.html" class="nav-link" id="dashboardLink" style="display: none;">Admin Dashboard</a>
+                 <a href="rtm-dashboard.html" class="nav-link" id="rtmDashboardLink" style="display: none;">RTM Dashboard</a>
+                 <div class="user-info" id="userInfo" style="display: none;">
+                    <span id="userName" class="user-name-display"></span>
+                    <button id="logoutButton" class="logout-btn">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+                        Logout
+                    </button>
+                 </div>
+            </div>
+        </header>
+
+        <main class="app-main dashboard-main">
+            <div id="auth-loading" class="loading-container" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 70vh;">
+                <div class="spinner"></div>
+                <p>Syncing data with Elevo Core...</p>
+            </div>
+
+            <div id="portalContent" style="display: none;">
+                <div class="dashboard-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+                     <div>
+                        <h1 id="agentGreeting">Welcome!</h1>
+                        <p id="agentSubtext" class="text-color-light">Historical performance data and agent analytics.</p>
+                     </div>
+                     <button id="exportDataBtn" class="action-button primary-button">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                        Export My Data
+                    </button>
+                </div>
+
+                <div class="scorecard" style="margin-top: 1.5rem;">
+                    <div class="kpi-card">
+                        <h4>Avg. Handling Time</h4>
+                        <div class="kpi-value" id="kpiAvgTime">--:--</div>
+                    </div>
+                    <div class="kpi-card" style="border-left-color: var(--success-color);">
+                        <h4>Customer Rating</h4>
+                        <div class="kpi-value" id="kpiAvgRating">⭐ -.--</div>
+                    </div>
+                    <div class="kpi-card" style="border-left-color: var(--warning-color);">
+                         <h4>Calls Completed</h4>
+                        <div class="kpi-value" id="kpiTotalCalls">0</div>
+                    </div>
+                    <div class="kpi-card" style="border-left-color: var(--accent-color);">
+                        <div class="progress-card" style="padding: 0; background: none;">
+                            <div class="progress-title">
+                                <span>Daily Target</span>
+                                <span id="dailyTargetPercentage">0%</span>
+                            </div>
+                            <div class="progress-bar-container">
+                                <div id="dailyTargetProgressBar" class="progress-bar" style="width: 0%;"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="portal-layout-grid">
+                    <div class="main-content-column">
+                        <div class="call-history-container card">
+                            <h2>Your Call History</h2>
+                            <div class="filter-controls">
+                                <div class="filter-grid">
+                                    <div><label for="searchInput">Search Scenario:</label><input type="text" id="searchInput" placeholder="Enter scenario name..."></div>
+                                    <div><label for="qualityFilter">Filter by Quality:</label><select id="qualityFilter"><option value="">All</option><option value="Good">Good</option><option value="Bad">Bad</option><option value="N/A">N/A</option></select></div>
+                                    <div><label for="startDateFilter">From Date:</label><input type="date" id="startDateFilter"></div>
+                                    <div><label for="endDateFilter">To Date:</label><input type="date" id="endDateFilter"></div>
+                                    <button id="resetFiltersBtn" class="action-button secondary-button">Reset Filters</button>
+                                </div>
+                            </div>
+                            <div class="table-responsive">
+                                <table id="callsTable">
+                                    <thead>
+                                        <tr>
+                                            <th>Date</th>
+                                            <th>Scenario</th>
+                                            <th>Duration</th>
+                                            <th>Completed</th>
+                                            <th>Quality</th>
+                                            <th>Reason</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody></tbody>
+                                </table>
+                                <div id="noDataMessage" style="text-align: center; padding: 2rem; display:none; color: var(--text-color-subtle);"></div>
+                            </div>
+                            <div id="paginationControls" class="pagination-container"></div>
+                        </div>
+                        
+                        <div class="widget-card widget-card-bordered">
+                            <h3>My Notes</h3>
+                             <textarea id="agentScratchpad" placeholder="Jot down temporary notes here..."></textarea>
+                             <div class="scratchpad-actions">
+                                 <button id="cancelNoteBtn" class="action-button secondary-button">Cancel</button>
+                                 <button id="saveNoteBtn" class="action-button primary-button">Save Note</button>
+                             </div>
+                             <hr style="border-color: var(--border-color); margin: 1.5rem 0;">
+                            <h4 style="margin-top:0; margin-bottom: 1rem;">Saved Notes</h4>
+                            <div id="savedNotesList" class="saved-notes-list"></div>
+                            <p id="noNotesMessage" style="text-align: center; padding: 1rem; display:none; color: var(--text-color-subtle);">No notes saved yet.</p>
+                            <div id="notesPaginationControls" class="pagination-container"></div>
+                        </div>
+
+                        <div id="trainingProgramsCard" class="widget-card training-programs">
+                            <div class="card-header collapsible-header" id="trainingCollapsibleHeader">
+                                <h3>My Training Programs</h3>
+                                <div class="toggle-icon">
+                                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                                </div>
+                            </div>
+                            <div id="trainingCollapsibleContent" class="collapsible-content">
+                                <div id="trainingProgramsList" class="training-programs-list"></div>
+                                <p id="noTrainingMessage" style="text-align: center; padding: 1rem; display:none; color: var(--text-color-subtle);">You have no assigned training programs.</p>
+                                <div id="trainingPaginationControls" class="pagination-container"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="sidebar-column">
+                        <div class="widget-card">
+                            <h3>Performance Summary</h3>
+                            <ul class="performance-summary-list">
+                                <li class="performance-summary-item">
+                                    <span>Total Calls (in view)</span>
+                                    <strong id="ins-total">0</strong>
+                                </li>
+                                <li class="performance-summary-item">
+                                    <span>Avg. Handling Time</span>
+                                    <strong id="ins-avg">0m 0s</strong>
+                                </li>
+                                <li class="performance-summary-item">
+                                    <span>Completion Rate</span>
+                                    <strong id="ins-completion">0%</strong>
+                                </li>
+                            </ul>
+                        </div>
+                        
+                        <div class="charts-container" style="display: flex; flex-direction: column; gap: 1.5rem;">
+                            <div class="charts-row">
+                                <div class="chart-wrapper"><canvas id="qualityChart"></canvas></div>
+                                <div class="chart-wrapper">
+                                    <canvas id="badReasonsChart"></canvas>
+                                    <p id="noBadCallsMessage" class="text-color-light" style="text-align: center; padding: 2rem; display: none;">No 'Bad' quality tickets recorded. Keep up the great work! ✨</p>
+                                </div>
+                            </div>
+                            
+                            <div id="monthlyPerfComparison" class="widget-card perf-comparison-card" style="display: none;">
+                                <h3>Monthly Performance Comparison</h3>
+                                <p class="text-color-light" style="font-size: 0.9em; margin-top: -0.5rem; margin-bottom: 1rem;">'Bad' Quality Tickets</p>
+                                <div class="comparison-grid">
+                                    <div class="comparison-metric">
+                                        <h5>Last Month</h5>
+                                        <p id="lastMonthBadCalls">0</p>
+                                    </div>
+                                    <div class="comparison-metric">
+                                        <h5>This Month</h5>
+                                        <p id="thisMonthBadCalls">0</p>
+                                    </div>
+                                </div>
+                                <div class="comparison-result">
+                                    <p id="perfChangeIndicator">--</p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="widget-card">
+                             <h3>Your Achievements</h3>
+                             <ul class="achievements-list">
+                                 <li class="achievement-item"><span class="achievement-icon">🏆</span> Fastest Call Today: <strong id="achFastestCall">--:--</strong></li>
+                                 <li class="achievement-item"><span class="achievement-icon">✅</span> Tickets Completed: <strong id="achTicketsCompleted">0</strong></li>
+                                 <li class="achievement-item" title="Based on your excellent ratio of 'Good' quality calls."><span class="achievement-icon">⭐</span> Top Quality Score</li>
+                             </ul>
+                        </div>
+                        <div class="widget-card">
+                             <h3>Resources</h3>
+                             <a href="#" class="action-button primary-button" style="width: 100%;">Open Learning Hub</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+        
+        <footer class="app-footer">
+            <p>© <span id="currentYear"></span> Mohamed Elmenisy - Elevo Core. All rights reserved.</p>
+        </footer>
+    </div>
+
+    <!-- Notes Modals -->
+    <div id="editNoteModal" class="modal">
+        <div class="modal-content">
+            <h3>Edit Note</h3>
+            <textarea id="editNoteTextarea" placeholder="Edit your note..."></textarea>
+            <div class="modal-actions">
+                <button id="cancelEditBtn" class="action-button secondary-button">Cancel</button>
+                <button id="saveChangesBtn" class="action-button primary-button">Save Changes</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="deleteConfirmModal" class="modal">
+        <div class="modal-content">
+            <h3>Confirm Deletion</h3>
+            <p>Are you sure you want to permanently delete this note? This action cannot be undone.</p>
+            <div class="modal-actions">
+                <button id="cancelDeleteBtn" class="action-button secondary-button">Cancel</button>
+                <button id="confirmDeleteBtn" class="action-button danger-button">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Training Modals -->
+    <div id="viewTrainingModal" class="modal">
+        <div class="modal-content">
+            <h3 id="viewTrainingTitle">Training Details</h3>
+            <div id="viewTrainingBody" class="training-card-body" style="color: var(--text-color);"></div>
+            <div class="modal-actions">
+                <button id="closeViewTrainingBtn" class="action-button primary-button">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="editTrainingModal" class="modal">
+        <div class="modal-content">
+            <h3>Edit Training Program</h3>
+            <div class="form-group">
+                <label for="editTrainingTitleInput">Training Title</label>
+                <input type="text" id="editTrainingTitleInput" placeholder="Enter training title">
+            </div>
+            <div class="form-group">
+                <label for="editTrainingReason">Reason for Assignment</label>
+                <textarea id="editTrainingReason" placeholder="Enter reason..."></textarea>
+            </div>
+            <div class="form-group">
+                <label for="editTrainingStatus">Status</label>
+                <select id="editTrainingStatus">
+                    <option value="Not Started">Not Started</option>
+                    <option value="In Progress">In Progress</option>
+                    <option value="Completed">Completed</option>
+                </select>
+            </div>
+            <div class="modal-actions">
+                <button id="cancelEditTrainingBtn" class="action-button secondary-button">Cancel</button>
+                <button id="saveTrainingChangesBtn" class="action-button primary-button">Save Changes</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="deleteTrainingConfirmModal" class="modal">
+        <div class="modal-content">
+            <h3>Confirm Deletion</h3>
+            <p>Are you sure you want to delete this training program? This action cannot be undone.</p>
+            <div class="modal-actions">
+                <button id="cancelTrainingDeleteBtn" class="action-button secondary-button">Cancel</button>
+                <button id="confirmTrainingDeleteBtn" class="action-button danger-button">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        const SUPABASE_URL = 'https://aefiigottnlcmjzilqnh.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFlZmlpZ290dG5sY21qemlscW5oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcxNzY2MDQsImV4cCI6MjA2Mjc1MjYwNH0.FypB02v3tGMnxXV9ZmZMdMC0oQpREKOJWgHMPxUzwX4';
+        // FIX: Correctly initialize Supabase client
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        // Global variables
+        let currentUser = null;
+        let currentUserId = null;
+        let currentPage = 1;
+        let currentNotesPage = 1;
+        let currentTrainingPage = 1;
+        const itemsPerPage = 10;
+        let notesData = [];
+        let trainingData = [];
+        let callHistoryData = [];
+        let filteredCallHistoryData = [];
+        let qualityChart = null;
+        let badReasonsChart = null;
+        let currentEditingNoteId = null;
+        let currentEditingTrainingId = null;
+
+        // Initialize the application
+        document.addEventListener('DOMContentLoaded', async function() {
+            // Set current year in footer
+            document.getElementById('currentYear').textContent = new Date().getFullYear();
+            
+            // Initialize collapsible training section
+            const trainingHeader = document.getElementById('trainingCollapsibleHeader');
+            const trainingContent = document.getElementById('trainingCollapsibleContent');
+            if (trainingHeader && trainingContent) {
+                trainingHeader.addEventListener('click', () => {
+                    trainingHeader.classList.toggle('is-collapsed');
+                    trainingContent.classList.toggle('collapsed');
+                });
+            }
+            
+            // Check authentication and load data
+            await checkAuth();
+            setupEventListeners();
+        });
+
+        // Authentication check
+        
+// --- Unified Role & Access Control (Inserted) ---
+async function checkAuth() {
+    try {
+        // Try to get current user (works with Supabase v2)
+        const { data: userData, error: userError } = await supabase.auth.getUser();
+        if (userError || !userData?.user) {
+            window.location.href = 'index.html';
+            return;
+        }
+        const sessionUser = userData.user;
+
+        // Fetch profile fields name, role, is_admin
+        const { data: profile, error: profileError } = await supabase
+            .from('users')
+            .select('name, role, is_admin')
+            .eq('id', sessionUser.id)
+            .single();
+
+        if (profileError) {
+            console.warn('Error fetching profile for role handling:', profileError);
+        }
+
+        const currentUserLocal = {
+            id: sessionUser.id,
+            email: sessionUser.email,
+            name: profile?.name || (sessionUser.email ? sessionUser.email.split('@')[0] : 'User'),
+            isAdmin: profile?.is_admin === true || (profile?.role?.toLowerCase?.() === 'admin')
+        };
+
+        // Expose globally for other scripts
+        window.currentUser = currentUserLocal;
+
+        // Update UI user info if present
+        const userInfoEl = document.getElementById('userInfo');
+        if (userInfoEl) userInfoEl.style.display = 'flex';
+        const userNameEl = document.getElementById('userName');
+        if (userNameEl) userNameEl.textContent = currentUserLocal.name;
+
+        // Determine current page
+        const currentPage = window.location.pathname.split('/').pop().toLowerCase();
+        const adminOnlyPages = ['dashboard.html','rtm-dashboard.html'];
+
+        // If this is an admin-only page and user is not admin -> show modal and stop rendering
+        if (adminOnlyPages.includes(currentPage) && !currentUserLocal.isAdmin) {
+            const loadingEl = document.getElementById('auth-loading');
+            if (loadingEl) loadingEl.style.display = 'none';
+            const contentEl = document.getElementById('dashboardContent') || document.getElementById('rtmContent') || document.getElementById('portalContent');
+            if (contentEl) contentEl.style.display = 'none';
+
+            const modal = document.getElementById('accessDeniedModal');
+            if (modal) {
+                modal.style.display = 'flex';
+                modal.classList.add('visible');
+            }
+            const btn = document.getElementById('returnToAppBtn');
+            if (btn) btn.addEventListener('click', () => {
+                window.location.href = 'agent-portal.html';
+            });
+            return;
+        }
+
+        // Allowed to proceed. Hide loading and show main content if present.
+        const loadingEl = document.getElementById('auth-loading');
+        if (loadingEl) loadingEl.style.display = 'none';
+        const contentEl = document.getElementById('dashboardContent') || document.getElementById('rtmContent') || document.getElementById('portalContent');
+        if (contentEl) contentEl.style.display = 'block';
+
+        // Call page-specific loaders if they exist (non-blocking)
+        if (typeof loadRTMData === 'function') { try { await loadRTMData(); } catch(e){ console.warn(e); } }
+        if (typeof loadDashboardData === 'function') { try { await loadDashboardData(); } catch(e){ console.warn(e); } }
+        if (typeof loadPortalData === 'function') { try { await loadPortalData(); } catch(e){ console.warn(e); } }
+
+    } catch (err) {
+        console.error('checkAuth error', err);
+        try { await supabase.auth.signOut(); } catch(e){};
+        window.location.href = 'index.html';
+    }
+}
+// --- End Unified Role & Access Control ---
+</script>
+
+<!-- Access Denied Modal (Inserted) -->
+<div id="accessDeniedModal" class="access-denied-modal" aria-hidden="true">
+  <div class="access-denied-content" role="dialog" aria-labelledby="accessDeniedTitle" aria-describedby="accessDeniedDesc">
+    <svg xmlns="http://www.w3.org/2000/svg" width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="10"></circle>
+      <line x1="12" y1="8" x2="12" y2="12"></line>
+      <line x1="12" y1="16" x2="12.01" y2="16"></line>
+    </svg>
+    <h3 id="accessDeniedTitle">Access Restricted</h3>
+    <p id="accessDeniedDesc">You don’t have permission to view this page. This section is available for <strong>Admins</strong> only.</p>
+    <button id="returnToAppBtn" class="action-button primary-button">🔙 Back to My Dashboard</button>
+  </div>
+</div>
+
+</body>
+</html>
