@@ -1226,6 +1226,61 @@
 
         // Initialize the application
         document.addEventListener('DOMContentLoaded', function() {
+            // Immediate auth check
+async function checkAuthImmediately() {
+    try {
+        console.log('Checking authentication...');
+        const { data: { user }, error } = await supabaseClient.auth.getUser();
+        
+        if (error || !user) {
+            console.log('No user found, redirecting to login');
+            window.location.href = 'index.html';
+            return false;
+        }
+        
+        console.log('User authenticated:', user.email);
+        return true;
+    } catch (error) {
+        console.error('Auth check error:', error);
+        window.location.href = 'index.html';
+        return false;
+    }
+}
+
+// Initialize the application
+async function initializeApp() {
+    try {
+        // Check auth first
+        const isAuthenticated = await checkAuthImmediately();
+        if (!isAuthenticated) return;
+        
+        console.log('User is authenticated, continuing...');
+        
+        // Check if user is signed in
+        const { data: { user } } = await supabaseClient.auth.getUser();
+        
+        if (user) {
+            currentUser = user;
+            await loadUserData();
+            await loadCallsData();
+            await loadNotesData();
+            await loadTrainingData();
+            setupEventListeners();
+            initializeCharts();
+            updatePerformanceSummary();
+            
+            // Show portal content
+            authLoading.style.display = 'none';
+            portalContent.style.display = 'block';
+        } else {
+            // Redirect to login if not authenticated
+            window.location.href = 'index.html';
+        }
+    } catch (error) {
+        console.error('Error initializing app:', error);
+        showError('Failed to initialize application. Please refresh the page.');
+    }
+}
             initializeApp();
         });
 
@@ -1259,12 +1314,13 @@
         }
 
       // Load user data
+// Load user data
 async function loadUserData() {
     try {
         console.log('Starting loadUserData...');
         
         // Get user profile from users table
-        const { data: profile, error } = await supabase
+        const { data: profile, error } = await supabaseClient
             .from('users')
             .select('*')
             .eq('id', currentUser.id)
@@ -1283,7 +1339,7 @@ async function loadUserData() {
         
         console.log('Is Admin:', isAdmin);
         console.log('Is Agent:', isAgent);
-        console.log('Should redirect?', !isAdmin && !isAgent);
+        console.log('Should redirect to core-flow?', !isAdmin && !isAgent);
 
         // إذا مش agent أو admin، اخرج
         if (!isAdmin && !isAgent) {
