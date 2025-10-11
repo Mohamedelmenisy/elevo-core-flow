@@ -766,8 +766,8 @@
 
     <script type="module">
         const SUPABASE_URL = 'https://aefiigottnlcmjzilqnh.supabase.co';
-        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFlZmlpZ290dG5sY21qemlscW5oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcxNzY2MDQsImV4cCI6MjA2Mjc1MjYwNH0.FypB02v3tGMnxXV9ZmZMdMC0oQpREKOJWgHMPxUzwX4';
-        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFlZmlpZ290dG5sY21qemlscW5oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcxNzY2MDQsImV4cCI6MjA2Mjc1MjYwNH0.FypB02v3tGMnxXV9ZmZMdMC0oQpREKOJWgHMPxUzw4Y';
+        const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
         // Global variables
         let currentUser = null;
@@ -808,27 +808,27 @@
         // Authentication check
         async function checkAuth() {
             try {
-                const { data, error } = await supabase.auth.getUser();
-                if (error || !data.user) {
+                const { data: { user }, error } = await supabase.auth.getUser();
+                if (error || !user) {
                     window.location.href = 'index.html';
                     return;
                 }
                 
-                currentUser = data.user;
-                currentUserId = data.user.id;
-                
-                // Show user info and admin links if applicable
-                document.getElementById('userInfo').style.display = 'flex';
-                document.getElementById('userName').textContent = currentUser.email;
-                
-                // Check if user is admin
+                currentUser = user;
+                currentUserId = user.id;
+
                 const { data: userData, error: userError } = await supabase
                     .from('users')
-                    .select('role')
+                    .select('role, name')
                     .eq('id', currentUserId)
                     .single();
-                    
-                if (!userError && userData && userData.role === 'admin') {
+                
+                // Show user info
+                document.getElementById('userInfo').style.display = 'flex';
+                document.getElementById('userName').textContent = (userData && userData.name) || currentUser.email;
+                
+                // Role-based access control
+                if (!userError && userData && (userData.role === 'admin')) {
                     document.getElementById('dashboardLink').style.display = 'inline-flex';
                     document.getElementById('rtmDashboardLink').style.display = 'inline-flex';
                 }
@@ -893,16 +893,30 @@
                     document.getElementById('agentGreeting').textContent = `Welcome, ${agentName}!`;
                     document.getElementById('agentSubtext').textContent = `${agentName}'s performance dashboard and analytics.`;
                 }
+
+                // Use Promise.all for faster parallel fetching
+                const [callHistoryResult, notesResult, trainingResult] = await Promise.all([
+                    supabase.from('call_sessions_egypt').select('*').eq('user_id', currentUserId).order('start_time_egypt', { ascending: false }),
+                    supabase.from('agent_notes').select('*').eq('user_id', currentUserId).order('created_at', { ascending: false }),
+                    supabase.from('training_programs').select('*').eq('user_id', currentUserId).order('created_at', { ascending: false })
+                ]);
                 
-                // Load call history data
-                await loadCallHistory();
-                
-                // Load notes data
-                await loadNotes();
-                
-                // Load training programs
-                await loadTrainingPrograms();
-                
+                // Handle call history data
+                if (callHistoryResult.error) console.error('Error fetching call history:', callHistoryResult.error);
+                callHistoryData = callHistoryResult.data || [];
+                filteredCallHistoryData = [...callHistoryData];
+                renderCallHistoryTable();
+
+                // Handle notes data
+                if (notesResult.error) console.error('Error fetching notes:', notesResult.error);
+                notesData = notesResult.data || [];
+                renderNotesList();
+
+                // Handle training programs data
+                if (trainingResult.error) console.error('Error fetching training programs:', trainingResult.error);
+                trainingData = trainingResult.data || [];
+                renderTrainingProgramsList();
+
                 // Calculate and display performance metrics
                 calculatePerformanceMetrics();
                 
@@ -966,7 +980,7 @@
             tableBody.innerHTML = pageData.map(call => `
                 <tr>
                     <td>${formatDate(call.start_time_egypt)}</td>
-                    <td>${call.scenario_id || 'N/A'}</td>
+                    <td>${call.scenario_title || 'N/A'}</td>
                     <td>${formatDuration(call.duration_interval)}</td>
                     <td>${call.completed ? '✅' : '❌'}</td>
                     <td>${call.call_quality || 'N/A'}</td>
@@ -991,7 +1005,7 @@
             filteredCallHistoryData = callHistoryData.filter(call => {
                 // Search filter
                 const matchesSearch = !searchTerm || 
-                    (call.scenario_id && call.scenario_id.toLowerCase().includes(searchTerm));
+                    (call.scenario_title && call.scenario_title.toLowerCase().includes(searchTerm));
                 
                 // Quality filter
                 const matchesQuality = !qualityFilter || 
@@ -1204,11 +1218,48 @@
                 renderTrainingProgramsList();
             });
         }
+        
+        // Function to render an empty chart as a fallback
+        function renderEmptyChart(ctx, message) {
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: message,
+                        data: [],
+                        backgroundColor: 'rgba(100, 116, 139, 0.3)',
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        title: { 
+                            display: true, 
+                            text: message, 
+                            color: '#9ca3af',
+                            font: { size: 14 } 
+                        }
+                    },
+                    scales: { 
+                        x: { display: false }, 
+                        y: { display: false } 
+                    }
+                }
+            });
+        }
+
 
         // Calculate and display performance metrics
         function calculatePerformanceMetrics() {
             if (filteredCallHistoryData.length === 0) {
                 resetPerformanceMetrics();
+                // Generate empty charts even if there's no data
+                generateQualityChart();
+                generateBadReasonsChart();
                 return;
             }
             
@@ -1314,14 +1365,16 @@
         // Generate quality distribution chart
         function generateQualityChart() {
             const ctx = document.getElementById('qualityChart').getContext('2d');
+            if (qualityChart) qualityChart.destroy();
+
+            const hasData = filteredCallHistoryData && filteredCallHistoryData.length > 0;
+            if (!hasData) {
+                renderEmptyChart(ctx, "No Quality Data Available");
+                return;
+            }
             
             // Count quality types
-            const qualityCounts = {
-                'Good': 0,
-                'Bad': 0,
-                'N/A': 0
-            };
-            
+            const qualityCounts = { 'Good': 0, 'Bad': 0, 'N/A': 0 };
             filteredCallHistoryData.forEach(call => {
                 const quality = call.call_quality || 'N/A';
                 if (qualityCounts.hasOwnProperty(quality)) {
@@ -1334,8 +1387,6 @@
             const labels = Object.keys(qualityCounts);
             const data = Object.values(qualityCounts);
             const colors = ['#10B981', '#EF4444', '#6B7280'];
-            
-            if (qualityChart) qualityChart.destroy();
             
             qualityChart = new Chart(ctx, {
                 type: 'doughnut',
@@ -1354,21 +1405,13 @@
                     plugins: {
                         legend: {
                             position: 'bottom',
-                            labels: {
-                                color: '#D1D5DB',
-                                font: {
-                                    size: 12
-                                }
-                            }
+                            labels: { color: '#D1D5DB', font: { size: 12 } }
                         },
                         title: {
                             display: true,
                             text: 'Call Quality Distribution',
                             color: '#F9FAFB',
-                            font: {
-                                size: 14,
-                                weight: 'bold'
-                            }
+                            font: { size: 14, weight: 'bold' }
                         }
                     }
                 }
@@ -1379,14 +1422,14 @@
         function generateBadReasonsChart() {
             const ctx = document.getElementById('badReasonsChart').getContext('2d');
             const noBadCallsMessage = document.getElementById('noBadCallsMessage');
-            
-            // Get bad quality calls
+            if (badReasonsChart) badReasonsChart.destroy();
+
             const badCalls = filteredCallHistoryData.filter(call => 
                 call.call_quality && call.call_quality.toLowerCase() === 'bad');
             
             if (badCalls.length === 0) {
-                if (badReasonsChart) badReasonsChart.destroy();
-                noBadCallsMessage.style.display = 'block';
+                noBadCallsMessage.style.display = 'none'; // Hide the specific message
+                renderEmptyChart(ctx, "No 'Bad' Quality Calls");
                 return;
             }
             
@@ -1401,15 +1444,11 @@
             
             const labels = Object.keys(reasonCounts);
             const data = Object.values(reasonCounts);
-            
-            // Generate colors
             const colors = [];
             for (let i = 0; i < labels.length; i++) {
-                const hue = (i * 137.508) % 360; // Golden angle approximation
+                const hue = (i * 137.508) % 360;
                 colors.push(`hsl(${hue}, 70%, 60%)`);
             }
-            
-            if (badReasonsChart) badReasonsChart.destroy();
             
             badReasonsChart = new Chart(ctx, {
                 type: 'bar',
@@ -1427,37 +1466,23 @@
                     responsive: true,
                     maintainAspectRatio: false,
                     plugins: {
-                        legend: {
-                            display: false
-                        },
+                        legend: { display: false },
                         title: {
                             display: true,
                             text: 'Reasons for Bad Quality Calls',
                             color: '#F9FAFB',
-                            font: {
-                                size: 14,
-                                weight: 'bold'
-                            }
+                            font: { size: 14, weight: 'bold' }
                         }
                     },
                     scales: {
                         y: {
                             beginAtZero: true,
-                            ticks: {
-                                color: '#9CA3AF'
-                            },
-                            grid: {
-                                color: '#374151'
-                            }
+                            ticks: { color: '#9CA3AF' },
+                            grid: { color: '#374151' }
                         },
                         x: {
-                            ticks: {
-                                color: '#9CA3AF',
-                                maxRotation: 45
-                            },
-                            grid: {
-                                display: false
-                            }
+                            ticks: { color: '#9CA3AF', maxRotation: 45 },
+                            grid: { display: false }
                         }
                     }
                 }
@@ -1725,7 +1750,7 @@
             
             filteredCallHistoryData.forEach(call => {
                 const date = formatDate(call.start_time_egypt);
-                const scenario = call.scenario_id || 'N/A';
+                const scenario = call.scenario_title || 'N/A';
                 const duration = formatDuration(call.duration_interval);
                 const completed = call.completed ? 'Yes' : 'No';
                 const quality = call.call_quality || 'N/A';
@@ -1761,25 +1786,18 @@
 
         function formatDuration(duration) {
             if (!duration) return 'N/A';
-            
-            // Handle interval format (HH:MM:SS)
-            if (typeof duration === 'string' && duration.includes(':')) {
-                const parts = duration.split(':');
-                if (parts.length === 3) {
-                    const hours = parseInt(parts[0]);
-                    const minutes = parseInt(parts[1]);
-                    const seconds = parseInt(parts[2]);
-                    
-                    if (hours > 0) {
-                        return `${hours}h ${minutes}m ${seconds}s`;
-                    } else if (minutes > 0) {
-                        return `${minutes}m ${seconds}s`;
-                    } else {
-                        return `${seconds}s`;
-                    }
-                }
+            if (typeof duration !== 'string' || !duration.includes(':')) return duration;
+
+            const parts = duration.split(':');
+            if (parts.length === 3) {
+                const hours = parseInt(parts[0]);
+                const minutes = parseInt(parts[1]);
+                const seconds = parseInt(parts[2]);
+                
+                if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`;
+                if (minutes > 0) return `${minutes}m ${seconds}s`;
+                return `${seconds}s`;
             }
-            
             return duration;
         }
 
@@ -1788,13 +1806,9 @@
             const minutes = Math.floor((totalSeconds % 3600) / 60);
             const seconds = Math.floor(totalSeconds % 60);
             
-            if (hours > 0) {
-                return `${hours}h ${minutes}m ${seconds}s`;
-            } else if (minutes > 0) {
-                return `${minutes}m ${seconds}s`;
-            } else {
-                return `${seconds}s`;
-            }
+            if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`;
+            if (minutes > 0) return `${minutes}m ${seconds}s`;
+            return `${seconds}s`;
         }
 
         function toggleModal(modalId, show) {
