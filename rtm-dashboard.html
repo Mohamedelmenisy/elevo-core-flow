@@ -228,7 +228,7 @@
         <main class="app-main dashboard-main">
             <div id="auth-loading" class="loading-container" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 70vh;">
                 <div class="spinner"></div>
-                <p>Verifying Permissions & Loading RTM Data...</p>
+                <p>Loading Real-Time Monitoring Data...</p>
             </div>
 
             <div id="rtmContent" style="display: none;">
@@ -319,7 +319,8 @@
 
     <script type="module">
         const SUPABASE_URL = 'https://aefiigottnlcmjzilqnh.supabase.co';
-        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFlZmlpZ290dG5sY21qemlscW5oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcxNzY2MDQsImV4cCI6MjA2Mjc1MjYwNH0.FypB02v3tGMnxXV9ZmZMdMC0oQpREKOJWgHMPxUzwX4';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFlZmlpZ290dG5sY21qemlscW5oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcxNzY2MDQsImV4cCI6MjA2Mjc1MjYwNH0.FypB02v3tGMnxXV9ZmZMdMC0oQpREKOJWgHMPxUzw4Y';
+        // FIX: Correctly initialize Supabase client
         const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
         // Global variables
@@ -331,65 +332,68 @@
 
         // Initialize the application
         document.addEventListener('DOMContentLoaded', async function() {
+            // Set current year in footer
             document.getElementById('currentYear').textContent = new Date().getFullYear();
+            
+            // Check authentication and load data
             await checkAuth();
-            if (currentUser) {
-                setupEventListeners();
-                startAutoRefresh();
-            }
+            setupEventListeners();
+            
+            // Start auto-refresh
+            startAutoRefresh();
         });
 
-        // Authentication and Authorization check
+        // Authentication check
         async function checkAuth() {
             try {
-                const { data: { user }, error } = await supabase.auth.getUser();
-                if (error || !user) {
-                    window.location.replace('login.html');
+                const { data, error } = await supabase.auth.getUser();
+                if (error || !data.user) {
+                    window.location.href = 'index.html';
                     return;
                 }
-
+                
+                // FIX: Add role-based access control
                 const { data: profile, error: profileError } = await supabase
                     .from('users')
-                    .select('role, name')
-                    .eq('id', user.id)
+                    .select('role')
+                    .eq('id', data.user.id)
                     .single();
 
-                if (profileError) {
-                    console.error('Error fetching user profile:', profileError);
-                    alert('Could not verify user profile. Logging out.');
-                    await supabase.auth.signOut();
-                    window.location.replace('login.html');
-                    return;
-                }
-
-                if (profile.role !== 'admin') {
-                    alert('Access Denied: You do not have permission to view this page.');
-                    window.location.replace('core-flow.html');
+                if (profileError || !profile || profile.role !== 'admin') {
+                    // Redirect non-admins to the main application page
+                    window.location.href = 'core-flow.html';
                     return;
                 }
                 
-                currentUser = { ...user, ...profile };
+                currentUser = data.user;
                 
+                // Show user info
                 document.getElementById('userInfo').style.display = 'flex';
-                document.getElementById('userName').textContent = currentUser.name || currentUser.email;
+                document.getElementById('userName').textContent = currentUser.email;
                 
+                // Load RTM data
                 await loadRTMData();
                 
             } catch (error) {
-                console.error('Authentication process error:', error);
-                window.location.replace('login.html');
+                console.error('Authentication error:', error);
+                window.location.href = 'index.html';
             }
         }
 
         // Setup event listeners
         function setupEventListeners() {
+            // Logout button
             document.getElementById('logoutButton').addEventListener('click', async () => {
                 await supabase.auth.signOut();
-                window.location.replace('login.html');
+                window.location.href = 'index.html';
             });
             
-            document.getElementById('refreshRTMDataBtn').addEventListener('click', loadRTMData);
+            // Refresh data button
+            document.getElementById('refreshRTMDataBtn').addEventListener('click', async () => {
+                await loadRTMData();
+            });
             
+            // Auto refresh toggle
             document.getElementById('autoRefreshToggle').addEventListener('change', (e) => {
                 isAutoRefreshEnabled = e.target.checked;
                 if (isAutoRefreshEnabled) {
@@ -399,11 +403,17 @@
                 }
             });
             
+            // Tab switching
             document.querySelectorAll('.tab').forEach(tab => {
                 tab.addEventListener('click', () => {
-                    document.querySelectorAll('.tab, .tab-content').forEach(el => el.classList.remove('active'));
+                    // Remove active class from all tabs and contents
+                    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                    
+                    // Add active class to clicked tab and corresponding content
                     tab.classList.add('active');
-                    document.getElementById(`${tab.dataset.tab}Tab`).classList.add('active');
+                    const tabId = tab.getAttribute('data-tab');
+                    document.getElementById(`${tabId}Tab`).classList.add('active');
                 });
             });
         }
@@ -411,9 +421,11 @@
         // Load RTM data
         async function loadRTMData() {
             try {
+                // Show loading state
                 document.getElementById('auth-loading').style.display = 'flex';
                 document.getElementById('rtmContent').style.display = 'none';
                 
+                // Load data from all required views
                 await Promise.all([
                     loadTicketMetrics(),
                     loadLiveTickets(),
@@ -423,7 +435,11 @@
                     loadAgentActivityChart()
                 ]);
                 
-                document.getElementById('lastUpdatedTime').textContent = new Date().toLocaleTimeString('en-US', { hour12: false });
+                // Update last updated time
+                document.getElementById('lastUpdatedTime').textContent = 
+                    new Date().toLocaleTimeString('en-US', { hour12: false });
+                
+                // Hide loading and show content
                 document.getElementById('auth-loading').style.display = 'none';
                 document.getElementById('rtmContent').style.display = 'block';
                 
@@ -436,54 +452,86 @@
         // Load ticket metrics
         async function loadTicketMetrics() {
             try {
-                const { error: liveError, count: liveCount } = await supabase.from('live_tickets').select('id', { count: 'exact', head: true });
-                if (!liveError) document.getElementById('rtmLiveTickets').textContent = liveCount;
-
-                const { error: delayedError, count: delayedCount } = await supabase.from('delayed_tickets').select('id', { count: 'exact', head: true });
-                if (!delayedError) document.getElementById('rtmDelayedTickets').textContent = delayedCount;
-
-                const { error: recentError, count: recentCount } = await supabase.from('recent_tickets').select('id', { count: 'exact', head: true });
-                if (!recentError) document.getElementById('rtmRecentTickets').textContent = recentCount;
-
-                const { data: agentsData, error: agentsError } = await supabase.from('live_tickets').select('agent_name');
-                if (!agentsError) {
-                    const activeAgents = new Set(agentsData.map(t => t.agent_name).filter(Boolean)).size;
-                    document.getElementById('rtmActiveAgents').textContent = activeAgents;
+                // Load live tickets count
+                const { data: liveData, error: liveError } = await supabase
+                    .from('live_tickets')
+                    .select('id', { count: 'exact' });
+                    
+                if (!liveError) {
+                    document.getElementById('rtmLiveTickets').textContent = liveData.length;
                 }
+                
+                // Load delayed tickets count
+                const { data: delayedData, error: delayedError } = await supabase
+                    .from('delayed_tickets')
+                    .select('id', { count: 'exact' });
+                    
+                if (!delayedError) {
+                    document.getElementById('rtmDelayedTickets').textContent = delayedData.length;
+                }
+                
+                // Load recent tickets count
+                const { data: recentData, error: recentError } = await supabase
+                    .from('recent_tickets')
+                    .select('id', { count: 'exact' });
+                    
+                if (!recentError) {
+                    document.getElementById('rtmRecentTickets').textContent = recentData.length;
+                }
+                
+                // Count active agents (from live tickets)
+                const { data: agentsData, error: agentsError } = await supabase
+                    .from('live_tickets')
+                    .select('agent_name');
+                    
+                if (!agentsError) {
+                    const activeAgents = new Set();
+                    agentsData.forEach(ticket => {
+                        if (ticket.agent_name) {
+                            activeAgents.add(ticket.agent_name);
+                        }
+                    });
+                    document.getElementById('rtmActiveAgents').textContent = activeAgents.size;
+                }
+                
             } catch (error) {
                 console.error('Error loading ticket metrics:', error);
             }
         }
 
-        // Render ticket list helper
-        function renderTicketList(elementId, data, statusClass, statusText, timeField, timePrefix) {
-            const listElement = document.getElementById(elementId);
-            if (!listElement) return;
-
-            if (data.length === 0) {
-                listElement.innerHTML = `<div class="no-data">No ${statusText.toLowerCase()} tickets at the moment</div>`;
-                return;
-            }
-
-            listElement.innerHTML = data.map(ticket => `
-                <div class="ticket-item">
-                    <div class="ticket-info">
-                        <div class="ticket-agent">${ticket.agent_name || 'Unknown Agent'}</div>
-                        <div class="ticket-scenario">${ticket.scenario_id || 'Unknown Scenario'}</div>
-                        <div class="ticket-time">${timePrefix}: ${formatTime(ticket[timeField])}</div>
-                    </div>
-                    <div class="ticket-status">
-                        <span class="status-badge ${statusClass}">${statusText}</span>
-                    </div>
-                </div>`).join('');
-        }
-
         // Load live tickets from live_tickets view
         async function loadLiveTickets() {
             try {
-                const { data, error } = await supabase.from('live_tickets').select('*').order('start_time_egypt', { ascending: false });
-                if (error) throw error;
-                renderTicketList('liveTicketsList', data, 'status-live', 'Live', 'start_time_egypt', 'Started');
+                const { data, error } = await supabase
+                    .from('live_tickets')
+                    .select('*')
+                    .order('start_time_egypt', { ascending: false });
+                    
+                if (error) {
+                    console.error('Error fetching live tickets:', error);
+                    return;
+                }
+                
+                const liveTicketsList = document.getElementById('liveTicketsList');
+                
+                if (data.length === 0) {
+                    liveTicketsList.innerHTML = '<div class="no-data">No live tickets at the moment</div>';
+                    return;
+                }
+                
+                liveTicketsList.innerHTML = data.map(ticket => `
+                    <div class="ticket-item">
+                        <div class="ticket-info">
+                            <div class="ticket-agent">${ticket.agent_name || 'Unknown Agent'}</div>
+                            <div class="ticket-scenario">${ticket.scenario_id || 'Unknown Scenario'}</div>
+                            <div class="ticket-time">Started: ${formatTime(ticket.start_time_egypt)}</div>
+                        </div>
+                        <div class="ticket-status">
+                            <span class="status-badge status-live">Live</span>
+                        </div>
+                    </div>
+                `).join('');
+                
             } catch (error) {
                 console.error('Error loading live tickets:', error);
             }
@@ -492,9 +540,36 @@
         // Load delayed tickets from delayed_tickets view
         async function loadDelayedTickets() {
             try {
-                const { data, error } = await supabase.from('delayed_tickets').select('*').order('start_time_egypt', { ascending: false });
-                if (error) throw error;
-                renderTicketList('delayedTicketsList', data, 'status-delayed', 'Delayed', 'start_time_egypt', 'Started');
+                const { data, error } = await supabase
+                    .from('delayed_tickets')
+                    .select('*')
+                    .order('start_time_egypt', { ascending: false });
+                    
+                if (error) {
+                    console.error('Error fetching delayed tickets:', error);
+                    return;
+                }
+                
+                const delayedTicketsList = document.getElementById('delayedTicketsList');
+                
+                if (data.length === 0) {
+                    delayedTicketsList.innerHTML = '<div class="no-data">No delayed tickets at the moment</div>';
+                    return;
+                }
+                
+                delayedTicketsList.innerHTML = data.map(ticket => `
+                    <div class="ticket-item">
+                        <div class="ticket-info">
+                            <div class="ticket-agent">${ticket.agent_name || 'Unknown Agent'}</div>
+                            <div class="ticket-scenario">${ticket.scenario_id || 'Unknown Scenario'}</div>
+                            <div class="ticket-time">Started: ${formatTime(ticket.start_time_egypt)}</div>
+                        </div>
+                        <div class="ticket-status">
+                            <span class="status-badge status-delayed">Delayed</span>
+                        </div>
+                    </div>
+                `).join('');
+                
             } catch (error) {
                 console.error('Error loading delayed tickets:', error);
             }
@@ -503,9 +578,36 @@
         // Load recent tickets from recent_tickets view
         async function loadRecentTickets() {
             try {
-                const { data, error } = await supabase.from('recent_tickets').select('*').order('end_time_egypt', { ascending: false });
-                if (error) throw error;
-                renderTicketList('recentTicketsList', data, 'status-recent', 'Completed', 'end_time_egypt', 'Completed');
+                const { data, error } = await supabase
+                    .from('recent_tickets')
+                    .select('*')
+                    .order('end_time_egypt', { ascending: false });
+                    
+                if (error) {
+                    console.error('Error fetching recent tickets:', error);
+                    return;
+                }
+                
+                const recentTicketsList = document.getElementById('recentTicketsList');
+                
+                if (data.length === 0) {
+                    recentTicketsList.innerHTML = '<div class="no-data">No recent tickets at the moment</div>';
+                    return;
+                }
+                
+                recentTicketsList.innerHTML = data.map(ticket => `
+                    <div class="ticket-item">
+                        <div class="ticket-info">
+                            <div class="ticket-agent">${ticket.agent_name || 'Unknown Agent'}</div>
+                            <div class="ticket-scenario">${ticket.scenario_id || 'Unknown Scenario'}</div>
+                            <div class="ticket-time">Completed: ${formatTime(ticket.end_time_egypt)}</div>
+                        </div>
+                        <div class="ticket-status">
+                            <span class="status-badge status-recent">Completed</span>
+                        </div>
+                    </div>
+                `).join('');
+                
             } catch (error) {
                 console.error('Error loading recent tickets:', error);
             }
@@ -514,34 +616,109 @@
         // Load ticket volume chart (last hour)
         async function loadTicketVolumeChart() {
             try {
-                const oneHourAgo = new Date(new Date().getTime() - 60 * 60 * 1000).toISOString();
-                const { data, error } = await supabase.from('call_sessions_egypt').select('start_time_egypt').gte('start_time_egypt', oneHourAgo);
-                if (error) throw error;
-                
-                const intervalMs = 5 * 60 * 1000;
-                const intervals = data.reduce((acc, ticket) => {
-                    const intervalStart = Math.floor(new Date(ticket.start_time_egypt).getTime() / intervalMs) * intervalMs;
-                    acc[intervalStart] = (acc[intervalStart] || 0) + 1;
-                    return acc;
-                }, {});
-
+                // Get current time and time one hour ago
                 const now = new Date();
+                const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+                
+                // Get tickets from the last hour
+                const { data, error } = await supabase
+                    .from('call_sessions_egypt')
+                    .select('start_time_egypt')
+                    .gte('start_time_egypt', oneHourAgo.toISOString())
+                    .order('start_time_egypt', { ascending: true });
+                    
+                if (error) {
+                    console.error('Error fetching ticket volume data:', error);
+                    return;
+                }
+                
+                // Group tickets by 5-minute intervals
+                const intervals = {};
+                const intervalMs = 5 * 60 * 1000; // 5 minutes in milliseconds
+                
+                data.forEach(ticket => {
+                    const ticketTime = new Date(ticket.start_time_egypt).getTime();
+                    const intervalStart = Math.floor(ticketTime / intervalMs) * intervalMs;
+                    
+                    if (!intervals[intervalStart]) {
+                        intervals[intervalStart] = 0;
+                    }
+                    intervals[intervalStart]++;
+                });
+                
+                // Prepare data for chart
                 const labels = [];
                 const values = [];
+                
+                // Generate labels for the last hour in 5-minute intervals
                 for (let i = 11; i >= 0; i--) {
                     const time = new Date(now.getTime() - i * intervalMs);
-                    labels.push(time.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }));
+                    const label = time.toLocaleTimeString('en-US', { 
+                        hour: '2-digit', 
+                        minute: '2-digit',
+                        hour12: false 
+                    });
+                    labels.push(label);
+                    
                     const intervalStart = Math.floor(time.getTime() / intervalMs) * intervalMs;
                     values.push(intervals[intervalStart] || 0);
                 }
                 
+                // Create or update chart
                 const ctx = document.getElementById('ticketVolumeChart').getContext('2d');
-                if (ticketVolumeChart) ticketVolumeChart.destroy();
+                
+                if (ticketVolumeChart) {
+                    ticketVolumeChart.destroy();
+                }
+                
                 ticketVolumeChart = new Chart(ctx, {
                     type: 'line',
-                    data: { labels, datasets: [{ label: 'Tickets', data: values, borderColor: '#4e8cff', backgroundColor: 'rgba(78, 140, 255, 0.1)', borderWidth: 2, fill: true, tension: 0.4 }] },
-                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: 'Tickets',
+                            data: values,
+                            borderColor: '#4e8cff',
+                            backgroundColor: 'rgba(78, 140, 255, 0.1)',
+                            borderWidth: 2,
+                            fill: true,
+                            tension: 0.4
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                display: false
+                            },
+                            title: {
+                                display: false
+                            }
+                        },
+                        scales: {
+                            x: {
+                                ticks: {
+                                    color: '#9CA3AF',
+                                    maxRotation: 0
+                                },
+                                grid: {
+                                    color: '#374151'
+                                }
+                            },
+                            y: {
+                                ticks: {
+                                    color: '#9CA3AF'
+                                },
+                                grid: {
+                                    color: '#374151'
+                                },
+                                beginAtZero: true
+                            }
+                        }
+                    }
                 });
+                
             } catch (error) {
                 console.error('Error loading ticket volume chart:', error);
             }
@@ -550,25 +727,80 @@
         // Load agent activity chart
         async function loadAgentActivityChart() {
             try {
-                const { data, error } = await supabase.from('live_tickets').select('agent_name');
-                if (error) throw error;
+                // Get active agents from live tickets
+                const { data, error } = await supabase
+                    .from('live_tickets')
+                    .select('agent_name');
+                    
+                if (error) {
+                    console.error('Error fetching agent activity data:', error);
+                    return;
+                }
                 
-                const agentCounts = data.reduce((acc, ticket) => {
+                // Count tickets per agent
+                const agentCounts = {};
+                data.forEach(ticket => {
                     const agent = ticket.agent_name || 'Unknown';
-                    acc[agent] = (acc[agent] || 0) + 1;
-                    return acc;
-                }, {});
+                    agentCounts[agent] = (agentCounts[agent] || 0) + 1;
+                });
                 
+                // Prepare data for chart
+                const labels = Object.keys(agentCounts);
+                const values = Object.values(agentCounts);
+                
+                // Create or update chart
                 const ctx = document.getElementById('agentActivityChart').getContext('2d');
-                if (agentActivityChart) agentActivityChart.destroy();
+                
+                if (agentActivityChart) {
+                    agentActivityChart.destroy();
+                }
+                
                 agentActivityChart = new Chart(ctx, {
                     type: 'bar',
                     data: {
-                        labels: Object.keys(agentCounts),
-                        datasets: [{ label: 'Active Tickets', data: Object.values(agentCounts), backgroundColor: 'rgba(78, 140, 255, 0.7)', borderColor: '#4e8cff', borderWidth: 1 }]
+                        labels: labels,
+                        datasets: [{
+                            label: 'Active Tickets',
+                            data: values,
+                            backgroundColor: 'rgba(78, 140, 255, 0.7)',
+                            borderColor: '#4e8cff',
+                            borderWidth: 1
+                        }]
                     },
-                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                display: false
+                            },
+                            title: {
+                                display: false
+                            }
+                        },
+                        scales: {
+                            x: {
+                                ticks: {
+                                    color: '#9CA3AF',
+                                    maxRotation: 45
+                                },
+                                grid: {
+                                    display: false
+                                }
+                            },
+                            y: {
+                                ticks: {
+                                    color: '#9CA3AF'
+                                },
+                                grid: {
+                                    color: '#374151'
+                                },
+                                beginAtZero: true
+                            }
+                        }
+                    }
                 });
+                
             } catch (error) {
                 console.error('Error loading agent activity chart:', error);
             }
@@ -576,24 +808,41 @@
 
         // Start auto-refresh
         function startAutoRefresh() {
-            if (autoRefreshInterval) clearInterval(autoRefreshInterval);
-            autoRefreshInterval = setInterval(() => {
-                if (isAutoRefreshEnabled) loadRTMData();
+            // Refresh data every 10 seconds
+            if (autoRefreshInterval) {
+                clearInterval(autoRefreshInterval);
+            }
+            
+            autoRefreshInterval = setInterval(async () => {
+                if (isAutoRefreshEnabled) {
+                    await loadRTMData();
+                }
             }, 10000);
         }
 
         // Stop auto-refresh
         function stopAutoRefresh() {
-            if (autoRefreshInterval) clearInterval(autoRefreshInterval);
+            if (autoRefreshInterval) {
+                clearInterval(autoRefreshInterval);
+                autoRefreshInterval = null;
+            }
         }
 
         // Utility functions
         function formatTime(dateString) {
             if (!dateString) return 'N/A';
-            return new Date(dateString).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+            const date = new Date(dateString);
+            return date.toLocaleTimeString('en-US', { 
+                hour: '2-digit', 
+                minute: '2-digit',
+                hour12: false 
+            });
         }
 
-        window.addEventListener('beforeunload', stopAutoRefresh);
+        // Clean up on page unload
+        window.addEventListener('beforeunload', () => {
+            stopAutoRefresh();
+        });
     </script>
 </body>
 </html>
