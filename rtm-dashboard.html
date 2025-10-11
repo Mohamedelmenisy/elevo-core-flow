@@ -228,7 +228,7 @@
         <main class="app-main dashboard-main">
             <div id="auth-loading" class="loading-container" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 70vh;">
                 <div class="spinner"></div>
-                <p>Loading Real-Time Monitoring Data...</p>
+                <p>Syncing data with Elevo Core...</p>
             </div>
 
             <div id="rtmContent" style="display: none;">
@@ -341,6 +341,7 @@
             
             // Start auto-refresh
             startAutoRefresh();
+            if (typeof startAutoRefreshRealTime === 'function') startAutoRefreshRealTime([loadTicketMetrics, loadLiveTickets, loadDelayedTickets, loadRecentTickets], 10);
         });
 
         // Authentication check
@@ -369,7 +370,7 @@
                 
                 // Show user info
                 document.getElementById('userInfo').style.display = 'flex';
-                document.getElementById('userName').textContent = currentUser.email;
+                document.getElementById('userName').textContent = currentUser.name || currentUser.email;
                 
                 // Load RTM data
                 await loadRTMData();
@@ -398,6 +399,7 @@
                 isAutoRefreshEnabled = e.target.checked;
                 if (isAutoRefreshEnabled) {
                     startAutoRefresh();
+            if (typeof startAutoRefreshRealTime === 'function') startAutoRefreshRealTime([loadTicketMetrics, loadLiveTickets, loadDelayedTickets, loadRecentTickets], 10);
                 } else {
                     stopAutoRefresh();
                 }
@@ -473,7 +475,7 @@
                 // Load recent tickets count
                 const { data: recentData, error: recentError } = await supabase
                     .from('recent_tickets')
-                    .select('id', { count: 'exact' });
+                    .select('id', { count: 'exact' }).limit(10);
                     
                 if (!recentError) {
                     document.getElementById('rtmRecentTickets').textContent = recentData.length;
@@ -580,7 +582,7 @@
             try {
                 const { data, error } = await supabase
                     .from('recent_tickets')
-                    .select('*')
+                    .select('*').limit(10)
                     .order('end_time_egypt', { ascending: false });
                     
                 if (error) {
@@ -623,7 +625,7 @@
                 // Get tickets from the last hour
                 const { data, error } = await supabase
                     .from('call_sessions_egypt')
-                    .select('start_time_egypt')
+                    .select('start_time_egypt').limit(10)
                     .gte('start_time_egypt', oneHourAgo.toISOString())
                     .order('start_time_egypt', { ascending: true });
                     
@@ -730,7 +732,7 @@
                 // Get active agents from live tickets
                 const { data, error } = await supabase
                     .from('live_tickets')
-                    .select('agent_name');
+                    .select('agent_name').limit(10);
                     
                 if (error) {
                     console.error('Error fetching agent activity data:', error);
@@ -843,6 +845,67 @@
         window.addEventListener('beforeunload', () => {
             stopAutoRefresh();
         });
-    </script>
+    
+/* --- BEGIN: Elevo frontend helpers added by patcher --- */
+// Format duration_interval (milliseconds or seconds) to readable string
+function formatDuration(msOrSeconds) {
+    if (msOrSeconds === null || msOrSeconds === undefined) return '--:--';
+    // If value looks like a number string, convert
+    let v = Number(msOrSeconds);
+    // Heuristic: if value > 1e6, treat as milliseconds, else seconds
+    if (v > 1000000) { // > ~16 minutes in ms
+        v = Math.floor(v/1000);
+    }
+    const seconds = v % 60;
+    const minutes = Math.floor(v/60) % 60;
+    const hours = Math.floor(v/3600);
+    if (hours > 0) {
+        // HH:MM:SS
+        const hh = String(hours).padStart(2,'0');
+        const mm = String(minutes).padStart(2,'0');
+        const ss = String(seconds).padStart(2,'0');
+        return `${hh}:${mm}:${ss}`;
+    } else if (minutes > 0) {
+        return `${minutes}m ${seconds}s`;
+    } else {
+        return `${seconds}s`;
+    }
+}
+
+// Simple fade replace for container element (diff-like update)
+function fadeUpdate(container, newInnerHTML) {
+    if (!container) return;
+    container.style.transition = 'opacity 0.25s ease';
+    container.style.opacity = 0;
+    setTimeout(() => {
+        container.innerHTML = newInnerHTML;
+        container.style.opacity = 1;
+    }, 260);
+}
+
+// Start auto-refresh for real-time boxes only.
+// Provide an array of updater functions (no-arg async functions) to call periodically.
+// intervalSec default 30.
+function startAutoRefreshRealTime(updaters = [], intervalSec = 30) {
+    if (window._elevoAutoRefreshInterval) clearInterval(window._elevoAutoRefreshInterval);
+    if (!Array.isArray(updaters) || updaters.length === 0) return;
+    // Run once immediately
+    updaters.forEach(fn => { try { fn(); } catch(e){console.error(e);} });
+    window._elevoAutoRefreshInterval = setInterval(() => {
+        updaters.forEach(fn => {
+            try { fn(); } catch(e){ console.error(e); }
+        });
+    }, intervalSec * 1000);
+}
+
+function stopAutoRefreshRealTime() {
+    if (window._elevoAutoRefreshInterval) {
+        clearInterval(window._elevoAutoRefreshInterval);
+        window._elevoAutoRefreshInterval = null;
+    }
+}
+/* --- END: Elevo frontend helpers --- */
+
+</script>
 </body>
 </html>
