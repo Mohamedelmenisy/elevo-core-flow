@@ -663,54 +663,53 @@
             }
         }
 
-        // Load top scenario from call_sessions
-        async function loadTopScenario() {
-            try {
-                const today = new Date().toISOString().split('T')[0];
-                const { data, error } = await supabaseClient
-                    .from('call_sessions')
-                    .select('scenario_title')
-                    .gte('start_time_egypt', `${today}T00:00:00`)
-                    .lt('start_time_egypt', `${today}T23:59:59`);
-                    
-                if (error) {
-                    console.error('Error fetching top scenario:', error);
-                    document.getElementById('topScenarioContainer').innerHTML = `
-                        <div class="top-scenario-item">
-                            <span class="scenario-name">No data available</span>
-                            <span class="scenario-count">-</span>
-                        </div>
-                    `;
-                    return;
-                }
-                
-                // تجميع البيانات يدوياً
-                const scenarioCounts = {};
-                data.forEach(call => {
-                    const scenario = call.scenario_title || 'Unknown';
-                    scenarioCounts[scenario] = (scenarioCounts[scenario] || 0) + 1;
-                });
-                
-                // إيجاد السيناريو الأكثر تكراراً
-                let topScenario = { scenario_title: 'No data', total_runs: 0 };
-                Object.entries(scenarioCounts).forEach(([scenario_title, total_runs]) => {
-                    if (total_runs > topScenario.total_runs) {
-                        topScenario = { scenario_title, total_runs };
-                    }
-                });
-                
-                document.getElementById('topScenarioContainer').innerHTML = `
-                    <div class="top-scenario-item">
-                        <span class="scenario-name">${topScenario.scenario_title}</span>
-                        <span class="scenario-count">${topScenario.total_runs}</span>
-                    </div>
-                `;
-                
-            } catch (error) {
-                console.error('Error loading top scenario:', error);
-            }
+        // في دالة loadTopScenario - بدل من scenario_title
+async function loadTopScenario() {
+    try {
+        const today = new Date().toISOString().split('T')[0];
+        const { data, error } = await supabaseClient
+            .from('call_sessions_egypt')
+            .select('scenario_title')
+            .gte('start_time_egypt', `${today}T00:00:00`)
+            .lt('start_time_egypt', `${today}T23:59:59`);
+            
+        if (error) {
+            console.error('Error fetching top scenario:', error);
+            document.getElementById('topScenarioContainer').innerHTML = `
+                <div class="top-scenario-item">
+                    <span class="scenario-name">No data available</span>
+                    <span class="scenario-count">-</span>
+                </div>
+            `;
+            return;
         }
-
+        
+        // تجميع البيانات يدوياً باستخدام scenario_id
+        const scenarioCounts = {};
+        data.forEach(call => {
+            const scenario = call.scenario_id || 'Unknown';
+            scenarioCounts[scenario] = (scenarioCounts[scenario] || 0) + 1;
+        });
+        
+        // إيجاد السيناريو الأكثر تكراراً
+        let topScenario = { scenario_title: 'No data', total_runs: 0 };
+        Object.entries(scenarioCounts).forEach(([scenario_id, total_runs]) => {
+            if (total_runs > topScenario.total_runs) {
+                topScenario = { scenario_title: scenario_id, total_runs };
+            }
+        });
+        
+        document.getElementById('topScenarioContainer').innerHTML = `
+            <div class="top-scenario-item">
+                <span class="scenario-name">${topScenario.scenario_title}</span>
+                <span class="scenario-count">${topScenario.total_runs}</span>
+            </div>
+        `;
+        
+    } catch (error) {
+        console.error('Error loading top scenario:', error);
+    }
+}
         // Load volume trends (last 7 days)
         async function loadVolumeTrends() {
             try {
@@ -968,43 +967,51 @@
         }
 
         // Load recent tickets with pagination
-        async function loadRecentTickets(page = 1) {
-            try {
-                recentTicketsPage = page;
-                const offset = (page - 1) * RECENT_TICKETS_PAGE_SIZE;
-                
-                // show shimmer rows
-                const tbody = document.getElementById('recentTicketsTbody');
-                if (tbody) {
-                    let shimmer = '';
-                    for (let i = 0; i < RECENT_TICKETS_PAGE_SIZE; i++) {
-                        shimmer += '<tr style="background:#fff;"><td colspan="8" style="padding:12px;"><div class="shimmer-row"></div></td></tr>';
-                    }
-                    tbody.innerHTML = shimmer;
-                }
-                
-                const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
-                const { data, error } = await supabaseClient
-                    .from('call_sessions')
-                    .select(`
-                        agent_name,
-                        agent_email,
-                        scenario_title,
-                        call_quality,
-                        quality_reason,
-                        start_time_egypt,
-                        end_time_egypt,
-                        duration_interval
-                    `)
-                    .eq('completed', true) // الجلسات المكتملة فقط
-                    .gte('end_time_egypt', tenMinutesAgo) // انتهت في آخر 10 دقائق
-                    .order('end_time_egypt', { ascending: false })
-                    .range(offset, offset + RECENT_TICKETS_PAGE_SIZE - 1);
-                    
-                if (error) { 
-                    console.error('Error loading recent tickets:', error); 
-                    return; 
-                }
+       // في loadRecentTickets - إزالة scenario_title واستخدام scenario_id
+async function loadRecentTickets(page = 1) {
+    try {
+        recentTicketsPage = page;
+        const offset = (page - 1) * RECENT_TICKETS_PAGE_SIZE;
+        
+        // show shimmer rows
+        const tbody = document.getElementById('recentTicketsTbody');
+        if (tbody) {
+            let shimmer = '';
+            for (let i = 0; i < RECENT_TICKETS_PAGE_SIZE; i++) {
+                shimmer += '<tr style="background:#fff;"><td colspan="8" style="padding:12px;"><div class="shimmer-row"></div></td></tr>';
+            }
+            tbody.innerHTML = shimmer;
+        }
+        
+        const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+        const { data, error } = await supabaseClient
+            .from('call_sessions')
+            .select(`
+                agent_name,
+                agent_email,
+                scenario_id,
+                call_quality,
+                quality_reason,
+                start_time_egypt,
+                end_time_egypt,
+                duration_interval
+            `)
+            .eq('completed', true)
+            .gte('end_time_egypt', tenMinutesAgo)
+            .order('end_time_egypt', { ascending: false })
+            .range(offset, offset + RECENT_TICKETS_PAGE_SIZE - 1);
+            
+        if (error) { 
+            console.error('Error loading recent tickets:', error); 
+            return; 
+        }
+        
+        renderRecentTicketsTable(data || []);
+        document.getElementById('recentTicketsPageInfo').textContent = 'Page ' + recentTicketsPage;
+    } catch (e) {
+        console.error('loadRecentTickets error', e);
+    }
+}
                 
                 renderRecentTicketsTable(data || []);
                 
@@ -1016,35 +1023,36 @@
         }
 
         function renderRecentTicketsTable(rows) {
-            const tbody = document.getElementById('recentTicketsTbody');
-            if (!tbody) return;
-            
-            if (!rows || rows.length === 0) {
-                fadeUpdate(tbody, '<tr><td colspan="8" style="padding:16px; text-align:center; color:var(--text-color-subtle)">No recent ticket sessions in the last 10 minutes.</td></tr>');
-                return;
-            }
-            
-            let html = '';
-            rows.forEach((r, i) => {
-                const bg = (i % 2 === 0) ? '#ffffff' : '#f8fafc';
-                const startTime = r.start_time_egypt ? new Date(r.start_time_egypt).toLocaleString() : '--';
-                const endTime = r.end_time_egypt ? new Date(r.end_time_egypt).toLocaleString() : '--';
-                const duration = formatDuration(r.duration_interval);
-                
-                html += `<tr style="background:${bg};">
-                    <td style="padding:8px;">${r.agent_name || '-'}</td>
-                    <td style="padding:8px;">${r.agent_email || '-'}</td>
-                    <td style="padding:8px;">${r.scenario_title || '-'}</td>
-                    <td style="padding:8px;">${r.call_quality || '-'}</td>
-                    <td style="padding:8px;">${r.quality_reason || '-'}</td>
-                    <td style="padding:8px;">${startTime}</td>
-                    <td style="padding:8px;">${endTime}</td>
-                    <td style="padding:8px;">${duration}</td>
-                </tr>`;
-            });
-            
-            fadeUpdate(tbody, html);
-        }
+    const tbody = document.getElementById('recentTicketsTbody');
+    if (!tbody) return;
+    
+    if (!rows || rows.length === 0) {
+        fadeUpdate(tbody, '<tr><td colspan="8" style="padding:16px; text-align:center; color:var(--text-color-subtle)">No recent ticket sessions in the last 10 minutes.</td></tr>');
+        return;
+    }
+    
+    let html = '';
+    rows.forEach((r, i) => {
+        const bg = (i % 2 === 0) ? '#ffffff' : '#f8fafc';
+        const startTime = r.start_time_egypt ? new Date(r.start_time_egypt).toLocaleString() : '--';
+        const endTime = r.end_time_egypt ? new Date(r.end_time_egypt).toLocaleString() : '--';
+        const duration = formatDuration(r.duration_interval);
+        
+        html += `<tr style="background:${bg};">
+            <td style="padding:8px;">${r.agent_name || '-'}</td>
+            <td style="padding:8px;">${r.agent_email || '-'}</td>
+            <td style="padding:8px;">${r.scenario_id || '-'}</td> <!-- استخدام scenario_id بدل scenario_title -->
+            <td style="padding:8px;">${r.call_quality || '-'}</td>
+            <td style="padding:8px;">${r.quality_reason || '-'}</td>
+            <td style="padding:8px;">${startTime}</td>
+            <td style="padding:8px;">${endTime}</td>
+            <td style="padding:8px;">${duration}</td>
+        </tr>`;
+    });
+    
+    fadeUpdate(tbody, html);
+}
+        
 
         // Start auto-refresh
         function startAutoRefresh() {
