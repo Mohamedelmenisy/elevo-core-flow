@@ -1228,95 +1228,92 @@
         document.addEventListener('DOMContentLoaded', function() {
             initializeApp();
         });
+        
+    // Initialize the application
+    async function initializeApp() {
+        try {
+            const { data: { user } } = await supabase.auth.getUser();
+            
+            if (user) {
+                currentUser = user;
+                await loadUserData();
+                await loadCallsData();
+                await loadNotesData();
+                await loadTrainingData();
+                setupEventListeners();
+                initializeCharts();
+                updatePerformanceSummary();
 
-        // Initialize the application
-        async function initializeApp() {
-            try {
-                // Check if user is signed in
-                const { data: { user } } = await supabase.auth.getUser();
-                
-                if (user) {
-                    currentUser = user;
-                    await loadUserData();
-                    await loadCallsData();
-                    await loadNotesData();
-                    await loadTrainingData();
-                    setupEventListeners();
-                    initializeCharts();
-                    updatePerformanceSummary();
-                    
-                    // Show portal content
-                    authLoading.style.display = 'none';
-                    portalContent.style.display = 'block';
-                } else {
-                    // Redirect to login if not authenticated
-                    window.location.href = 'index.html';
-                }
-            } catch (error) {
-                console.error('Error initializing app:', error);
-                showError('Failed to initialize application. Please refresh the page.');
+                // Show portal content
+                authLoading.style.display = 'none';
+                portalContent.style.display = 'block';
+            } else {
+                // Redirect to login if not authenticated
+                window.location.href = 'index.html';
             }
+        } catch (error) {
+            console.error('Error initializing app:', error);
+            showError('Failed to initialize application. Please refresh the page.');
         }
-
-   // Load user data
-async function loadUserData() {
-    try {
-        // Get user profile from users table
-        const { data: profile, error } = await supabase
-            .from('users')
-            .select('name, role, is_admin')
-            .eq('id', currentUser.id)
-            .single();
-
-        if (error) {
-            console.error('Error fetching profile:', error);
-            // سيب المستخدم يدخل عادي
-            userName.textContent = currentUser.email;
-            userInfo.style.display = 'flex';
-            agentGreeting.textContent = 'Welcome, Agent!';
-            return;
-        }
-
-        // تحديد الـ role من الـ profile
-        const userRoleFromProfile = profile?.role || 'agent';
-        const isAdmin = userRoleFromProfile === 'admin' || profile?.is_admin === true;
-        const isAgent = userRoleFromProfile === 'agent' || isAdmin;
-        
-        if (!isAdmin && !isAgent) {
-            window.location.href = 'core-flow.html';
-            return;
-        }
-
-        // Update UI with user info - استخدم profile.name
-        userName.textContent = profile?.name || currentUser.email;
-        userInfo.style.display = 'flex';
-        
-        // Set user role
-        userRole = userRoleFromProfile;
-        
-        // Update greeting - استخدم profile.name
-        const now = new Date();
-        const hour = now.getHours();
-        let greeting = 'Good ';
-        
-        if (hour < 12) greeting += 'Morning';
-        else if (hour < 18) greeting += 'Afternoon';
-        else greeting += 'Evening';
-        
-        agentGreeting.textContent = `${greeting}, ${profile?.name || 'Agent'}!`;
-        
-        // Show appropriate dashboard links based on role
-        if (isAdmin) {
-            dashboardLink.style.display = 'inline-flex';
-            rtmDashboardLink.style.display = 'inline-flex';
-        } else if (userRole === 'rtm') {
-            rtmDashboardLink.style.display = 'inline-flex';
-        }
-    } catch (error) {
-        console.error('Error loading user data:', error);
     }
-}
-        // Load calls data
+
+    // Load user data
+    async function loadUserData() {
+        try {
+            // Get user profile from users table
+            const { data: profile, error } = await supabase
+                .from('users')
+                .select('name, role, is_admin')
+                .eq('id', currentUser.id)
+                .single();
+
+            if (error) {
+                console.error('Error fetching profile:', error);
+                userName.textContent = currentUser.email;
+                userInfo.style.display = 'flex';
+                agentGreeting.textContent = 'Welcome!';
+                return;
+            }
+
+            // ✅ تحديد الصلاحيات بدقة
+            const userRoleFromProfile = profile?.role || 'agent';
+            const isAdmin = userRoleFromProfile === 'admin' || profile?.is_admin === true;
+            const isAgent = userRoleFromProfile === 'agent';
+
+            // ✅ فقط لو المستخدم مش admin ومش agent نحوله على core-flow
+            if (!isAdmin && !isAgent) {
+                window.location.href = 'core-flow.html';
+                return;
+            }
+
+            // ✅ admin أو agent يدخلوا عادي
+            userName.textContent = profile?.name || currentUser.email;
+            userInfo.style.display = 'flex';
+            userRole = userRoleFromProfile;
+
+            // Update greeting
+            const now = new Date();
+            const hour = now.getHours();
+            let greeting = 'Good ';
+            if (hour < 12) greeting += 'Morning';
+            else if (hour < 18) greeting += 'Afternoon';
+            else greeting += 'Evening';
+            agentGreeting.textContent = `${greeting}, ${profile?.name || 'User'}!`;
+
+            // ✅ روابط الأدمن فقط
+            if (isAdmin) {
+                if (dashboardLink) dashboardLink.style.display = 'inline-flex';
+                if (rtmDashboardLink) rtmDashboardLink.style.display = 'inline-flex';
+            } else if (userRole === 'rtm') {
+                if (rtmDashboardLink) rtmDashboardLink.style.display = 'inline-flex';
+            }
+
+        } catch (error) {
+            console.error('Error loading user data:', error);
+        }
+    }
+
+       // Load calls data
         async function loadCallsData() {
             try {
                 // In a real app, you would fetch from Supabase
