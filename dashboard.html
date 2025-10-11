@@ -444,14 +444,9 @@
 
     <script type="module">
         const SUPABASE_URL = 'https://aefiigottnlcmjzilqnh.supabase.co';
-        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFlZmlpZ290dG5sY21qemlscW5oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcxNzY2MDQsImV4cCI6MjA2Mjc1MjYwNH0.FypB02v3tGMnxXV9ZmZMdMC0oQpREKOJWgHMPxUzwX4';
-let supabase;
-        try {
-            supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-             } catch (error) {
-            console.error("Supabase client initialization failed:", error);
-            document.getElementById('auth-loading').innerHTML = '<p style="color:var(--danger-color); text-align:center;">Error connecting to services. Core Flow is unavailable.</p>';
-        }
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFlZmlpZ290dG5sY21qemlscW5oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcxNzY2MDQsImV4cCI6MjA2Mjc1MjYwNH0.FypB02v3tGMnxXV9ZmZMdMC0oQpREKOJWgHMPxUzw4Y';
+        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
         // Global variables
         let currentUser = null;
         let userRole = null;
@@ -477,7 +472,7 @@ let supabase;
         // Authentication check
         async function checkAuth() {
             try {
-                const { data, error } = await supabase.auth.getUser();
+                const { data, error } = await supabaseClient.auth.getUser();
                 if (error || !data.user) {
                     window.location.href = 'index.html';
                     return;
@@ -497,7 +492,7 @@ let supabase;
         // Check user role and permissions
         async function checkUserRole() {
             try {
-                const { data: userData, error } = await supabase
+                const { data: userData, error } = await supabaseClient
                     .from('users')
                     .select('role, is_admin, name')
                     .eq('email', currentUser.email)
@@ -534,7 +529,7 @@ let supabase;
         function setupEventListeners() {
             // Logout button
             document.getElementById('logoutButton').addEventListener('click', async () => {
-                await supabase.auth.signOut();
+                await supabaseClient.auth.signOut();
                 window.location.href = 'index.html';
             });
             
@@ -593,12 +588,12 @@ let supabase;
             try {
                 // Load all counts in parallel
                 const [liveData, delayedData, recentData, todayData] = await Promise.all([
-                    supabase.from('live_tickets').select('id', { count: 'exact' }),
-                    supabase.from('delayed_tickets').select('id', { count: 'exact' }),
-                    supabase.from('recent_tickets').select('id', { count: 'exact' }),
-                    supabase.from('call_sessions_egypt').select('id', { count: 'exact' })
+                    supabaseClient.from('live_tickets').select('id', { count: 'exact' }),
+                    supabaseClient.from('delayed_tickets').select('id', { count: 'exact' }),
+                    supabaseClient.from('recent_tickets').select('id', { count: 'exact' }),
+                    supabaseClient.from('call_sessions_egypt').select('id', { count: 'exact' })
                         .gte('start_time_egypt', `${new Date().toISOString().split('T')[0]}T00:00:00`)
-                        .lt('start_time_egypt', `${new Date().toISOString().split('T')[0]}T23:59:59')
+                        .lt('start_time_egypt', `${new Date().toISOString().split('T')[0]}T23:59:59`)
                 ]);
                 
                 // Update UI with counts
@@ -615,7 +610,7 @@ let supabase;
         // Load call quality summary from v_call_quality_summary
         async function loadCallQualitySummary() {
             try {
-                const { data, error } = await supabase
+                const { data, error } = await supabaseClient
                     .from('v_call_quality_summary')
                     .select('*');
                     
@@ -698,7 +693,7 @@ let supabase;
         // Load top 5 agents from top_5_agents_today
         async function loadTopAgents() {
             try {
-                const { data, error } = await supabase
+                const { data, error } = await supabaseClient
                     .from('top_5_agents_today')
                     .select('*')
                     .order('total_tickets', { ascending: false });
@@ -730,7 +725,7 @@ let supabase;
         // Load top scenario from top_scenario_today
         async function loadTopScenario() {
             try {
-                const { data, error } = await supabase
+                const { data, error } = await supabaseClient
                     .from('top_scenario_today')
                     .select('*')
                     .single();
@@ -771,7 +766,7 @@ let supabase;
                 
                 // Get call counts for each date in parallel
                 const volumePromises = dates.map(date => 
-                    supabase
+                    supabaseClient
                         .from('call_sessions_egypt')
                         .select('id', { count: 'exact' })
                         .gte('start_time_egypt', `${date}T00:00:00`)
@@ -854,7 +849,7 @@ let supabase;
         async function loadAgentPerformance() {
             try {
                 // Get all agents with their call counts
-                const { data, error } = await supabase
+                const { data, error } = await supabaseClient
                     .from('call_sessions_egypt')
                     .select('agent_name')
                     .gte('start_time_egypt', new Date().toISOString().split('T')[0] + 'T00:00:00');
@@ -943,7 +938,7 @@ let supabase;
                 const today = new Date().toISOString().split('T')[0];
                 
                 // Get today's calls for calculations
-                const { data: todayCalls, error: todayError } = await supabase
+                const { data: todayCalls, error: todayError } = await supabaseClient
                     .from('call_sessions_egypt')
                     .select('*')
                     .gte('start_time_egypt', `${today}T00:00:00`)
@@ -1003,7 +998,7 @@ let supabase;
         // Load recent tickets for the table
         async function loadRecentTickets() {
             try {
-                const { data, error } = await supabase
+                const { data, error } = await supabaseClient
                     .from('recent_tickets')
                     .select('*')
                     .order('end_time_egypt', { ascending: false })
