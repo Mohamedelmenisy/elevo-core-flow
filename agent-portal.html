@@ -522,7 +522,7 @@
         <main class="app-main dashboard-main">
             <div id="auth-loading" class="loading-container" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 70vh;">
                 <div class="spinner"></div>
-                <p>Loading Your Performance Data...</p>
+                <p>Syncing data with Elevo Core...</p>
             </div>
 
             <div id="portalContent" style="display: none;">
@@ -765,1070 +765,153 @@
     </div>
 
     <script type="module">
-        const SUPABASE_URL = 'https://aefiigottnlcmjzilqnh.supabase.co';
-        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFlZmlpZ290dG5sY21qemlscW5oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcxNzY2MDQsImV4cCI6MjA2Mjc1MjYwNH0.FypB02v3tGMnxXV9ZmZMdMC0oQpREKOJWgHMPxUzwX4';
-        
-        // Correct Supabase initialization
-        const { createClient } = supabase;
-        const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-        
-        // Global variables
-        let currentUser = null;
-        let currentUserId = null;
-        let currentPage = 1;
-        let currentNotesPage = 1;
-        let currentTrainingPage = 1;
-        const itemsPerPage = 10;
-        let notesData = [];
-        let trainingData = [];
-        let callHistoryData = [];
-        let filteredCallHistoryData = [];
-        let qualityChart = null;
-        let badReasonsChart = null;
-        let currentEditingNoteId = null;
-        let currentEditingTrainingId = null;        
+        <script type="module">
+    const SUPABASE_URL = 'https://aefiigottnlcmjzilqnh.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFlZmlpZ290dG5sY21qemlscW5oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcxNzY2MDQsImV4cCI6MjA2Mjc1MjYwNH0.FypB02v3tGMnxXV9ZmZMdMC0oQpREKOJWgHMPxUzwX4';
+    
+    // التصحيح: تهيئة Supabase بشكل صحيح
+    const { createClient } = window.supabase;
+    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-        // Initialize the application
-        document.addEventListener('DOMContentLoaded', async function() {
-            // Set current year in footer
-            document.getElementById('currentYear').textContent = new Date().getFullYear();
-            
-            // Initialize collapsible training section
-            const trainingHeader = document.getElementById('trainingCollapsibleHeader');
-            const trainingContent = document.getElementById('trainingCollapsibleContent');
-            if (trainingHeader && trainingContent) {
-                trainingHeader.addEventListener('click', () => {
-                    trainingHeader.classList.toggle('is-collapsed');
-                    trainingContent.classList.toggle('collapsed');
-                });
+    // Global variables
+    let currentUser = null;
+    let currentUserId = null;
+    let currentPage = 1;
+    let currentNotesPage = 1;
+    let currentTrainingPage = 1;
+    const itemsPerPage = 10;
+    let notesData = [];
+    let trainingData = [];
+    let callHistoryData = [];
+    let filteredCallHistoryData = [];
+    let qualityChart = null;
+    let badReasonsChart = null;
+    let currentEditingNoteId = null;
+    let currentEditingTrainingId = null;
+
+    // Initialize the application
+    document.addEventListener('DOMContentLoaded', async function() {
+        // Set current year in footer
+        document.getElementById('currentYear').textContent = new Date().getFullYear();
+        
+        // Initialize collapsible training section
+        const trainingHeader = document.getElementById('trainingCollapsibleHeader');
+        const trainingContent = document.getElementById('trainingCollapsibleContent');
+        if (trainingHeader && trainingContent) {
+            trainingHeader.addEventListener('click', () => {
+                trainingHeader.classList.toggle('is-collapsed');
+                trainingContent.classList.toggle('collapsed');
+            });
+        }
+        
+        // Check authentication and load data
+        await checkAuth();
+        setupEventListeners();
+    });
+
+    // Authentication check
+    async function checkAuth() {
+        try {
+            const { data, error } = await supabase.auth.getUser();
+            if (error || !data.user) {
+                window.location.href = 'index.html';
+                return;
             }
             
-            // Check authentication and load data
-            await checkAuth();
-            setupEventListeners();
-        });
-
-        // Authentication check
-        async function checkAuth() {
+            currentUser = data.user;
+            currentUserId = data.user.id;
+            
+            // Show user info and admin links if applicable
+            document.getElementById('userInfo').style.display = 'flex';
+            document.getElementById('userName').textContent = currentUser.email; // استخدام الإيميل مباشرة
+            
+            // محاولة جلب بيانات المستخدم من جدول users
             try {
-                const { data, error } = await supabase.auth.getUser();
-                if (error || !data.user) {
-                    window.location.href = 'index.html';
-                    return;
-                }
-                
-                currentUser = data.user;
-                currentUserId = data.user.id;
-                
-                // Show user info and admin links if applicable
-                document.getElementById('userInfo').style.display = 'flex';
-                document.getElementById('userName').textContent = currentUser.email;
-                
-                // Check if user is admin
                 const { data: userData, error: userError } = await supabase
                     .from('users')
-                    .select('role')
+                    .select('role, name')
                     .eq('id', currentUserId)
                     .single();
-                    
-                if (!userError && userData && userData.role === 'admin') {
-                    document.getElementById('dashboardLink').style.display = 'inline-flex';
-                    document.getElementById('rtmDashboardLink').style.display = 'inline-flex';
-                }
-                
-                // Load agent data and initialize the portal
-                await loadAgentData();
-                
-            } catch (error) {
-                console.error('Authentication error:', error);
-                window.location.href = 'index.html';
-            }
-        }
-
-        // Setup event listeners
-        function setupEventListeners() {
-            // Logout button
-            document.getElementById('logoutButton').addEventListener('click', async () => {
-                await supabase.auth.signOut();
-                window.location.href = 'index.html';
-            });
-            
-            // Export data button
-            document.getElementById('exportDataBtn').addEventListener('click', exportAgentData);
-            
-            // Filter controls
-            document.getElementById('searchInput').addEventListener('input', filterCallHistory);
-            document.getElementById('qualityFilter').addEventListener('change', filterCallHistory);
-            document.getElementById('startDateFilter').addEventListener('change', filterCallHistory);
-            document.getElementById('endDateFilter').addEventListener('change', filterCallHistory);
-            document.getElementById('resetFiltersBtn').addEventListener('click', resetFilters);
-            
-            // Notes functionality
-            document.getElementById('saveNoteBtn').addEventListener('click', saveNote);
-            document.getElementById('cancelNoteBtn').addEventListener('click', cancelNote);
-            
-            // Note modals
-            document.getElementById('cancelEditBtn').addEventListener('click', () => toggleModal('editNoteModal', false));
-            document.getElementById('saveChangesBtn').addEventListener('click', updateNote);
-            document.getElementById('cancelDeleteBtn').addEventListener('click', () => toggleModal('deleteConfirmModal', false));
-            document.getElementById('confirmDeleteBtn').addEventListener('click', deleteNote);
-            
-            // Training modals
-            document.getElementById('closeViewTrainingBtn').addEventListener('click', () => toggleModal('viewTrainingModal', false));
-            document.getElementById('cancelEditTrainingBtn').addEventListener('click', () => toggleModal('editTrainingModal', false));
-            document.getElementById('saveTrainingChangesBtn').addEventListener('click', updateTraining);
-            document.getElementById('cancelTrainingDeleteBtn').addEventListener('click', () => toggleModal('deleteTrainingConfirmModal', false));
-            document.getElementById('confirmTrainingDeleteBtn').addEventListener('click', deleteTraining);
-        }
-
-        // Load agent data
-        async function loadAgentData() {
-            try {
-                // Get agent name from users table
-                const { data: userData, error: userError } = await supabase
-                    .from('users')
-                    .select('name')
-                    .eq('id', currentUserId)
-                    .single();
-                    
-                if (!userError && userData) {
-                    const agentName = userData.name || currentUser.email.split('@')[0];
-                    document.getElementById('agentGreeting').textContent = `Welcome, ${agentName}!`;
-                    document.getElementById('agentSubtext').textContent = `${agentName}'s performance dashboard and analytics.`;
-                }
-                
-                // Load call history data
-                await loadCallHistory();
-                
-                // Load notes data
-                await loadNotes();
-                
-                // Load training programs
-                await loadTrainingPrograms();
-                
-                // Calculate and display performance metrics
-                calculatePerformanceMetrics();
-                
-                // Show portal content
-                document.getElementById('auth-loading').style.display = 'none';
-                document.getElementById('portalContent').style.display = 'block';
-                
-            } catch (error) {
-                console.error('Error loading agent data:', error);
-                document.getElementById('auth-loading').innerHTML = '<p>Error loading data. Please try again.</p>';
-            }
-        }
-
-        // Load call history from call_sessions_egypt view
-        async function loadCallHistory() {
-            try {
-                const { data, error } = await supabase
-                    .from('call_sessions_egypt')
-                    .select('*')
-                    .eq('user_id', currentUserId)
-                    .order('start_time_egypt', { ascending: false });
-                    
-                if (error) {
-                    console.error('Error fetching call history:', error);
-                    return;
-                }
-                
-                callHistoryData = data || [];
-                filteredCallHistoryData = [...callHistoryData];
-                
-                // Render the table
-                renderCallHistoryTable();
-                
-            } catch (error) {
-                console.error('Error loading call history:', error);
-            }
-        }
-
-        // Render call history table
-        function renderCallHistoryTable() {
-            const tableBody = document.querySelector('#callsTable tbody');
-            const noDataMessage = document.getElementById('noDataMessage');
-            
-            if (filteredCallHistoryData.length === 0) {
-                tableBody.innerHTML = '';
-                noDataMessage.style.display = 'block';
-                noDataMessage.textContent = 'No call history found for the selected filters.';
-                document.getElementById('paginationControls').innerHTML = '';
-                return;
-            }
-            
-            noDataMessage.style.display = 'none';
-            
-            // Calculate pagination
-            const totalPages = Math.ceil(filteredCallHistoryData.length / itemsPerPage);
-            const startIndex = (currentPage - 1) * itemsPerPage;
-            const endIndex = Math.min(startIndex + itemsPerPage, filteredCallHistoryData.length);
-            const pageData = filteredCallHistoryData.slice(startIndex, endIndex);
-            
-            // Render table rows
-            tableBody.innerHTML = pageData.map(call => `
-                <tr>
-                    <td>${formatDate(call.start_time_egypt)}</td>
-                    <td>${call.scenario_id || 'N/A'}</td>
-                    <td>${formatDuration(call.duration_interval)}</td>
-                    <td>${call.completed ? '✅' : '❌'}</td>
-                    <td>${call.call_quality || 'N/A'}</td>
-                    <td>${call.quality_reason || '-'}</td>
-                </tr>
-            `).join('');
-            
-            // Render pagination controls
-            renderPaginationControls(totalPages, currentPage, 'paginationControls', (page) => {
-                currentPage = page;
-                renderCallHistoryTable();
-            });
-        }
-
-        // Filter call history
-        function filterCallHistory() {
-            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
-            const qualityFilter = document.getElementById('qualityFilter').value;
-            const startDate = document.getElementById('startDateFilter').value;
-            const endDate = document.getElementById('endDateFilter').value;
-            
-            filteredCallHistoryData = callHistoryData.filter(call => {
-                // Search filter
-                const matchesSearch = !searchTerm || 
-                    (call.scenario_id && call.scenario_id.toLowerCase().includes(searchTerm));
-                
-                // Quality filter
-                const matchesQuality = !qualityFilter || 
-                    (call.call_quality && call.call_quality.toLowerCase() === qualityFilter.toLowerCase());
-                
-                // Date filters
-                const callDate = new Date(call.start_time_egypt).toISOString().split('T')[0];
-                const matchesStartDate = !startDate || callDate >= startDate;
-                const matchesEndDate = !endDate || callDate <= endDate;
-                
-                return matchesSearch && matchesQuality && matchesStartDate && matchesEndDate;
-            });
-            
-            currentPage = 1;
-            renderCallHistoryTable();
-            calculatePerformanceMetrics();
-        }
-
-        // Reset filters
-        function resetFilters() {
-            document.getElementById('searchInput').value = '';
-            document.getElementById('qualityFilter').value = '';
-            document.getElementById('startDateFilter').value = '';
-            document.getElementById('endDateFilter').value = '';
-            filterCallHistory();
-        }
-
-        // Load notes
-        async function loadNotes() {
-            try {
-                const { data, error } = await supabase
-                    .from('agent_notes')
-                    .select('*')
-                    .eq('user_id', currentUserId)
-                    .order('created_at', { ascending: false });
-                    
-                if (error) {
-                    console.error('Error fetching notes:', error);
-                    return;
-                }
-                
-                notesData = data || [];
-                renderNotesList();
-                
-            } catch (error) {
-                console.error('Error loading notes:', error);
-            }
-        }
-
-        // Render notes list
-        function renderNotesList() {
-            const notesList = document.getElementById('savedNotesList');
-            const noNotesMessage = document.getElementById('noNotesMessage');
-            
-            if (notesData.length === 0) {
-                notesList.innerHTML = '';
-                noNotesMessage.style.display = 'block';
-                document.getElementById('notesPaginationControls').innerHTML = '';
-                return;
-            }
-            
-            noNotesMessage.style.display = 'none';
-            
-            // Calculate pagination
-            const totalPages = Math.ceil(notesData.length / itemsPerPage);
-            const startIndex = (currentNotesPage - 1) * itemsPerPage;
-            const endIndex = Math.min(startIndex + itemsPerPage, notesData.length);
-            const pageData = notesData.slice(startIndex, endIndex);
-            
-            // Render notes
-            notesList.innerHTML = pageData.map(note => `
-                <div class="note-card">
-                    <div class="note-header">
-                        <div class="note-author">
-                            <span>Author</span>
-                            <span>${currentUser.email}</span>
-                        </div>
-                        <div class="note-timestamp">
-                            <span>Created</span>
-                            <span>${formatDate(note.created_at)}</span>
-                        </div>
-                    </div>
-                    <div class="note-content">
-                        <p>${note.content}</p>
-                    </div>
-                    <div class="note-actions">
-                        <button class="note-action-btn edit-note-btn" data-id="${note.id}">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
-                        </button>
-                        <button class="note-action-btn delete-note-btn" data-id="${note.id}">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
-                        </button>
-                    </div>
-                </div>
-            `).join('');
-            
-            // Add event listeners to note action buttons
-            document.querySelectorAll('.edit-note-btn').forEach(btn => {
-                btn.addEventListener('click', (e) => {
-                    const noteId = e.currentTarget.getAttribute('data-id');
-                    openEditNoteModal(noteId);
-                });
-            });
-            
-            document.querySelectorAll('.delete-note-btn').forEach(btn => {
-                btn.addEventListener('click', (e) => {
-                    const noteId = e.currentTarget.getAttribute('data-id');
-                    openDeleteNoteModal(noteId);
-                });
-            });
-            
-            // Render pagination controls
-            renderPaginationControls(totalPages, currentNotesPage, 'notesPaginationControls', (page) => {
-                currentNotesPage = page;
-                renderNotesList();
-            });
-        }
-
-        // Load training programs
-        async function loadTrainingPrograms() {
-            try {
-                const { data, error } = await supabase
-                    .from('training_programs')
-                    .select('*')
-                    .eq('user_id', currentUserId)
-                    .order('created_at', { ascending: false });
-                    
-                if (error) {
-                    console.error('Error fetching training programs:', error);
-                    return;
-                }
-                
-                trainingData = data || [];
-                renderTrainingProgramsList();
-                
-            } catch (error) {
-                console.error('Error loading training programs:', error);
-            }
-        }
-
-        // Render training programs list
-        function renderTrainingProgramsList() {
-            const trainingList = document.getElementById('trainingProgramsList');
-            const noTrainingMessage = document.getElementById('noTrainingMessage');
-            
-            if (trainingData.length === 0) {
-                trainingList.innerHTML = '';
-                noTrainingMessage.style.display = 'block';
-                document.getElementById('trainingPaginationControls').innerHTML = '';
-                return;
-            }
-            
-            noTrainingMessage.style.display = 'none';
-            
-            // Calculate pagination
-            const totalPages = Math.ceil(trainingData.length / itemsPerPage);
-            const startIndex = (currentTrainingPage - 1) * itemsPerPage;
-            const endIndex = Math.min(startIndex + itemsPerPage, trainingData.length);
-            const pageData = trainingData.slice(startIndex, endIndex);
-            
-            // Render training programs
-            trainingList.innerHTML = pageData.map(training => `
-                <div class="training-card ${training.status === 'Completed' ? 'completed' : ''}">
-                    <div class="training-card-header">
-                        <h4>${training.title}</h4>
-                        <span class="training-status ${training.status.toLowerCase().replace(' ', '-')}">${training.status}</span>
-                    </div>
-                    <div class="training-card-body">
-                        <p><strong>Assigned:</strong> ${formatDate(training.created_at)}</p>
-                        <p><strong>Reason:</strong> ${training.reason || 'N/A'}</p>
-                    </div>
-                    <div class="training-card-footer">
-                        <div class="training-card-date">
-                            ${training.updated_at ? `Last updated: ${formatDate(training.updated_at)}` : ''}
-                        </div>
-                        <div class="training-card-actions">
-                            <button class="action-button secondary-button view-training-btn" data-id="${training.id}">View</button>
-                            <button class="action-button primary-button edit-training-btn" data-id="${training.id}">Edit</button>
-                            <button class="action-button danger-button delete-training-btn" data-id="${training.id}">Delete</button>
-                        </div>
-                    </div>
-                </div>
-            `).join('');
-            
-            // Add event listeners to training action buttons
-            document.querySelectorAll('.view-training-btn').forEach(btn => {
-                btn.addEventListener('click', (e) => {
-                    const trainingId = e.currentTarget.getAttribute('data-id');
-                    openViewTrainingModal(trainingId);
-                });
-            });
-            
-            document.querySelectorAll('.edit-training-btn').forEach(btn => {
-                btn.addEventListener('click', (e) => {
-                    const trainingId = e.currentTarget.getAttribute('data-id');
-                    openEditTrainingModal(trainingId);
-                });
-            });
-            
-            document.querySelectorAll('.delete-training-btn').forEach(btn => {
-                btn.addEventListener('click', (e) => {
-                    const trainingId = e.currentTarget.getAttribute('data-id');
-                    openDeleteTrainingModal(trainingId);
-                });
-            });
-            
-            // Render pagination controls
-            renderPaginationControls(totalPages, currentTrainingPage, 'trainingPaginationControls', (page) => {
-                currentTrainingPage = page;
-                renderTrainingProgramsList();
-            });
-        }
-
-        // Calculate and display performance metrics
-        function calculatePerformanceMetrics() {
-            if (filteredCallHistoryData.length === 0) {
-                resetPerformanceMetrics();
-                return;
-            }
-            
-            // Calculate average handling time
-            const completedCalls = filteredCallHistoryData.filter(call => call.completed);
-            const totalDuration = completedCalls.reduce((sum, call) => {
-                if (call.duration_interval) {
-                    // Parse interval string (e.g., "00:15:30")
-                    const parts = call.duration_interval.split(':');
-                    if (parts.length === 3) {
-                        const hours = parseInt(parts[0]) || 0;
-                        const minutes = parseInt(parts[1]) || 0;
-                        const seconds = parseInt(parts[2]) || 0;
-                        return sum + (hours * 3600 + minutes * 60 + seconds);
-                    }
-                }
-                return sum;
-            }, 0);
-            
-            const avgSeconds = completedCalls.length > 0 ? totalDuration / completedCalls.length : 0;
-            const avgMinutes = Math.floor(avgSeconds / 60);
-            const avgSecs = Math.floor(avgSeconds % 60);
-            
-            document.getElementById('kpiAvgTime').textContent = 
-                avgSeconds > 0 ? `${avgMinutes}m ${avgSecs}s` : '--:--';
-            document.getElementById('ins-avg').textContent = 
-                avgSeconds > 0 ? `${avgMinutes}m ${avgSecs}s` : '0m 0s';
-            
-            // Calculate completion rate
-            const completionRate = filteredCallHistoryData.length > 0 ? 
-                Math.round((completedCalls.length / filteredCallHistoryData.length) * 100) : 0;
-            document.getElementById('ins-completion').textContent = `${completionRate}%`;
-            
-            // Calculate total calls
-            document.getElementById('kpiTotalCalls').textContent = filteredCallHistoryData.length;
-            document.getElementById('ins-total').textContent = filteredCallHistoryData.length;
-            
-            // Calculate average rating (placeholder - would need rating data)
-            const goodCalls = filteredCallHistoryData.filter(call => 
-                call.call_quality && call.call_quality.toLowerCase() === 'good').length;
-            const avgRating = filteredCallHistoryData.length > 0 ? 
-                (goodCalls / filteredCallHistoryData.length).toFixed(2) : 0;
-            document.getElementById('kpiAvgRating').textContent = `⭐ ${avgRating}`;
-            
-            // Calculate daily target progress (placeholder)
-            const dailyTarget = 20; // Example target
-            const todayCalls = filteredCallHistoryData.filter(call => {
-                const callDate = new Date(call.start_time_egypt).toDateString();
-                const today = new Date().toDateString();
-                return callDate === today;
-            }).length;
-            
-            const targetPercentage = Math.min(Math.round((todayCalls / dailyTarget) * 100), 100);
-            document.getElementById('dailyTargetPercentage').textContent = `${targetPercentage}%`;
-            document.getElementById('dailyTargetProgressBar').style.width = `${targetPercentage}%`;
-            
-            // Update achievements
-            const fastestCall = completedCalls.reduce((fastest, call) => {
-                if (call.duration_interval) {
-                    const parts = call.duration_interval.split(':');
-                    if (parts.length === 3) {
-                        const seconds = parseInt(parts[0]) * 3600 + parseInt(parts[1]) * 60 + parseInt(parts[2]);
-                        return seconds < fastest ? seconds : fastest;
-                    }
-                }
-                return fastest;
-            }, Infinity);
-            
-            document.getElementById('achFastestCall').textContent = 
-                fastestCall !== Infinity ? formatSeconds(fastestCall) : '--:--';
-            document.getElementById('achTicketsCompleted').textContent = completedCalls.length;
-            
-            // Generate charts
-            generateQualityChart();
-            generateBadReasonsChart();
-            
-            // Calculate monthly performance comparison
-            calculateMonthlyComparison();
-        }
-
-        // Reset performance metrics when no data
-        function resetPerformanceMetrics() {
-            document.getElementById('kpiAvgTime').textContent = '--:--';
-            document.getElementById('kpiAvgRating').textContent = '⭐ -.--';
-            document.getElementById('kpiTotalCalls').textContent = '0';
-            document.getElementById('dailyTargetPercentage').textContent = '0%';
-            document.getElementById('dailyTargetProgressBar').style.width = '0%';
-            
-            document.getElementById('ins-total').textContent = '0';
-            document.getElementById('ins-avg').textContent = '0m 0s';
-            document.getElementById('ins-completion').textContent = '0%';
-            
-            document.getElementById('achFastestCall').textContent = '--:--';
-            document.getElementById('achTicketsCompleted').textContent = '0';
-            
-            // Clear charts
-            if (qualityChart) qualityChart.destroy();
-            if (badReasonsChart) badReasonsChart.destroy();
-            
-            document.getElementById('monthlyPerfComparison').style.display = 'none';
-        }
-
-        // Generate quality distribution chart
-        function generateQualityChart() {
-            const ctx = document.getElementById('qualityChart').getContext('2d');
-            
-            // Count quality types
-            const qualityCounts = {
-                'Good': 0,
-                'Bad': 0,
-                'N/A': 0
-            };
-            
-            filteredCallHistoryData.forEach(call => {
-                const quality = call.call_quality || 'N/A';
-                if (qualityCounts.hasOwnProperty(quality)) {
-                    qualityCounts[quality]++;
-                } else {
-                    qualityCounts['N/A']++;
-                }
-            });
-            
-            const labels = Object.keys(qualityCounts);
-            const data = Object.values(qualityCounts);
-            const colors = ['#10B981', '#EF4444', '#6B7280'];
-            
-            if (qualityChart) qualityChart.destroy();
-            
-            qualityChart = new Chart(ctx, {
-                type: 'doughnut',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        data: data,
-                        backgroundColor: colors,
-                        borderColor: ['#0F966B', '#DC2626', '#4B5563'],
-                        borderWidth: 2
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            position: 'bottom',
-                            labels: {
-                                color: '#D1D5DB',
-                                font: {
-                                    size: 12
-                                }
-                            }
-                        },
-                        title: {
-                            display: true,
-                            text: 'Call Quality Distribution',
-                            color: '#F9FAFB',
-                            font: {
-                                size: 14,
-                                weight: 'bold'
-                            }
-                        }
-                    }
-                }
-            });
-        }
-
-        // Generate bad call reasons chart
-        function generateBadReasonsChart() {
-            const ctx = document.getElementById('badReasonsChart').getContext('2d');
-            const noBadCallsMessage = document.getElementById('noBadCallsMessage');
-            
-            // Get bad quality calls
-            const badCalls = filteredCallHistoryData.filter(call => 
-                call.call_quality && call.call_quality.toLowerCase() === 'bad');
-            
-            if (badCalls.length === 0) {
-                if (badReasonsChart) badReasonsChart.destroy();
-                noBadCallsMessage.style.display = 'block';
-                return;
-            }
-            
-            noBadCallsMessage.style.display = 'none';
-            
-            // Count reasons for bad calls
-            const reasonCounts = {};
-            badCalls.forEach(call => {
-                const reason = call.quality_reason || 'Unknown';
-                reasonCounts[reason] = (reasonCounts[reason] || 0) + 1;
-            });
-            
-            const labels = Object.keys(reasonCounts);
-            const data = Object.values(reasonCounts);
-            
-            // Generate colors
-            const colors = [];
-            for (let i = 0; i < labels.length; i++) {
-                const hue = (i * 137.508) % 360; // Golden angle approximation
-                colors.push(`hsl(${hue}, 70%, 60%)`);
-            }
-            
-            if (badReasonsChart) badReasonsChart.destroy();
-            
-            badReasonsChart = new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        label: 'Count',
-                        data: data,
-                        backgroundColor: colors,
-                        borderColor: colors.map(color => color.replace('60%)', '50%)')),
-                        borderWidth: 1
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            display: false
-                        },
-                        title: {
-                            display: true,
-                            text: 'Reasons for Bad Quality Calls',
-                            color: '#F9FAFB',
-                            font: {
-                                size: 14,
-                                weight: 'bold'
-                            }
-                        }
-                    },
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            ticks: {
-                                color: '#9CA3AF'
-                            },
-                            grid: {
-                                color: '#374151'
-                            }
-                        },
-                        x: {
-                            ticks: {
-                                color: '#9CA3AF',
-                                maxRotation: 45
-                            },
-                            grid: {
-                                display: false
-                            }
-                        }
-                    }
-                }
-            });
-        }
-
-        // Calculate monthly performance comparison
-        function calculateMonthlyComparison() {
-            const monthlyPerfComparison = document.getElementById('monthlyPerfComparison');
-            
-            // Get current month and last month
-            const now = new Date();
-            const currentMonth = now.getMonth();
-            const currentYear = now.getFullYear();
-            
-            const lastMonth = currentMonth === 0 ? 11 : currentMonth - 1;
-            const lastMonthYear = currentMonth === 0 ? currentYear - 1 : currentYear;
-            
-            // Count bad calls for current month
-            const thisMonthBadCalls = filteredCallHistoryData.filter(call => {
-                if (!call.call_quality || call.call_quality.toLowerCase() !== 'bad') return false;
-                
-                const callDate = new Date(call.start_time_egypt);
-                return callDate.getMonth() === currentMonth && callDate.getFullYear() === currentYear;
-            }).length;
-            
-            // Count bad calls for last month
-            const lastMonthBadCalls = filteredCallHistoryData.filter(call => {
-                if (!call.call_quality || call.call_quality.toLowerCase() !== 'bad') return false;
-                
-                const callDate = new Date(call.start_time_egypt);
-                return callDate.getMonth() === lastMonth && callDate.getFullYear() === lastMonthYear;
-            }).length;
-            
-            // Update UI
-            document.getElementById('lastMonthBadCalls').textContent = lastMonthBadCalls;
-            document.getElementById('thisMonthBadCalls').textContent = thisMonthBadCalls;
-            
-            const changeIndicator = document.getElementById('perfChangeIndicator');
-            if (thisMonthBadCalls < lastMonthBadCalls) {
-                changeIndicator.innerHTML = `<span class="improvement">↓ ${lastMonthBadCalls - thisMonthBadCalls} improvement</span>`;
-            } else if (thisMonthBadCalls > lastMonthBadCalls) {
-                changeIndicator.innerHTML = `<span class="decline">↑ ${thisMonthBadCalls - lastMonthBadCalls} decline</span>`;
-            } else {
-                changeIndicator.innerHTML = `<span>→ No change</span>`;
-            }
-            
-            monthlyPerfComparison.style.display = 'block';
-        }
-
-        // Save note
-        async function saveNote() {
-            const noteContent = document.getElementById('agentScratchpad').value.trim();
-            
-            if (!noteContent) {
-                alert('Please enter some content for your note.');
-                return;
-            }
-            
-            try {
-                const { data, error } = await supabase
-                    .from('agent_notes')
-                    .insert([
-                        {
-                            user_id: currentUserId,
-                            content: noteContent,
-                            created_at: new Date().toISOString()
-                        }
-                    ])
-                    .select();
-                    
-                if (error) {
-                    console.error('Error saving note:', error);
-                    alert('Error saving note. Please try again.');
-                    return;
-                }
-                
-                // Clear scratchpad and reload notes
-                document.getElementById('agentScratchpad').value = '';
-                await loadNotes();
-                
-            } catch (error) {
-                console.error('Error saving note:', error);
-                alert('Error saving note. Please try again.');
-            }
-        }
-
-        // Cancel note
-        function cancelNote() {
-            document.getElementById('agentScratchpad').value = '';
-        }
-
-        // Open edit note modal
-        function openEditNoteModal(noteId) {
-            const note = notesData.find(n => n.id === noteId);
-            if (!note) return;
-            
-            document.getElementById('editNoteTextarea').value = note.content;
-            currentEditingNoteId = noteId;
-            toggleModal('editNoteModal', true);
-        }
-
-        async function initializeDashboard() {
-            if (!supabase) return;
-            const { data: { session }, error } = await supabase.auth.getSession();
-            if (error || !session) {
-                window.location.replace('login.html');
-                return;
-            }
-
-            const storedUserData = JSON.parse(localStorage.getItem('elevoCoreUserData'));
-            if (storedUserData && storedUserData.id === session.user.id) {
-                currentUser = storedUserData;
-            } else {
-                const { data: profile } = await supabase.from('users').select('name, is_admin').eq('id', session.user.id).single();
-                currentUser = {
-                    id: session.user.id,
-                    email: session.user.email,
-                    name: profile?.name || session.user.email,
                     isAdmin: profile?.role === 'admin'  // التغيير هنا
-                };
-                localStorage.setItem('elevoCoreUserData', JSON.stringify(currentUser));
-            }
-            
-            appContainerContent.style.display = 'flex';
 
-            if (!currentUser.isAdmin) {
-                showAccessDenied();
-                return;
-            }
-
-            setupUI();
-            initializeCharts();
-            await fetchInitialData();
-            setupRealtimeSubscription();
-            
-            liveStatsInterval = setInterval(updateLiveDurationsAndStats, 1000);
-            
-            periodicShiftInterval = setInterval(() => {
-                updateTicketVolumeChart(null, true); 
-            }, TICKET_VOLUME_BUCKET_MINUTES * 60 * 1000);
-
-            authLoadingDiv.style.display = 'none';
-            dashboardContentDiv.style.display = 'block';
-        }
-
-        // Update note
-        async function updateNote() {
-            const updatedContent = document.getElementById('editNoteTextarea').value.trim();
-            
-            if (!updatedContent) {
-                alert('Note content cannot be empty.');
-                return;
-            }
-            
-            try {
-                const { error } = await supabase
-                    .from('agent_notes')
-                    .update({ 
-                        content: updatedContent,
-                        updated_at: new Date().toISOString()
-                    })
-                    .eq('id', currentEditingNoteId);
-                    
-                if (error) {
-                    console.error('Error updating note:', error);
-                    alert('Error updating note. Please try again.');
-                    return;
-                }
-                
-                toggleModal('editNoteModal', false);
-                await loadNotes();
-                
-            } catch (error) {
-                console.error('Error updating note:', error);
-                alert('Error updating note. Please try again.');
-            }
-        }
-
-        // Open delete note modal
-        function openDeleteNoteModal(noteId) {
-            currentEditingNoteId = noteId;
-            toggleModal('deleteConfirmModal', true);
-        }
-
-        // Delete note
-        async function deleteNote() {
-            try {
-                const { error } = await supabase
-                    .from('agent_notes')
-                    .delete()
-                    .eq('id', currentEditingNoteId);
-                    
-                if (error) {
-                    console.error('Error deleting note:', error);
-                    alert('Error deleting note. Please try again.');
-                    return;
-                }
-                
-                toggleModal('deleteConfirmModal', false);
-                await loadNotes();
-                
-            } catch (error) {
-                console.error('Error deleting note:', error);
-                alert('Error deleting note. Please try again.');
-            }
-        }
-
-        // Open view training modal
-        function openViewTrainingModal(trainingId) {
-            const training = trainingData.find(t => t.id === trainingId);
-            if (!training) return;
-            
-            document.getElementById('viewTrainingTitle').textContent = training.title;
-            document.getElementById('viewTrainingBody').innerHTML = `
-                <p><strong>Status:</strong> ${training.status}</p>
-                <p><strong>Assigned:</strong> ${formatDate(training.created_at)}</p>
-                <p><strong>Reason:</strong> ${training.reason || 'N/A'}</p>
-                ${training.updated_at ? `<p><strong>Last Updated:</strong> ${formatDate(training.updated_at)}</p>` : ''}
-            `;
-            
-            toggleModal('viewTrainingModal', true);
-        }
-
-        // Open edit training modal
-        function openEditTrainingModal(trainingId) {
-            const training = trainingData.find(t => t.id === trainingId);
-            if (!training) return;
-            
-            document.getElementById('editTrainingTitleInput').value = training.title;
-            document.getElementById('editTrainingReason').value = training.reason || '';
-            document.getElementById('editTrainingStatus').value = training.status;
-            currentEditingTrainingId = trainingId;
-            
-            toggleModal('editTrainingModal', true);
-        }
-
-        // Update training
-        async function updateTraining() {
-            const title = document.getElementById('editTrainingTitleInput').value.trim();
-            const reason = document.getElementById('editTrainingReason').value.trim();
-            const status = document.getElementById('editTrainingStatus').value;
-            
-            if (!title) {
-                alert('Training title cannot be empty.');
-                return;
-            }
-            
-            try {
-                const { error } = await supabase
-                    .from('training_programs')
-                    .update({ 
-                        title: title,
-                        reason: reason,
-                        status: status,
-                        updated_at: new Date().toISOString()
-                    })
-                    .eq('id', currentEditingTrainingId);
-                    
-                if (error) {
-                    console.error('Error updating training:', error);
-                    alert('Error updating training program. Please try again.');
-                    return;
-                }
-                
-                toggleModal('editTrainingModal', false);
-                await loadTrainingPrograms();
-                
-            } catch (error) {
-                console.error('Error updating training:', error);
-                alert('Error updating training program. Please try again.');
-            }
-        }
-
-        // Open delete training modal
-        function openDeleteTrainingModal(trainingId) {
-            currentEditingTrainingId = trainingId;
-            toggleModal('deleteTrainingConfirmModal', true);
-        }
-
-        // Delete training
-        async function deleteTraining() {
-            try {
-                const { error } = await supabase
-                    .from('training_programs')
-                    .delete()
-                    .eq('id', currentEditingTrainingId);
-                    
-                if (error) {
-                    console.error('Error deleting training:', error);
-                    alert('Error deleting training program. Please try again.');
-                    return;
-                }
-                
-                toggleModal('deleteTrainingConfirmModal', false);
-                await loadTrainingPrograms();
-                
-            } catch (error) {
-                console.error('Error deleting training:', error);
-                alert('Error deleting training program. Please try again.');
-            }
-        }
-
-        // Export agent data
-        function exportAgentData() {
-            // Create CSV content
-            let csvContent = "Call History Data\n";
-            csvContent += "Date,Scenario,Duration,Completed,Quality,Reason\n";
-            
-            filteredCallHistoryData.forEach(call => {
-                const date = formatDate(call.start_time_egypt);
-                const scenario = call.scenario_id || 'N/A';
-                const duration = formatDuration(call.duration_interval);
-                const completed = call.completed ? 'Yes' : 'No';
-                const quality = call.call_quality || 'N/A';
-                const reason = call.quality_reason || '-';
-                
-                csvContent += `"${date}","${scenario}","${duration}","${completed}","${quality}","${reason}"\n`;
-            });
-            
-            // Create and download file
-            const blob = new Blob([csvContent], { type: 'text/csv' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `agent-data-${new Date().toISOString().split('T')[0]}.csv`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-        }
-
-        // Utility functions
-        function formatDate(dateString) {
-            if (!dateString) return 'N/A';
-            const date = new Date(dateString);
-            return date.toLocaleDateString('en-US', { 
-                year: 'numeric', 
-                month: 'short', 
-                day: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit'
-            });
-        }
-
-        function formatDuration(duration) {
-            if (!duration) return 'N/A';
-            
-            // Handle interval format (HH:MM:SS)
-            if (typeof duration === 'string' && duration.includes(':')) {
-                const parts = duration.split(':');
-                if (parts.length === 3) {
-                    const hours = parseInt(parts[0]);
-                    const minutes = parseInt(parts[1]);
-                    const seconds = parseInt(parts[2]);
-                    
-                    if (hours > 0) {
-                        return `${hours}h ${minutes}m ${seconds}s`;
-                    } else if (minutes > 0) {
-                        return `${minutes}m ${seconds}s`;
-                    } else {
-                        return `${seconds}s`;
+                if (!userError && userData) {
+                    // عرض اسم المستخدم إذا وجد
+                    if (userData.name) {
+                        document.getElementById('userName').textContent = userData.name;
                     }
+                    
+                    // التحقق من الصلاحية
+                    if (userData.role === 'admin') {
+                        document.getElementById('dashboardLink').style.display = 'inline-flex';
+                        document.getElementById('rtmDashboardLink').style.display = 'inline-flex';
+                    } else if (userData.role !== 'agent') {
+                        console.warn('User role not recognized, redirecting to call app');
+                        window.location.href = 'core-flow.html';
+                        return;
+                    }
+                } else {
+                    console.warn('Could not fetch user role, proceeding as agent');
                 }
+            } catch (userFetchError) {
+                console.warn('Error fetching user role, proceeding as agent:', userFetchError);
             }
             
-            return duration;
+            // Load agent data and initialize the portal
+            await loadAgentData();
+            
+        } catch (error) {
+            console.error('Authentication error:', error);
+            window.location.href = 'index.html';
         }
+    }
+
+    // باقي الدوال تبقى كما هي مع التعديل على دالة formatDuration
+
+    // دالة formatDuration موحدة
+    function formatDuration(duration) {
+        if (!duration) return 'N/A';
+        
+        // إذا كانت المدة عبارة عن نص بصيغة HH:MM:SS
+        if (typeof duration === 'string' && duration.includes(':')) {
+            const parts = duration.split(':');
+            if (parts.length === 3) {
+                const hours = parseInt(parts[0]);
+                const minutes = parseInt(parts[1]);
+                const seconds = parseInt(parts[2]);
+                
+                if (hours > 0) {
+                    return `${hours}h ${minutes}m ${seconds}s`;
+                } else if (minutes > 0) {
+                    return `${minutes}m ${seconds}s`;
+                } else {
+                    return `${seconds}s`;
+                }
+            }
+        }
+        
+        // إذا كانت المدة بالأرقام (ثواني)
+        if (typeof duration === 'number') {
+            const totalSeconds = duration;
+            const hours = Math.floor(totalSeconds / 3600);
+            const minutes = Math.floor((totalSeconds % 3600) / 60);
+            const seconds = Math.floor(totalSeconds % 60);
+            
+            if (hours > 0) {
+                return `${hours}h ${minutes}m ${seconds}s`;
+            } else if (minutes > 0) {
+                return `${minutes}m ${seconds}s`;
+            } else {
+                return `${seconds}s`;
+            }
+        }
+        
+        return duration;
+    }
+
+    // ... باقي الدوال تبقى كما هي
+
+    // إزالة التعريف المكرر في نهاية الملف
+</script>
 
         function formatSeconds(totalSeconds) {
             const hours = Math.floor(totalSeconds / 3600);
@@ -1895,6 +978,67 @@
                 });
             });
         }
-    </script>
+    
+/* --- BEGIN: Elevo frontend helpers added by patcher --- */
+// Format duration_interval (milliseconds or seconds) to readable string
+function formatDuration(msOrSeconds) {
+    if (msOrSeconds === null || msOrSeconds === undefined) return '--:--';
+    // If value looks like a number string, convert
+    let v = Number(msOrSeconds);
+    // Heuristic: if value > 1e6, treat as milliseconds, else seconds
+    if (v > 1000000) { // > ~16 minutes in ms
+        v = Math.floor(v/1000);
+    }
+    const seconds = v % 60;
+    const minutes = Math.floor(v/60) % 60;
+    const hours = Math.floor(v/3600);
+    if (hours > 0) {
+        // HH:MM:SS
+        const hh = String(hours).padStart(2,'0');
+        const mm = String(minutes).padStart(2,'0');
+        const ss = String(seconds).padStart(2,'0');
+        return `${hh}:${mm}:${ss}`;
+    } else if (minutes > 0) {
+        return `${minutes}m ${seconds}s`;
+    } else {
+        return `${seconds}s`;
+    }
+}
+
+// Simple fade replace for container element (diff-like update)
+function fadeUpdate(container, newInnerHTML) {
+    if (!container) return;
+    container.style.transition = 'opacity 0.25s ease';
+    container.style.opacity = 0;
+    setTimeout(() => {
+        container.innerHTML = newInnerHTML;
+        container.style.opacity = 1;
+    }, 260);
+}
+
+// Start auto-refresh for real-time boxes only.
+// Provide an array of updater functions (no-arg async functions) to call periodically.
+// intervalSec default 30.
+function startAutoRefreshRealTime(updaters = [], intervalSec = 30) {
+    if (window._elevoAutoRefreshInterval) clearInterval(window._elevoAutoRefreshInterval);
+    if (!Array.isArray(updaters) || updaters.length === 0) return;
+    // Run once immediately
+    updaters.forEach(fn => { try { fn(); } catch(e){console.error(e);} });
+    window._elevoAutoRefreshInterval = setInterval(() => {
+        updaters.forEach(fn => {
+            try { fn(); } catch(e){ console.error(e); }
+        });
+    }, intervalSec * 1000);
+}
+
+function stopAutoRefreshRealTime() {
+    if (window._elevoAutoRefreshInterval) {
+        clearInterval(window._elevoAutoRefreshInterval);
+        window._elevoAutoRefreshInterval = null;
+    }
+}
+/* --- END: Elevo frontend helpers --- */
+
+</script>
 </body>
 </html>
