@@ -452,78 +452,71 @@
         // Authentication check
         
 
-// --- Final Role & Access Control (Stable Version) ---
+// --- Unified Role & Access Control (Final Stable) ---
 async function checkAuth() {
   try {
-    const { data: userData, error: userError } = await supabase.auth.getUser();
-    if (userError || !userData?.user) {
+    const { data: { user }, error } = await supabase.auth.getUser();
+    if (error || !user) {
       window.location.href = "index.html";
       return;
     }
 
-    const sessionUser = userData.user;
-
-    // get user profile
     const { data: profile } = await supabase
       .from("users")
       .select("name, role, is_admin")
-      .eq("id", sessionUser.id)
+      .eq("id", user.id)
       .single();
 
     const currentUser = {
-      id: sessionUser.id,
-      email: sessionUser.email,
-      name: profile?.name || sessionUser.email.split("@")[0],
+      id: user.id,
+      email: user.email,
+      name: profile?.name || user.email?.split("@")[0],
       isAdmin:
         profile?.is_admin === true ||
         (profile?.role && profile.role.toLowerCase() === "admin"),
     };
-
     window.currentUser = currentUser;
 
-    // show username
-    const userNameEl = document.getElementById("userName");
-    if (userNameEl) userNameEl.textContent = currentUser.name;
+    // Update UI
+    document.getElementById("userName").textContent = currentUser.name;
+    document.getElementById("userInfo").style.display = "flex";
 
     const page = location.pathname.split("/").pop().toLowerCase();
     const adminPages = ["dashboard.html", "rtm-dashboard.html"];
-    const agentPages = ["agent-portal.html", "core-flow.html"];
+    const allowedAgentPages = ["agent-portal.html", "core-flow.html"];
 
-    // admin → all pages
+    // Admin can access everything
     if (currentUser.isAdmin) {
-      document.getElementById("auth-loading")?.remove();
+      document.getElementById("auth-loading").style.display = "none";
+      document.getElementById("dashboardContent")?.style.setProperty("display", "block");
       return;
     }
 
-    // agent → only agent pages
+    // Agent access
     if (adminPages.includes(page)) {
-      document.getElementById("auth-loading")?.remove();
-      document.getElementById("dashboardContent")?.remove();
-      document.getElementById("rtmContent")?.remove();
+      document.getElementById("auth-loading").style.display = "none";
+      document.getElementById("dashboardContent")?.style.setProperty("display", "none");
       const modal = document.getElementById("accessDeniedModal");
       if (modal) modal.style.display = "flex";
-      const btn = document.getElementById("returnToAppBtn");
-      if (btn)
-        btn.onclick = () => {
-          window.location.href = "agent-portal.html";
-        };
+      document.getElementById("returnToAppBtn")?.addEventListener("click", () => {
+        window.location.href = "agent-portal.html";
+      });
       return;
     }
 
-    if (!agentPages.includes(page)) {
+    if (!allowedAgentPages.includes(page)) {
       window.location.href = "agent-portal.html";
       return;
     }
 
-    document.getElementById("auth-loading")?.remove();
+    document.getElementById("auth-loading").style.display = "none";
   } catch (err) {
-    console.error("Auth error:", err);
+    console.error("Auth check error:", err);
     await supabase.auth.signOut();
     window.location.href = "index.html";
   }
 }
-// --- End Role & Access Control ---
-
+// --- End Unified Role & Access Control ---
 </script>
 
 <!-- Access Denied Modal (Inserted) -->
