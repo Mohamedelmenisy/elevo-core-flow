@@ -111,9 +111,6 @@
     <script type="module">
         import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
         
-        //
-        // ❗️❗️❗️ IMPORTANT: PASTE YOUR CORRECT KEY HERE ❗️❗️❗️
-        //
         const SUPABASE_URL = 'https://aefiigottnlcmjzilqnh.supabase.co';
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFlZmlpZ290dG5sY21qemlscW5oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcxNzY2MDQsImV4cCI6MjA2Mjc1MjYwNH0.FypB02v3tGMnxXV9ZmZMdMC0oQpREKOJWgHMPxUzwX4';
         
@@ -179,7 +176,7 @@
                     email: user.email,
                     name: profile?.name || user.user_metadata?.full_name || user.email.split('@')[0], 
                     isAdmin: profile?.is_admin || false,
-                    role: profile?.role || 'agent' // Default to agent if role is not set
+                    role: profile?.role || 'agent'
                 };
                 localStorage.setItem(USER_DATA_KEY, JSON.stringify(userData));
                 console.log('User details stored in localStorage:', userData);
@@ -193,16 +190,21 @@
         async function initializePage() {
             if (!supabase) return;
 
-            const { data: { session } } = await supabase.auth.getSession();
-            if (session) {
-                console.log('User already logged in. Checking role...');
-                const userData = await storeUserDetails(session.user);
+            // --- FIX START: Use getUser() for a strict check ---
+            const { data: { user }, error } = await supabase.auth.getUser();
+
+            if (user && !error) {
+                console.log('User has a valid session. Checking role and redirecting...');
+                const userData = await storeUserDetails(user);
                 const role = userData?.role || 'agent';
                 const destination = role === 'admin' ? 'dashboard.html' : 'agent-portal.html';
                 window.location.replace(destination);
-                return;
+                return; // Stop further execution
             }
+            // --- FIX END ---
 
+            // If no valid user, proceed with showing the login form
+            console.log('No valid session found. Displaying login form.');
             const rememberedEmail = localStorage.getItem(REMEMBERED_EMAIL_KEY);
             if (rememberedEmail && emailInput) {
                 emailInput.value = rememberedEmail;
