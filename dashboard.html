@@ -41,6 +41,46 @@
             fadeUpdate(tbody, html);
         }
 
+
+        // Pagination state for recent tickets
+        let recentTicketsPage = 1;
+        const RECENT_TICKETS_PAGE_SIZE = 10;
+        async function loadRecentTickets(page = 1) {
+            try {
+                recentTicketsPage = page;
+                const offset = (page - 1) * RECENT_TICKETS_PAGE_SIZE;
+                // show shimmer rows
+                const tbody = document.getElementById('recentTicketsTbody');
+                if (tbody) {
+                    let shimmer = '';
+                    for (let i=0;i<RECENT_TICKETS_PAGE_SIZE;i++){
+                        shimmer += '<tr style="background:#fff;"><td colspan="8" style="padding:12px;"><div class=\"shimmer-row\"></div></td></tr>';
+                    }
+                    tbody.innerHTML = shimmer;
+                }
+                const { data, error } = await supabase
+                    .from('recent_tickets')
+                    .select('*')
+                    .order('end_time_egypt', { ascending: false })
+                    .range(offset, offset + RECENT_TICKETS_PAGE_SIZE - 1);
+                if (error) { console.error('Error loading recent tickets:', error); return; }
+                renderRecentTicketsTable(data || []);
+                // update page info
+                document.getElementById('recentTicketsPageInfo').textContent = 'Page ' + recentTicketsPage;
+            } catch (e) {
+                console.error('loadRecentTickets error', e);
+            }
+        }
+
+        // Prev/Next handlers
+        document.addEventListener('click', function(e){
+            if (e.target && e.target.id === 'recentTicketsPrev') {
+                if (recentTicketsPage > 1) { recentTicketsPage--; loadRecentTickets(recentTicketsPage); }
+            } else if (e.target && e.target.id === 'recentTicketsNext') {
+                recentTicketsPage++; loadRecentTickets(recentTicketsPage);
+            }
+        });
+
 </script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
     <style>
@@ -184,6 +224,19 @@
             }
         }
     </style>
+
+    <style>
+    .shimmer-row {
+      height: 18px;
+      width: 100%;
+      background: linear-gradient(90deg, #f0f3f6 25%, #e2e8f0 37%, #f0f3f6 63%);
+      background-size: 400% 100%;
+      animation: shimmer 1.2s linear infinite;
+      border-radius: 6px;
+    }
+    @keyframes shimmer { 100% { background-position: -200% 0; } }
+    </style>
+
 </head>
 <body>
     <div class="app-container">
@@ -209,6 +262,7 @@
         </header>
 
         <main class="app-main dashboard-main">
+            <div id="accessDenied" style="display:none;align-items:center;justify-content:center;height:70vh;background:rgba(0,0,0,0.03);"><div style="background:white;padding:24px 32px;border-radius:16px;box-shadow:0 4px 12px rgba(0,0,0,0.1);text-align:center;max-width:400px;color:#1e3a8a;"><h2>⚠️ Access Restricted</h2><p>This page is available for <b>Admins</b> only.</p><p style="margin-top:12px;color:#64748b;">Please go back to your dashboard.</p><button onclick="window.location.href='agent-portal.html'" style="background:#2563eb;color:#fff;border:none;padding:10px 20px;border-radius:8px;cursor:pointer;margin-top:16px;transition:background 0.2s ease;">🔙 Back to My Dashboard</button></div></div>
             <div id="auth-loading" class="loading-container" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 70vh;">
                 <div class="spinner"></div>
                 <p>Syncing data with Elevo Core...</p>
@@ -413,8 +467,9 @@
                     .single();
 
                 if (profileError || !profile || profile.role !== 'admin') {
-                    // Redirect non-admins to the main application page
-                    window.location.href = 'core-flow.html';
+                    // Show access denied message for non-admins
+                    document.getElementById('auth-loading').style.display = 'none';
+                    document.getElementById('accessDenied').style.display = 'flex';
                     return;
                 }
                 
