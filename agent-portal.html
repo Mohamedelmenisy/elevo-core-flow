@@ -1,34 +1,3 @@
-أهلاً بك، يسعدني تنفيذ التعديلات والتحسينات المطلوبة. لقد قمت بمراجعة كافة النقاط الفنية والتصميمية التي ذكرتها، وتطبيقها بدقة على الملفات الثلاثة لضمان الحصول على لوحات تحكم متطورة، سريعة، وجذابة بصرياً.
-
-فيما يلي الشرح الكامل للتعديلات مع الكود المحدث لكل ملف.
-
-### ملخص التحسينات المطبقة:
-
-1.  **تحسين الأداء (Performance):**
-    *   تم استخدام `Promise.all` لجلب البيانات من قاعدة البيانات بشكل متوازٍ، مما يقلل زمن التحميل بشكل ملحوظ.
-    *   تم تحسين آلية التحديث التلقائي (Auto Refresh) لتكون أكثر سلاسة وتستهدف البيانات فقط دون إعادة تحميل الصفحة بالكامل.
-    *   تم وضع حدود (LIMIT) على الاستعلامات التي تجلب قوائم طويلة، مثل جدول الجلسات الأخيرة.
-
-2.  **تحديث مصادر البيانات (Data Sources):**
-    *   تم التأكد من أن جميع الصفحات تستعلم من الـ Views المحدثة (`call_sessions_egypt`, `live_tickets`, `recent_tickets`, `top_5_agents_today`, `top_scenario_today`).
-    *   تم استبدال `scenario_id` بـ `scenario_title` لعرض أسماء السيناريوهات بشكل واضح.
-    *   تم إصلاح مشكلة "Unknown Agent" عبر التأكد من جلب `agent_name` من الـ Views.
-
-3.  **تحسينات التصميم والواجهة (UI/UX):**
-    *   تم إعادة تنسيق الـ Layouts باستخدام CSS Grid لتوزيع العناصر بشكل متجاوب وأنيق.
-    *   تم تحديث تصميم الكروت (Cards) لتشمل زوايا دائرية، ظلال ناعمة، وتأثيرات بسيطة عند التمرير.
-    *   تم تحسين تصميم الجداول، الرسوم البيانية (Charts)، وحالة التحميل (Loading State) لتكون أكثر احترافية.
-    *   تم تنسيق عرض الوقت والمدة (`duration_interval`) ليظهر بصيغة سهلة القراءة (مثل: `3m 25s`).
-    *   تم تحديث طريقة عرض اسم المستخدم في الـ Header ليظهر الاسم الكامل بدلاً من البريد الإلكتروني.
-
----
-
-### 1. Agent Portal (`agent.txt`)
-
-تم تحديث الملف ليشمل عرض اسم السيناريو الصحيح، تنسيق مدة المكالمة، وعرض اسم المستخدم الكامل.
-
-**`agent.txt` - Code:**
-```html
 <!DOCTYPE html>
 <html lang="en" class="dark">
 <head>
@@ -551,9 +520,10 @@
         </header>
 
         <main class="app-main dashboard-main">
+            <div id="accessDenied" style="display:none;align-items:center;justify-content:center;height:70vh;background:rgba(0,0,0,0.03);"><div style="background:white;padding:24px 32px;border-radius:16px;box-shadow:0 4px 12px rgba(0,0,0,0.1);text-align:center;max-width:400px;color:#1e3a8a;"><h2>⚠️ Access Restricted</h2><p>You do not have permission to access this page.</p><p style="margin-top:12px;color:#64748b;">Please return to the main application.</p><button onclick="window.location.href='core-flow.html'" style="background:#2563eb;color:#fff;border:none;padding:10px 20px;border-radius:8px;cursor:pointer;margin-top:16px;transition:background 0.2s ease;">🔙 Go to App</button></div></div>
             <div id="auth-loading" class="loading-container" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 70vh;">
                 <div class="spinner"></div>
-                <p>Loading Your Performance Data...</p>
+                <p>Syncing data with Elevo Core...</p>
             </div>
 
             <div id="portalContent" style="display: none;">
@@ -798,6 +768,7 @@
     <script type="module">
         const SUPABASE_URL = 'https://aefiigottnlcmjzilqnh.supabase.co';
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFlZmlpZ290dG5sY21qemlscW5oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcxNzY2MDQsImV4cCI6MjA2Mjc1MjYwNH0.FypB02v3tGMnxXV9ZmZMdMC0oQpREKOJWgHMPxUzwX4';
+        // FIX: Correctly initialize Supabase client
         const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
         // Global variables
@@ -818,8 +789,10 @@
 
         // Initialize the application
         document.addEventListener('DOMContentLoaded', async function() {
+            // Set current year in footer
             document.getElementById('currentYear').textContent = new Date().getFullYear();
             
+            // Initialize collapsible training section
             const trainingHeader = document.getElementById('trainingCollapsibleHeader');
             const trainingContent = document.getElementById('trainingCollapsibleContent');
             if (trainingHeader && trainingContent) {
@@ -829,6 +802,7 @@
                 });
             }
             
+            // Check authentication and load data
             await checkAuth();
             setupEventListeners();
         });
@@ -845,33 +819,31 @@
                 currentUser = data.user;
                 currentUserId = data.user.id;
                 
+                // Show user info and admin links if applicable
+                document.getElementById('userInfo').style.display = 'flex';
+                document.getElementById('userName').textContent = currentUser.name || currentUser.email;
+                
+                // FIX: Add role-based access control
                 const { data: userData, error: userError } = await supabase
                     .from('users')
-                    .select('role, name')
+                    .select('role')
                     .eq('id', currentUserId)
                     .single();
 
-                if (userError || !userData) {
-                     window.location.href = 'index.html'; // Fallback redirect
-                     return;
-                }
-                
-                // Show user info with name
-                document.getElementById('userInfo').style.display = 'flex';
-                document.getElementById('userName').textContent = userData.name || currentUser.email;
-
-                // Role-based access control
-                if (userData.role !== 'admin' && userData.role !== 'agent') {
-                    window.location.href = 'core-flow.html';
+                // Show access denied if user has an invalid role for this page
+                if (userError || !userData || (userData.role !== 'admin' && userData.role !== 'agent')) {
+                    document.getElementById('auth-loading').style.display = 'none';
+                    document.getElementById('accessDenied').style.display = 'flex';
                     return;
                 }
                     
-                if (userData.role === 'admin') {
+                if (!userError && userData && userData.role === 'admin') {
                     document.getElementById('dashboardLink').style.display = 'inline-flex';
                     document.getElementById('rtmDashboardLink').style.display = 'inline-flex';
                 }
                 
-                await loadAgentData(userData);
+                // Load agent data and initialize the portal
+                await loadAgentData();
                 
             } catch (error) {
                 console.error('Authentication error:', error);
@@ -881,27 +853,33 @@
 
         // Setup event listeners
         function setupEventListeners() {
+            // Logout button
             document.getElementById('logoutButton').addEventListener('click', async () => {
                 await supabase.auth.signOut();
                 window.location.href = 'index.html';
             });
             
+            // Export data button
             document.getElementById('exportDataBtn').addEventListener('click', exportAgentData);
             
+            // Filter controls
             document.getElementById('searchInput').addEventListener('input', filterCallHistory);
             document.getElementById('qualityFilter').addEventListener('change', filterCallHistory);
             document.getElementById('startDateFilter').addEventListener('change', filterCallHistory);
             document.getElementById('endDateFilter').addEventListener('change', filterCallHistory);
             document.getElementById('resetFiltersBtn').addEventListener('click', resetFilters);
             
+            // Notes functionality
             document.getElementById('saveNoteBtn').addEventListener('click', saveNote);
             document.getElementById('cancelNoteBtn').addEventListener('click', cancelNote);
             
+            // Note modals
             document.getElementById('cancelEditBtn').addEventListener('click', () => toggleModal('editNoteModal', false));
             document.getElementById('saveChangesBtn').addEventListener('click', updateNote);
             document.getElementById('cancelDeleteBtn').addEventListener('click', () => toggleModal('deleteConfirmModal', false));
             document.getElementById('confirmDeleteBtn').addEventListener('click', deleteNote);
             
+            // Training modals
             document.getElementById('closeViewTrainingBtn').addEventListener('click', () => toggleModal('viewTrainingModal', false));
             document.getElementById('cancelEditTrainingBtn').addEventListener('click', () => toggleModal('editTrainingModal', false));
             document.getElementById('saveTrainingChangesBtn').addEventListener('click', updateTraining);
@@ -910,21 +888,34 @@
         }
 
         // Load agent data
-        async function loadAgentData(userData) {
+        async function loadAgentData() {
             try {
-                const agentName = userData.name || currentUser.email.split('@')[0];
-                document.getElementById('agentGreeting').textContent = `Welcome, ${agentName}!`;
-                document.getElementById('agentSubtext').textContent = `${agentName}'s performance dashboard and analytics.`;
-
-                // Fetch data in parallel
-                await Promise.all([
-                    loadCallHistory(),
-                    loadNotes(),
-                    loadTrainingPrograms()
-                ]);
+                // Get agent name from users table
+                const { data: userData, error: userError } = await supabase
+                    .from('users')
+                    .select('name')
+                    .eq('id', currentUserId)
+                    .single();
+                    
+                if (!userError && userData) {
+                    const agentName = userData.name || currentUser.email.split('@')[0];
+                    document.getElementById('agentGreeting').textContent = `Welcome, ${agentName}!`;
+                    document.getElementById('agentSubtext').textContent = `${agentName}'s performance dashboard and analytics.`;
+                }
                 
+                // Load call history data
+                await loadCallHistory();
+                
+                // Load notes data
+                await loadNotes();
+                
+                // Load training programs
+                await loadTrainingPrograms();
+                
+                // Calculate and display performance metrics
                 calculatePerformanceMetrics();
                 
+                // Show portal content
                 document.getElementById('auth-loading').style.display = 'none';
                 document.getElementById('portalContent').style.display = 'block';
                 
@@ -939,7 +930,7 @@
             try {
                 const { data, error } = await supabase
                     .from('call_sessions_egypt')
-                    .select('*')
+                    .select('*').limit(10)
                     .eq('user_id', currentUserId)
                     .order('start_time_egypt', { ascending: false });
                     
@@ -951,6 +942,7 @@
                 callHistoryData = data || [];
                 filteredCallHistoryData = [...callHistoryData];
                 
+                // Render the table
                 renderCallHistoryTable();
                 
             } catch (error) {
@@ -973,15 +965,17 @@
             
             noDataMessage.style.display = 'none';
             
+            // Calculate pagination
             const totalPages = Math.ceil(filteredCallHistoryData.length / itemsPerPage);
             const startIndex = (currentPage - 1) * itemsPerPage;
             const endIndex = Math.min(startIndex + itemsPerPage, filteredCallHistoryData.length);
             const pageData = filteredCallHistoryData.slice(startIndex, endIndex);
             
+            // Render table rows
             tableBody.innerHTML = pageData.map(call => `
                 <tr>
                     <td>${formatDate(call.start_time_egypt)}</td>
-                    <td>${call.scenario_title || 'N/A'}</td>
+                    <td>${call.scenario_id || 'N/A'}</td>
                     <td>${formatDuration(call.duration_interval)}</td>
                     <td>${call.completed ? '✅' : '❌'}</td>
                     <td>${call.call_quality || 'N/A'}</td>
@@ -989,6 +983,7 @@
                 </tr>
             `).join('');
             
+            // Render pagination controls
             renderPaginationControls(totalPages, currentPage, 'paginationControls', (page) => {
                 currentPage = page;
                 renderCallHistoryTable();
@@ -1003,12 +998,15 @@
             const endDate = document.getElementById('endDateFilter').value;
             
             filteredCallHistoryData = callHistoryData.filter(call => {
+                // Search filter
                 const matchesSearch = !searchTerm || 
-                    (call.scenario_title && call.scenario_title.toLowerCase().includes(searchTerm));
+                    (call.scenario_id && call.scenario_id.toLowerCase().includes(searchTerm));
                 
+                // Quality filter
                 const matchesQuality = !qualityFilter || 
                     (call.call_quality && call.call_quality.toLowerCase() === qualityFilter.toLowerCase());
                 
+                // Date filters
                 const callDate = new Date(call.start_time_egypt).toISOString().split('T')[0];
                 const matchesStartDate = !startDate || callDate >= startDate;
                 const matchesEndDate = !endDate || callDate <= endDate;
@@ -1039,9 +1037,14 @@
                     .eq('user_id', currentUserId)
                     .order('created_at', { ascending: false });
                     
-                if (error) throw error;
+                if (error) {
+                    console.error('Error fetching notes:', error);
+                    return;
+                }
+                
                 notesData = data || [];
                 renderNotesList();
+                
             } catch (error) {
                 console.error('Error loading notes:', error);
             }
@@ -1061,11 +1064,13 @@
             
             noNotesMessage.style.display = 'none';
             
+            // Calculate pagination
             const totalPages = Math.ceil(notesData.length / itemsPerPage);
             const startIndex = (currentNotesPage - 1) * itemsPerPage;
             const endIndex = Math.min(startIndex + itemsPerPage, notesData.length);
             const pageData = notesData.slice(startIndex, endIndex);
             
+            // Render notes
             notesList.innerHTML = pageData.map(note => `
                 <div class="note-card">
                     <div class="note-header">
@@ -1092,10 +1097,23 @@
                 </div>
             `).join('');
             
-            document.querySelectorAll('.edit-note-btn').forEach(btn => btn.addEventListener('click', e => openEditNoteModal(e.currentTarget.getAttribute('data-id'))));
-            document.querySelectorAll('.delete-note-btn').forEach(btn => btn.addEventListener('click', e => openDeleteNoteModal(e.currentTarget.getAttribute('data-id'))));
+            // Add event listeners to note action buttons
+            document.querySelectorAll('.edit-note-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const noteId = e.currentTarget.getAttribute('data-id');
+                    openEditNoteModal(noteId);
+                });
+            });
             
-            renderPaginationControls(totalPages, currentNotesPage, 'notesPaginationControls', page => {
+            document.querySelectorAll('.delete-note-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const noteId = e.currentTarget.getAttribute('data-id');
+                    openDeleteNoteModal(noteId);
+                });
+            });
+            
+            // Render pagination controls
+            renderPaginationControls(totalPages, currentNotesPage, 'notesPaginationControls', (page) => {
                 currentNotesPage = page;
                 renderNotesList();
             });
@@ -1110,9 +1128,14 @@
                     .eq('user_id', currentUserId)
                     .order('created_at', { ascending: false });
                     
-                if (error) throw error;
+                if (error) {
+                    console.error('Error fetching training programs:', error);
+                    return;
+                }
+                
                 trainingData = data || [];
                 renderTrainingProgramsList();
+                
             } catch (error) {
                 console.error('Error loading training programs:', error);
             }
@@ -1132,11 +1155,13 @@
             
             noTrainingMessage.style.display = 'none';
             
+            // Calculate pagination
             const totalPages = Math.ceil(trainingData.length / itemsPerPage);
             const startIndex = (currentTrainingPage - 1) * itemsPerPage;
             const endIndex = Math.min(startIndex + itemsPerPage, trainingData.length);
             const pageData = trainingData.slice(startIndex, endIndex);
             
+            // Render training programs
             trainingList.innerHTML = pageData.map(training => `
                 <div class="training-card ${training.status === 'Completed' ? 'completed' : ''}">
                     <div class="training-card-header">
@@ -1160,11 +1185,30 @@
                 </div>
             `).join('');
             
-            document.querySelectorAll('.view-training-btn').forEach(btn => btn.addEventListener('click', e => openViewTrainingModal(e.currentTarget.getAttribute('data-id'))));
-            document.querySelectorAll('.edit-training-btn').forEach(btn => btn.addEventListener('click', e => openEditTrainingModal(e.currentTarget.getAttribute('data-id'))));
-            document.querySelectorAll('.delete-training-btn').forEach(btn => btn.addEventListener('click', e => openDeleteTrainingModal(e.currentTarget.getAttribute('data-id'))));
-
-            renderPaginationControls(totalPages, currentTrainingPage, 'trainingPaginationControls', page => {
+            // Add event listeners to training action buttons
+            document.querySelectorAll('.view-training-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const trainingId = e.currentTarget.getAttribute('data-id');
+                    openViewTrainingModal(trainingId);
+                });
+            });
+            
+            document.querySelectorAll('.edit-training-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const trainingId = e.currentTarget.getAttribute('data-id');
+                    openEditTrainingModal(trainingId);
+                });
+            });
+            
+            document.querySelectorAll('.delete-training-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const trainingId = e.currentTarget.getAttribute('data-id');
+                    openDeleteTrainingModal(trainingId);
+                });
+            });
+            
+            // Render pagination controls
+            renderPaginationControls(totalPages, currentTrainingPage, 'trainingPaginationControls', (page) => {
                 currentTrainingPage = page;
                 renderTrainingProgramsList();
             });
@@ -1177,159 +1221,295 @@
                 return;
             }
             
+            // Calculate average handling time
             const completedCalls = filteredCallHistoryData.filter(call => call.completed);
             const totalDuration = completedCalls.reduce((sum, call) => {
                 if (call.duration_interval) {
+                    // Parse interval string (e.g., "00:15:30")
                     const parts = call.duration_interval.split(':');
                     if (parts.length === 3) {
-                        return sum + (parseInt(parts[0])*3600 + parseInt(parts[1])*60 + parseInt(parts[2]));
+                        const hours = parseInt(parts[0]) || 0;
+                        const minutes = parseInt(parts[1]) || 0;
+                        const seconds = parseInt(parts[2]) || 0;
+                        return sum + (hours * 3600 + minutes * 60 + seconds);
                     }
                 }
                 return sum;
             }, 0);
             
             const avgSeconds = completedCalls.length > 0 ? totalDuration / completedCalls.length : 0;
-            const avgFormatted = formatSeconds(avgSeconds);
-            document.getElementById('kpiAvgTime').textContent = avgSeconds > 0 ? avgFormatted : '--:--';
-            document.getElementById('ins-avg').textContent = avgSeconds > 0 ? avgFormatted : '0m 0s';
-
-            const completionRate = filteredCallHistoryData.length > 0 ? Math.round((completedCalls.length / filteredCallHistoryData.length) * 100) : 0;
+            const avgMinutes = Math.floor(avgSeconds / 60);
+            const avgSecs = Math.floor(avgSeconds % 60);
+            
+            document.getElementById('kpiAvgTime').textContent = 
+                avgSeconds > 0 ? `${avgMinutes}m ${avgSecs}s` : '--:--';
+            document.getElementById('ins-avg').textContent = 
+                avgSeconds > 0 ? `${avgMinutes}m ${avgSecs}s` : '0m 0s';
+            
+            // Calculate completion rate
+            const completionRate = filteredCallHistoryData.length > 0 ? 
+                Math.round((completedCalls.length / filteredCallHistoryData.length) * 100) : 0;
             document.getElementById('ins-completion').textContent = `${completionRate}%`;
             
+            // Calculate total calls
             document.getElementById('kpiTotalCalls').textContent = filteredCallHistoryData.length;
             document.getElementById('ins-total').textContent = filteredCallHistoryData.length;
             
-            const goodCalls = filteredCallHistoryData.filter(call => call.call_quality?.toLowerCase() === 'good').length;
-            const avgRating = filteredCallHistoryData.length > 0 ? (goodCalls / filteredCallHistoryData.length * 5).toFixed(2) : 0;
+            // Calculate average rating (placeholder - would need rating data)
+            const goodCalls = filteredCallHistoryData.filter(call => 
+                call.call_quality && call.call_quality.toLowerCase() === 'good').length;
+            const avgRating = filteredCallHistoryData.length > 0 ? 
+                (goodCalls / filteredCallHistoryData.length).toFixed(2) : 0;
             document.getElementById('kpiAvgRating').textContent = `⭐ ${avgRating}`;
             
-            const dailyTarget = 20;
-            const todayCalls = filteredCallHistoryData.filter(call => new Date(call.start_time_egypt).toDateString() === new Date().toDateString()).length;
+            // Calculate daily target progress (placeholder)
+            const dailyTarget = 20; // Example target
+            const todayCalls = filteredCallHistoryData.filter(call => {
+                const callDate = new Date(call.start_time_egypt).toDateString();
+                const today = new Date().toDateString();
+                return callDate === today;
+            }).length;
+            
             const targetPercentage = Math.min(Math.round((todayCalls / dailyTarget) * 100), 100);
             document.getElementById('dailyTargetPercentage').textContent = `${targetPercentage}%`;
             document.getElementById('dailyTargetProgressBar').style.width = `${targetPercentage}%`;
             
+            // Update achievements
             const fastestCall = completedCalls.reduce((fastest, call) => {
                 if (call.duration_interval) {
                     const parts = call.duration_interval.split(':');
-                    const seconds = parseInt(parts[0])*3600 + parseInt(parts[1])*60 + parseInt(parts[2]);
-                    return Math.min(seconds, fastest);
+                    if (parts.length === 3) {
+                        const seconds = parseInt(parts[0]) * 3600 + parseInt(parts[1]) * 60 + parseInt(parts[2]);
+                        return seconds < fastest ? seconds : fastest;
+                    }
                 }
                 return fastest;
             }, Infinity);
             
-            document.getElementById('achFastestCall').textContent = fastestCall !== Infinity ? formatSeconds(fastestCall) : '--:--';
+            document.getElementById('achFastestCall').textContent = 
+                fastestCall !== Infinity ? formatSeconds(fastestCall) : '--:--';
             document.getElementById('achTicketsCompleted').textContent = completedCalls.length;
             
+            // Generate charts
             generateQualityChart();
             generateBadReasonsChart();
+            
+            // Calculate monthly performance comparison
             calculateMonthlyComparison();
         }
 
-        // Reset performance metrics
+        // Reset performance metrics when no data
         function resetPerformanceMetrics() {
             document.getElementById('kpiAvgTime').textContent = '--:--';
             document.getElementById('kpiAvgRating').textContent = '⭐ -.--';
             document.getElementById('kpiTotalCalls').textContent = '0';
             document.getElementById('dailyTargetPercentage').textContent = '0%';
             document.getElementById('dailyTargetProgressBar').style.width = '0%';
+            
             document.getElementById('ins-total').textContent = '0';
             document.getElementById('ins-avg').textContent = '0m 0s';
             document.getElementById('ins-completion').textContent = '0%';
+            
             document.getElementById('achFastestCall').textContent = '--:--';
             document.getElementById('achTicketsCompleted').textContent = '0';
+            
+            // Clear charts
             if (qualityChart) qualityChart.destroy();
             if (badReasonsChart) badReasonsChart.destroy();
+            
             document.getElementById('monthlyPerfComparison').style.display = 'none';
         }
 
-        // Charts generation (Quality and Bad Reasons)
+        // Generate quality distribution chart
         function generateQualityChart() {
             const ctx = document.getElementById('qualityChart').getContext('2d');
-            const qualityCounts = { 'Good': 0, 'Bad': 0, 'N/A': 0 };
+            
+            // Count quality types
+            const qualityCounts = {
+                'Good': 0,
+                'Bad': 0,
+                'N/A': 0
+            };
+            
             filteredCallHistoryData.forEach(call => {
                 const quality = call.call_quality || 'N/A';
-                qualityCounts[quality] = (qualityCounts[quality] || 0) + 1;
+                if (qualityCounts.hasOwnProperty(quality)) {
+                    qualityCounts[quality]++;
+                } else {
+                    qualityCounts['N/A']++;
+                }
             });
+            
+            const labels = Object.keys(qualityCounts);
+            const data = Object.values(qualityCounts);
+            const colors = ['#10B981', '#EF4444', '#6B7280'];
+            
             if (qualityChart) qualityChart.destroy();
+            
             qualityChart = new Chart(ctx, {
                 type: 'doughnut',
                 data: {
-                    labels: Object.keys(qualityCounts),
+                    labels: labels,
                     datasets: [{
-                        data: Object.values(qualityCounts),
-                        backgroundColor: ['#10B981', '#EF4444', '#6B7280'],
+                        data: data,
+                        backgroundColor: colors,
                         borderColor: ['#0F966B', '#DC2626', '#4B5563'],
                         borderWidth: 2
                     }]
                 },
-                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#D1D5DB' } }, title: { display: true, text: 'Call Quality Distribution', color: '#F9FAFB', font: { size: 14, weight: 'bold' } } } }
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                color: '#D1D5DB',
+                                font: {
+                                    size: 12
+                                }
+                            }
+                        },
+                        title: {
+                            display: true,
+                            text: 'Call Quality Distribution',
+                            color: '#F9FAFB',
+                            font: {
+                                size: 14,
+                                weight: 'bold'
+                            }
+                        }
+                    }
+                }
             });
         }
 
+        // Generate bad call reasons chart
         function generateBadReasonsChart() {
             const ctx = document.getElementById('badReasonsChart').getContext('2d');
             const noBadCallsMessage = document.getElementById('noBadCallsMessage');
-            const badCalls = filteredCallHistoryData.filter(call => call.call_quality?.toLowerCase() === 'bad');
+            
+            // Get bad quality calls
+            const badCalls = filteredCallHistoryData.filter(call => 
+                call.call_quality && call.call_quality.toLowerCase() === 'bad');
             
             if (badCalls.length === 0) {
                 if (badReasonsChart) badReasonsChart.destroy();
                 noBadCallsMessage.style.display = 'block';
-                document.getElementById('badReasonsChart').style.display = 'none';
                 return;
             }
             
             noBadCallsMessage.style.display = 'none';
-            document.getElementById('badReasonsChart').style.display = 'block';
-
+            
+            // Count reasons for bad calls
             const reasonCounts = {};
             badCalls.forEach(call => {
                 const reason = call.quality_reason || 'Unknown';
                 reasonCounts[reason] = (reasonCounts[reason] || 0) + 1;
             });
-
-            const colors = Object.keys(reasonCounts).map((_, i) => `hsl(${(i * 137.508) % 360}, 70%, 60%)`);
+            
+            const labels = Object.keys(reasonCounts);
+            const data = Object.values(reasonCounts);
+            
+            // Generate colors
+            const colors = [];
+            for (let i = 0; i < labels.length; i++) {
+                const hue = (i * 137.508) % 360; // Golden angle approximation
+                colors.push(`hsl(${hue}, 70%, 60%)`);
+            }
+            
             if (badReasonsChart) badReasonsChart.destroy();
+            
             badReasonsChart = new Chart(ctx, {
                 type: 'bar',
                 data: {
-                    labels: Object.keys(reasonCounts),
-                    datasets: [{ label: 'Count', data: Object.values(reasonCounts), backgroundColor: colors, borderWidth: 1 }]
+                    labels: labels,
+                    datasets: [{
+                        label: 'Count',
+                        data: data,
+                        backgroundColor: colors,
+                        borderColor: colors.map(color => color.replace('60%)', '50%)')),
+                        borderWidth: 1
+                    }]
                 },
-                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, title: { display: true, text: 'Reasons for Bad Quality Calls', color: '#F9FAFB', font: { size: 14, weight: 'bold' } } }, scales: { y: { beginAtZero: true, ticks: { color: '#9CA3AF' }, grid: { color: '#374151' } }, x: { ticks: { color: '#9CA3AF', maxRotation: 45 }, grid: { display: false } } } }
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        title: {
+                            display: true,
+                            text: 'Reasons for Bad Quality Calls',
+                            color: '#F9FAFB',
+                            font: {
+                                size: 14,
+                                weight: 'bold'
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                color: '#9CA3AF'
+                            },
+                            grid: {
+                                color: '#374151'
+                            }
+                        },
+                        x: {
+                            ticks: {
+                                color: '#9CA3AF',
+                                maxRotation: 45
+                            },
+                            grid: {
+                                display: false
+                            }
+                        }
+                    }
+                }
             });
         }
-        
+
         // Calculate monthly performance comparison
         function calculateMonthlyComparison() {
             const monthlyPerfComparison = document.getElementById('monthlyPerfComparison');
+            
+            // Get current month and last month
             const now = new Date();
             const currentMonth = now.getMonth();
             const currentYear = now.getFullYear();
+            
             const lastMonth = currentMonth === 0 ? 11 : currentMonth - 1;
             const lastMonthYear = currentMonth === 0 ? currentYear - 1 : currentYear;
-
+            
+            // Count bad calls for current month
             const thisMonthBadCalls = filteredCallHistoryData.filter(call => {
-                if (call.call_quality?.toLowerCase() !== 'bad') return false;
+                if (!call.call_quality || call.call_quality.toLowerCase() !== 'bad') return false;
+                
                 const callDate = new Date(call.start_time_egypt);
                 return callDate.getMonth() === currentMonth && callDate.getFullYear() === currentYear;
             }).length;
             
+            // Count bad calls for last month
             const lastMonthBadCalls = filteredCallHistoryData.filter(call => {
-                if (call.call_quality?.toLowerCase() !== 'bad') return false;
+                if (!call.call_quality || call.call_quality.toLowerCase() !== 'bad') return false;
+                
                 const callDate = new Date(call.start_time_egypt);
                 return callDate.getMonth() === lastMonth && callDate.getFullYear() === lastMonthYear;
             }).length;
-
+            
+            // Update UI
             document.getElementById('lastMonthBadCalls').textContent = lastMonthBadCalls;
             document.getElementById('thisMonthBadCalls').textContent = thisMonthBadCalls;
             
             const changeIndicator = document.getElementById('perfChangeIndicator');
-            const diff = thisMonthBadCalls - lastMonthBadCalls;
-            if (diff < 0) {
-                changeIndicator.innerHTML = `<span class="improvement">↓ ${Math.abs(diff)} improvement</span>`;
-            } else if (diff > 0) {
-                changeIndicator.innerHTML = `<span class="decline">↑ ${diff} decline</span>`;
+            if (thisMonthBadCalls < lastMonthBadCalls) {
+                changeIndicator.innerHTML = `<span class="improvement">↓ ${lastMonthBadCalls - thisMonthBadCalls} improvement</span>`;
+            } else if (thisMonthBadCalls > lastMonthBadCalls) {
+                changeIndicator.innerHTML = `<span class="decline">↑ ${thisMonthBadCalls - lastMonthBadCalls} decline</span>`;
             } else {
                 changeIndicator.innerHTML = `<span>→ No change</span>`;
             }
@@ -1337,110 +1517,407 @@
             monthlyPerfComparison.style.display = 'block';
         }
 
-        // CRUD operations for Notes and Training (Save, Update, Delete)
+        // Save note
         async function saveNote() {
-            const content = document.getElementById('agentScratchpad').value.trim();
-            if (!content) return;
-            const { error } = await supabase.from('agent_notes').insert([{ user_id: currentUserId, content }]);
-            if (error) console.error('Error saving note:', error);
-            else {
+            const noteContent = document.getElementById('agentScratchpad').value.trim();
+            
+            if (!noteContent) {
+                alert('Please enter some content for your note.');
+                return;
+            }
+            
+            try {
+                const { data, error } = await supabase
+                    .from('agent_notes')
+                    .insert([
+                        {
+                            user_id: currentUserId,
+                            content: noteContent,
+                            created_at: new Date().toISOString()
+                        }
+                    ])
+                    .select();
+                    
+                if (error) {
+                    console.error('Error saving note:', error);
+                    alert('Error saving note. Please try again.');
+                    return;
+                }
+                
+                // Clear scratchpad and reload notes
                 document.getElementById('agentScratchpad').value = '';
                 await loadNotes();
+                
+            } catch (error) {
+                console.error('Error saving note:', error);
+                alert('Error saving note. Please try again.');
             }
         }
-        function cancelNote() { document.getElementById('agentScratchpad').value = ''; }
+
+        // Cancel note
+        function cancelNote() {
+            document.getElementById('agentScratchpad').value = '';
+        }
+
+        // Open edit note modal
         function openEditNoteModal(noteId) {
-            const note = notesData.find(n => n.id == noteId);
+            const note = notesData.find(n => n.id === noteId);
             if (!note) return;
-            currentEditingNoteId = noteId;
+            
             document.getElementById('editNoteTextarea').value = note.content;
+            currentEditingNoteId = noteId;
             toggleModal('editNoteModal', true);
         }
+
+        // Update note
         async function updateNote() {
-            const content = document.getElementById('editNoteTextarea').value.trim();
-            if (!content) return;
-            const { error } = await supabase.from('agent_notes').update({ content, updated_at: new Date().toISOString() }).eq('id', currentEditingNoteId);
-            if (error) console.error('Error updating note:', error);
-            else {
+            const updatedContent = document.getElementById('editNoteTextarea').value.trim();
+            
+            if (!updatedContent) {
+                alert('Note content cannot be empty.');
+                return;
+            }
+            
+            try {
+                const { error } = await supabase
+                    .from('agent_notes')
+                    .update({ 
+                        content: updatedContent,
+                        updated_at: new Date().toISOString()
+                    })
+                    .eq('id', currentEditingNoteId);
+                    
+                if (error) {
+                    console.error('Error updating note:', error);
+                    alert('Error updating note. Please try again.');
+                    return;
+                }
+                
                 toggleModal('editNoteModal', false);
                 await loadNotes();
+                
+            } catch (error) {
+                console.error('Error updating note:', error);
+                alert('Error updating note. Please try again.');
             }
         }
-        function openDeleteNoteModal(noteId) { currentEditingNoteId = noteId; toggleModal('deleteConfirmModal', true); }
+
+        // Open delete note modal
+        function openDeleteNoteModal(noteId) {
+            currentEditingNoteId = noteId;
+            toggleModal('deleteConfirmModal', true);
+        }
+
+        // Delete note
         async function deleteNote() {
-            const { error } = await supabase.from('agent_notes').delete().eq('id', currentEditingNoteId);
-            if (error) console.error('Error deleting note:', error);
-            else {
+            try {
+                const { error } = await supabase
+                    .from('agent_notes')
+                    .delete()
+                    .eq('id', currentEditingNoteId);
+                    
+                if (error) {
+                    console.error('Error deleting note:', error);
+                    alert('Error deleting note. Please try again.');
+                    return;
+                }
+                
                 toggleModal('deleteConfirmModal', false);
                 await loadNotes();
+                
+            } catch (error) {
+                console.error('Error deleting note:', error);
+                alert('Error deleting note. Please try again.');
             }
         }
-        
-        // Similar functions for Training Programs
-        function openViewTrainingModal(trainingId) { /* ... */ }
-        function openEditTrainingModal(trainingId) { /* ... */ }
-        async function updateTraining() { /* ... */ }
-        function openDeleteTrainingModal(trainingId) { /* ... */ }
-        async function deleteTraining() { /* ... */ }
 
-        // Export data to CSV
+        // Open view training modal
+        function openViewTrainingModal(trainingId) {
+            const training = trainingData.find(t => t.id === trainingId);
+            if (!training) return;
+            
+            document.getElementById('viewTrainingTitle').textContent = training.title;
+            document.getElementById('viewTrainingBody').innerHTML = `
+                <p><strong>Status:</strong> ${training.status}</p>
+                <p><strong>Assigned:</strong> ${formatDate(training.created_at)}</p>
+                <p><strong>Reason:</strong> ${training.reason || 'N/A'}</p>
+                ${training.updated_at ? `<p><strong>Last Updated:</strong> ${formatDate(training.updated_at)}</p>` : ''}
+            `;
+            
+            toggleModal('viewTrainingModal', true);
+        }
+
+        // Open edit training modal
+        function openEditTrainingModal(trainingId) {
+            const training = trainingData.find(t => t.id === trainingId);
+            if (!training) return;
+            
+            document.getElementById('editTrainingTitleInput').value = training.title;
+            document.getElementById('editTrainingReason').value = training.reason || '';
+            document.getElementById('editTrainingStatus').value = training.status;
+            currentEditingTrainingId = trainingId;
+            
+            toggleModal('editTrainingModal', true);
+        }
+
+        // Update training
+        async function updateTraining() {
+            const title = document.getElementById('editTrainingTitleInput').value.trim();
+            const reason = document.getElementById('editTrainingReason').value.trim();
+            const status = document.getElementById('editTrainingStatus').value;
+            
+            if (!title) {
+                alert('Training title cannot be empty.');
+                return;
+            }
+            
+            try {
+                const { error } = await supabase
+                    .from('training_programs')
+                    .update({ 
+                        title: title,
+                        reason: reason,
+                        status: status,
+                        updated_at: new Date().toISOString()
+                    })
+                    .eq('id', currentEditingTrainingId);
+                    
+                if (error) {
+                    console.error('Error updating training:', error);
+                    alert('Error updating training program. Please try again.');
+                    return;
+                }
+                
+                toggleModal('editTrainingModal', false);
+                await loadTrainingPrograms();
+                
+            } catch (error) {
+                console.error('Error updating training:', error);
+                alert('Error updating training program. Please try again.');
+            }
+        }
+
+        // Open delete training modal
+        function openDeleteTrainingModal(trainingId) {
+            currentEditingTrainingId = trainingId;
+            toggleModal('deleteTrainingConfirmModal', true);
+        }
+
+        // Delete training
+        async function deleteTraining() {
+            try {
+                const { error } = await supabase
+                    .from('training_programs')
+                    .delete()
+                    .eq('id', currentEditingTrainingId);
+                    
+                if (error) {
+                    console.error('Error deleting training:', error);
+                    alert('Error deleting training program. Please try again.');
+                    return;
+                }
+                
+                toggleModal('deleteTrainingConfirmModal', false);
+                await loadTrainingPrograms();
+                
+            } catch (error) {
+                console.error('Error deleting training:', error);
+                alert('Error deleting training program. Please try again.');
+            }
+        }
+
+        // Export agent data
         function exportAgentData() {
-            let csvContent = "Date,Scenario,Duration,Completed,Quality,Reason\n";
+            // Create CSV content
+            let csvContent = "Call History Data\n";
+            csvContent += "Date,Scenario,Duration,Completed,Quality,Reason\n";
+            
             filteredCallHistoryData.forEach(call => {
-                csvContent += `"${formatDate(call.start_time_egypt)}","${call.scenario_title || 'N/A'}","${formatDuration(call.duration_interval)}","${call.completed ? 'Yes' : 'No'}","${call.call_quality || 'N/A'}","${(call.quality_reason || '-').replace(/"/g, '""')}"\n`;
+                const date = formatDate(call.start_time_egypt);
+                const scenario = call.scenario_id || 'N/A';
+                const duration = formatDuration(call.duration_interval);
+                const completed = call.completed ? 'Yes' : 'No';
+                const quality = call.call_quality || 'N/A';
+                const reason = call.quality_reason || '-';
+                
+                csvContent += `"${date}","${scenario}","${duration}","${completed}","${quality}","${reason}"\n`;
             });
-            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-            const link = document.createElement("a");
-            link.href = URL.createObjectURL(blob);
-            link.download = `agent-data-${new Date().toISOString().split('T')[0]}.csv`;
-            link.click();
-            URL.revokeObjectURL(link.href);
+            
+            // Create and download file
+            const blob = new Blob([csvContent], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `agent-data-${new Date().toISOString().split('T')[0]}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
         }
 
         // Utility functions
         function formatDate(dateString) {
             if (!dateString) return 'N/A';
-            return new Date(dateString).toLocaleString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+            const date = new Date(dateString);
+            return date.toLocaleDateString('en-US', { 
+                year: 'numeric', 
+                month: 'short', 
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
         }
+
         function formatDuration(duration) {
-            if (!duration || typeof duration !== 'string' || !duration.includes(':')) return '0s';
-            const parts = duration.split(':').map(Number);
-            if (parts.length !== 3) return 'N/A';
-            const [hours, minutes, seconds] = parts;
-            if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`;
-            if (minutes > 0) return `${minutes}m ${seconds}s`;
-            return `${seconds}s`;
+            if (!duration) return 'N/A';
+            
+            // Handle interval format (HH:MM:SS)
+            if (typeof duration === 'string' && duration.includes(':')) {
+                const parts = duration.split(':');
+                if (parts.length === 3) {
+                    const hours = parseInt(parts[0]);
+                    const minutes = parseInt(parts[1]);
+                    const seconds = parseInt(parts[2]);
+                    
+                    if (hours > 0) {
+                        return `${hours}h ${minutes}m ${seconds}s`;
+                    } else if (minutes > 0) {
+                        return `${minutes}m ${seconds}s`;
+                    } else {
+                        return `${seconds}s`;
+                    }
+                }
+            }
+            
+            return duration;
         }
+
         function formatSeconds(totalSeconds) {
-            if (isNaN(totalSeconds) || totalSeconds === 0) return '0s';
             const hours = Math.floor(totalSeconds / 3600);
             const minutes = Math.floor((totalSeconds % 3600) / 60);
             const seconds = Math.floor(totalSeconds % 60);
-            if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`;
-            if (minutes > 0) return `${minutes}m ${seconds}s`;
-            return `${seconds}s`;
+            
+            if (hours > 0) {
+                return `${hours}h ${minutes}m ${seconds}s`;
+            } else if (minutes > 0) {
+                return `${minutes}m ${seconds}s`;
+            } else {
+                return `${seconds}s`;
+            }
         }
+
         function toggleModal(modalId, show) {
             const modal = document.getElementById(modalId);
-            if (show) modal.classList.add('visible');
-            else modal.classList.remove('visible');
-            if (!show) {
+            if (show) {
+                modal.classList.add('visible');
+            } else {
+                modal.classList.remove('visible');
                 currentEditingNoteId = null;
                 currentEditingTrainingId = null;
             }
         }
+
         function renderPaginationControls(totalPages, currentPage, containerId, onPageChange) {
             const container = document.getElementById(containerId);
-            if (totalPages <= 1) { container.innerHTML = ''; return; }
-            let paginationHTML = '<div class="pagination">';
-            if (currentPage > 1) paginationHTML += `<button class="pagination-btn" data-page="${currentPage - 1}">Previous</button>`;
-            for (let i = 1; i <= totalPages; i++) {
-                paginationHTML += (i === currentPage) ? `<span class="pagination-current">${i}</span>` : `<button class="pagination-btn" data-page="${i}">${i}</button>`;
+            
+            if (totalPages <= 1) {
+                container.innerHTML = '';
+                return;
             }
-            if (currentPage < totalPages) paginationHTML += `<button class="pagination-btn" data-page="${currentPage + 1}">Next</button>`;
-            container.innerHTML = paginationHTML + '</div>';
-            container.querySelectorAll('.pagination-btn').forEach(btn => btn.addEventListener('click', () => onPageChange(parseInt(btn.dataset.page))));
+            
+            let paginationHTML = '<div class="pagination">';
+            
+            // Previous button
+            if (currentPage > 1) {
+                paginationHTML += `<button class="pagination-btn" data-page="${currentPage - 1}">Previous</button>`;
+            }
+            
+            // Page numbers
+            for (let i = 1; i <= totalPages; i++) {
+                if (i === currentPage) {
+                    paginationHTML += `<span class="pagination-current">${i}</span>`;
+                } else {
+                    paginationHTML += `<button class="pagination-btn" data-page="${i}">${i}</button>`;
+                }
+            }
+            
+            // Next button
+            if (currentPage < totalPages) {
+                paginationHTML += `<button class="pagination-btn" data-page="${currentPage + 1}">Next</button>`;
+            }
+            
+            paginationHTML += '</div>';
+            container.innerHTML = paginationHTML;
+            
+            // Add event listeners to pagination buttons
+            container.querySelectorAll('.pagination-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const page = parseInt(btn.getAttribute('data-page'));
+                    onPageChange(page);
+                });
+            });
         }
-    </script>
+    
+/* --- BEGIN: Elevo frontend helpers added by patcher --- */
+// Format duration_interval (milliseconds or seconds) to readable string
+function formatDuration(msOrSeconds) {
+    if (msOrSeconds === null || msOrSeconds === undefined) return '--:--';
+    // If value looks like a number string, convert
+    let v = Number(msOrSeconds);
+    // Heuristic: if value > 1e6, treat as milliseconds, else seconds
+    if (v > 1000000) { // > ~16 minutes in ms
+        v = Math.floor(v/1000);
+    }
+    const seconds = v % 60;
+    const minutes = Math.floor(v/60) % 60;
+    const hours = Math.floor(v/3600);
+    if (hours > 0) {
+        // HH:MM:SS
+        const hh = String(hours).padStart(2,'0');
+        const mm = String(minutes).padStart(2,'0');
+        const ss = String(seconds).padStart(2,'0');
+        return `${hh}:${mm}:${ss}`;
+    } else if (minutes > 0) {
+        return `${minutes}m ${seconds}s`;
+    } else {
+        return `${seconds}s`;
+    }
+}
+
+// Simple fade replace for container element (diff-like update)
+function fadeUpdate(container, newInnerHTML) {
+    if (!container) return;
+    container.style.transition = 'opacity 0.25s ease';
+    container.style.opacity = 0;
+    setTimeout(() => {
+        container.innerHTML = newInnerHTML;
+        container.style.opacity = 1;
+    }, 260);
+}
+
+// Start auto-refresh for real-time boxes only.
+// Provide an array of updater functions (no-arg async functions) to call periodically.
+// intervalSec default 30.
+function startAutoRefreshRealTime(updaters = [], intervalSec = 30) {
+    if (window._elevoAutoRefreshInterval) clearInterval(window._elevoAutoRefreshInterval);
+    if (!Array.isArray(updaters) || updaters.length === 0) return;
+    // Run once immediately
+    updaters.forEach(fn => { try { fn(); } catch(e){console.error(e);} });
+    window._elevoAutoRefreshInterval = setInterval(() => {
+        updaters.forEach(fn => {
+            try { fn(); } catch(e){ console.error(e); }
+        });
+    }, intervalSec * 1000);
+}
+
+function stopAutoRefreshRealTime() {
+    if (window._elevoAutoRefreshInterval) {
+        clearInterval(window._elevoAutoRefreshInterval);
+        window._elevoAutoRefreshInterval = null;
+    }
+}
+/* --- END: Elevo frontend helpers --- */
+
+</script>
 </body>
 </html>
