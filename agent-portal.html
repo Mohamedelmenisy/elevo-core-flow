@@ -520,7 +520,6 @@
         </header>
 
         <main class="app-main dashboard-main">
-            <div id="accessDenied" style="display:none;align-items:center;justify-content:center;height:70vh;background:rgba(0,0,0,0.03);"><div style="background:white;padding:24px 32px;border-radius:16px;box-shadow:0 4px 12px rgba(0,0,0,0.1);text-align:center;max-width:400px;color:#1e3a8a;"><h2>⚠️ Access Restricted</h2><p>You do not have permission to access this page.</p><p style="margin-top:12px;color:#64748b;">Please return to the main application.</p><button onclick="window.location.href='core-flow.html'" style="background:#2563eb;color:#fff;border:none;padding:10px 20px;border-radius:8px;cursor:pointer;margin-top:16px;transition:background 0.2s ease;">🔙 Go to App</button></div></div>
             <div id="auth-loading" class="loading-container" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 70vh;">
                 <div class="spinner"></div>
                 <p>Syncing data with Elevo Core...</p>
@@ -824,20 +823,29 @@
                 document.getElementById('userName').textContent = currentUser.name || currentUser.email;
                 
                 // FIX: Add role-based access control
-                const { data: userData, error: userError } = await supabase
+                const { data: profile, error: userError } = await supabase
                     .from('users')
-                    .select('role')
+                    .select('role, is_admin')
                     .eq('id', currentUserId)
                     .single();
 
-                // Show access denied if user has an invalid role for this page
-                if (userError || !userData || (userData.role !== 'admin' && userData.role !== 'agent')) {
-                    document.getElementById('auth-loading').style.display = 'none';
-                    document.getElementById('accessDenied').style.display = 'flex';
+                // Handle potential errors fetching the profile
+                if (userError && userError.code !== 'PGRST116') { // PGRST116 is 'single row not found'
+                    console.error('Error fetching profile:', userError);
+                    window.location.href = 'core-flow.html';
+                    return;
+                }
+                
+                const isAdmin = profile?.is_admin === true || (profile?.role?.toLowerCase() === 'admin');
+                const isAgent = profile?.role?.toLowerCase() === 'agent';
+
+                // Redirect if user is neither an admin nor an agent
+                if (!profile || (!isAdmin && !isAgent)) {
+                    window.location.href = 'core-flow.html';
                     return;
                 }
                     
-                if (!userError && userData && userData.role === 'admin') {
+                if (isAdmin) {
                     document.getElementById('dashboardLink').style.display = 'inline-flex';
                     document.getElementById('rtmDashboardLink').style.display = 'inline-flex';
                 }
