@@ -1226,61 +1226,6 @@
 
         // Initialize the application
         document.addEventListener('DOMContentLoaded', function() {
-            // Immediate auth check
-async function checkAuthImmediately() {
-    try {
-        console.log('Checking authentication...');
-        const { data: { user }, error } = await supabaseClient.auth.getUser();
-        
-        if (error || !user) {
-            console.log('No user found, redirecting to login');
-            window.location.href = 'index.html';
-            return false;
-        }
-        
-        console.log('User authenticated:', user.email);
-        return true;
-    } catch (error) {
-        console.error('Auth check error:', error);
-        window.location.href = 'index.html';
-        return false;
-    }
-}
-
-// Initialize the application
-async function initializeApp() {
-    try {
-        // Check auth first
-        const isAuthenticated = await checkAuthImmediately();
-        if (!isAuthenticated) return;
-        
-        console.log('User is authenticated, continuing...');
-        
-        // Check if user is signed in
-        const { data: { user } } = await supabaseClient.auth.getUser();
-        
-        if (user) {
-            currentUser = user;
-            await loadUserData();
-            await loadCallsData();
-            await loadNotesData();
-            await loadTrainingData();
-            setupEventListeners();
-            initializeCharts();
-            updatePerformanceSummary();
-            
-            // Show portal content
-            authLoading.style.display = 'none';
-            portalContent.style.display = 'block';
-        } else {
-            // Redirect to login if not authenticated
-            window.location.href = 'index.html';
-        }
-    } catch (error) {
-        console.error('Error initializing app:', error);
-        showError('Failed to initialize application. Please refresh the page.');
-    }
-}
             initializeApp();
         });
 
@@ -1313,15 +1258,13 @@ async function initializeApp() {
             }
         }
 
-// Load user data
+   // Load user data
 async function loadUserData() {
     try {
-        console.log('Starting loadUserData...');
-        
         // Get user profile from users table
         const { data: profile, error } = await supabase
             .from('users')
-            .select('*')
+            .select('name, role, is_admin')
             .eq('id', currentUser.id)
             .single();
 
@@ -1334,32 +1277,24 @@ async function loadUserData() {
             return;
         }
 
-        console.log('Profile fetched:', profile);
-        console.log('User role:', profile.role);
-        console.log('Is admin:', profile.is_admin);
-
-        // التحقق من الصلاحيات بشكل مرن
-        const isAdmin = profile.role === 'admin' || profile.is_admin === true;
-        const isAgent = profile.role === 'agent' || profile.role === 'admin';
+        // تحديد الـ role من الـ profile
+        const userRoleFromProfile = profile?.role || 'agent';
+        const isAdmin = userRoleFromProfile === 'admin' || profile?.is_admin === true;
+        const isAgent = userRoleFromProfile === 'agent' || isAdmin;
         
-        console.log('Is Admin:', isAdmin);
-        console.log('Is Agent:', isAgent);
-
-        // إذا لم يكن المستخدم مسموحاً له
         if (!isAdmin && !isAgent) {
-            console.log('User is not authorized, redirecting to core-flow');
             window.location.href = 'core-flow.html';
             return;
         }
 
-        console.log('User is authorized for agent portal, continuing...');
-        
-        // Update UI with user info
-        userName.textContent = profile.name || currentUser.email;
+        // Update UI with user info - استخدم profile.name
+        userName.textContent = profile?.name || currentUser.email;
         userInfo.style.display = 'flex';
-        userRole = profile.role || 'agent';
         
-        // Update greeting
+        // Set user role
+        userRole = userRoleFromProfile;
+        
+        // Update greeting - استخدم profile.name
         const now = new Date();
         const hour = now.getHours();
         let greeting = 'Good ';
@@ -1368,19 +1303,17 @@ async function loadUserData() {
         else if (hour < 18) greeting += 'Afternoon';
         else greeting += 'Evening';
         
-        agentGreeting.textContent = `${greeting}, ${profile.name || 'Agent'}!`;
+        agentGreeting.textContent = `${greeting}, ${profile?.name || 'Agent'}!`;
         
         // Show appropriate dashboard links based on role
         if (isAdmin) {
             dashboardLink.style.display = 'inline-flex';
             rtmDashboardLink.style.display = 'inline-flex';
+        } else if (userRole === 'rtm') {
+            rtmDashboardLink.style.display = 'inline-flex';
         }
-        
-        console.log('User data loaded successfully');
-        
     } catch (error) {
         console.error('Error loading user data:', error);
-        window.location.href = 'index.html';
     }
 }
         // Load calls data
