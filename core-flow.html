@@ -521,7 +521,7 @@
     <script type="module">
         // --- Supabase Client Setup ---
         const SUPABASE_URL = 'https://aefiigottnlcmjzilqnh.supabase.co';
-        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFlZmlpZ290dG5sY21qemlscW5oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcxNzY2MDQsImV4cCI6MjA2Mjc1MjYwNH0.FypB02v3tGMnxXV9ZmZMdMC0oQpREKOJWgHMPxUzwX4';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFlZmlpZ290dG5sY21qemlscW5oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcxNzY2MDQsImV4cCI6MjA2Mjc1MjYwNH0.FypB02v3tGMnxXV9ZmZMdMC0oQpREKOJWgHMPxUzw4Y';
         
         let supabase;
         try {
@@ -638,8 +638,20 @@
                 currentUser = storedUserData;
             } else {
                 let { data: profile, error } = await supabase.from('users').select('name, is_admin, role').eq('id', session.user.id).single();
-                if (error && error.code !== 'PGRST116') { console.error("Error fetching user profile:", error); return; }
-                currentUser = { id: session.user.id, email: session.user.email, name: profile?.name || session.user.email.split('@')[0], isAdmin: profile?.is_admin || false, role: profile?.role || 'agent' };
+                if (error && error.code !== 'PGRST116') { 
+                    console.error("Error fetching user profile:", error);
+                    // FIX: If profile doesn't exist, log out to prevent issues
+                    await supabase.auth.signOut();
+                    window.location.replace('login.html');
+                    return;
+                }
+                // FIX: Check for valid roles before proceeding
+                if (!profile || (profile.role !== 'admin' && profile.role !== 'agent')) {
+                    await supabase.auth.signOut();
+                    window.location.replace('login.html');
+                    return;
+                }
+                currentUser = { id: session.user.id, email: session.user.email, name: profile?.name || session.user.email.split('@')[0], isAdmin: profile?.role === 'admin', role: profile?.role || 'agent' };
                 localStorage.setItem('elevoCoreUserData', JSON.stringify(currentUser));
             }
 
