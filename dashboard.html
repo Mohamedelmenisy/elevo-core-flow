@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard - Elevo Core</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234e8cff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M12 22V12M9 19l3-3 3 3M12 2a4 4 0 0 0-4 4v0a4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4z'/></svg>">
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        .dashboard-main {
+            width: 100%;
+            max-width: none; 
+            padding: 1.5rem 2rem; 
+            text-align: left;
+        }
+        
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+        
+        .dashboard-card {
+            background-color: var(--card-bg-color);
+            border-radius: 1rem;
+            padding: 1.5rem;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        
+        .dashboard-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+        }
+        
+        .dashboard-card h3 {
+            margin-top: 0;
+            margin-bottom: 0.75rem;
+            font-size: 1.1em;
+            color: #9cc4ff;
+            font-weight: 500;
+        }
+        
+        .dashboard-card .value {
+            font-size: 2.5em;
+            font-weight: 700;
+            margin: 0.5rem 0;
+            color: var(--text-color);
+        }
+        
+        .dashboard-card .trend {
+            display: flex;
+            align-items: center;
+            font-size: 0.9em;
+            margin-top: 0.5rem;
+            color: var(--text-color-light);
+        }
+        
+        .trend.up {
+            color: var(--success-color);
+        }
+        
+        .trend.down {
+            color: var(--danger-color);
+        }
+        
+        .trend-icon {
+            margin-right: 0.25rem;
+        }
+        
+        .card-large {
+            grid-column: span 2;
+        }
+        
+        .card-full {
+            grid-column: 1 / -1;
+        }
+        
+        .chart-container {
+            height: 300px;
+            position: relative;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+        
+        .stat-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            padding: 1rem;
+            background-color: var(--input-bg-color);
+            border-radius: var(--border-radius-md);
+        }
+        
+        .stat-value {
+            font-size: 1.75em;
+            font-weight: 700;
+            margin-bottom: 0.25rem;
+            color: var(--text-color);
+        }
+        
+        .stat-label {
+            font-size: 0.85em;
+            color: var(--text-color-light);
+        }
+        
+        .top-agents-list, .top-scenarios-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        
+        .top-agent-item, .top-scenario-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem 0;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .top-agent-item:last-child, .top-scenario-item:last-child {
+            border-bottom: none;
+        }
+        
+        .agent-name, .scenario-name {
+            font-weight: 500;
+        }
+        
+        .agent-count, .scenario-count {
+            font-weight: 600;
+            color: var(--primary-color);
+        }
+
+        /* Recent Tickets Table Styles */
+        .recent-tickets-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+        }
+        
+        .recent-tickets-table th {
+            background-color: #1e3a8a;
+            color: white;
+            padding: 1rem;
+            text-align: left;
+            font-weight: 600;
+        }
+        
+        .recent-tickets-table td {
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .recent-tickets-table tr:nth-child(even) {
+            background-color: rgba(255, 255, 255, 0.02);
+        }
+        
+        .recent-tickets-table tr:hover {
+            background-color: rgba(255, 255, 255, 0.05);
+        }
+
+        /* Auto Refresh Toggle */
+        .auto-refresh {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(255, 255, 255, 0.05);
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-weight: 500;
+            font-size: 0.9rem;
+            color: #9cc4ff;
+            transition: all 0.2s ease;
+        }
+        
+        .auto-refresh:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: #ffffff;
+        }
+        
+        .auto-refresh input {
+            margin: 0;
+        }
+
+        /* Loading Animation */
+        .loading-shimmer {
+            background: linear-gradient(90deg, #2d3748 25%, #374151 50%, #2d3748 75%);
+            background-size: 200% 100%;
+            animation: shimmer 1.5s infinite;
+            border-radius: 4px;
+        }
+        
+        @keyframes shimmer {
+            0% { background-position: -200% 0; }
+            100% { background-position: 200% 0; }
+        }
+        
+        @media (max-width: 768px) {
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .card-large, .card-full {
+                grid-column: 1;
+            }
+            
+            .recent-tickets-table {
+                font-size: 0.8em;
+            }
+        }
+    </style>
+
+<!-- Access Denied Modal CSS (Inserted) -->
+<style>
+.access-denied-modal { position: fixed; inset: 0; background-color: rgba(0,0,0,0.6); display: none; align-items: center; justify-content: center; z-index: 99999; }
+.access-denied-modal.visible { display: flex; }
+.access-denied-content { background: var(--card-bg-color); padding: 1.75rem; border-radius: 12px; text-align: center; max-width: 420px; box-shadow: 0 12px 40px rgba(0,0,0,0.5); }
+.access-denied-content svg { margin-bottom: 0.5rem; color: var(--primary-color); }
+.access-denied-content h3 { margin: 0.5rem 0; color: var(--text-color); }
+.access-denied-content p { margin: 0.5rem 0 1rem; color: var(--text-color-light); }
+</style>
+
+</head>
+<body>
+    <div class="app-container">
+        <header class="app-header">
+            <div class="logo-container">
+                <svg class="company-logo" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="color: var(--primary-color); width: 28px; height: 28px;">
+                    <path d="M12 22V12M9 19l3-3 3 3M12 2a4 4 0 0 0-4 4v0a4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                <span class="app-title" style="font-size: 1.4rem;">Elevo Core - Admin Dashboard</span>
+            </div>
+            <div class="header-controls">
+                <a href="core-flow.html" class="nav-link">Call App</a>
+                <a href="agent-portal.html" class="nav-link">Agent Portal</a>
+                <a href="rtm-dashboard.html" class="nav-link">RTM Dashboard</a>
+                <div class="user-info" id="userInfo" style="display: none;">
+                    <span id="userName" class="user-name-display"></span>
+                    <button id="logoutButton" class="logout-btn">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+                        Logout
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <main class="app-main dashboard-main">
+            <div id="auth-loading" class="loading-container" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 70vh;">
+                <div class="spinner" style="border-color: #4e8cff; border-top-color: transparent;"></div>
+                <p style="margin-top: 1rem; color: #9cc4ff;">Syncing data with Elevo Core...</p>
+            </div>
+
+            <div id="dashboardContent" style="display: none;">
+                <div class="dashboard-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+                    <div>
+                        <h1>Admin Dashboard</h1>
+                        <p class="text-color-light">Overview of call center performance and metrics</p>
+                    </div>
+                    <div style="display: flex; gap: 0.75rem; align-items: center;">
+                        <label class="auto-refresh">
+                            <input type="checkbox" id="autoRefreshToggle" checked>
+                            <span>🔄 Auto Refresh (30s)</span>
+                        </label>
+                        <button id="refreshDataBtn" class="action-button primary-button">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"></path><path d="M1 20v-6h6"></path><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+                            Refresh Data
+                        </button>
+                        <button id="exportReportBtn" class="action-button secondary-button">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                            Export Report
+                        </button>
+                    </div>
+                </div>
+
+                <div class="dashboard-grid">
+                    <!-- Live / Delayed / Recent Tickets Boxes -->
+                    <div class="dashboard-card" style="border-left: 4px solid var(--primary-color);">
+                        <h3>📞 Live Tickets</h3>
+                        <div class="value" id="liveTicketsCount">0</div>
+                        <div class="trend" id="liveTicketsTrend">
+                            <span class="trend-icon">→</span>
+                            <span>Real-time</span>
+                        </div>
+                    </div>
+                    
+                    <div class="dashboard-card" style="border-left: 4px solid var(--warning-color);">
+                        <h3>⏰ Delayed Tickets</h3>
+                        <div class="value" id="delayedTicketsCount">0</div>
+                        <div class="trend" id="delayedTicketsTrend">
+                            <span class="trend-icon">→</span>
+                            <span>Over 5 minutes</span>
+                        </div>
+                    </div>
+                    
+                    <div class="dashboard-card" style="border-left: 4px solid var(--success-color);">
+                        <h3>✅ Recent Tickets</h3>
+                        <div class="value" id="recentTicketsCount">0</div>
+                        <div class="trend" id="recentTicketsTrend">
+                            <span class="trend-icon">→</span>
+                            <span>Last 10 minutes</span>
+                        </div>
+                    </div>
+                    
+                    <div class="dashboard-card" style="border-left: 4px solid var(--accent-color);">
+                        <h3>📊 Total Calls Today</h3>
+                        <div class="value" id="totalCallsToday">0</div>
+                        <div class="trend" id="totalCallsTrend">
+                            <span class="trend-icon">→</span>
+                            <span>All scenarios</span>
+                        </div>
+                    </div>
+
+                    <!-- Call Quality Summary -->
+                    <div class="dashboard-card card-large">
+                        <h3 style="color: #9cc4ff;">Call Quality Distribution</h3>
+                        <div class="chart-container">
+                            <canvas id="qualitySummaryChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Top 5 Agents Today -->
+                    <div class="dashboard-card">
+                        <h3 style="color: #9cc4ff;">Top 5 Agents Today</h3>
+                        <ul class="top-agents-list" id="topAgentsList">
+                            <li class="top-agent-item">
+                                <span class="agent-name">Loading...</span>
+                                <span class="agent-count">-</span>
+                            </li>
+                        </ul>
+                    </div>
+
+                    <!-- Top Scenario Today -->
+                    <div class="dashboard-card">
+                        <h3 style="color: #9cc4ff;">Top Scenario Today</h3>
+                        <div id="topScenarioContainer">
+                            <div class="top-scenario-item">
+                                <span class="scenario-name">Loading...</span>
+                                <span class="scenario-count">-</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Additional Charts -->
+                    <div class="dashboard-card card-full">
+                        <h3 style="color: #9cc4ff;">Call Volume Trends (Last 7 Days)</h3>
+                        <div class="chart-container">
+                            <canvas id="volumeTrendChart"></canvas>
+                        </div>
+                    </div>
+                    
+                    <div class="dashboard-card card-large">
+                        <h3 style="color: #9cc4ff;">Agent Performance Distribution</h3>
+                        <div class="chart-container">
+                            <canvas id="agentPerformanceChart"></canvas>
+                        </div>
+                    </div>
+                    
+                    <div class="dashboard-card">
+                        <h3 style="color: #9cc4ff;">Quick Stats</h3>
+                        <div class="stats-grid">
+                            <div class="stat-item">
+                                <div class="stat-value" id="avgHandleTime">0m</div>
+                                <div class="stat-label">Avg Handle Time</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-value" id="completionRate">0%</div>
+                                <div class="stat-label">Completion Rate</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-value" id="goodQualityRate">0%</div>
+                                <div class="stat-label">Good Quality</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-value" id="activeAgents">0</div>
+                                <div class="stat-label">Active Agents</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Recent Ticket Sessions Table -->
+                    <div class="dashboard-card card-full">
+                        <h3 style="color: #9cc4ff;">🕓 Recent Ticket Sessions (Last 10 minutes)</h3>
+                        <div class="table-responsive">
+                            <table class="recent-tickets-table">
+                                <thead>
+                                    <tr>
+                                        <th>Agent Name</th>
+                                        <th>Agent Email</th>
+                                        <th>Scenario</th>
+                                        <th>Quality</th>
+                                        <th>Reason</th>
+                                        <th>Start Time</th>
+                                        <th>End Time</th>
+                                        <th>Duration</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="recentTicketsTableBody">
+                                    <tr>
+                                        <td colspan="8" style="text-align: center; padding: 2rem;">Loading recent sessions...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+        
+        <footer class="app-footer">
+            <p>© <span id="currentYear"></span> Mohamed Elmenisy - Elevo Core. All rights reserved.</p>
+        </footer>
+    </div>
+
+    <script type="module">
+        const SUPABASE_URL = 'https://aefiigottnlcmjzilqnh.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFlZmlpZ290dG5sY21qemlscW5oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcxNzY2MDQsImV4cCI6MjA2Mjc1MjYwNH0.FypB02v3tGMnxXV9ZmZMdMC0oQpREKOJWgHMPxUzw4Y';
+        
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        // Global variables
+        let currentUser = null;
+        let qualitySummaryChart = null;
+        let volumeTrendChart = null;
+        let agentPerformanceChart = null;
+        let autoRefreshInterval = null;
+        let isAutoRefreshEnabled = true;
+
+        // Initialize the application
+        document.addEventListener('DOMContentLoaded', async function() {
+            // Set current year in footer
+            document.getElementById('currentYear').textContent = new Date().getFullYear();
+            
+            // Check authentication and load data
+            await checkAuth();
+            setupEventListeners();
+            
+            // Start auto-refresh
+            startAutoRefresh();
+        });
+
+        // Authentication check
+        
+
+// --- Unified Role & Access Control (Final Corrected) ---
+async function checkAuth() {
+    try {
+        const { data: userData, error: userError } = await supabase.auth.getUser();
+        if (userError || !userData?.user) {
+            window.location.href = 'index.html';
+            return;
+        }
+        const sessionUser = userData.user;
+
+        const { data: profile, error: profileError } = await supabase
+            .from('users')
+            .select('name, role, is_admin')
+            .eq('id', sessionUser.id)
+            .single();
+
+        if (profileError) console.warn('Profile fetch error:', profileError);
+
+        const currentUserLocal = {
+            id: sessionUser.id,
+            email: sessionUser.email,
+            name: profile?.name || (sessionUser.email ? sessionUser.email.split('@')[0] : 'User'),
+            isAdmin: profile?.is_admin === true || (profile?.role?.toLowerCase?.() === 'admin')
+        };
+        window.currentUser = currentUserLocal;
+
+        // update UI
+        const userInfoEl = document.getElementById('userInfo');
+        if (userInfoEl) userInfoEl.style.display = 'flex';
+        const userNameEl = document.getElementById('userName');
+        if (userNameEl) userNameEl.textContent = currentUserLocal.name;
+
+        const currentPage = window.location.pathname.split('/').pop().toLowerCase();
+        const adminOnlyPages = ['dashboard.html', 'rtm-dashboard.html'];
+        const allowedAgentPages = ['agent-portal.html', 'core-flow.html'];
+
+        // admin allowed anywhere
+        if (currentUserLocal.isAdmin === true) {
+            const loading = document.getElementById('auth-loading');
+            if (loading) loading.style.display = 'none';
+            const content = document.getElementById('dashboardContent') || document.getElementById('rtmContent') || document.getElementById('portalContent');
+            if (content) content.style.display = 'block';
+        } else {
+            // agent
+            if (adminOnlyPages.includes(currentPage)) {
+                const loading = document.getElementById('auth-loading');
+                if (loading) loading.style.display = 'none';
+                const content = document.getElementById('dashboardContent') || document.getElementById('rtmContent') || document.getElementById('portalContent');
+                if (content) content.style.display = 'none';
+                const modal = document.getElementById('accessDeniedModal');
+                if (modal) modal.style.display = 'flex';
+                const btn = document.getElementById('returnToAppBtn');
+                if (btn) btn.addEventListener('click', () => window.location.href = 'agent-portal.html');
+                return;
+            } else if (!allowedAgentPages.includes(currentPage)) {
+                window.location.href = 'agent-portal.html';
+                return;
+            }
+            const loading = document.getElementById('auth-loading');
+            if (loading) loading.style.display = 'none';
+            const content = document.getElementById('dashboardContent') || document.getElementById('rtmContent') || document.getElementById('portalContent');
+            if (content) content.style.display = 'block';
+        }
+
+        if (typeof loadDashboardData === 'function') { try { await loadDashboardData(); } catch(e){ console.warn(e); } }
+        if (typeof loadRTMData === 'function') { try { await loadRTMData(); } catch(e){ console.warn(e); } }
+        if (typeof loadPortalData === 'function') { try { await loadPortalData(); } catch(e){ console.warn(e); } }
+
+    } catch (err) {
+        console.error('Auth check error:', err);
+        try { await supabase.auth.signOut(); } catch(e){}
+        window.location.href = 'index.html';
+    }
+}
+// --- End Unified Role & Access Control ---
+</script>
+
+<!-- Access Denied Modal (Inserted) -->
+<div id="accessDeniedModal" class="access-denied-modal" aria-hidden="true">
+  <div class="access-denied-content" role="dialog" aria-labelledby="accessDeniedTitle" aria-describedby="accessDeniedDesc">
+    <svg xmlns="http://www.w3.org/2000/svg" width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="10"></circle>
+      <line x1="12" y1="8" x2="12" y2="12"></line>
+      <line x1="12" y1="16" x2="12.01" y2="16"></line>
+    </svg>
+    <h3 id="accessDeniedTitle">Access Restricted</h3>
+    <p id="accessDeniedDesc">You don’t have permission to view this page. This section is available for <strong>Admins</strong> only.</p>
+    <button id="returnToAppBtn" class="action-button primary-button">🔙 Back to My Dashboard</button>
+  </div>
+</div>
+
+</body>
+</html>
