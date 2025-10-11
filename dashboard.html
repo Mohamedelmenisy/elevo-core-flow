@@ -7,82 +7,8 @@
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234e8cff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M12 22V12M9 19l3-3 3 3M12 2a4 4 0 0 0-4 4v0a4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4z'/></svg>">
     <link rel="stylesheet" href="style.css">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2">
-        // Load recent tickets (from view recent_tickets)
-        async function loadRecentTickets() {
-            try {
-                const { data, error } = await supabase
-                    .from('recent_tickets')
-                    .select('*')
-                    .order('end_time_egypt', { ascending: false })
-                    .limit(10);
-                if (error) { console.error('Error loading recent tickets:', error); return; }
-                renderRecentTicketsTable(data || []);
-            } catch (e) {
-                console.error('loadRecentTickets error', e);
-            }
-        }
-
-        function renderRecentTicketsTable(rows) {
-            const tbody = document.getElementById('recentTicketsTbody');
-            if (!tbody) return;
-            if (!rows || rows.length === 0) {
-                fadeUpdate(tbody, '<tr><td colspan="8" style="padding:16px; text-align:center; color:var(--text-color-subtle)">No recent ticket sessions in the last 10 minutes.</td></tr>');
-                return;
-            }
-            let html = '';
-            rows.forEach((r, i) => {
-                const bg = (i % 2 === 0) ? '#ffffff' : '#f8fafc';
-                const startTime = r.start_time_egypt ? new Date(r.start_time_egypt).toLocaleString() : '--';
-                const endTime = r.end_time_egypt ? new Date(r.end_time_egypt).toLocaleString() : '--';
-                const duration = formatDuration(r.duration_interval);
-                html += `<tr style="background:${bg};"><td style="padding:8px;">${r.agent_name || '-'}</td><td style="padding:8px;">${r.agent_email || '-'}</td><td style="padding:8px;">${r.scenario_title || '-'}</td><td style="padding:8px;">${r.call_quality || '-'}</td><td style="padding:8px;">${r.quality_reason || '-'}</td><td style="padding:8px;">${startTime}</td><td style="padding:8px;">${endTime}</td><td style="padding:8px;">${duration}</td></tr>`;
-            });
-            fadeUpdate(tbody, html);
-        }
-
-
-        // Pagination state for recent tickets
-        let recentTicketsPage = 1;
-        const RECENT_TICKETS_PAGE_SIZE = 10;
-        async function loadRecentTickets(page = 1) {
-            try {
-                recentTicketsPage = page;
-                const offset = (page - 1) * RECENT_TICKETS_PAGE_SIZE;
-                // show shimmer rows
-                const tbody = document.getElementById('recentTicketsTbody');
-                if (tbody) {
-                    let shimmer = '';
-                    for (let i=0;i<RECENT_TICKETS_PAGE_SIZE;i++){
-                        shimmer += '<tr style="background:#fff;"><td colspan="8" style="padding:12px;"><div class=\"shimmer-row\"></div></td></tr>';
-                    }
-                    tbody.innerHTML = shimmer;
-                }
-                const { data, error } = await supabase
-                    .from('recent_tickets')
-                    .select('*')
-                    .order('end_time_egypt', { ascending: false })
-                    .range(offset, offset + RECENT_TICKETS_PAGE_SIZE - 1);
-                if (error) { console.error('Error loading recent tickets:', error); return; }
-                renderRecentTicketsTable(data || []);
-                // update page info
-                document.getElementById('recentTicketsPageInfo').textContent = 'Page ' + recentTicketsPage;
-            } catch (e) {
-                console.error('loadRecentTickets error', e);
-            }
-        }
-
-        // Prev/Next handlers
-        document.addEventListener('click', function(e){
-            if (e.target && e.target.id === 'recentTicketsPrev') {
-                if (recentTicketsPage > 1) { recentTicketsPage--; loadRecentTickets(recentTicketsPage); }
-            } else if (e.target && e.target.id === 'recentTicketsNext') {
-                recentTicketsPage++; loadRecentTickets(recentTicketsPage);
-            }
-        });
-
-</script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <style>
         .dashboard-main {
             width: 100%;
@@ -94,28 +20,29 @@
         .dashboard-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 1.5rem;
-            margin-top: 1.5rem;
+            gap: 1rem;
+            margin-top: 1rem;
         }
         
         .dashboard-card {
             background-color: var(--card-bg-color);
-            border-radius: var(--border-radius-lg);
+            border-radius: 1rem;
             padding: 1.5rem;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
             transition: transform 0.2s ease, box-shadow 0.2s ease;
+            border: 1px solid rgba(255, 255, 255, 0.05);
         }
         
         .dashboard-card:hover {
-            transform: translateY(-4px);
-            box-shadow: 0 10px 15px rgba(0, 0, 0, 0.2);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
         }
         
         .dashboard-card h3 {
             margin-top: 0;
             margin-bottom: 0.75rem;
             font-size: 1.1em;
-            color: var(--text-color-light);
+            color: #9cc4ff;
             font-weight: 500;
         }
         
@@ -131,6 +58,7 @@
             align-items: center;
             font-size: 0.9em;
             margin-top: 0.5rem;
+            color: var(--text-color-light);
         }
         
         .trend.up {
@@ -213,6 +141,70 @@
             font-weight: 600;
             color: var(--primary-color);
         }
+
+        /* Recent Tickets Table Styles */
+        .recent-tickets-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+        }
+        
+        .recent-tickets-table th {
+            background-color: #1e3a8a;
+            color: white;
+            padding: 1rem;
+            text-align: left;
+            font-weight: 600;
+        }
+        
+        .recent-tickets-table td {
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .recent-tickets-table tr:nth-child(even) {
+            background-color: rgba(255, 255, 255, 0.02);
+        }
+        
+        .recent-tickets-table tr:hover {
+            background-color: rgba(255, 255, 255, 0.05);
+        }
+
+        /* Auto Refresh Toggle */
+        .auto-refresh {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(255, 255, 255, 0.05);
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-weight: 500;
+            font-size: 0.9rem;
+            color: #9cc4ff;
+            transition: all 0.2s ease;
+        }
+        
+        .auto-refresh:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: #ffffff;
+        }
+        
+        .auto-refresh input {
+            margin: 0;
+        }
+
+        /* Loading Animation */
+        .loading-shimmer {
+            background: linear-gradient(90deg, #2d3748 25%, #374151 50%, #2d3748 75%);
+            background-size: 200% 100%;
+            animation: shimmer 1.5s infinite;
+            border-radius: 4px;
+        }
+        
+        @keyframes shimmer {
+            0% { background-position: -200% 0; }
+            100% { background-position: 200% 0; }
+        }
         
         @media (max-width: 768px) {
             .dashboard-grid {
@@ -222,21 +214,12 @@
             .card-large, .card-full {
                 grid-column: 1;
             }
+            
+            .recent-tickets-table {
+                font-size: 0.8em;
+            }
         }
     </style>
-
-    <style>
-    .shimmer-row {
-      height: 18px;
-      width: 100%;
-      background: linear-gradient(90deg, #f0f3f6 25%, #e2e8f0 37%, #f0f3f6 63%);
-      background-size: 400% 100%;
-      animation: shimmer 1.2s linear infinite;
-      border-radius: 6px;
-    }
-    @keyframes shimmer { 100% { background-position: -200% 0; } }
-    </style>
-
 </head>
 <body>
     <div class="app-container">
@@ -263,8 +246,8 @@
 
         <main class="app-main dashboard-main">
             <div id="auth-loading" class="loading-container" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 70vh;">
-                <div class="spinner"></div>
-                <p>Syncing data with Elevo Core...</p>
+                <div class="spinner" style="border-color: #4e8cff; border-top-color: transparent;"></div>
+                <p style="margin-top: 1rem; color: #9cc4ff;">Syncing data with Elevo Core...</p>
             </div>
 
             <div id="dashboardContent" style="display: none;">
@@ -273,7 +256,11 @@
                         <h1>Admin Dashboard</h1>
                         <p class="text-color-light">Overview of call center performance and metrics</p>
                     </div>
-                    <div style="display: flex; gap: 0.75rem;">
+                    <div style="display: flex; gap: 0.75rem; align-items: center;">
+                        <label class="auto-refresh">
+                            <input type="checkbox" id="autoRefreshToggle" checked>
+                            <span>🔄 Auto Refresh (30s)</span>
+                        </label>
                         <button id="refreshDataBtn" class="action-button primary-button">
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"></path><path d="M1 20v-6h6"></path><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
                             Refresh Data
@@ -288,7 +275,7 @@
                 <div class="dashboard-grid">
                     <!-- Live / Delayed / Recent Tickets Boxes -->
                     <div class="dashboard-card" style="border-left: 4px solid var(--primary-color);">
-                        <h3>Live Tickets</h3>
+                        <h3>📞 Live Tickets</h3>
                         <div class="value" id="liveTicketsCount">0</div>
                         <div class="trend" id="liveTicketsTrend">
                             <span class="trend-icon">→</span>
@@ -297,7 +284,7 @@
                     </div>
                     
                     <div class="dashboard-card" style="border-left: 4px solid var(--warning-color);">
-                        <h3>Delayed Tickets</h3>
+                        <h3>⏰ Delayed Tickets</h3>
                         <div class="value" id="delayedTicketsCount">0</div>
                         <div class="trend" id="delayedTicketsTrend">
                             <span class="trend-icon">→</span>
@@ -306,7 +293,7 @@
                     </div>
                     
                     <div class="dashboard-card" style="border-left: 4px solid var(--success-color);">
-                        <h3>Recent Tickets</h3>
+                        <h3>✅ Recent Tickets</h3>
                         <div class="value" id="recentTicketsCount">0</div>
                         <div class="trend" id="recentTicketsTrend">
                             <span class="trend-icon">→</span>
@@ -315,7 +302,7 @@
                     </div>
                     
                     <div class="dashboard-card" style="border-left: 4px solid var(--accent-color);">
-                        <h3>Total Calls Today</h3>
+                        <h3>📊 Total Calls Today</h3>
                         <div class="value" id="totalCallsToday">0</div>
                         <div class="trend" id="totalCallsTrend">
                             <span class="trend-icon">→</span>
@@ -325,7 +312,7 @@
 
                     <!-- Call Quality Summary -->
                     <div class="dashboard-card card-large">
-                        <h3>Call Quality Summary</h3>
+                        <h3 style="color: #9cc4ff;">Call Quality Distribution</h3>
                         <div class="chart-container">
                             <canvas id="qualitySummaryChart"></canvas>
                         </div>
@@ -333,7 +320,7 @@
 
                     <!-- Top 5 Agents Today -->
                     <div class="dashboard-card">
-                        <h3>Top 5 Agents Today</h3>
+                        <h3 style="color: #9cc4ff;">Top 5 Agents Today</h3>
                         <ul class="top-agents-list" id="topAgentsList">
                             <li class="top-agent-item">
                                 <span class="agent-name">Loading...</span>
@@ -344,7 +331,7 @@
 
                     <!-- Top Scenario Today -->
                     <div class="dashboard-card">
-                        <h3>Top Scenario Today</h3>
+                        <h3 style="color: #9cc4ff;">Top Scenario Today</h3>
                         <div id="topScenarioContainer">
                             <div class="top-scenario-item">
                                 <span class="scenario-name">Loading...</span>
@@ -355,21 +342,21 @@
 
                     <!-- Additional Charts -->
                     <div class="dashboard-card card-full">
-                        <h3>Call Volume Trends (Last 7 Days)</h3>
+                        <h3 style="color: #9cc4ff;">Call Volume Trends (Last 7 Days)</h3>
                         <div class="chart-container">
                             <canvas id="volumeTrendChart"></canvas>
                         </div>
                     </div>
                     
                     <div class="dashboard-card card-large">
-                        <h3>Agent Performance Distribution</h3>
+                        <h3 style="color: #9cc4ff;">Agent Performance Distribution</h3>
                         <div class="chart-container">
                             <canvas id="agentPerformanceChart"></canvas>
                         </div>
                     </div>
                     
                     <div class="dashboard-card">
-                        <h3>Quick Stats</h3>
+                        <h3 style="color: #9cc4ff;">Quick Stats</h3>
                         <div class="stats-grid">
                             <div class="stat-item">
                                 <div class="stat-value" id="avgHandleTime">0m</div>
@@ -390,28 +377,31 @@
                         </div>
                     </div>
 
-                    <!-- Recent Ticket Sessions -->
-                    <div class="dashboard-card card-full" id="recentTicketsCard" style="margin-top: 0;">
-                        <h3 style="color: #60a5fa;">🕓 Recent Ticket Sessions (Last 10 minutes)</h3>
+                    <!-- Recent Ticket Sessions Table -->
+                    <div class="dashboard-card card-full">
+                        <h3 style="color: #9cc4ff;">🕓 Recent Ticket Sessions (Last 10 minutes)</h3>
                         <div class="table-responsive">
-                            <table id="recentTicketsTable" style="width:100%; border-collapse: collapse;">
-                                <thead style="background-color:#1e3a8a; color: #fff;">
+                            <table class="recent-tickets-table">
+                                <thead>
                                     <tr>
-                                        <th style="padding:8px;">Agent</th>
-                                        <th style="padding:8px;">Agent Email</th>
-                                        <th style="padding:8px;">Scenario</th>
-                                        <th style="padding:8px;">Quality</th>
-                                        <th style="padding:8px;">Reason</th>
-                                        <th style="padding:8px;">Start (EG)</th>
-                                        <th style="padding:8px;">End (EG)</th>
-                                        <th style="padding:8px;">Duration</th>
+                                        <th>Agent Name</th>
+                                        <th>Agent Email</th>
+                                        <th>Scenario</th>
+                                        <th>Quality</th>
+                                        <th>Reason</th>
+                                        <th>Start Time</th>
+                                        <th>End Time</th>
+                                        <th>Duration</th>
                                     </tr>
                                 </thead>
-                                <tbody id="recentTicketsTbody"></tbody>
+                                <tbody id="recentTicketsTableBody">
+                                    <tr>
+                                        <td colspan="8" style="text-align: center; padding: 2rem;">Loading recent sessions...</td>
+                                    </tr>
+                                </tbody>
                             </table>
                         </div>
                     </div>
-
                 </div>
             </div>
         </main>
@@ -423,8 +413,8 @@
 
     <script type="module">
         const SUPABASE_URL = 'https://aefiigottnlcmjzilqnh.supabase.co';
-        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFlZmlpZ290dG5sY21qemlscW5oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcxNzY2MDQsImV4cCI6MjA2Mjc1MjYwNH0.FypB02v3tGMnxXV9ZmZMdMC0oQpREKOJWgHMPxUzwX4';
-        // FIX: Correctly initialize Supabase client
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFlZmlpZ290dG5sY21qemlscW5oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcxNzY2MDQsImV4cCI6MjA2Mjc1MjYwNH0.FypB02v3tGMnxXV9ZmZMdMC0oQpREKOJWgHMPxUzw4Y';
+        
         const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
         // Global variables
@@ -433,6 +423,7 @@
         let volumeTrendChart = null;
         let agentPerformanceChart = null;
         let autoRefreshInterval = null;
+        let isAutoRefreshEnabled = true;
 
         // Initialize the application
         document.addEventListener('DOMContentLoaded', async function() {
@@ -445,8 +436,6 @@
             
             // Start auto-refresh
             startAutoRefresh();
-            // Start real-time auto-refresh for summary boxes and recent tickets
-            if (typeof startAutoRefreshRealTime === 'function') startAutoRefreshRealTime([loadTicketCounts, loadRecentTickets], 30);
         });
 
         // Authentication check
@@ -458,32 +447,23 @@
                     return;
                 }
                 
-                // FIX: Add role-based access control
+                // Role-based access control
                 const { data: profile, error: profileError } = await supabase
                     .from('users')
-                    .select('role, is_admin')
+                    .select('role, name')
                     .eq('id', data.user.id)
                     .single();
-                
-                if (profileError && profileError.code !== 'PGRST116') {
-                    console.error('Error fetching user profile:', profileError);
-                    window.location.href = 'core-flow.html';
-                    return;
-                }
 
-                const isAdmin = profile?.is_admin === true || (profile?.role?.toLowerCase() === 'admin');
-
-                if (!isAdmin) {
-                    // Redirect non-admins to the main application page
+                if (profileError || !profile || profile.role !== 'admin') {
                     window.location.href = 'core-flow.html';
                     return;
                 }
                 
                 currentUser = data.user;
                 
-                // Show user info
+                // Show user info with name
                 document.getElementById('userInfo').style.display = 'flex';
-                document.getElementById('userName').textContent = currentUser.name || currentUser.email;
+                document.getElementById('userName').textContent = profile.name || currentUser.email;
                 
                 // Load dashboard data
                 await loadDashboardData();
@@ -509,6 +489,16 @@
             
             // Export report button
             document.getElementById('exportReportBtn').addEventListener('click', exportDashboardReport);
+            
+            // Auto refresh toggle
+            document.getElementById('autoRefreshToggle').addEventListener('change', (e) => {
+                isAutoRefreshEnabled = e.target.checked;
+                if (isAutoRefreshEnabled) {
+                    startAutoRefresh();
+                } else {
+                    stopAutoRefresh();
+                }
+            });
         }
 
         // Load dashboard data
@@ -518,7 +508,7 @@
                 document.getElementById('auth-loading').style.display = 'flex';
                 document.getElementById('dashboardContent').style.display = 'none';
                 
-                // Load data from all required views
+                // Load data from all required views in parallel
                 await Promise.all([
                     loadTicketCounts(),
                     loadCallQualitySummary(),
@@ -526,10 +516,11 @@
                     loadTopScenario(),
                     loadVolumeTrends(),
                     loadAgentPerformance(),
-                    loadQuickStats()
+                    loadQuickStats(),
+                    loadRecentTickets()
                 ]);
                 
-                // Hide loading and show content
+                // Hide loading and show content with fade effect
                 document.getElementById('auth-loading').style.display = 'none';
                 document.getElementById('dashboardContent').style.display = 'block';
                 
@@ -542,44 +533,22 @@
         // Load ticket counts from views
         async function loadTicketCounts() {
             try {
-                // Load live tickets count
-                const { data: liveData, error: liveError } = await supabase
-                    .from('live_tickets')
-                    .select('id', { count: 'exact' });
-                    
-                if (!liveError) {
-                    document.getElementById('liveTicketsCount').textContent = liveData.length;
-                }
+                // Load all counts in parallel
+                const [liveData, delayedData, recentData, todayData] = await Promise.all([
+                    supabase.from('live_tickets').select('id', { count: 'exact' }),
+                    supabase.from('delayed_tickets').select('id', { count: 'exact' }),
+                    supabase.from('recent_tickets').select('id', { count: 'exact' }),
+                    supabase.from('call_sessions_egypt')
+                        .select('id', { count: 'exact' })
+                        .gte('start_time_egypt', new Date().toISOString().split('T')[0] + 'T00:00:00')
+                        .lt('start_time_egypt', new Date().toISOString().split('T')[0] + 'T23:59:59')
+                ]);
                 
-                // Load delayed tickets count
-                const { data: delayedData, error: delayedError } = await supabase
-                    .from('delayed_tickets')
-                    .select('id', { count: 'exact' });
-                    
-                if (!delayedError) {
-                    document.getElementById('delayedTicketsCount').textContent = delayedData.length;
-                }
-                
-                // Load recent tickets count
-                const { data: recentData, error: recentError } = await supabase
-                    .from('recent_tickets')
-                    .select('id', { count: 'exact' }).limit(10);
-                    
-                if (!recentError) {
-                    document.getElementById('recentTicketsCount').textContent = recentData.length;
-                }
-                
-                // Load total calls today from call_sessions_egypt
-                const today = new Date().toISOString().split('T')[0];
-                const { data: todayData, error: todayError } = await supabase
-                    .from('call_sessions_egypt')
-                    .select('id', { count: 'exact' }).limit(10)
-                    .gte('start_time_egypt', `${today}T00:00:00`)
-                    .lt('start_time_egypt', `${today}T23:59:59`);
-                    
-                if (!todayError) {
-                    document.getElementById('totalCallsToday').textContent = todayData.length;
-                }
+                // Update UI
+                if (!liveData.error) document.getElementById('liveTicketsCount').textContent = liveData.data.length;
+                if (!delayedData.error) document.getElementById('delayedTicketsCount').textContent = delayedData.data.length;
+                if (!recentData.error) document.getElementById('recentTicketsCount').textContent = recentData.data.length;
+                if (!todayData.error) document.getElementById('totalCallsToday').textContent = todayData.data.length;
                 
             } catch (error) {
                 console.error('Error loading ticket counts:', error);
@@ -591,7 +560,8 @@
             try {
                 const { data, error } = await supabase
                     .from('v_call_quality_summary')
-                    .select('*');
+                    .select('*')
+                    .limit(10);
                     
                 if (error) {
                     console.error('Error fetching call quality summary:', error);
@@ -648,16 +618,11 @@
                                         size: 12
                                     }
                                 }
-                            },
-                            title: {
-                                display: true,
-                                text: 'Call Quality Distribution',
-                                color: '#F9FAFB',
-                                font: {
-                                    size: 14,
-                                    weight: 'bold'
-                                }
                             }
+                        },
+                        animation: {
+                            duration: 800,
+                            easing: 'easeOutQuart'
                         }
                     }
                 });
@@ -673,7 +638,8 @@
                 const { data, error } = await supabase
                     .from('top_5_agents_today')
                     .select('*')
-                    .order('total_tickets', { ascending: false });
+                    .order('total_tickets', { ascending: false })
+                    .limit(5);
                     
                 if (error) {
                     console.error('Error fetching top agents:', error);
@@ -741,22 +707,19 @@
                     dates.push(date.toISOString().split('T')[0]);
                 }
                 
-                // Get call counts for each date
-                const volumeData = [];
-                
-                for (const date of dates) {
-                    const { data, error } = await supabase
+                // Get call counts for each date in parallel
+                const volumePromises = dates.map(date => 
+                    supabase
                         .from('call_sessions_egypt')
-                        .select('id', { count: 'exact' }).limit(10)
+                        .select('id', { count: 'exact' })
                         .gte('start_time_egypt', `${date}T00:00:00`)
-                        .lt('start_time_egypt', `${date}T23:59:59`);
-                        
-                    if (!error) {
-                        volumeData.push(data.length);
-                    } else {
-                        volumeData.push(0);
-                    }
-                }
+                        .lt('start_time_egypt', `${date}T23:59:59`)
+                );
+                
+                const volumeResults = await Promise.all(volumePromises);
+                const volumeData = volumeResults.map(result => 
+                    result.error ? 0 : result.data.length
+                );
                 
                 // Format dates for display
                 const formattedDates = dates.map(date => {
@@ -793,15 +756,6 @@
                                 labels: {
                                     color: '#D1D5DB'
                                 }
-                            },
-                            title: {
-                                display: true,
-                                text: 'Call Volume Over Time',
-                                color: '#F9FAFB',
-                                font: {
-                                    size: 14,
-                                    weight: 'bold'
-                                }
                             }
                         },
                         scales: {
@@ -822,6 +776,10 @@
                                 },
                                 beginAtZero: true
                             }
+                        },
+                        animation: {
+                            duration: 800,
+                            easing: 'easeOutQuart'
                         }
                     }
                 });
@@ -834,11 +792,12 @@
         // Load agent performance distribution
         async function loadAgentPerformance() {
             try {
-                // Get all agents with their call counts
+                // Get all agents with their call counts for today
                 const { data, error } = await supabase
                     .from('call_sessions_egypt')
-                    .select('agent_name').limit(10)
-                    .gte('start_time_egypt', new Date().toISOString().split('T')[0] + 'T00:00:00');
+                    .select('agent_name')
+                    .gte('start_time_egypt', new Date().toISOString().split('T')[0] + 'T00:00:00')
+                    .limit(100);
                     
                 if (error) {
                     console.error('Error fetching agent performance data:', error);
@@ -883,15 +842,6 @@
                                 labels: {
                                     color: '#D1D5DB'
                                 }
-                            },
-                            title: {
-                                display: true,
-                                text: 'Calls per Agent (Today)',
-                                color: '#F9FAFB',
-                                font: {
-                                    size: 14,
-                                    weight: 'bold'
-                                }
                             }
                         },
                         scales: {
@@ -913,6 +863,10 @@
                                 },
                                 beginAtZero: true
                             }
+                        },
+                        animation: {
+                            duration: 800,
+                            easing: 'easeOutQuart'
                         }
                     }
                 });
@@ -931,9 +885,10 @@
                 // Get today's calls for calculations
                 const { data: todayCalls, error: todayError } = await supabase
                     .from('call_sessions_egypt')
-                    .select('*').limit(10)
+                    .select('*')
                     .gte('start_time_egypt', `${today}T00:00:00`)
-                    .lt('start_time_egypt', `${today}T23:59:59`);
+                    .lt('start_time_egypt', `${today}T23:59:59`)
+                    .limit(500);
                     
                 if (todayError) {
                     console.error('Error fetching today\'s calls:', todayError);
@@ -986,15 +941,128 @@
             }
         }
 
-        // Start auto-refresh
-        function startAutoRefresh() {
-            // Refresh data every 30 seconds
-            autoRefreshInterval = setInterval(async () => {
-                await loadDashboardData();
-            }, 30000);
+        // Load recent tickets table
+        async function loadRecentTickets() {
+            try {
+                const { data, error } = await supabase
+                    .from('recent_tickets')
+                    .select('*')
+                    .order('end_time_egypt', { ascending: false })
+                    .limit(20);
+                    
+                if (error) {
+                    console.error('Error loading recent tickets:', error);
+                    return;
+                }
+                
+                renderRecentTicketsTable(data);
+                
+            } catch (error) {
+                console.error('Error loading recent tickets:', error);
+            }
         }
 
-        // Stop auto-refresh
+        // Render recent tickets table
+        function renderRecentTicketsTable(data) {
+            const tableBody = document.getElementById('recentTicketsTableBody');
+            
+            if (!data || data.length === 0) {
+                tableBody.innerHTML = `
+                    <tr>
+                        <td colspan="8" style="text-align: center; padding: 2rem;">
+                            No recent ticket sessions found
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+            
+            tableBody.innerHTML = data.map(ticket => {
+                // Format duration
+                const duration = formatDuration(ticket.duration_interval);
+                
+                // Format quality with color
+                let qualityDisplay = ticket.call_quality || 'N/A';
+                let qualityClass = '';
+                if (ticket.call_quality === 'good') {
+                    qualityClass = 'style="color: #10B981;"';
+                } else if (ticket.call_quality === 'bad') {
+                    qualityClass = 'style="color: #EF4444;"';
+                }
+                
+                // Format timestamps
+                const startTime = formatDateTime(ticket.start_time_egypt);
+                const endTime = formatDateTime(ticket.end_time_egypt);
+                
+                return `
+                    <tr>
+                        <td>${ticket.agent_name || 'Unknown'}</td>
+                        <td>${ticket.agent_email || 'N/A'}</td>
+                        <td>${ticket.scenario_title || 'N/A'}</td>
+                        <td ${qualityClass}>${qualityDisplay}</td>
+                        <td>${ticket.quality_reason || 'N/A'}</td>
+                        <td>${startTime}</td>
+                        <td>${endTime}</td>
+                        <td>${duration}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // Format duration from interval to readable format
+        function formatDuration(interval) {
+            if (!interval) return '0s';
+            
+            try {
+                const parts = interval.split(':');
+                if (parts.length === 3) {
+                    const hours = parseInt(parts[0]) || 0;
+                    const minutes = parseInt(parts[1]) || 0;
+                    const seconds = parseInt(parts[2]) || 0;
+                    
+                    if (hours > 0) {
+                        return `${hours}h ${minutes}m ${seconds}s`;
+                    } else if (minutes > 0) {
+                        return `${minutes}m ${seconds}s`;
+                    } else {
+                        return `${seconds}s`;
+                    }
+                }
+                return interval;
+            } catch (error) {
+                return interval;
+            }
+        }
+
+        // Format date time for display
+        function formatDateTime(dateTimeString) {
+            if (!dateTimeString) return 'N/A';
+            
+            try {
+                const date = new Date(dateTimeString);
+                return date.toLocaleTimeString('en-US', { 
+                    hour: '2-digit', 
+                    minute: '2-digit',
+                    hour12: true 
+                });
+            } catch (error) {
+                return dateTimeString;
+            }
+        }
+
+        // Auto refresh functionality
+        function startAutoRefresh() {
+            if (autoRefreshInterval) {
+                clearInterval(autoRefreshInterval);
+            }
+            
+            autoRefreshInterval = setInterval(async () => {
+                if (isAutoRefreshEnabled) {
+                    await loadDashboardData();
+                }
+            }, 30000); // 30 seconds
+        }
+
         function stopAutoRefresh() {
             if (autoRefreshInterval) {
                 clearInterval(autoRefreshInterval);
@@ -1004,101 +1072,26 @@
 
         // Export dashboard report
         function exportDashboardReport() {
-            // Create CSV content with current dashboard data
-            let csvContent = "Elevo Core Dashboard Report\n";
-            csvContent += `Generated: ${new Date().toLocaleString()}\n\n`;
+            // Create a simple CSV report
+            const date = new Date().toISOString().split('T')[0];
+            const fileName = `elevo-dashboard-report-${date}.csv`;
             
-            // Add ticket counts
-            csvContent += "Ticket Counts\n";
-            csvContent += `Live Tickets,${document.getElementById('liveTicketsCount').textContent}\n`;
-            csvContent += `Delayed Tickets,${document.getElementById('delayedTicketsCount').textContent}\n`;
-            csvContent += `Recent Tickets,${document.getElementById('recentTicketsCount').textContent}\n`;
-            csvContent += `Total Calls Today,${document.getElementById('totalCallsToday').textContent}\n\n`;
+            // Get current data for export
+            const liveCount = document.getElementById('liveTicketsCount').textContent;
+            const delayedCount = document.getElementById('delayedTicketsCount').textContent;
+            const recentCount = document.getElementById('recentTicketsCount').textContent;
+            const totalCount = document.getElementById('totalCallsToday').textContent;
             
-            // Add quick stats
-            csvContent += "Performance Metrics\n";
-            csvContent += `Average Handle Time,${document.getElementById('avgHandleTime').textContent}\n`;
-            csvContent += `Completion Rate,${document.getElementById('completionRate').textContent}\n`;
-            csvContent += `Good Quality Rate,${document.getElementById('goodQualityRate').textContent}\n`;
-            csvContent += `Active Agents,${document.getElementById('activeAgents').textContent}\n`;
+            const csvContent = `data:text/csv;charset=utf-8,Elevo Core Dashboard Report - ${date}\n\nMetric,Value\nLive Tickets,${liveCount}\nDelayed Tickets,${delayedCount}\nRecent Tickets,${recentCount}\nTotal Calls Today,${totalCount}`;
             
-            // Create and download file
-            const blob = new Blob([csvContent], { type: 'text/csv' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `elevo-dashboard-report-${new Date().toISOString().split('T')[0]}.csv`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement('a');
+            link.setAttribute('href', encodedUri);
+            link.setAttribute('download', fileName);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
         }
-
-        // Clean up on page unload
-        window.addEventListener('beforeunload', () => {
-            stopAutoRefresh();
-        });
-    
-/* --- BEGIN: Elevo frontend helpers added by patcher --- */
-// Format duration_interval (milliseconds or seconds) to readable string
-function formatDuration(msOrSeconds) {
-    if (msOrSeconds === null || msOrSeconds === undefined) return '--:--';
-    // If value looks like a number string, convert
-    let v = Number(msOrSeconds);
-    // Heuristic: if value > 1e6, treat as milliseconds, else seconds
-    if (v > 1000000) { // > ~16 minutes in ms
-        v = Math.floor(v/1000);
-    }
-    const seconds = v % 60;
-    const minutes = Math.floor(v/60) % 60;
-    const hours = Math.floor(v/3600);
-    if (hours > 0) {
-        // HH:MM:SS
-        const hh = String(hours).padStart(2,'0');
-        const mm = String(minutes).padStart(2,'0');
-        const ss = String(seconds).padStart(2,'0');
-        return `${hh}:${mm}:${ss}`;
-    } else if (minutes > 0) {
-        return `${minutes}m ${seconds}s`;
-    } else {
-        return `${seconds}s`;
-    }
-}
-
-// Simple fade replace for container element (diff-like update)
-function fadeUpdate(container, newInnerHTML) {
-    if (!container) return;
-    container.style.transition = 'opacity 0.25s ease';
-    container.style.opacity = 0;
-    setTimeout(() => {
-        container.innerHTML = newInnerHTML;
-        container.style.opacity = 1;
-    }, 260);
-}
-
-// Start auto-refresh for real-time boxes only.
-// Provide an array of updater functions (no-arg async functions) to call periodically.
-// intervalSec default 30.
-function startAutoRefreshRealTime(updaters = [], intervalSec = 30) {
-    if (window._elevoAutoRefreshInterval) clearInterval(window._elevoAutoRefreshInterval);
-    if (!Array.isArray(updaters) || updaters.length === 0) return;
-    // Run once immediately
-    updaters.forEach(fn => { try { fn(); } catch(e){console.error(e);} });
-    window._elevoAutoRefreshInterval = setInterval(() => {
-        updaters.forEach(fn => {
-            try { fn(); } catch(e){ console.error(e); }
-        });
-    }, intervalSec * 1000);
-}
-
-function stopAutoRefreshRealTime() {
-    if (window._elevoAutoRefreshInterval) {
-        clearInterval(window._elevoAutoRefreshInterval);
-        window._elevoAutoRefreshInterval = null;
-    }
-}
-/* --- END: Elevo frontend helpers --- */
-
-</script>
+    </script>
 </body>
 </html>
