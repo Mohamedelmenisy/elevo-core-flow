@@ -327,14 +327,13 @@
         document.addEventListener('DOMContentLoaded', async function() {
             document.getElementById('currentYear').textContent = new Date().getFullYear();
             await checkAuth();
-            // Only setup listeners if authentication and authorization succeed
             if (currentUser) {
                 setupEventListeners();
                 startAutoRefresh();
             }
         });
 
-        // --- MODIFIED Authentication and Authorization check ---
+        // Authentication and Authorization check
         async function checkAuth() {
             try {
                 const { data: { user }, error } = await supabase.auth.getUser();
@@ -343,7 +342,6 @@
                     return;
                 }
 
-                // Check user role for authorization
                 const { data: profile, error: profileError } = await supabase
                     .from('users')
                     .select('role, name')
@@ -360,11 +358,10 @@
 
                 if (profile.role !== 'admin') {
                     alert('Access Denied: You do not have permission to view this page.');
-                    window.location.replace('core-flow.html'); // Redirect non-admins to a safe page
+                    window.location.replace('core-flow.html');
                     return;
                 }
-
-                // If all checks pass, set the current user and proceed
+                
                 currentUser = { ...user, ...profile };
                 
                 document.getElementById('userInfo').style.display = 'flex';
@@ -386,6 +383,7 @@
             });
             
             document.getElementById('refreshDataBtn').addEventListener('click', loadDashboardData);
+            
             document.getElementById('exportReportBtn').addEventListener('click', exportDashboardReport);
         }
 
@@ -417,28 +415,36 @@
         // Load ticket counts from views
         async function loadTicketCounts() {
             try {
-                const { error: liveError, count: liveCount } = await supabase
+                const { data: liveData, error: liveError, count: liveCount } = await supabase
                     .from('live_tickets')
                     .select('id', { count: 'exact', head: true });
-                if (!liveError) document.getElementById('liveTicketsCount').textContent = liveCount;
+                if (!liveError) {
+                    document.getElementById('liveTicketsCount').textContent = liveCount;
+                }
                 
-                const { error: delayedError, count: delayedCount } = await supabase
+                const { data: delayedData, error: delayedError, count: delayedCount } = await supabase
                     .from('delayed_tickets')
                     .select('id', { count: 'exact', head: true });
-                if (!delayedError) document.getElementById('delayedTicketsCount').textContent = delayedCount;
+                if (!delayedError) {
+                    document.getElementById('delayedTicketsCount').textContent = delayedCount;
+                }
                 
-                const { error: recentError, count: recentCount } = await supabase
+                const { data: recentData, error: recentError, count: recentCount } = await supabase
                     .from('recent_tickets')
                     .select('id', { count: 'exact', head: true });
-                if (!recentError) document.getElementById('recentTicketsCount').textContent = recentCount;
+                if (!recentError) {
+                    document.getElementById('recentTicketsCount').textContent = recentCount;
+                }
                 
                 const today = new Date().toISOString().split('T')[0];
-                const { error: todayError, count: todayCount } = await supabase
+                const { data: todayData, error: todayError, count: todayCount } = await supabase
                     .from('call_sessions_egypt')
                     .select('id', { count: 'exact', head: true })
                     .gte('start_time_egypt', `${today}T00:00:00`)
                     .lt('start_time_egypt', `${today}T23:59:59`);
-                if (!todayError) document.getElementById('totalCallsToday').textContent = todayCount;
+                if (!todayError) {
+                    document.getElementById('totalCallsToday').textContent = todayCount;
+                }
                 
             } catch (error) {
                 console.error('Error loading ticket counts:', error);
@@ -448,8 +454,14 @@
         // Load call quality summary from v_call_quality_summary
         async function loadCallQualitySummary() {
             try {
-                const { data, error } = await supabase.from('v_call_quality_summary').select('*');
-                if (error) throw error;
+                const { data, error } = await supabase
+                    .from('v_call_quality_summary')
+                    .select('*');
+                    
+                if (error) {
+                    console.error('Error fetching call quality summary:', error);
+                    return;
+                }
                 
                 const labels = data.map(item => item.call_quality.charAt(0).toUpperCase() + item.call_quality.slice(1));
                 const values = data.map(item => item.total);
@@ -465,11 +477,12 @@
                 qualitySummaryChart = new Chart(ctx, {
                     type: 'doughnut',
                     data: {
-                        labels,
+                        labels: labels,
                         datasets: [{ data: values, backgroundColor: colors, borderWidth: 2 }]
                     },
                     options: {
-                        responsive: true, maintainAspectRatio: false,
+                        responsive: true,
+                        maintainAspectRatio: false,
                         plugins: {
                             legend: { position: 'bottom', labels: { color: '#D1D5DB' } },
                             title: { display: true, text: 'Call Quality Distribution', color: '#F9FAFB', font: { size: 14 } }
@@ -484,19 +497,29 @@
         // Load top 5 agents from top_5_agents_today
         async function loadTopAgents() {
             try {
-                const { data, error } = await supabase.from('top_5_agents_today').select('*').order('total_tickets', { ascending: false });
-                if (error) throw error;
+                const { data, error } = await supabase
+                    .from('top_5_agents_today')
+                    .select('*')
+                    .order('total_tickets', { ascending: false });
+                    
+                if (error) {
+                    console.error('Error fetching top agents:', error);
+                    return;
+                }
                 
                 const topAgentsList = document.getElementById('topAgentsList');
                 if (data.length === 0) {
-                    topAgentsList.innerHTML = '<li class="top-agent-item"><span>No data available</span><span>-</span></li>';
+                    topAgentsList.innerHTML = '<li class="top-agent-item"><span class="agent-name">No data available</span><span class="agent-count">-</span></li>';
                     return;
                 }
+                
                 topAgentsList.innerHTML = data.map(agent => `
                     <li class="top-agent-item">
                         <span class="agent-name">${agent.agent_name || 'Unknown'}</span>
                         <span class="agent-count">${agent.total_tickets}</span>
-                    </li>`).join('');
+                    </li>
+                `).join('');
+                
             } catch (error) {
                 console.error('Error loading top agents:', error);
             }
@@ -505,17 +528,23 @@
         // Load top scenario from top_scenario_today
         async function loadTopScenario() {
             try {
-                const { data, error } = await supabase.from('top_scenario_today').select('*').single();
+                const { data, error } = await supabase
+                    .from('top_scenario_today')
+                    .select('*')
+                    .single();
+                    
                 const container = document.getElementById('topScenarioContainer');
                 if (error) {
-                    container.innerHTML = `<div class="top-scenario-item"><span>No data available</span><span>-</span></div>`;
+                    container.innerHTML = `<div class="top-scenario-item"><span class="scenario-name">No data available</span><span class="scenario-count">-</span></div>`;
                     return;
                 }
+                
                 container.innerHTML = `
                     <div class="top-scenario-item">
                         <span class="scenario-name">${data.scenario_title || 'Unknown'}</span>
                         <span class="scenario-count">${data.total_runs}</span>
-                    </div>`;
+                    </div>
+                `;
             } catch (error) {
                 console.error('Error loading top scenario:', error);
             }
@@ -531,10 +560,13 @@
                 }).reverse();
                 
                 const promises = dates.map(date => 
-                    supabase.from('call_sessions_egypt').select('id', { count: 'exact', head: true })
-                    .gte('start_time_egypt', `${date}T00:00:00`)
-                    .lt('start_time_egypt', `${date}T23:59:59`)
+                    supabase
+                        .from('call_sessions_egypt')
+                        .select('id', { count: 'exact', head: true })
+                        .gte('start_time_egypt', `${date}T00:00:00`)
+                        .lt('start_time_egypt', `${date}T23:59:59`)
                 );
+                
                 const results = await Promise.all(promises);
                 const volumeData = results.map(res => res.error ? 0 : res.count);
                 
@@ -564,8 +596,15 @@
         async function loadAgentPerformance() {
             try {
                 const todayStart = new Date().toISOString().split('T')[0] + 'T00:00:00';
-                const { data, error } = await supabase.from('call_sessions_egypt').select('agent_name').gte('start_time_egypt', todayStart);
-                if (error) throw error;
+                const { data, error } = await supabase
+                    .from('call_sessions_egypt')
+                    .select('agent_name')
+                    .gte('start_time_egypt', todayStart);
+                    
+                if (error) {
+                    console.error('Error fetching agent performance data:', error);
+                    return;
+                }
                 
                 const agentCounts = data.reduce((acc, call) => {
                     const agent = call.agent_name || 'Unknown';
@@ -582,7 +621,7 @@
                 agentPerformanceChart = new Chart(ctx, {
                     type: 'bar',
                     data: {
-                        labels,
+                        labels: labels,
                         datasets: [{
                             label: 'Calls Today', data: values,
                             backgroundColor: 'rgba(78, 140, 255, 0.7)',
@@ -600,16 +639,27 @@
         async function loadQuickStats() {
             try {
                 const today = new Date().toISOString().split('T')[0];
-                const { data: todayCalls, error } = await supabase.from('call_sessions_egypt').select('*')
-                    .gte('start_time_egypt', `${today}T00:00:00`).lt('start_time_egypt', `${today}T23:59:59`);
-                if (error) throw error;
+                const { data: todayCalls, error } = await supabase
+                    .from('call_sessions_egypt')
+                    .select('*')
+                    .gte('start_time_egypt', `${today}T00:00:00`)
+                    .lt('start_time_egypt', `${today}T23:59:59`);
+                if (error) {
+                    console.error('Error fetching today\'s calls:', error);
+                    return;
+                }
                 
                 const completedCalls = todayCalls.filter(c => c.completed);
-                const totalSeconds = completedCalls.reduce((sum, call) => {
-                    if (!call.duration_interval) return sum;
-                    const [h, m, s] = call.duration_interval.split(':').map(Number);
-                    return sum + (h * 3600) + (m * 60) + s;
-                }, 0);
+                let totalSeconds = 0;
+                completedCalls.forEach(call => {
+                    if (call.duration_interval) {
+                        const parts = call.duration_interval.split(':');
+                        if (parts.length === 3) {
+                            const [h, m, s] = parts.map(Number);
+                            totalSeconds += (h * 3600) + (m * 60) + s;
+                        }
+                    }
+                });
                 
                 const avgSeconds = completedCalls.length > 0 ? totalSeconds / completedCalls.length : 0;
                 document.getElementById('avgHandleTime').textContent = `${Math.floor(avgSeconds / 60)}m`;
@@ -632,7 +682,7 @@
         // Start auto-refresh
         function startAutoRefresh() {
             if (autoRefreshInterval) clearInterval(autoRefreshInterval);
-            autoRefreshInterval = setInterval(loadDashboardData, 30000); // Refresh every 30 seconds
+            autoRefreshInterval = setInterval(loadDashboardData, 30000);
         }
 
         // Stop auto-refresh
@@ -656,613 +706,11 @@
             
             const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
             const link = document.createElement("a");
-            const url = URL.createObjectURL(blob);
-            link.setAttribute("href", url);
+            link.setAttribute("href", URL.createObjectURL(blob));
             link.setAttribute("download", `elevo-dashboard-report-${new Date().toISOString().split('T')[0]}.csv`);
-            link.style.visibility = 'hidden';
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
-        }
-
-        window.addEventListener('beforeunload', stopAutoRefresh);
-    </script>
-</body>
-</html>
-2. rtm-dashboard.html (الملف الكامل والمُعدل)
-code
-Html
-<!DOCTYPE html>
-<html lang="en" class="dark">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RTM Dashboard - Elevo Core</title>
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234e8cff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M12 22V12M9 19l3-3 3 3M12 2a4 4 0 0 0-4 4v0a4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4z'/></svg>">
-    <link rel="stylesheet" href="style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
-    <style>
-        .dashboard-main {
-            width: 100%;
-            max-width: none; 
-            padding: 1.5rem 2rem; 
-            text-align: left;
-        }
-        
-        .rtm-grid {
-            display: grid;
-            grid-template-columns: 1fr;
-            gap: 1.5rem;
-            margin-top: 1.5rem;
-        }
-        
-        @media (min-width: 1024px) {
-            .rtm-grid {
-                grid-template-columns: 2fr 1fr;
-            }
-        }
-        
-        .activity-log {
-            background-color: var(--card-bg-color);
-            border-radius: var(--border-radius-lg);
-            padding: 1.5rem;
-            max-height: 600px;
-            overflow-y: auto;
-        }
-        
-        .activity-log::-webkit-scrollbar {
-            width: 8px;
-        }
-        
-        .activity-log::-webkit-scrollbar-track {
-            background: var(--input-bg-color);
-            border-radius: 4px;
-        }
-        
-        .activity-log::-webkit-scrollbar-thumb {
-            background-color: var(--border-color);
-            border-radius: 4px;
-            border: 2px solid var(--input-bg-color);
-        }
-        
-        .activity-log::-webkit-scrollbar-thumb:hover {
-            background-color: var(--primary-color);
-        }
-        
-        .tabs {
-            display: flex;
-            border-bottom: 1px solid var(--border-color);
-            margin-bottom: 1rem;
-        }
-        
-        .tab {
-            padding: 0.75rem 1.5rem;
-            cursor: pointer;
-            border-bottom: 2px solid transparent;
-            transition: all 0.2s ease;
-            font-weight: 500;
-        }
-        
-        .tab.active {
-            border-bottom-color: var(--primary-color);
-            color: var(--primary-color);
-        }
-        
-        .tab-content {
-            display: none;
-        }
-        
-        .tab-content.active {
-            display: block;
-        }
-        
-        .ticket-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 1rem;
-            border-bottom: 1px solid var(--border-color);
-            transition: background-color 0.2s ease;
-        }
-        
-        .ticket-item:hover {
-            background-color: var(--input-bg-color);
-        }
-        
-        .ticket-item:last-child {
-            border-bottom: none;
-        }
-        
-        .ticket-info {
-            display: flex;
-            flex-direction: column;
-            gap: 0.25rem;
-        }
-        
-        .ticket-agent {
-            font-weight: 600;
-            color: var(--text-color);
-        }
-        
-        .ticket-scenario {
-            font-size: 0.9em;
-            color: var(--text-color-light);
-        }
-        
-        .ticket-time {
-            font-size: 0.85em;
-            color: var(--text-color-subtle);
-        }
-        
-        .ticket-status {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-        
-        .status-badge {
-            padding: 0.25rem 0.75rem;
-            border-radius: var(--border-radius-full);
-            font-size: 0.8em;
-            font-weight: 600;
-        }
-        
-        .status-live {
-            background-color: rgba(78, 140, 255, 0.2);
-            color: var(--primary-color);
-        }
-        
-        .status-delayed {
-            background-color: rgba(245, 158, 11, 0.2);
-            color: var(--warning-color);
-        }
-        
-        .status-recent {
-            background-color: rgba(16, 185, 129, 0.2);
-            color: var(--success-color);
-        }
-        
-        .metrics-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-            gap: 1rem;
-            margin-bottom: 1.5rem;
-        }
-        
-        .metric-card {
-            background-color: var(--card-bg-color);
-            border-radius: var(--border-radius-lg);
-            padding: 1rem;
-            text-align: center;
-        }
-        
-        .metric-value {
-            font-size: 1.75em;
-            font-weight: 700;
-            margin-bottom: 0.25rem;
-            color: var(--text-color);
-        }
-        
-        .metric-label {
-            font-size: 0.85em;
-            color: var(--text-color-light);
-        }
-        
-        .chart-card {
-            background-color: var(--card-bg-color);
-            border-radius: var(--border-radius-lg);
-            padding: 1.5rem;
-            margin-bottom: 1.5rem;
-        }
-        
-        .chart-container {
-            height: 250px;
-            position: relative;
-        }
-        
-        .no-data {
-            text-align: center;
-            padding: 2rem;
-            color: var(--text-color-subtle);
-        }
-        
-        .last-updated {
-            text-align: right;
-            font-size: 0.85em;
-            color: var(--text-color-subtle);
-            margin-top: 1rem;
-        }
-    </style>
-</head>
-<body>
-    <div class="app-container">
-        <header class="app-header">
-            <div class="logo-container">
-                <svg class="company-logo" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="color: var(--primary-color); width: 28px; height: 28px;">
-                    <path d="M12 22V12M9 19l3-3 3 3M12 2a4 4 0 0 0-4 4v0a4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-                <span class="app-title" style="font-size: 1.4rem;">Elevo Core - RTM Dashboard</span>
-            </div>
-            <div class="header-controls">
-                <a href="core-flow.html" class="nav-link">Call App</a>
-                <a href="agent-portal.html" class="nav-link">Agent Portal</a>
-                <a href="dashboard.html" class="nav-link">Admin Dashboard</a>
-                <div class="user-info" id="userInfo" style="display: none;">
-                    <span id="userName" class="user-name-display"></span>
-                    <button id="logoutButton" class="logout-btn">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
-                        Logout
-                    </button>
-                </div>
-            </div>
-        </header>
-
-        <main class="app-main dashboard-main">
-            <div id="auth-loading" class="loading-container" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 70vh;">
-                <div class="spinner"></div>
-                <p>Verifying Permissions & Loading RTM Data...</p>
-            </div>
-
-            <div id="rtmContent" style="display: none;">
-                <div class="dashboard-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
-                    <div>
-                        <h1>Real-Time Monitoring</h1>
-                        <p class="text-color-light">Live tracking of call center activities and performance</p>
-                    </div>
-                    <div style="display: flex; gap: 0.75rem; align-items: center;">
-                        <div class="auto-refresh-toggle">
-                            <input type="checkbox" id="autoRefreshToggle" checked>
-                            <label for="autoRefreshToggle">Auto Refresh (10s)</label>
-                        </div>
-                        <button id="refreshRTMDataBtn" class="action-button primary-button">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"></path><path d="M1 20v-6h6"></path><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
-                            Refresh Now
-                        </button>
-                    </div>
-                </div>
-
-                <div class="metrics-grid">
-                    <div class="metric-card">
-                        <div class="metric-value" id="rtmLiveTickets">0</div>
-                        <div class="metric-label">Live Tickets</div>
-                    </div>
-                    <div class="metric-card">
-                        <div class="metric-value" id="rtmDelayedTickets">0</div>
-                        <div class="metric-label">Delayed Tickets</div>
-                    </div>
-                    <div class="metric-card">
-                        <div class="metric-value" id="rtmRecentTickets">0</div>
-                        <div class="metric-label">Recent Tickets</div>
-                    </div>
-                    <div class="metric-card">
-                        <div class="metric-value" id="rtmActiveAgents">0</div>
-                        <div class="metric-label">Active Agents</div>
-                    </div>
-                </div>
-
-                <div class="rtm-grid">
-                    <div class="activity-log">
-                        <div class="tabs">
-                            <div class="tab active" data-tab="live">Live Activity</div>
-                            <div class="tab" data-tab="delayed">Delayed</div>
-                            <div class="tab" data-tab="recent">Recent</div>
-                        </div>
-                        
-                        <div class="tab-content active" id="liveTab">
-                            <div id="liveTicketsList"></div>
-                        </div>
-                        
-                        <div class="tab-content" id="delayedTab">
-                            <div id="delayedTicketsList"></div>
-                        </div>
-                        
-                        <div class="tab-content" id="recentTab">
-                            <div id="recentTicketsList"></div>
-                        </div>
-                        
-                        <div class="last-updated">
-                            Last updated: <span id="lastUpdatedTime">--:--:--</span>
-                        </div>
-                    </div>
-                    
-                    <div>
-                        <div class="chart-card">
-                            <h3>Ticket Volume (Last Hour)</h3>
-                            <div class="chart-container">
-                                <canvas id="ticketVolumeChart"></canvas>
-                            </div>
-                        </div>
-                        
-                        <div class="chart-card">
-                            <h3>Agent Activity</h3>
-                            <div class="chart-container">
-                                <canvas id="agentActivityChart"></canvas>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </main>
-        
-        <footer class="app-footer">
-            <p>© <span id="currentYear"></span> Mohamed Elmenisy - Elevo Core. All rights reserved.</p>
-        </footer>
-    </div>
-
-    <script type="module">
-        const SUPABASE_URL = 'https://aefiigottnlcmjzilqnh.supabase.co';
-        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFlZmlpZ290dG5sY21qemlscW5oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcxNzY2MDQsImV4cCI6MjA2Mjc1MjYwNH0.FypB02v3tGMnxXV9ZmZMdMC0oQpREKOJWgHMPxUzwX4';
-        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-        // Global variables
-        let currentUser = null;
-        let ticketVolumeChart = null;
-        let agentActivityChart = null;
-        let autoRefreshInterval = null;
-        let isAutoRefreshEnabled = true;
-
-        // Initialize the application
-        document.addEventListener('DOMContentLoaded', async function() {
-            document.getElementById('currentYear').textContent = new Date().getFullYear();
-            await checkAuth();
-            if (currentUser) {
-                setupEventListeners();
-                startAutoRefresh();
-            }
-        });
-
-        // --- MODIFIED Authentication and Authorization check ---
-        async function checkAuth() {
-            try {
-                const { data: { user }, error } = await supabase.auth.getUser();
-                if (error || !user) {
-                    window.location.replace('login.html');
-                    return;
-                }
-
-                // Check user role for authorization
-                const { data: profile, error: profileError } = await supabase
-                    .from('users')
-                    .select('role, name')
-                    .eq('id', user.id)
-                    .single();
-
-                if (profileError) {
-                    console.error('Error fetching user profile:', profileError);
-                    alert('Could not verify user profile. Logging out.');
-                    await supabase.auth.signOut();
-                    window.location.replace('login.html');
-                    return;
-                }
-
-                if (profile.role !== 'admin') {
-                    alert('Access Denied: You do not have permission to view this page.');
-                    window.location.replace('core-flow.html');
-                    return;
-                }
-                
-                currentUser = { ...user, ...profile };
-                
-                document.getElementById('userInfo').style.display = 'flex';
-                document.getElementById('userName').textContent = currentUser.name || currentUser.email;
-                
-                await loadRTMData();
-                
-            } catch (error) {
-                console.error('Authentication process error:', error);
-                window.location.replace('login.html');
-            }
-        }
-
-        // Setup event listeners
-        function setupEventListeners() {
-            document.getElementById('logoutButton').addEventListener('click', async () => {
-                await supabase.auth.signOut();
-                window.location.replace('login.html');
-            });
-            
-            document.getElementById('refreshRTMDataBtn').addEventListener('click', loadRTMData);
-            
-            document.getElementById('autoRefreshToggle').addEventListener('change', (e) => {
-                isAutoRefreshEnabled = e.target.checked;
-                if (isAutoRefreshEnabled) {
-                    startAutoRefresh();
-                } else {
-                    stopAutoRefresh();
-                }
-            });
-            
-            document.querySelectorAll('.tab').forEach(tab => {
-                tab.addEventListener('click', () => {
-                    document.querySelectorAll('.tab, .tab-content').forEach(el => el.classList.remove('active'));
-                    tab.classList.add('active');
-                    document.getElementById(`${tab.dataset.tab}Tab`).classList.add('active');
-                });
-            });
-        }
-
-        // Load RTM data
-        async function loadRTMData() {
-            try {
-                document.getElementById('auth-loading').style.display = 'flex';
-                document.getElementById('rtmContent').style.display = 'none';
-                
-                await Promise.all([
-                    loadTicketMetrics(),
-                    loadLiveTickets(),
-                    loadDelayedTickets(),
-                    loadRecentTickets(),
-                    loadTicketVolumeChart(),
-                    loadAgentActivityChart()
-                ]);
-                
-                document.getElementById('lastUpdatedTime').textContent = new Date().toLocaleTimeString('en-US', { hour12: false });
-                document.getElementById('auth-loading').style.display = 'none';
-                document.getElementById('rtmContent').style.display = 'block';
-                
-            } catch (error) {
-                console.error('Error loading RTM data:', error);
-                document.getElementById('auth-loading').innerHTML = '<p>Error loading data. Please try again.</p>';
-            }
-        }
-
-        // Load ticket metrics
-        async function loadTicketMetrics() {
-            try {
-                const { error: liveError, count: liveCount } = await supabase.from('live_tickets').select('id', { count: 'exact', head: true });
-                if (!liveError) document.getElementById('rtmLiveTickets').textContent = liveCount;
-                
-                const { error: delayedError, count: delayedCount } = await supabase.from('delayed_tickets').select('id', { count: 'exact', head: true });
-                if (!delayedError) document.getElementById('rtmDelayedTickets').textContent = delayedCount;
-                
-                const { error: recentError, count: recentCount } = await supabase.from('recent_tickets').select('id', { count: 'exact', head: true });
-                if (!recentError) document.getElementById('rtmRecentTickets').textContent = recentCount;
-                
-                const { data: agentsData, error: agentsError } = await supabase.from('live_tickets').select('agent_name');
-                if (!agentsError) {
-                    const activeAgents = new Set(agentsData.map(t => t.agent_name).filter(Boolean)).size;
-                    document.getElementById('rtmActiveAgents').textContent = activeAgents;
-                }
-            } catch (error) {
-                console.error('Error loading ticket metrics:', error);
-            }
-        }
-
-        // Render ticket list helper
-        function renderTicketList(elementId, data, statusClass, statusText, timeField, timePrefix) {
-            const listElement = document.getElementById(elementId);
-            if (data.length === 0) {
-                listElement.innerHTML = `<div class="no-data">No ${statusText.toLowerCase()} tickets at the moment</div>`;
-                return;
-            }
-            listElement.innerHTML = data.map(ticket => `
-                <div class="ticket-item">
-                    <div class="ticket-info">
-                        <div class="ticket-agent">${ticket.agent_name || 'Unknown Agent'}</div>
-                        <div class="ticket-scenario">${ticket.scenario_id || 'Unknown Scenario'}</div>
-                        <div class="ticket-time">${timePrefix}: ${formatTime(ticket[timeField])}</div>
-                    </div>
-                    <div class="ticket-status">
-                        <span class="status-badge ${statusClass}">${statusText}</span>
-                    </div>
-                </div>`).join('');
-        }
-
-        // Load live tickets from live_tickets view
-        async function loadLiveTickets() {
-            try {
-                const { data, error } = await supabase.from('live_tickets').select('*').order('start_time_egypt', { ascending: false });
-                if (error) throw error;
-                renderTicketList('liveTicketsList', data, 'status-live', 'Live', 'start_time_egypt', 'Started');
-            } catch (error) {
-                console.error('Error loading live tickets:', error);
-            }
-        }
-
-        // Load delayed tickets from delayed_tickets view
-        async function loadDelayedTickets() {
-            try {
-                const { data, error } = await supabase.from('delayed_tickets').select('*').order('start_time_egypt', { ascending: false });
-                if (error) throw error;
-                renderTicketList('delayedTicketsList', data, 'status-delayed', 'Delayed', 'start_time_egypt', 'Started');
-            } catch (error) {
-                console.error('Error loading delayed tickets:', error);
-            }
-        }
-
-        // Load recent tickets from recent_tickets view
-        async function loadRecentTickets() {
-            try {
-                const { data, error } = await supabase.from('recent_tickets').select('*').order('end_time_egypt', { ascending: false });
-                if (error) throw error;
-                renderTicketList('recentTicketsList', data, 'status-recent', 'Completed', 'end_time_egypt', 'Completed');
-            } catch (error) {
-                console.error('Error loading recent tickets:', error);
-            }
-        }
-
-        // Load ticket volume chart (last hour)
-        async function loadTicketVolumeChart() {
-            try {
-                const oneHourAgo = new Date(new Date().getTime() - 60 * 60 * 1000).toISOString();
-                const { data, error } = await supabase.from('call_sessions_egypt').select('start_time_egypt').gte('start_time_egypt', oneHourAgo);
-                if (error) throw error;
-                
-                const intervalMs = 5 * 60 * 1000;
-                const intervals = data.reduce((acc, ticket) => {
-                    const intervalStart = Math.floor(new Date(ticket.start_time_egypt).getTime() / intervalMs) * intervalMs;
-                    acc[intervalStart] = (acc[intervalStart] || 0) + 1;
-                    return acc;
-                }, {});
-
-                const now = new Date();
-                const labels = [];
-                const values = [];
-                for (let i = 11; i >= 0; i--) {
-                    const time = new Date(now.getTime() - i * intervalMs);
-                    labels.push(time.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }));
-                    const intervalStart = Math.floor(time.getTime() / intervalMs) * intervalMs;
-                    values.push(intervals[intervalStart] || 0);
-                }
-                
-                const ctx = document.getElementById('ticketVolumeChart').getContext('2d');
-                if (ticketVolumeChart) ticketVolumeChart.destroy();
-                ticketVolumeChart = new Chart(ctx, {
-                    type: 'line',
-                    data: { labels, datasets: [{ label: 'Tickets', data: values, borderColor: '#4e8cff', backgroundColor: 'rgba(78, 140, 255, 0.1)', borderWidth: 2, fill: true, tension: 0.4 }] },
-                    options: { responsive: true, maintainAspectRatio: false }
-                });
-            } catch (error) {
-                console.error('Error loading ticket volume chart:', error);
-            }
-        }
-
-        // Load agent activity chart
-        async function loadAgentActivityChart() {
-            try {
-                const { data, error } = await supabase.from('live_tickets').select('agent_name');
-                if (error) throw error;
-                
-                const agentCounts = data.reduce((acc, ticket) => {
-                    const agent = ticket.agent_name || 'Unknown';
-                    acc[agent] = (acc[agent] || 0) + 1;
-                    return acc;
-                }, {});
-                
-                const ctx = document.getElementById('agentActivityChart').getContext('2d');
-                if (agentActivityChart) agentActivityChart.destroy();
-                agentActivityChart = new Chart(ctx, {
-                    type: 'bar',
-                    data: {
-                        labels: Object.keys(agentCounts),
-                        datasets: [{ label: 'Active Tickets', data: Object.values(agentCounts), backgroundColor: 'rgba(78, 140, 255, 0.7)', borderColor: '#4e8cff', borderWidth: 1 }]
-                    },
-                    options: { responsive: true, maintainAspectRatio: false }
-                });
-            } catch (error) {
-                console.error('Error loading agent activity chart:', error);
-            }
-        }
-
-        // Start auto-refresh
-        function startAutoRefresh() {
-            if (autoRefreshInterval) clearInterval(autoRefreshInterval);
-            autoRefreshInterval = setInterval(() => {
-                if (isAutoRefreshEnabled) loadRTMData();
-            }, 10000); // 10 seconds
-        }
-
-        // Stop auto-refresh
-        function stopAutoRefresh() {
-            if (autoRefreshInterval) clearInterval(autoRefreshInterval);
-        }
-
-        // Utility functions
-        function formatTime(dateString) {
-            if (!dateString) return 'N/A';
-            return new Date(dateString).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
         }
 
         window.addEventListener('beforeunload', stopAutoRefresh);
