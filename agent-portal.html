@@ -820,81 +820,78 @@
         // Authentication check
         
 
-// --- Unified Role & Access Control (Final Corrected) ---
+// --- Final Role & Access Control (Stable Version) ---
 async function checkAuth() {
-    try {
-        const { data: userData, error: userError } = await supabase.auth.getUser();
-        if (userError || !userData?.user) {
-            window.location.href = 'index.html';
-            return;
-        }
-        const sessionUser = userData.user;
-
-        const { data: profile, error: profileError } = await supabase
-            .from('users')
-            .select('name, role, is_admin')
-            .eq('id', sessionUser.id)
-            .single();
-
-        if (profileError) console.warn('Profile fetch error:', profileError);
-
-        const currentUserLocal = {
-            id: sessionUser.id,
-            email: sessionUser.email,
-            name: profile?.name || (sessionUser.email ? sessionUser.email.split('@')[0] : 'User'),
-            isAdmin: profile?.is_admin === true || (profile?.role?.toLowerCase?.() === 'admin')
-        };
-        window.currentUser = currentUserLocal;
-
-        // update UI
-        const userInfoEl = document.getElementById('userInfo');
-        if (userInfoEl) userInfoEl.style.display = 'flex';
-        const userNameEl = document.getElementById('userName');
-        if (userNameEl) userNameEl.textContent = currentUserLocal.name;
-
-        const currentPage = window.location.pathname.split('/').pop().toLowerCase();
-        const adminOnlyPages = ['dashboard.html', 'rtm-dashboard.html'];
-        const allowedAgentPages = ['agent-portal.html', 'core-flow.html'];
-
-        // admin allowed anywhere
-        if (currentUserLocal.isAdmin === true) {
-            const loading = document.getElementById('auth-loading');
-            if (loading) loading.style.display = 'none';
-            const content = document.getElementById('dashboardContent') || document.getElementById('rtmContent') || document.getElementById('portalContent');
-            if (content) content.style.display = 'block';
-        } else {
-            // agent
-            if (adminOnlyPages.includes(currentPage)) {
-                const loading = document.getElementById('auth-loading');
-                if (loading) loading.style.display = 'none';
-                const content = document.getElementById('dashboardContent') || document.getElementById('rtmContent') || document.getElementById('portalContent');
-                if (content) content.style.display = 'none';
-                const modal = document.getElementById('accessDeniedModal');
-                if (modal) modal.style.display = 'flex';
-                const btn = document.getElementById('returnToAppBtn');
-                if (btn) btn.addEventListener('click', () => window.location.href = 'agent-portal.html');
-                return;
-            } else if (!allowedAgentPages.includes(currentPage)) {
-                window.location.href = 'agent-portal.html';
-                return;
-            }
-            const loading = document.getElementById('auth-loading');
-            if (loading) loading.style.display = 'none';
-            const content = document.getElementById('dashboardContent') || document.getElementById('rtmContent') || document.getElementById('portalContent');
-            if (content) content.style.display = 'block';
-        }
-
-        if (typeof loadDashboardData === 'function') { try { await loadDashboardData(); } catch(e){ console.warn(e); } }
-        if (typeof loadRTMData === 'function') { try { await loadRTMData(); } catch(e){ console.warn(e); } }
-        if (typeof loadPortalData === 'function') { try { await loadPortalData(); } catch(e){ console.warn(e); } }
-
-    } catch (err) {
-        console.error('Auth check error:', err);
-        try { await supabase.auth.signOut(); } catch(e){}
-        window.location.href = 'index.html';
+  try {
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+    if (userError || !userData?.user) {
+      window.location.href = "index.html";
+      return;
     }
+
+    const sessionUser = userData.user;
+
+    // get user profile
+    const { data: profile } = await supabase
+      .from("users")
+      .select("name, role, is_admin")
+      .eq("id", sessionUser.id)
+      .single();
+
+    const currentUser = {
+      id: sessionUser.id,
+      email: sessionUser.email,
+      name: profile?.name || sessionUser.email.split("@")[0],
+      isAdmin:
+        profile?.is_admin === true ||
+        (profile?.role && profile.role.toLowerCase() === "admin"),
+    };
+
+    window.currentUser = currentUser;
+
+    // show username
+    const userNameEl = document.getElementById("userName");
+    if (userNameEl) userNameEl.textContent = currentUser.name;
+
+    const page = location.pathname.split("/").pop().toLowerCase();
+    const adminPages = ["dashboard.html", "rtm-dashboard.html"];
+    const agentPages = ["agent-portal.html", "core-flow.html"];
+
+    // admin → all pages
+    if (currentUser.isAdmin) {
+      document.getElementById("auth-loading")?.remove();
+      return;
+    }
+
+    // agent → only agent pages
+    if (adminPages.includes(page)) {
+      document.getElementById("auth-loading")?.remove();
+      document.getElementById("dashboardContent")?.remove();
+      document.getElementById("rtmContent")?.remove();
+      const modal = document.getElementById("accessDeniedModal");
+      if (modal) modal.style.display = "flex";
+      const btn = document.getElementById("returnToAppBtn");
+      if (btn)
+        btn.onclick = () => {
+          window.location.href = "agent-portal.html";
+        };
+      return;
+    }
+
+    if (!agentPages.includes(page)) {
+      window.location.href = "agent-portal.html";
+      return;
+    }
+
+    document.getElementById("auth-loading")?.remove();
+  } catch (err) {
+    console.error("Auth error:", err);
+    await supabase.auth.signOut();
+    window.location.href = "index.html";
+  }
 }
-// --- End Unified Role & Access Control ---
+// --- End Role & Access Control ---
+
 </script>
 
 <!-- Access Denied Modal (Inserted) -->
