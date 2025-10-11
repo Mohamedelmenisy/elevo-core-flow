@@ -663,53 +663,45 @@
                 addNotification('There are 5 delayed tickets that need review', 'warning');
             }, 2000);
         });
-// Authentication check
-async function checkAuth() {
-    try {
-        const { data, error } = await supabaseClient.auth.getUser();
-        if (error || !data.user) {
-            window.location.href = 'index.html';
-            return;
-        }
-        
-        currentUser = data.user;
-        currentUserId = data.user.id;
-        
-        // التحقق من الصلاحيات
-        const { data: profile, error: profileError } = await supabaseClient
-            .from('users')
-            .select('role, name')
-            .eq('id', currentUserId)
-            .single();
 
-        const isAdmin = profile?.role === 'admin';
-        const isAgent = profile?.role === 'agent';
+        // Authentication check
+        async function checkAuth() {
+            try {
+                const { data, error } = await supabaseClient.auth.getUser();
+                if (error || !data.user) {
+                    window.location.href = 'index.html';
+                    return;
+                }
+                
+                currentUser = data.user;
+                
+                // Role-based access control
+                const { data: profile, error: profileError } = await supabaseClient
+                    .from('users')
+                    .select('role')
+                    .eq('id', data.user.id)
+                    .single();
 
-        // إذا مش agent أو admin، اخرج
-        if (profileError || !profile || (!isAdmin && !isAgent)) {
-            window.location.href = 'core-flow.html';
-            return;
+                const isAdmin = profile?.role === 'admin';
+
+                if (profileError || !profile || !isAdmin) {
+                    // Redirect non-admins to the main application page
+                    window.location.href = 'core-flow.html';
+                    return;
+                }
+                
+                // Show user info
+                document.getElementById('userInfo').style.display = 'flex';
+                document.getElementById('userName').textContent = currentUser.email;
+                
+                // Load dashboard data
+                await loadDashboardData();
+                
+            } catch (error) {
+                console.error('Authentication error:', error);
+                window.location.href = 'index.html';
+            }
         }
-            
-        // Show user info
-        document.getElementById('userInfo').style.display = 'flex';
-        document.getElementById('userName').textContent = profile?.name || currentUser.email;
-        
-        // Show admin links if user is admin
-        if (isAdmin) {
-            document.getElementById('dashboardLink').style.display = 'inline-flex';
-            document.getElementById('rtmDashboardLink').style.display = 'inline-flex';
-        }
-        
-        // Load agent data
-        await loadAgentData();
-        
-    } catch (error) {
-        console.error('Authentication error:', error);
-        window.location.href = 'index.html';
-    }
-}
-        
 
         // Setup event listeners
         function setupEventListeners() {
