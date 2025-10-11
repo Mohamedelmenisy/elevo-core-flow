@@ -149,30 +149,20 @@
                 grid-column: 1;
             }
         }
-
-        .shimmer-row {
-          height: 18px;
-          width: 100%;
-          background: linear-gradient(90deg, #f0f3f6 25%, #e2e8f0 37%, #f0f3f6 63%);
-          background-size: 400% 100%;
-          animation: shimmer 1.2s linear infinite;
-          border-radius: 6px;
-        }
-        
-        @keyframes shimmer { 
-            100% { 
-                background-position: -200% 0; 
-            } 
-        }
-
-        .pagination-controls {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-top: 1rem;
-            padding: 0.5rem 0;
-        }
     </style>
+
+    <style>
+    .shimmer-row {
+      height: 18px;
+      width: 100%;
+      background: linear-gradient(90deg, #f0f3f6 25%, #e2e8f0 37%, #f0f3f6 63%);
+      background-size: 400% 100%;
+      animation: shimmer 1.2s linear infinite;
+      border-radius: 6px;
+    }
+    @keyframes shimmer { 100% { background-position: -200% 0; } }
+    </style>
+
 </head>
 <body>
     <div class="app-container">
@@ -364,7 +354,7 @@
 
     <script type="module">
         const SUPABASE_URL = 'https://aefiigottnlcmjzilqnh.supabase.co';
-        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFlZmlpZ290dG5sY21qemlscW5oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcxNzY2MDQsImV4cCI6MjA2Mjc1MjYwNH0.FypB02v3tGMnxXV9ZmZMdMC0oQpREKOJWgHMPxUzwX4';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFlZmlpZ290dG5sY21qemlscW5oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcxNzY2MDQsImV4cCI6MjA2Mjc1MjYwNH0.FypB02v3tGMnxXV9ZmZMdMC0oQpREKOJWgHMPxUzw4Y';
         
         // Correct Supabase initialization
         const { createClient } = supabase;
@@ -405,6 +395,8 @@
                     return;
                 }
                 
+                currentUser = data.user;
+                
                 // Role-based access control
                 const { data: profile, error: profileError } = await supabaseClient
                     .from('users')
@@ -412,17 +404,17 @@
                     .eq('id', data.user.id)
                     .single();
 
-                if (profileError || !profile || profile.role !== 'admin') {
+                const isAdmin = profile?.role === 'admin';
+
+                if (profileError || !profile || !isAdmin) {
                     // Redirect non-admins to the main application page
                     window.location.href = 'core-flow.html';
                     return;
                 }
                 
-                currentUser = data.user;
-                
                 // Show user info
                 document.getElementById('userInfo').style.display = 'flex';
-                document.getElementById('userName').textContent = currentUser.name || currentUser.email;
+                document.getElementById('userName').textContent = currentUser.email;
                 
                 // Load dashboard data
                 await loadDashboardData();
@@ -492,41 +484,48 @@
             }
         }
 
-        // Load ticket counts from views
+        // Load ticket counts from call_sessions table
         async function loadTicketCounts() {
             try {
-                // Load live tickets count
+                // Load live tickets count - الجلسات النشطة
                 const { data: liveData, error: liveError } = await supabaseClient
-                    .from('live_tickets')
-                    .select('id', { count: 'exact' });
+                    .from('call_sessions')
+                    .select('id')
+                    .eq('completed', false); // الجلسات النشطة
                     
                 if (!liveError) {
                     document.getElementById('liveTicketsCount').textContent = liveData.length;
                 }
                 
-                // Load delayed tickets count
+                // Load delayed tickets count - المتأخرة أكثر من 5 دقائق
+                const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
                 const { data: delayedData, error: delayedError } = await supabaseClient
-                    .from('delayed_tickets')
-                    .select('id', { count: 'exact' });
+                    .from('call_sessions')
+                    .select('id')
+                    .eq('completed', false) // لم تنتهي بعد
+                    .lt('start_time_egypt', fiveMinutesAgo); // بدأت قبل أكثر من 5 دقائق
                     
                 if (!delayedError) {
                     document.getElementById('delayedTicketsCount').textContent = delayedData.length;
                 }
                 
-                // Load recent tickets count
+                // Load recent tickets count - آخر 10 دقائق
+                const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
                 const { data: recentData, error: recentError } = await supabaseClient
-                    .from('recent_tickets')
-                    .select('id', { count: 'exact' });
+                    .from('call_sessions')
+                    .select('id')
+                    .eq('completed', true) // الجلسات المكتملة فقط
+                    .gte('end_time_egypt', tenMinutesAgo); // انتهت في آخر 10 دقائق
                     
                 if (!recentError) {
                     document.getElementById('recentTicketsCount').textContent = recentData.length;
                 }
                 
-                // Load total calls today from call_sessions_egypt
+                // Load total calls today
                 const today = new Date().toISOString().split('T')[0];
                 const { data: todayData, error: todayError } = await supabaseClient
-                    .from('call_sessions_egypt')
-                    .select('id', { count: 'exact' })
+                    .from('call_sessions')
+                    .select('id')
                     .gte('start_time_egypt', `${today}T00:00:00`)
                     .lt('start_time_egypt', `${today}T23:59:59`);
                     
@@ -539,36 +538,33 @@
             }
         }
 
-        // Load call quality summary from v_call_quality_summary
+        // Load call quality summary from call_sessions
         async function loadCallQualitySummary() {
             try {
                 const { data, error } = await supabaseClient
-                    .from('v_call_quality_summary')
-                    .select('*');
+                    .from('call_sessions')
+                    .select('call_quality')
+                    .not('call_quality', 'is', null); // استبعاد القيم الفارغة
                     
                 if (error) {
                     console.error('Error fetching call quality summary:', error);
                     return;
                 }
                 
-                // Prepare data for chart
-                const labels = [];
-                const values = [];
-                const colors = [];
-                
+                // تجميع البيانات يدوياً
+                const qualityCounts = {};
                 data.forEach(item => {
-                    const quality = item.call_quality;
-                    labels.push(quality.charAt(0).toUpperCase() + quality.slice(1));
-                    values.push(item.total);
-                    
-                    // Assign colors based on quality
-                    if (quality === 'good') {
-                        colors.push('#10B981');
-                    } else if (quality === 'bad') {
-                        colors.push('#EF4444');
-                    } else {
-                        colors.push('#6B7280');
-                    }
+                    const quality = item.call_quality || 'Unknown';
+                    qualityCounts[quality] = (qualityCounts[quality] || 0) + 1;
+                });
+                
+                // Prepare data for chart
+                const labels = Object.keys(qualityCounts);
+                const values = Object.values(qualityCounts);
+                const colors = labels.map(quality => {
+                    if (quality.toLowerCase() === 'good') return '#10B981';
+                    if (quality.toLowerCase() === 'bad') return '#EF4444';
+                    return '#6B7280';
                 });
                 
                 // Create or update chart
@@ -620,29 +616,44 @@
             }
         }
 
-        // Load top 5 agents from top_5_agents_today
+        // Load top 5 agents from call_sessions
         async function loadTopAgents() {
             try {
+                const today = new Date().toISOString().split('T')[0];
                 const { data, error } = await supabaseClient
-                    .from('top_5_agents_today')
-                    .select('*')
-                    .order('total_tickets', { ascending: false });
+                    .from('call_sessions')
+                    .select('agent_name')
+                    .gte('start_time_egypt', `${today}T00:00:00`)
+                    .lt('start_time_egypt', `${today}T23:59:59`);
                     
                 if (error) {
                     console.error('Error fetching top agents:', error);
                     return;
                 }
                 
+                // تجميع البيانات يدوياً
+                const agentCounts = {};
+                data.forEach(call => {
+                    const agent = call.agent_name || 'Unknown';
+                    agentCounts[agent] = (agentCounts[agent] || 0) + 1;
+                });
+                
+                // تحويل لـ array وترتيب تنازلي
+                const topAgents = Object.entries(agentCounts)
+                    .map(([agent_name, total_tickets]) => ({ agent_name, total_tickets }))
+                    .sort((a, b) => b.total_tickets - a.total_tickets)
+                    .slice(0, 5); // أول 5 فقط
+                
                 const topAgentsList = document.getElementById('topAgentsList');
                 
-                if (data.length === 0) {
+                if (topAgents.length === 0) {
                     topAgentsList.innerHTML = '<li class="top-agent-item"><span class="agent-name">No data available</span><span class="agent-count">-</span></li>';
                     return;
                 }
                 
-                topAgentsList.innerHTML = data.map(agent => `
+                topAgentsList.innerHTML = topAgents.map(agent => `
                     <li class="top-agent-item">
-                        <span class="agent-name">${agent.agent_name || 'Unknown'}</span>
+                        <span class="agent-name">${agent.agent_name}</span>
                         <span class="agent-count">${agent.total_tickets}</span>
                     </li>
                 `).join('');
@@ -652,13 +663,15 @@
             }
         }
 
-        // Load top scenario from top_scenario_today
+        // Load top scenario from call_sessions
         async function loadTopScenario() {
             try {
+                const today = new Date().toISOString().split('T')[0];
                 const { data, error } = await supabaseClient
-                    .from('top_scenario_today')
-                    .select('*')
-                    .single();
+                    .from('call_sessions')
+                    .select('scenario_title')
+                    .gte('start_time_egypt', `${today}T00:00:00`)
+                    .lt('start_time_egypt', `${today}T23:59:59`);
                     
                 if (error) {
                     console.error('Error fetching top scenario:', error);
@@ -671,10 +684,25 @@
                     return;
                 }
                 
+                // تجميع البيانات يدوياً
+                const scenarioCounts = {};
+                data.forEach(call => {
+                    const scenario = call.scenario_title || 'Unknown';
+                    scenarioCounts[scenario] = (scenarioCounts[scenario] || 0) + 1;
+                });
+                
+                // إيجاد السيناريو الأكثر تكراراً
+                let topScenario = { scenario_title: 'No data', total_runs: 0 };
+                Object.entries(scenarioCounts).forEach(([scenario_title, total_runs]) => {
+                    if (total_runs > topScenario.total_runs) {
+                        topScenario = { scenario_title, total_runs };
+                    }
+                });
+                
                 document.getElementById('topScenarioContainer').innerHTML = `
                     <div class="top-scenario-item">
-                        <span class="scenario-name">${data.scenario_title || 'Unknown'}</span>
-                        <span class="scenario-count">${data.total_runs}</span>
+                        <span class="scenario-name">${topScenario.scenario_title}</span>
+                        <span class="scenario-count">${topScenario.total_runs}</span>
                     </div>
                 `;
                 
@@ -699,7 +727,7 @@
                 
                 for (const date of dates) {
                     const { data, error } = await supabaseClient
-                        .from('call_sessions_egypt')
+                        .from('call_sessions')
                         .select('id', { count: 'exact' })
                         .gte('start_time_egypt', `${date}T00:00:00`)
                         .lt('start_time_egypt', `${date}T23:59:59`);
@@ -789,7 +817,7 @@
             try {
                 // Get all agents with their call counts
                 const { data, error } = await supabaseClient
-                    .from('call_sessions_egypt')
+                    .from('call_sessions')
                     .select('agent_name')
                     .gte('start_time_egypt', new Date().toISOString().split('T')[0] + 'T00:00:00');
                     
@@ -883,7 +911,7 @@
                 
                 // Get today's calls for calculations
                 const { data: todayCalls, error: todayError } = await supabaseClient
-                    .from('call_sessions_egypt')
+                    .from('call_sessions')
                     .select('*')
                     .gte('start_time_egypt', `${today}T00:00:00`)
                     .lt('start_time_egypt', `${today}T23:59:59`);
@@ -955,9 +983,21 @@
                     tbody.innerHTML = shimmer;
                 }
                 
+                const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
                 const { data, error } = await supabaseClient
-                    .from('recent_tickets')
-                    .select('*')
+                    .from('call_sessions')
+                    .select(`
+                        agent_name,
+                        agent_email,
+                        scenario_title,
+                        call_quality,
+                        quality_reason,
+                        start_time_egypt,
+                        end_time_egypt,
+                        duration_interval
+                    `)
+                    .eq('completed', true) // الجلسات المكتملة فقط
+                    .gte('end_time_egypt', tenMinutesAgo) // انتهت في آخر 10 دقائق
                     .order('end_time_egypt', { ascending: false })
                     .range(offset, offset + RECENT_TICKETS_PAGE_SIZE - 1);
                     
