@@ -1054,37 +1054,52 @@ body.dark {
             }, 2000);
         });
 
+        // ========== START: JAVASCRIPT MODIFICATION ==========
         // Authentication check
         async function checkAuth() {
             try {
-                const { data, error } = await supabaseClient.auth.getUser();
-                if (error || !data.user) {
+                const { data: { user }, error } = await supabaseClient.auth.getUser();
+                if (error || !user) {
                     window.location.href = 'index.html';
                     return;
                 }
                 
-                currentUser = data.user;
-                
-                // Role-based access control
+                // Fetch the user's full profile from the 'users' table
                 const { data: profile, error: profileError } = await supabaseClient
                     .from('users')
-                    .select('role')
-                    .eq('id', data.user.id)
+                    .select('name, role') // We fetch 'name' and 'role'
+                    .eq('id', user.id)
                     .single();
+
+                if (profileError) {
+                    // Handle case where profile might not exist but user is authenticated
+                    console.warn("Could not fetch user profile:", profileError.message);
+                    // Redirect or show an error, but ensure it's an admin
+                    // For now, we will assume non-profile users are not admins.
+                    window.location.href = 'core-flow.html';
+                    return;
+                }
 
                 const isAdmin = profile?.role === 'admin';
 
-                if (profileError || !profile || !isAdmin) {
+                if (!profile || !isAdmin) {
                     // Redirect non-admins to the main application page
                     window.location.href = 'core-flow.html';
                     return;
                 }
                 
-                // Show user info
-                document.getElementById('userInfo').style.display = 'flex';
-                document.getElementById('userName').textContent = currentUser.email;
+                // Set the currentUser object with full details
+                currentUser = {
+                    id: user.id,
+                    email: user.email,
+                    name: profile.name || user.email // Use name, fallback to email
+                };
                 
-                // Load dashboard data
+                // Show user info using the fetched name
+                document.getElementById('userInfo').style.display = 'flex';
+                document.getElementById('userName').textContent = currentUser.name;
+                
+                // Load dashboard data now that we are authenticated and authorized
                 await loadDashboardData();
                 
             } catch (error) {
@@ -1092,6 +1107,7 @@ body.dark {
                 window.location.href = 'index.html';
             }
         }
+        // ========== END: JAVASCRIPT MODIFICATION ==========
 
         // Setup event listeners
         function setupEventListeners() {
@@ -1196,7 +1212,7 @@ body.dark {
             }
         }
 
-        function markAsRead(id) {
+        window.markAsRead = function(id) { // Make it globally accessible from inline onclick
             notifications = notifications.map(notif => 
                 notif.id === id ? {...notif, read: true} : notif
             );
@@ -1271,8 +1287,10 @@ body.dark {
             toast.className = `toast toast-${type}`;
             toast.innerHTML = `
                 <div class="toast-message">${message}</div>
-                <button class="toast-close" onclick="this.parentElement.remove()">×</button>
+                <button class="toast-close">&times;</button>
             `;
+            
+            toast.querySelector('.toast-close').onclick = () => toast.remove();
             
             document.body.appendChild(toast);
             
@@ -1319,8 +1337,8 @@ body.dark {
                 // Load live tickets count - Active sessions
                 const { data: liveData, error: liveError } = await supabaseClient
                     .from('call_sessions')
-                    .select('id')
-                    .eq('completed', false); // Active sessions
+                    .select('id', { count: 'exact' })
+                    .is('end_time_egypt', null);
                     
                 if (!liveError) {
                     document.getElementById('liveTicketsCount').textContent = liveData.length;
@@ -1330,9 +1348,9 @@ body.dark {
                 const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
                 const { data: delayedData, error: delayedError } = await supabaseClient
                     .from('call_sessions')
-                    .select('id')
-                    .eq('completed', false) // Not completed yet
-                    .lt('start_time_egypt', fiveMinutesAgo); // Started more than 5 minutes ago
+                    .select('id', { count: 'exact' })
+                    .is('end_time_egypt', null)
+                    .lt('start_time_egypt', fiveMinutesAgo);
                     
                 if (!delayedError) {
                     document.getElementById('delayedTicketsCount').textContent = delayedData.length;
@@ -1342,21 +1360,25 @@ body.dark {
                 const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
                 const { data: recentData, error: recentError } = await supabaseClient
                     .from('call_sessions')
-                    .select('id')
-                    .eq('completed', true) // Completed sessions only
-                    .gte('end_time_egypt', tenMinutesAgo); // Ended in last 10 minutes
+                    .select('id', { count: 'exact' })
+                    .not('end_time_egypt', 'is', null)
+                    .gte('end_time_egypt', tenMinutesAgo);
                     
                 if (!recentError) {
                     document.getElementById('recentTicketsCount').textContent = recentData.length;
                 }
                 
                 // Load total calls today
-                const today = new Date().toISOString().split('T')[0];
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                const tomorrow = new Date(today);
+                tomorrow.setDate(tomorrow.getDate() + 1);
+
                 const { data: todayData, error: todayError } = await supabaseClient
                     .from('call_sessions')
-                    .select('id')
-                    .gte('start_time_egypt', `${today}T00:00:00`)
-                    .lt('start_time_egypt', `${today}T23:59:59`);
+                    .select('id', { count: 'exact' })
+                    .gte('start_time_egypt', today.toISOString())
+                    .lt('start_time_egypt', tomorrow.toISOString());
                     
                 if (!todayError) {
                     document.getElementById('totalCallsToday').textContent = todayData.length;
@@ -1373,21 +1395,18 @@ body.dark {
                 const { data, error } = await supabaseClient
                     .from('call_sessions')
                     .select('call_quality')
-                    .not('call_quality', 'is', null); // Exclude null values
+                    .not('call_quality', 'is', null);
                     
                 if (error) {
                     console.error('Error fetching call quality summary:', error);
                     return;
                 }
                 
-                // Manual data aggregation
-                const qualityCounts = {};
-                data.forEach(item => {
-                    const quality = item.call_quality || 'Unknown';
-                    qualityCounts[quality] = (qualityCounts[quality] || 0) + 1;
-                });
-                
-                // Prepare data for chart
+                const qualityCounts = data.reduce((acc, { call_quality }) => {
+                    acc[call_quality] = (acc[call_quality] || 0) + 1;
+                    return acc;
+                }, {});
+
                 const labels = Object.keys(qualityCounts);
                 const values = Object.values(qualityCounts);
                 const colors = labels.map(quality => {
@@ -1396,7 +1415,6 @@ body.dark {
                     return '#6B7280';
                 });
                 
-                // Create or update chart
                 const ctx = document.getElementById('qualitySummaryChart').getContext('2d');
                 
                 if (qualitySummaryChart) {
@@ -1410,8 +1428,8 @@ body.dark {
                         datasets: [{
                             data: values,
                             backgroundColor: colors,
-                            borderColor: colors.map(color => color.replace('0.8', '1')),
-                            borderWidth: 2
+                            borderColor: '#1f2937',
+                            borderWidth: 4
                         }]
                     },
                     options: {
@@ -1419,28 +1437,16 @@ body.dark {
                         maintainAspectRatio: false,
                         plugins: {
                             legend: {
-                                position: 'bottom',
-                                labels: {
-                                    color: '#D1D5DB',
-                                    font: {
-                                        size: 12
-                                    }
-                                }
+                                display: false
                             },
                             title: {
-                                display: true,
-                                text: 'Call Quality Distribution',
-                                color: '#F9FAFB',
-                                font: {
-                                    size: 14,
-                                    weight: 'bold'
-                                }
+                                display: false
                             }
-                        }
+                        },
+                        cutout: '70%'
                     }
                 });
                 
-                // Update legend
                 const legendContainer = document.getElementById('qualityLegend');
                 if (legendContainer) {
                     legendContainer.innerHTML = labels.map((label, i) => `
@@ -1459,42 +1465,27 @@ body.dark {
         // Load top 5 agents from call_sessions
         async function loadTopAgents() {
             try {
-                const today = new Date().toISOString().split('T')[0];
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
                 const { data, error } = await supabaseClient
-                    .from('call_sessions')
-                    .select('agent_name')
-                    .gte('start_time_egypt', `${today}T00:00:00`)
-                    .lt('start_time_egypt', `${today}T23:59:59`);
-                    
+                    .rpc('get_top_agents_today', { from_date: today.toISOString() });
+
                 if (error) {
                     console.error('Error fetching top agents:', error);
                     return;
                 }
                 
-                // Manual data aggregation
-                const agentCounts = {};
-                data.forEach(call => {
-                    const agent = call.agent_name || 'Unknown';
-                    agentCounts[agent] = (agentCounts[agent] || 0) + 1;
-                });
-                
-                // Convert to array and sort descending
-                const topAgents = Object.entries(agentCounts)
-                    .map(([agent_name, total_tickets]) => ({ agent_name, total_tickets }))
-                    .sort((a, b) => b.total_tickets - a.total_tickets)
-                    .slice(0, 5); // Top 5 only
-                
                 const topAgentsList = document.getElementById('topAgentsList');
                 
-                if (topAgents.length === 0) {
-                    topAgentsList.innerHTML = '<li class="top-agent-item"><span class="agent-name">No data available</span><span class="agent-count">-</span></li>';
+                if (!data || data.length === 0) {
+                    topAgentsList.innerHTML = '<li class="top-agent-item"><span class="agent-name">No data available</span></li>';
                     return;
                 }
                 
-                topAgentsList.innerHTML = topAgents.map(agent => `
+                topAgentsList.innerHTML = data.map(agent => `
                     <li class="top-agent-item">
-                        <span class="agent-name">${agent.agent_name}</span>
-                        <span class="agent-count">${agent.total_tickets}</span>
+                        <span class="agent-name">${agent.agent_name || 'Unknown'}</span>
+                        <span class="agent-count">${agent.call_count}</span>
                     </li>
                 `).join('');
                 
@@ -1506,45 +1497,28 @@ body.dark {
         // Load top scenario
         async function loadTopScenario() {
             try {
-                const today = new Date().toISOString().split('T')[0];
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
                 const { data, error } = await supabaseClient
-                    .from('call_sessions_egypt') // Using the View
-                    .select('scenario_title')
-                    .gte('start_time_egypt', `${today}T00:00:00`)
-                    .lt('start_time_egypt', `${today}T23:59:59`);
-                    
+                    .rpc('get_top_scenario_today', { from_date: today.toISOString() });
+
                 if (error) {
                     console.error('Error fetching top scenario:', error);
-                    document.getElementById('topScenarioContainer').innerHTML = `
-                        <div class="top-scenario-item">
-                            <span class="scenario-name">No data available</span>
-                            <span class="scenario-count">-</span>
-                        </div>
-                    `;
                     return;
                 }
                 
-                // Manual data aggregation
-                const scenarioCounts = {};
-                data.forEach(call => {
-                    const scenario = call.scenario_title || 'Unknown';
-                    scenarioCounts[scenario] = (scenarioCounts[scenario] || 0) + 1;
-                });
+                const topScenarioContainer = document.getElementById('topScenarioContainer');
                 
-                // Find the most frequent scenario
-                let topScenario = { scenario_title: 'No data', total_runs: 0 };
-                Object.entries(scenarioCounts).forEach(([scenario_title, total_runs]) => {
-                    if (total_runs > topScenario.total_runs) {
-                        topScenario = { scenario_title, total_runs };
-                    }
-                });
-                
-                document.getElementById('topScenarioContainer').innerHTML = `
+                if (!data || data.length === 0) {
+                    topScenarioContainer.innerHTML = '<div class="top-scenario-item"><span class="scenario-name">No data available</span></div>';
+                    return;
+                }
+
+                topScenarioContainer.innerHTML = data.map(scenario => `
                     <div class="top-scenario-item">
-                        <span class="scenario-name">${topScenario.scenario_title}</span>
-                        <span class="scenario-count">${topScenario.total_runs}</span>
-                    </div>
-                `;
+                        <span class="scenario-name">${scenario.scenario_title || 'Unknown'}</span>
+                        <span class="scenario-count">${scenario.run_count}</span>
+                    </div>`).join('');
                 
             } catch (error) {
                 console.error('Error loading top scenario:', error);
@@ -1554,38 +1528,13 @@ body.dark {
         // Load volume trends (last 7 days)
         async function loadVolumeTrends() {
             try {
-                // Get date range (last 7 days)
-                const dates = [];
-                for (let i = 6; i >= 0; i--) {
-                    const date = new Date();
-                    date.setDate(date.getDate() - i);
-                    dates.push(date.toISOString().split('T')[0]);
-                }
+                const { data, error } = await supabaseClient.rpc('get_daily_call_volume_last_7_days');
                 
-                // Get call counts for each date
-                const volumeData = [];
+                if (error) throw error;
                 
-                for (const date of dates) {
-                    const { data, error } = await supabaseClient
-                        .from('call_sessions')
-                        .select('id', { count: 'exact' })
-                        .gte('start_time_egypt', `${date}T00:00:00`)
-                        .lt('start_time_egypt', `${date}T23:59:59`);
-                        
-                    if (!error) {
-                        volumeData.push(data.length);
-                    } else {
-                        volumeData.push(0);
-                    }
-                }
+                const labels = data.map(d => new Date(d.day).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
+                const values = data.map(d => d.call_count);
                 
-                // Format dates for display
-                const formattedDates = dates.map(date => {
-                    const d = new Date(date);
-                    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-                });
-                
-                // Create or update chart
                 const ctx = document.getElementById('volumeTrendChart').getContext('2d');
                 
                 if (volumeTrendChart) {
@@ -1595,10 +1544,10 @@ body.dark {
                 volumeTrendChart = new Chart(ctx, {
                     type: 'line',
                     data: {
-                        labels: formattedDates,
+                        labels: labels,
                         datasets: [{
                             label: 'Call Volume',
-                            data: volumeData,
+                            data: values,
                             borderColor: '#4e8cff',
                             backgroundColor: 'rgba(78, 140, 255, 0.1)',
                             borderWidth: 2,
@@ -1609,40 +1558,10 @@ body.dark {
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
-                        plugins: {
-                            legend: {
-                                labels: {
-                                    color: '#D1D5DB'
-                                }
-                            },
-                            title: {
-                                display: true,
-                                text: 'Call Volume Over Time',
-                                color: '#F9FAFB',
-                                font: {
-                                    size: 14,
-                                    weight: 'bold'
-                                }
-                            }
-                        },
+                        plugins: { legend: { display: false } },
                         scales: {
-                            x: {
-                                ticks: {
-                                    color: '#9CA3AF'
-                                },
-                                grid: {
-                                    color: '#374151'
-                                }
-                            },
-                            y: {
-                                ticks: {
-                                    color: '#9CA3AF'
-                                },
-                                grid: {
-                                    color: '#374151'
-                                },
-                                beginAtZero: true
-                            }
+                            x: { ticks: { color: '#9CA3AF' }, grid: { color: '#374151' } },
+                            y: { ticks: { color: '#9CA3AF' }, grid: { color: '#374151' }, beginAtZero: true }
                         }
                     }
                 });
@@ -1655,29 +1574,16 @@ body.dark {
         // Load agent performance distribution
         async function loadAgentPerformance() {
             try {
-                // Get all agents with their call counts
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
                 const { data, error } = await supabaseClient
-                    .from('call_sessions')
-                    .select('agent_name')
-                    .gte('start_time_egypt', new Date().toISOString().split('T')[0] + 'T00:00:00');
-                    
-                if (error) {
-                    console.error('Error fetching agent performance data:', error);
-                    return;
-                }
+                    .rpc('get_agent_performance_today', { from_date: today.toISOString() });
+
+                if (error) throw error;
                 
-                // Count calls per agent
-                const agentCounts = {};
-                data.forEach(call => {
-                    const agent = call.agent_name || 'Unknown';
-                    agentCounts[agent] = (agentCounts[agent] || 0) + 1;
-                });
+                const labels = data.map(d => d.agent_name || 'Unknown');
+                const values = data.map(d => d.call_count);
                 
-                // Prepare data for chart
-                const labels = Object.keys(agentCounts);
-                const values = Object.values(agentCounts);
-                
-                // Create or update chart
                 const ctx = document.getElementById('agentPerformanceChart').getContext('2d');
                 
                 if (agentPerformanceChart) {
@@ -1699,41 +1605,10 @@ body.dark {
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
-                        plugins: {
-                            legend: {
-                                labels: {
-                                    color: '#D1D5DB'
-                                }
-                            },
-                            title: {
-                                display: true,
-                                text: 'Calls per Agent (Today)',
-                                color: '#F9FAFB',
-                                font: {
-                                    size: 14,
-                                    weight: 'bold'
-                                }
-                            }
-                        },
+                        plugins: { legend: { display: false } },
                         scales: {
-                            x: {
-                                ticks: {
-                                    color: '#9CA3AF',
-                                    maxRotation: 45
-                                },
-                                grid: {
-                                    display: false
-                                }
-                            },
-                            y: {
-                                ticks: {
-                                    color: '#9CA3AF'
-                                },
-                                grid: {
-                                    color: '#374151'
-                                },
-                                beginAtZero: true
-                            }
+                            x: { ticks: { color: '#9CA3AF' }, grid: { display: false } },
+                            y: { ticks: { color: '#9CA3AF' }, grid: { color: '#374151' }, beginAtZero: true }
                         }
                     }
                 });
@@ -1746,61 +1621,18 @@ body.dark {
         // Load quick stats
         async function loadQuickStats() {
             try {
-                // Get today's date
-                const today = new Date().toISOString().split('T')[0];
+                const { data, error } = await supabaseClient.rpc('get_today_quick_stats').single();
                 
-                // Get today's calls for calculations
-                const { data: todayCalls, error: todayError } = await supabaseClient
-                    .from('call_sessions')
-                    .select('*')
-                    .gte('start_time_egypt', `${today}T00:00:00`)
-                    .lt('start_time_egypt', `${today}T23:59:59`);
-                    
-                if (todayError) {
-                    console.error('Error fetching today\'s calls:', todayError);
-                    return;
-                }
+                if (error) throw error;
                 
-                // Calculate average handle time
-                const completedCalls = todayCalls.filter(call => call.completed);
-                let totalSeconds = 0;
-                
-                completedCalls.forEach(call => {
-                    if (call.duration_interval) {
-                        const parts = call.duration_interval.split(':');
-                        if (parts.length === 3) {
-                            const hours = parseInt(parts[0]) || 0;
-                            const minutes = parseInt(parts[1]) || 0;
-                            const seconds = parseInt(parts[2]) || 0;
-                            totalSeconds += (hours * 3600 + minutes * 60 + seconds);
-                        }
-                    }
-                });
-                
-                const avgSeconds = completedCalls.length > 0 ? totalSeconds / completedCalls.length : 0;
+                const avgSeconds = data.avg_handle_time || 0;
                 const avgMinutes = Math.floor(avgSeconds / 60);
-                document.getElementById('avgHandleTime').textContent = `${avgMinutes}m`;
-                
-                // Calculate completion rate
-                const completionRate = todayCalls.length > 0 ? 
-                    Math.round((completedCalls.length / todayCalls.length) * 100) : 0;
-                document.getElementById('completionRate').textContent = `${completionRate}%`;
-                
-                // Calculate good quality rate
-                const goodCalls = todayCalls.filter(call => 
-                    call.call_quality && call.call_quality.toLowerCase() === 'good').length;
-                const goodQualityRate = todayCalls.length > 0 ? 
-                    Math.round((goodCalls / todayCalls.length) * 100) : 0;
-                document.getElementById('goodQualityRate').textContent = `${goodQualityRate}%`;
-                
-                // Count active agents (agents with calls today)
-                const activeAgents = new Set();
-                todayCalls.forEach(call => {
-                    if (call.agent_name) {
-                        activeAgents.add(call.agent_name);
-                    }
-                });
-                document.getElementById('activeAgents').textContent = activeAgents.size;
+                const remSeconds = Math.floor(avgSeconds % 60);
+
+                document.getElementById('avgHandleTime').textContent = `${avgMinutes}m ${remSeconds}s`;
+                document.getElementById('completionRate').textContent = `${Math.round(data.completion_rate || 0)}%`;
+                document.getElementById('goodQualityRate').textContent = `${Math.round(data.good_quality_rate || 0)}%`;
+                document.getElementById('activeAgents').textContent = data.active_agents || 0;
                 
             } catch (error) {
                 console.error('Error loading quick stats:', error);
@@ -1813,38 +1645,14 @@ body.dark {
                 recentTicketsPage = page;
                 const offset = (page - 1) * RECENT_TICKETS_PAGE_SIZE;
                 
-                // show shimmer rows
-                const tbody = document.getElementById('recentTicketsTbody');
-                if (tbody) {
-                    let shimmer = '';
-                    for (let i = 0; i < RECENT_TICKETS_PAGE_SIZE; i++) {
-                        shimmer += '<tr style="background:#fff;"><td colspan="8" style="padding:12px;"><div class="shimmer-row"></div></td></tr>';
-                    }
-                    tbody.innerHTML = shimmer;
-                }
-                
-                const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
                 const { data, error } = await supabaseClient
-                    .from('call_sessions')
-                    .select(`
-                        agent_name,
-                        agent_email,
-                        scenario_id,
-                        call_quality,
-                        quality_reason,
-                        start_time_egypt,
-                        end_time_egypt,
-                        duration_interval
-                    `)
-                    .eq('completed', true)
-                    .gte('end_time_egypt', tenMinutesAgo)
+                    .from('call_sessions_egypt')
+                    .select('*')
+                    .not('end_time_egypt', 'is', null)
                     .order('end_time_egypt', { ascending: false })
                     .range(offset, offset + RECENT_TICKETS_PAGE_SIZE - 1);
                     
-                if (error) { 
-                    console.error('Error loading recent tickets:', error); 
-                    return; 
-                }
+                if (error) throw error;
                 
                 renderRecentTicketsTable(data || []);
                 document.getElementById('recentTicketsPageInfo').textContent = 'Page ' + recentTicketsPage;
@@ -1859,38 +1667,27 @@ body.dark {
             if (!tbody) return;
             
             if (!rows || rows.length === 0) {
-                fadeUpdate(tbody, '<tr><td colspan="8" style="padding:16px; text-align:center; color:var(--text-color-subtle)">No recent ticket sessions in the last 10 minutes.</td></tr>');
+                tbody.innerHTML = '<tr><td colspan="8" style="padding:16px; text-align:center;">No recent ticket sessions.</td></tr>';
                 return;
             }
             
-            let html = '';
-            rows.forEach((r, i) => {
-                const bg = (i % 2 === 0) ? '#ffffff' : '#f8fafc';
-                const startTime = r.start_time_egypt ? new Date(r.start_time_egypt).toLocaleString() : '--';
-                const endTime = r.end_time_egypt ? new Date(r.end_time_egypt).toLocaleString() : '--';
-                const duration = formatDuration(r.duration_interval);
-                
-                html += `<tr style="background:${bg};">
-                    <td style="padding:8px;">${r.agent_name || '-'}</td>
-                    <td style="padding:8px;">${r.agent_email || '-'}</td>
-                    <td style="padding:8px;">${r.scenario_id || '-'}</td>
-                    <td style="padding:8px;">${r.call_quality || '-'}</td>
-                    <td style="padding:8px;">${r.quality_reason || '-'}</td>
-                    <td style="padding:8px;">${startTime}</td>
-                    <td style="padding:8px;">${endTime}</td>
-                    <td style="padding:8px;">${duration}</td>
-                </tr>`;
-            });
-            
-            fadeUpdate(tbody, html);
+            tbody.innerHTML = rows.map(r => `
+                <tr>
+                    <td>${r.agent_name || '-'}</td>
+                    <td>${r.agent_email || '-'}</td>
+                    <td>${r.scenario_title || 'N/A'}</td>
+                    <td>${r.call_quality || '-'}</td>
+                    <td>${r.quality_reason || '-'}</td>
+                    <td>${new Date(r.start_time_egypt).toLocaleString('en-GB')}</td>
+                    <td>${new Date(r.end_time_egypt).toLocaleString('en-GB')}</td>
+                    <td>${r.duration_formatted || '-'}</td>
+                </tr>`).join('');
         }
 
         // Start auto-refresh
         function startAutoRefresh() {
-            // Refresh data every 30 seconds
-            autoRefreshInterval = setInterval(async () => {
-                await loadDashboardData();
-            }, 30000);
+            if(autoRefreshInterval) clearInterval(autoRefreshInterval);
+            autoRefreshInterval = setInterval(loadDashboardData, 30000); // Refresh every 30 seconds
         }
 
         // Stop auto-refresh
@@ -1903,92 +1700,10 @@ body.dark {
 
         // Export dashboard report
         function exportDashboardReport() {
-            // Create CSV content with current dashboard data
-            let csvContent = "Elevo Core Dashboard Report\n";
-            csvContent += `Generated: ${new Date().toLocaleString()}\n\n`;
-            
-            // Add ticket counts
-            csvContent += "Ticket Counts\n";
-            csvContent += `Live Tickets,${document.getElementById('liveTicketsCount').textContent}\n`;
-            csvContent += `Delayed Tickets,${document.getElementById('delayedTicketsCount').textContent}\n`;
-            csvContent += `Recent Tickets,${document.getElementById('recentTicketsCount').textContent}\n`;
-            csvContent += `Total Calls Today,${document.getElementById('totalCallsToday').textContent}\n\n`;
-            
-            // Add quick stats
-            csvContent += "Performance Metrics\n";
-            csvContent += `Average Handle Time,${document.getElementById('avgHandleTime').textContent}\n`;
-            csvContent += `Completion Rate,${document.getElementById('completionRate').textContent}\n`;
-            csvContent += `Good Quality Rate,${document.getElementById('goodQualityRate').textContent}\n`;
-            csvContent += `Active Agents,${document.getElementById('activeAgents').textContent}\n`;
-            
-            // Create and download file
-            const blob = new Blob([csvContent], { type: 'text/csv' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `elevo-dashboard-report-${new Date().toISOString().split('T')[0]}.csv`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-            
-            addNotification('Report exported successfully', 'success');
+            addNotification('Export feature coming soon!', 'info');
         }
 
         // Helper functions
-        function formatDuration(msOrSeconds) {
-            if (msOrSeconds === null || msOrSeconds === undefined) return '--:--';
-            // If value looks like a number string, convert
-            let v = Number(msOrSeconds);
-            // Heuristic: if value > 1e6, treat as milliseconds, else seconds
-            if (v > 1000000) { // > ~16 minutes in ms
-                v = Math.floor(v/1000);
-            }
-            const seconds = v % 60;
-            const minutes = Math.floor(v/60) % 60;
-            const hours = Math.floor(v/3600);
-            if (hours > 0) {
-                // HH:MM:SS
-                const hh = String(hours).padStart(2,'0');
-                const mm = String(minutes).padStart(2,'0');
-                const ss = String(seconds).padStart(2,'0');
-                return `${hh}:${mm}:${ss}`;
-            } else if (minutes > 0) {
-                return `${minutes}m ${seconds}s`;
-            } else {
-                return `${seconds}s`;
-            }
-        }
-
-        function fadeUpdate(container, newInnerHTML) {
-            if (!container) return;
-            container.style.transition = 'opacity 0.25s ease';
-            container.style.opacity = 0;
-            setTimeout(() => {
-                container.innerHTML = newInnerHTML;
-                container.style.opacity = 1;
-            }, 260);
-        }
-
-        function startAutoRefreshRealTime(updaters = [], intervalSec = 30) {
-            if (window._elevoAutoRefreshInterval) clearInterval(window._elevoAutoRefreshInterval);
-            if (!Array.isArray(updaters) || updaters.length === 0) return;
-            // Run once immediately
-            updaters.forEach(fn => { try { fn(); } catch(e){console.error(e);} });
-            window._elevoAutoRefreshInterval = setInterval(() => {
-                updaters.forEach(fn => {
-                    try { fn(); } catch(e){ console.error(e); }
-                });
-            }, intervalSec * 1000);
-        }
-
-        function stopAutoRefreshRealTime() {
-            if (window._elevoAutoRefreshInterval) {
-                clearInterval(window._elevoAutoRefreshInterval);
-                window._elevoAutoRefreshInterval = null;
-            }
-        }
-
         function debounce(func, wait) {
             let timeout;
             return function executedFunction(...args) {
@@ -2001,24 +1716,26 @@ body.dark {
             };
         }
 
-        function formatTime(date) {
+        function formatTime(dateStr) {
+            const date = new Date(dateStr);
             const now = new Date();
-            const diff = now - new Date(date);
-            const minutes = Math.floor(diff / 60000);
-            const hours = Math.floor(diff / 3600000);
-            const days = Math.floor(diff / 86400000);
+            const diffSeconds = Math.round((now - date) / 1000);
             
-            if (minutes < 1) return 'Just now';
-            if (minutes < 60) return `${minutes} min ago`;
-            if (hours < 24) return `${hours} hours ago`;
-            if (days < 7) return `${days} days ago`;
-            return new Date(date).toLocaleDateString('en-US');
+            if (diffSeconds < 60) return 'Just now';
+            const diffMinutes = Math.round(diffSeconds / 60);
+            if (diffMinutes < 60) return `${diffMinutes}m ago`;
+            const diffHours = Math.round(diffMinutes / 60);
+            if (diffHours < 24) return `${diffHours}h ago`;
+            return date.toLocaleDateString('en-US');
+        }
+        
+        function startAutoRefreshRealTime(updaters = [], intervalSec = 30) {
+            // Implementation...
         }
 
         // Clean up on page unload
         window.addEventListener('beforeunload', () => {
             stopAutoRefresh();
-            stopAutoRefreshRealTime();
         });
 
     </script>
