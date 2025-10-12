@@ -1,184 +1,143 @@
-
-// role-check.js
-// Shared Role-Based Access Control (RBAC) script.
-// Uses existing window.supabase if available (Supabase JS v2).
-// If window.supabase is not available, the script will warn and do nothing.
-//
-// Behavior:
-// - Determines page type (admin-only pages) using filename/title heuristics.
-// - Fetches current user and their role from 'users' table.
-// - If the role is not authorized for this page, shows a styled popup overlay (English).
-//
-// Note: Ensure your pages include Supabase client (window.supabase) or modify this file to init it.
-
-(async function(){
-  // small helper
-  const sleep = ms => new Promise(r => setTimeout(r, ms));
-
-  // Determine allowed roles per page
-  const pathname = location.pathname.toLowerCase();
-  const title = (document.title || "").toLowerCase();
-
-  // default: allow everyone
-  let allowedRoles = null; // null means allow all authenticated users
-
-  // heuristics for admin pages (matches filenames or title keywords)
-  const isAdminPage = pathname.includes('dashboard admin') || title.includes('admin dashboard') || pathname.includes('dashboard-admin') || pathname.includes('admin-dashboard');
-  const isRtmPage = pathname.includes('rtm') || title.includes('rtm dashboard') || pathname.includes('rtm-dashboard');
-
-  if (isAdminPage || isRtmPage) {
-    allowedRoles = ['admin', 'manager'];
-  } else {
-    // other pages (core flow, agent portal) allow all authenticated users (agents, admin, manager)
-    allowedRoles = ['agent', 'admin', 'manager'];
-  }
-
-  // If user isn't authenticated, don't block — let page handle login flow.
-  // Check for window.supabase
-  if (!window.supabase || typeof window.supabase.auth?.getUser !== 'function') {
-    console.warn('[role-check] window.supabase or supabase.auth.getUser() not found. Skipping RBAC check. If you want role-check to work, ensure Supabase client is initialized as window.supabase (v2).');
-    return;
-  }
-
-  try {
-    const userRes = await window.supabase.auth.getUser();
-    const user = userRes?.data?.user;
-    if (!user) {
-      // not logged in — do not block here
-      return;
+// role-check.js - نظام التحقق من الصلاحيات المشترك
+class RoleChecker {
+    constructor(supabase) {
+        this.supabase = supabase;
+        this.currentUser = null;
+        this.userRole = null;
     }
 
-    // fetch role from users table
-    const { data, error } = await window.supabase
-      .from('users')
-      .select('role')
-      .eq('id', user.id)
-      .single();
+    // التحقق من صلاحية المستخدم
+    async checkUserRole() {
+        try {
+            const { data: { user } } = await this.supabase.auth.getUser();
+            if (!user) return null;
 
-    if (error || !data) {
-      console.warn('[role-check] could not fetch role for user:', error);
-      return;
+            const { data: profile, error } = await this.supabase
+                .from('users')
+                .select('role')
+                .eq('id', user.id)
+                .single();
+
+            if (error) {
+                console.error('Error fetching user role:', error);
+                return null;
+            }
+
+            this.currentUser = user;
+            this.userRole = profile?.role || 'agent';
+            return this.userRole;
+        } catch (error) {
+            console.error('Error in checkUserRole:', error);
+            return null;
+        }
     }
 
-    const role = (data.role || '').toLowerCase();
-
-    // if allowedRoles is null -> allow everyone
-    if (Array.isArray(allowedRoles) && !allowedRoles.includes(role)) {
-      // show popup
-      showAccessPopup(role, allowedRoles);
-    } else {
-      // allowed — nothing to do
+    // التحقق من صلاحية المدير أو المسؤول
+    hasAdminAccess() {
+        return this.userRole === 'admin' || this.userRole === 'manager';
     }
 
-  } catch (e) {
-    console.error('[role-check] unexpected error', e);
-  }
+    // التحقق من صلاحية الوكيل
+    hasAgentAccess() {
+        return this.userRole === 'agent' || this.hasAdminAccess();
+    }
 
-  // creates and shows overlay popup
-  function showAccessPopup(role, allowedRoles) {
-    // prevent multiple popups
-    if (document.getElementById('rbac-overlay')) return;
+    // التحقق من صلاحية محددة
+    hasRole(role) {
+        return this.userRole === role;
+    }
 
-    // overlay
-    const overlay = document.createElement('div');
-    overlay.id = 'rbac-overlay';
-    overlay.style.position = 'fixed';
-    overlay.style.inset = '0';
-    overlay.style.background = 'rgba(2,6,23,0.6)';
-    overlay.style.display = 'flex';
-    overlay.style.alignItems = 'center';
-    overlay.style.justifyContent = 'center';
-    overlay.style.zIndex = '99999';
-    overlay.style.backdropFilter = 'blur(4px)';
+    // إنشاء نافذة تقييد الوصول
+    createAccessDeniedModal(message = "You don't have permission to view this page. This section is available for Admins and Managers only.") {
+        const modal = document.createElement('div');
+        modal.id = 'accessDeniedModal';
+        modal.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 10000;
+            backdrop-filter: blur(8px);
+        `;
 
-    // popup box
-    const box = document.createElement('div');
-    box.id = 'rbac-box';
-    box.style.maxWidth = '520px';
-    box.style.width = '92%';
-    box.style.background = 'linear-gradient(180deg, rgba(17,24,39,0.98), rgba(31,41,55,0.98))';
-    box.style.border = '1px solid rgba(99,102,241,0.12)';
-    box.style.borderRadius = '12px';
-    box.style.padding = '26px';
-    box.style.boxShadow = '0 10px 30px rgba(0,0,0,0.6)';
-    box.style.color = '#e6eef8';
-    box.style.fontFamily = 'Inter, Poppins, system-ui, sans-serif';
+        modal.innerHTML = `
+            <div class="access-denied-content" style="
+                background: linear-gradient(145deg, #2b2b3d, #242436);
+                padding: 3rem;
+                border-radius: 20px;
+                text-align: center;
+                max-width: 500px;
+                width: 90%;
+                border: 1px solid #444444;
+                box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+                color: #f0f0f0;
+                position: relative;
+                overflow: hidden;
+            ">
+                <div style="margin-bottom: 2rem;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="#ff6b6b" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom: 1.5rem;">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="12" y1="8" x2="12" y2="12"></line>
+                        <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                    </svg>
+                    <h3 style="margin: 0 0 1rem 0; font-size: 1.8rem; font-weight: 700; color: #ff6b6b;">Access Restricted</h3>
+                    <p style="margin: 0; line-height: 1.6; color: #a0a0b0; font-size: 1.1rem;">${message}</p>
+                </div>
+                <button id="returnToDashboardBtn" class="action-button primary-button" style="
+                    background: linear-gradient(135deg, #4e8cff, #3d7eff);
+                    color: white;
+                    border: none;
+                    border-radius: 12px;
+                    padding: 1rem 2rem;
+                    font-size: 1.1rem;
+                    font-weight: 600;
+                    cursor: pointer;
+                    transition: all 0.3s ease;
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 0.5rem;
+                ">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                        <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                    </svg>
+                    Back to Dashboard
+                </button>
+            </div>
+        `;
 
-    // title
-    const title = document.createElement('h2');
-    title.textContent = '⚠️ Access Restricted';
-    title.style.margin = '0 0 8px 0';
-    title.style.fontSize = '20px';
-    title.style.letterSpacing = '0.2px';
+        document.body.appendChild(modal);
 
-    // message
-    const msg = document.createElement('p');
-    msg.textContent = 'This page is for admins only.';
-    msg.style.margin = '0 0 18px 0';
-    msg.style.color = '#c7d2fe';
+        // إضافة تأثيرات تفاعلية للأزرار
+        const returnBtn = document.getElementById('returnToDashboardBtn');
+        returnBtn.addEventListener('mouseenter', function() {
+            this.style.transform = 'translateY(-2px)';
+            this.style.boxShadow = '0 6px 20px rgba(78, 140, 255, 0.4)';
+        });
+        returnBtn.addEventListener('mouseleave', function() {
+            this.style.transform = 'translateY(0)';
+            this.style.boxShadow = 'none';
+        });
+        returnBtn.addEventListener('click', function() {
+            window.location.href = 'core-flow.html';
+        });
 
-    // small info
-    const info = document.createElement('p');
-    info.textContent = `Your role: ${role || 'unknown'}  •  Required: ${allowedRoles.join(', ')}`;
-    info.style.margin = '0 0 18px 0';
-    info.style.fontSize = '13px';
-    info.style.color = '#9ca3af';
+        return modal;
+    }
 
-    // buttons container
-    const actions = document.createElement('div');
-    actions.style.display = 'flex';
-    actions.style.gap = '10px';
-    actions.style.justifyContent = 'flex-end';
+    // إخفاء نافذة تقييد الوصول
+    hideAccessDeniedModal() {
+        const modal = document.getElementById('accessDeniedModal');
+        if (modal) {
+            modal.remove();
+        }
+    }
+}
 
-    // back button
-    const backBtn = document.createElement('button');
-    backBtn.textContent = 'Back to Dashboard';
-    backBtn.style.padding = '10px 14px';
-    backBtn.style.borderRadius = '10px';
-    backBtn.style.border = 'none';
-    backBtn.style.cursor = 'pointer';
-    backBtn.style.fontWeight = '600';
-    backBtn.style.background = 'linear-gradient(90deg,#6366f1,#58a6ff)';
-    backBtn.style.color = 'white';
-    backBtn.onclick = () => {
-      // try to navigate to agent portal or core flow
-      const fallback = '/agent-portal core flow .html';
-      // If current page has an agent dashboard link, prefer that; otherwise fallback
-      window.location.href = fallback;
-    };
-
-    // close button (dismiss overlay)
-    const closeBtn = document.createElement('button');
-    closeBtn.textContent = 'Close';
-    closeBtn.style.padding = '10px 14px';
-    closeBtn.style.borderRadius = '10px';
-    closeBtn.style.border = '1px solid rgba(99,102,241,0.14)';
-    closeBtn.style.cursor = 'pointer';
-    closeBtn.style.fontWeight = '600';
-    closeBtn.style.background = 'transparent';
-    closeBtn.style.color = '#e6eef8';
-    closeBtn.onclick = () => {
-      overlay.remove();
-    };
-
-    actions.appendChild(closeBtn);
-    actions.appendChild(backBtn);
-
-    // append elements
-    box.appendChild(title);
-    box.appendChild(msg);
-    box.appendChild(info);
-    box.appendChild(actions);
-    overlay.appendChild(box);
-    document.body.appendChild(overlay);
-
-    // prevent interaction with background
-    document.body.style.pointerEvents = 'none';
-    box.style.pointerEvents = 'auto';
-    // restore pointer events when overlay removed
-    overlay.addEventListener('remove', () => {
-      document.body.style.pointerEvents = '';
-    });
-  }
-
-})();
+// إنشاء نسخة عامة للاستخدام في جميع الصفحات
+window.RoleChecker = RoleChecker;
