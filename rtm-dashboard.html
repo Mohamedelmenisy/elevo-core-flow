@@ -483,6 +483,7 @@ body.dark {
 
     <div class="app-container" id="appContainerContent" style="display: none;">
         
+<!-- ========== START: HEADER (تم التعديل هنا) ========== -->
 <header class="app-header" style="width: 100%; background: #111827; border-bottom: 1px solid #1f2937; box-shadow: 0 4px 12px rgba(0,0,0,0.3); display: flex; justify-content: space-between; align-items: center; padding: 1rem 2rem;">
   <div class="logo-container" style="display: flex; align-items: center; gap: 0.75rem;">
     <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="color: #4e8cff; width: 32px; height: 32px;">
@@ -494,14 +495,20 @@ body.dark {
   </div>
   <div class="header-controls" style="display: flex; align-items: center; gap: 1.25rem;">
     <a href="core-flow.html" class="nav-link" style="color: #d1d5db; text-decoration: none; font-weight: 500; transition: 0.3s;">Core Flow</a>
-    <a href="dashboard.html" class="nav-link" style="color: #d1d5db; text-decoration: none; font-weight: 500; transition: 0.3s;">Dashboard</a>
-    <a href="agent-portal.html" class="nav-link" style="color: #d1d5db; text-decoration: none; font-weight: 500; transition: 0.3s;">Agent Portal</a>
-    <div class="user-info" style="display: flex; align-items: center; gap: 0.75rem;">
+    
+    <!-- تم إضافة id="adminDashboardLink" -->
+    <a href="dashboard.html" class="nav-link" id="adminDashboardLink" style="color: #d1d5db; text-decoration: none; font-weight: 500; transition: 0.3s;">Dashboard</a>
+    
+    <!-- تم إضافة id="agentPortalLink" -->
+    <a href="agent-portal.html" class="nav-link" id="agentPortalLink" style="color: #d1d5db; text-decoration: none; font-weight: 500; transition: 0.3s;">Agent Portal</a>
+
+    <div class="user-info" id="userInfo" style="display: flex; align-items: center; gap: 0.75rem;">
       <span id="userName" style="color: #d1d5db; font-weight: 500;">User</span>
       <button id="logoutButton" class="logout-btn" style="background: linear-gradient(135deg, #4e8cff, #60a5fa); color: white; border: none; border-radius: 8px; padding: 0.6rem 1rem; font-weight: 600; cursor: pointer;">Logout</button>
     </div>
   </div>
 </header>
+<!-- ========== END: HEADER ========== -->
 
 
         <main class="app-main dashboard-main">
@@ -657,7 +664,7 @@ body.dark {
             if (storedUserData && storedUserData.id === session.user.id) {
                 currentUser = storedUserData;
             } else {
-                const { data: profile } = await supabase.from('users').select('name, is_admin').eq('id', session.user.id).single();
+                const { data: profile } = await supabase.from('users').select('name, is_admin, role').eq('id', session.user.id).single();
                 currentUser = {
                     id: session.user.id,
                     email: session.user.email,
@@ -697,12 +704,20 @@ body.dark {
         }
 
         function setupUI() {
-            userNameSpan.textContent = currentUser.name;
-            document.getElementById('userInfo').style.display = 'flex';
-            if(currentUser.isAdmin) {
-                if (adminDashboardLink) adminDashboardLink.style.display = 'inline-block';
+            // هذا التعديل يضمن عرض الاسم بشكل صحيح ويتحقق من وجود العناصر
+            userNameSpan.textContent = currentUser.name || currentUser.email;
+            if(document.getElementById('userInfo')) {
+                document.getElementById('userInfo').style.display = 'flex';
             }
-            if (agentPortalLink) agentPortalLink.style.display = 'inline-block';
+            
+            if(currentUser.isAdmin) {
+                if (adminDashboardLink) {
+                    adminDashboardLink.style.display = 'inline-block';
+                }
+            }
+            if (agentPortalLink) {
+                agentPortalLink.style.display = 'inline-block';
+            }
         }
 
         async function fetchInitialData() {
@@ -823,7 +838,7 @@ body.dark {
                 
                 const ticketStartTime = new Date(ticket.start_time_egypt).getTime();
                 const insertBeforeRow = Array.from(liveUnifiedTableBody.children).find(r => 
-                    new Date(r.dataset.startTime).getTime() < ticketStartTime
+                    r.dataset.startTime && (new Date(r.dataset.startTime).getTime() < ticketStartTime)
                 );
 
                 liveUnifiedTableBody.insertBefore(row, insertBeforeRow || null);
@@ -879,9 +894,7 @@ body.dark {
         }
         
         function updateTableVisibility() {
-            const hasRows = liveUnifiedTableBody.children.length > 1 || 
-                           (liveUnifiedTableBody.children.length === 1 && 
-                            !liveUnifiedTableBody.children[0].classList.contains('placeholder-row'));
+            const hasRows = Array.from(liveUnifiedTableBody.children).some(child => !child.classList.contains('placeholder-row'));
             
             if (placeholderRow) {
                 placeholderRow.style.display = hasRows ? 'none' : 'table-row';
@@ -894,15 +907,20 @@ body.dark {
             const activeRows = liveUnifiedTableBody.querySelectorAll('tr[data-status="live"], tr[data-status="delayed"]');
 
             activeRows.forEach(row => {
-                const startTime = new Date(row.dataset.startTime).getTime();
-                if (startTime) {
+                const startTimeStr = row.dataset.startTime;
+                if (startTimeStr) {
+                    const startTime = new Date(startTimeStr).getTime();
                     const durationMs = Date.now() - startTime;
                     totalDuration += durationMs;
                     const durationSec = Math.floor(durationMs / 1000);
-                    row.querySelector('.duration-cell').textContent = formatDuration(durationSec);
+                    
+                    const durationCell = row.querySelector('.duration-cell');
+                    if (durationCell) {
+                        durationCell.textContent = formatDuration(durationSec);
+                    }
                     
                     const statusCell = row.querySelector('.status-badge');
-                    if (durationSec > DELAYED_THRESHOLD_SECONDS) {
+                    if (statusCell && durationSec > DELAYED_THRESHOLD_SECONDS) {
                         if (row.dataset.status !== 'delayed') {
                            row.dataset.status = 'delayed';
                            statusCell.textContent = 'Delayed';
@@ -914,7 +932,7 @@ body.dark {
             
             activeCount = activeRows.length;
             
-            const avgDurationMs = totalDuration > 0 ? totalDuration / activeCount : 0;
+            const avgDurationMs = activeCount > 0 ? totalDuration / activeCount : 0;
             avgActiveDurationEl.textContent = formatDuration(Math.floor(avgDurationMs / 1000));
             
             updateTableVisibility();
