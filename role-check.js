@@ -84,6 +84,8 @@ function showAccessDeniedModal() {
 async function checkAdminAccess() {
     const userData = await checkUserRole();
     if (!userData) return false;
+    
+    console.log('User role:', userData.role); // دي علشان تشوف الرول في الكونسول
 
     if (userData.role === 'admin' || userData.role === 'manager') {
         updateUserInterface(userData);
