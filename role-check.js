@@ -30,8 +30,16 @@ async function checkUserRole() {
 }
 
 function showAccessDeniedModal() {
-    if (document.getElementById('accessDeniedModal')) return;
+  // ✅ منع تكرار المودال
+  if (document.getElementById('accessDeniedModal')) return;
 
+  const modalHTML = `
+    <div id="accessDeniedModal" ...>
+       ...
+    </div>
+  `;
+  document.body.insertAdjacentHTML('beforeend', modalHTML);
+}
     const modalHTML = `
         <div id="accessDeniedModal" style="
             position: fixed;
@@ -81,32 +89,17 @@ function showAccessDeniedModal() {
     document.body.insertAdjacentHTML('beforeend', modalHTML);
 }
 
-async function checkAdminAccess() {
-    const userData = await checkUserRole();
-    if (!userData) return false;
-    
-    console.log('User role:', userData.role); // دي علشان تشوف الرول في الكونسول
+async function checkAccess(allowedRoles = []) {
+  const userData = await checkUserRole();
+  if (!userData) return false;
 
-    if (userData.role === 'admin' || userData.role === 'manager') {
-        updateUserInterface(userData);
-        return userData;
-    } else {
-        showAccessDeniedModal();
-        return false;
-    }
-}
-
-async function checkAgentAccess() {
-    const userData = await checkUserRole();
-    if (!userData) return false;
-
-    if (userData.role === 'admin' || userData.role === 'manager' || userData.role === 'agent') {
-        updateUserInterface(userData);
-        return userData;
-    } else {
-        window.location.href = 'login.html';
-        return false;
-    }
+  if (allowedRoles.includes(userData.role)) {
+    updateUserInterface(userData);
+    return userData;
+  } else {
+    showAccessDeniedModal();
+    return false;
+  }
 }
 
 function updateUserInterface(userData) {
@@ -116,7 +109,7 @@ function updateUserInterface(userData) {
     const userNameElements = document.querySelectorAll('#userName, .user-name-display');
     userNameElements.forEach(element => {
         if (element) {
-            element.textContent = userData.name || userData.email;
+            
             console.log('Updated element:', element, 'with:', userData.name || userData.email);
         }
     });
@@ -143,15 +136,6 @@ function updateUserInterface(userData) {
 }
 
 window.roleCheck = {
-    checkAdminAccess,
-    checkAgentAccess,
-    updateUserInterface
+  roleCheck.checkAccess(['admin', 'manager']); // للادمن داشبورد
+roleCheck.checkAccess(['agent', 'admin', 'manager']); // للكور فلو
 };
-
-// مسح البيانات القديمة عند التحميل
-document.addEventListener('DOMContentLoaded', function() {
-    // مسح البيانات القديمة من localStorage
-    localStorage.removeItem('elevoCoreUserData');
-    localStorage.removeItem('user');
-    console.log('Cleaned old localStorage data');
-});
