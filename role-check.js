@@ -154,3 +154,14 @@ window.roleCheck = {
   updateUserInterface,
   showAccessDeniedModal
 };
+
+// ✅ لتحديد من له صلاحية الوصول للصفحة الحالية
+document.addEventListener('DOMContentLoaded', async () => {
+  const currentPage = window.location.pathname;
+
+  if (currentPage.includes('dashboard')) {
+    await roleCheck.checkAccess(['admin', 'manager']);
+  } else if (currentPage.includes('core-flow')) {
+    await roleCheck.checkAccess(['agent', 'admin', 'manager']);
+  }
+});
