@@ -1374,10 +1374,11 @@
                 ]
             }
         ];
-
-       // Initialize the application
-document.addEventListener('DOMContentLoaded', async function () {
-  await initializeApp();
+// Initialize the application
+document.addEventListener('DOMContentLoaded', function () {
+  (async () => {
+    await initializeApp();
+  })();
 });
 
 // 🔒 التحقق من تسجيل الدخول باستخدام Supabase مع إعادة المحاولة
@@ -1396,7 +1397,8 @@ async function initializeApp() {
     // Show loading state
     if (typeof authLoadingEl !== 'undefined') {
       authLoadingEl.style.display = 'flex';
-      authLoadingEl.querySelector('p').textContent = 'Checking your session...';
+      const p = authLoadingEl.querySelector('p');
+      if (p) p.textContent = 'Checking your session...';
     }
 
     const user = await getCurrentUserWithRetry();
@@ -1409,59 +1411,49 @@ async function initializeApp() {
 
     console.log('✅ Authenticated user:', user.email);
 
-    // ✅ بعد التحقق من المستخدم نبدأ تحميل محتوى الصفحة
+    // 🔹 Fetch full user info (name + role)
+    const { data, error } = await supabase
+      .from('users')
+      .select('id, name, email, role')
+      .eq('id', user.id)
+      .single();
+
+    if (error) {
+      console.error('Error fetching user data:', error);
+      if (typeof showToast === 'function') showToast('Error loading user data', 'error');
+      return;
+    }
+
+    // Store and display user info
+    currentUser = user;
+    userRole = data.role;
+    if (typeof userNameEl !== 'undefined') {
+      userNameEl.textContent = data.name || data.email;
+    }
+
+    // Show dashboard link
+    if (typeof dashboardLink !== 'undefined') {
+      dashboardLink.style.display = 'inline-block';
+    }
+
+    // Hide loading and show initial view
+    if (typeof authLoadingEl !== 'undefined') authLoadingEl.style.display = 'none';
+    if (typeof initialViewEl !== 'undefined') initialViewEl.style.display = 'grid';
+
+    // Initialize assistant or other app parts
     if (typeof initializeAssistant === 'function') {
       initializeAssistant(user);
-    } else {
-      console.log('ℹ️ initializeAssistant function not found, skipping initialization.');
     }
+
+    // Load scenarios and set up event listeners
+    if (typeof loadScenarios === 'function') loadScenarios();
+    if (typeof setupEventListeners === 'function') setupEventListeners();
 
   } catch (error) {
     console.error('Error initializing app:', error);
-    if (typeof showErrorMessage === 'function') {
-      showErrorMessage('Error initializing application');
-    }
+    if (typeof showToast === 'function') showToast('Error initializing application', 'error');
   }
 }
-
-                currentUser = user;
-                
-                // Get user role from database
-                const { data, error } = await supabase
-                    .from('users')
-                    .select('id, name, email, role')
-                    .eq('id', user.id)
-                    .single();
-                    
-                if (error) {
-                    console.error('Error fetching user data:', error);
-                    showToast('Error loading user data', 'error');
-                    return;
-                }
-                
-                userRole = data.role;
-                
-                // Update UI with user info
-                userNameEl.textContent = data.name || data.email;
-                
-                // Show dashboard link for all roles
-                dashboardLink.style.display = 'inline-block';
-                
-                // Hide loading and show initial view
-                authLoadingEl.style.display = 'none';
-                initialViewEl.style.display = 'grid';
-                
-                // Load scenarios
-                loadScenarios();
-                
-                // Set up event listeners
-                setupEventListeners();
-                
-            } catch (error) {
-                console.error('Error initializing app:', error);
-                showToast('Error initializing application', 'error');
-            }
-        }
 
         // Set up event listeners
         function setupEventListeners() {
