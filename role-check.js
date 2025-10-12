@@ -136,6 +136,19 @@ function updateUserInterface(userData) {
 }
 
 window.roleCheck = {
-  roleCheck.checkAccess(['admin', 'manager']); // للادمن داشبورد
-roleCheck.checkAccess(['agent', 'admin', 'manager']); // للكور فلو
+  checkUserRole,
+  showAccessDeniedModal,
+  checkAccess,
+  updateUserInterface
 };
+
+// ✅ استدعاء التحقق من الصلاحيات حسب الصفحة
+// للداشبورد (Admins & Managers فقط)
+if (window.location.pathname.includes('dashboard.html')) {
+  checkAccess(['admin', 'manager']);
+}
+
+// للكور فلو (Agents + Managers + Admins)
+if (window.location.pathname.includes('core-flow.html')) {
+  checkAccess(['agent', 'manager', 'admin']);
+}
