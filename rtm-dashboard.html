@@ -194,6 +194,7 @@
                 <span class="app-title">Elevo RTM</span>
             </div>
             <div class="header-controls">
+  <div id="navLinks" style="display:flex;gap:0.5rem;align-items:center"></div>
                 <a href="core-flow.html" class="nav-link">Core Flow</a>
                 <a href="dashboard.html" class="nav-link" id="adminDashboardLink">Dashboard</a>
                 <a href="agent-portal.html" class="nav-link" id="agentPortalLink">Agent Portal</a>
@@ -776,5 +777,147 @@
 
         if (supabase) initializeDashboard();
     </script>
+
+<!-- ROLE CHECK & NAV CONTROL: injected by assistant -->
+<script type="module">
+  // This script assumes supabase-js is already loaded via CDN in each page.
+  // It will: 1) get current user, 2) query users table for is_admin, 3) adjust UI and protect pages.
+  (async function(){
+    try {
+      // Try to access global supabase client if present, otherwise create one using values found in page.
+      let supabase;
+      if (window.supabase && typeof window.supabase === 'object' && window.supabase.auth) {
+        supabase = window.supabase;
+      } else {
+        // try to find keys inside the page (look for createClient(...) usage)
+        const text = document.documentElement.innerHTML;
+        const urlMatch = text.match(/createClient\(['"]([^'"]+?)['"]/);
+        const keyMatch = text.match(/createClient\([^,]+,\s*['"]([^'"]+?)['"]\)/);
+        if (urlMatch && keyMatch) {
+          const url = urlMatch[1];
+          const anon = keyMatch[1];
+          // dynamic import of supabase client (ESM)
+          const mod = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm');
+          supabase = mod.createClient(url, anon);
+          window.supabase = supabase;
+        } else {
+          // fallback: try common global name
+          console.warn('Supabase client not found on page; role checks may fail.');
+        }
+      }
+
+      async function getRole() {
+        if (!supabase) return { is_admin: false, user: null };
+        const resUser = await supabase.auth.getUser();
+        const user = resUser?.data?.user ?? null;
+        if (!user) return { is_admin: false, user: null };
+        // query users table for is_admin
+        try {
+          const { data, error } = await supabase
+            .from('users')
+            .select('is_admin')
+            .eq('id', user.id)
+            .single();
+          if (error) {
+            console.warn('Error fetching role:', error);
+            return { is_admin: false, user };
+          }
+          return { is_admin: !!data?.is_admin, user };
+        } catch (e) {
+          console.warn('Exception fetching role', e);
+          return { is_admin: false, user };
+        }
+      }
+
+      const { is_admin, user } = await getRole();
+
+      // Insert or adjust header nav links if present
+      const navContainer = document.querySelector('#navLinks') || document.querySelector('.header-controls') || null;
+      if (navContainer) {
+        // ensure links exist (id-based to avoid duplicates)
+        const makeLink = (id, href, text, cls='') => {
+          if (document.getElementById(id)) return;
+          const a = document.createElement('a');
+          a.id = id;
+          a.href = href;
+          a.className = 'nav-link ' + cls;
+          a.textContent = text;
+          a.style.display = 'inline-flex';
+          navContainer.appendChild(a);
+        };
+        makeLink('nav-core', 'core-flow.html', 'Core Flow', '');
+        makeLink('nav-admin', 'dashboard.html', 'Admin Dashboard', 'admin-only');
+        makeLink('nav-rtm', 'rtm-dashboard.html', 'RTM Dashboard', 'admin-only');
+        makeLink('nav-agent', 'agent-portal.html', 'Agent Dashboard', 'agent-only');
+      }
+
+      // Show/hide admin-only and agent-only links
+      document.querySelectorAll('.admin-only').forEach(el => {
+        el.style.display = is_admin ? 'inline-flex' : 'none';
+      });
+      document.querySelectorAll('.agent-only').forEach(el => {
+        el.style.display = !is_admin ? 'inline-flex' : 'none';
+      });
+
+      // If this page is admin-only (has data-admin-only attribute or filename), block agents
+      const pathname = window.location.pathname.split('/').pop() || '';
+      const adminPages = ['dashboard.html','rtm-dashboard.html'];
+      if (adminPages.includes(pathname)) {
+        // If not admin -> show access denied modal (if exists) or alert then redirect
+        if (!is_admin) {
+          const modal = document.getElementById('accessDeniedModal');
+          const app = document.getElementById('appContainerContent') || document.querySelector('.app-container');
+          if (modal) {
+            modal.style.display = 'flex';
+            if (app) app.style.display = 'none';
+            const returnBtn = document.getElementById('returnToAppBtn');
+            if (returnBtn) returnBtn.onclick = ()=> window.location.href = 'core-flow.html';
+          } else {
+            alert('This dashboard is for administrators only.');
+            window.location.href = 'core-flow.html';
+          }
+          return;
+        } else {
+          // admin: ensure app content is visible
+          const app = document.getElementById('appContainerContent') || document.querySelector('.app-container');
+          if (app) app.style.display = 'block';
+        }
+      }
+
+      // If this is agent-portal and user is admin, still allow seeing it.
+      // If this is agent-portal and user is agent -> show normally.
+      // Set first-run redirect: if on auth redirect or index, go to core-flow
+      // Additionally, ensure first login lands on core-flow
+      if (pathname === '' || pathname === 'index.html') {
+        window.location.href = 'core-flow.html';
+      }
+
+      // Optional: show small badge near logout showing role
+      const header = document.querySelector('.app-header');
+      if (header && user) {
+        let roleBadge = document.getElementById('roleBadge');
+        if (!roleBadge) {
+          roleBadge = document.createElement('div');
+          roleBadge.id = 'roleBadge';
+          roleBadge.style.marginLeft = '0.5rem';
+          roleBadge.style.padding = '0.25rem 0.6rem';
+          roleBadge.style.borderRadius = '999px';
+          roleBadge.style.fontWeight = '600';
+          roleBadge.style.fontSize = '0.8rem';
+          roleBadge.style.background = is_admin ? 'linear-gradient(90deg, #4e8cff, #8b5cf6)' : 'rgba(255,255,255,0.04)';
+          roleBadge.style.color = is_admin ? 'white' : '#d1d5db';
+          roleBadge.textContent = is_admin ? 'Admin' : 'Agent';
+          const userInfo = header.querySelector('.user-info') || header;
+          userInfo.appendChild(roleBadge);
+        }
+      }
+
+    } catch (err) {
+      console.error('Role script error', err);
+    }
+  })();
+</script>
+<!-- END ROLE CHECK -->
+
 </body>
 </html>
