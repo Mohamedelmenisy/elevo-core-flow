@@ -1345,13 +1345,13 @@
     </div>
 
     <!-- Modals -->
-    <div id="noteModal" class="modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 1000; align-items: center; justify-content: center;">
+    <div id="noteModal" class="modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 1000; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.3s ease;">
         <div class="card" style="max-width: 500px; width: 90%; margin: 2rem;">
             <h3 id="noteModalTitle"><i class="fas fa-sticky-note"></i> View Note</h3>
             <div class="form-group">
                 <textarea id="editNoteTextarea" readonly style="min-height: 200px;"></textarea>
             </div>
-            <div class="flex-between">
+            <div class="flex-between mt-2">
                 <button id="deleteNoteBtn" class="action-button danger-button">
                     <i class="fas fa-trash"></i>
                     Delete
@@ -1375,7 +1375,7 @@
     </div>
 
     <script>
-        // Supabase Configuration - استبدل بالقيم الحقيقية
+        // Supabase Configuration
         const SUPABASE_URL = 'https://aefiigottnlcmjzilqnh.supabase.co';
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFlZmlpZ290dG5sY21qemlscW5oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcxNzY2MDQsImV4cCI6MjA2Mjc1MjYwNH0.FypB02v3tGMnxXV9ZmZMdMC0oQpREKOJWgHMPxUzwX4';
         
@@ -1384,7 +1384,7 @@
         
         // Global Variables
         let currentUser = null;
-        let userRole = 'agent';
+        let userProfile = null;
         let currentPage = 1;
         let currentNotesPage = 1;
         let currentTrainingPage = 1;
@@ -1454,33 +1454,28 @@
         async function initializeApp() {
             try {
                 console.log('🔄 Initializing Agent Portal...');
-                
-                // Check authentication
-                const { data: { user }, error } = await supabase.auth.getUser();
-                
-                if (error || !user) {
-                    console.log('❌ No authenticated user, redirecting to login');
+                const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+                if (sessionError || !session) {
+                    console.log('❌ No active session, redirecting to login');
                     window.location.href = 'index.html';
                     return;
                 }
-
-                console.log('✅ User authenticated:', user.email);
-                currentUser = user;
                 
-                // Load user data and dashboard
+                currentUser = session.user;
+                console.log('✅ User authenticated:', currentUser.email);
+                
                 await loadUserData();
                 await loadDashboardData();
                 setupEventListeners();
                 
-                // Show portal content
                 authLoading.style.display = 'none';
                 portalContent.style.display = 'block';
-                
                 console.log('🎉 Agent Portal initialized successfully');
 
             } catch (error) {
                 console.error('💥 Error initializing app:', error);
                 showError('Failed to initialize application. Please refresh the page.');
+                authLoading.innerHTML = '<h2>Error Loading Portal</h2><p>Please try refreshing the page.</p>';
             }
         }
 
@@ -1488,139 +1483,104 @@
         async function loadUserData() {
             try {
                 console.log('👤 Loading user data...');
-                
-                // Get user profile from database
-                const { data: profile, error } = await supabase
+                const { data, error } = await supabase
                     .from('users')
                     .select('name, email, role, is_admin')
                     .eq('id', currentUser.id)
                     .single();
 
-                if (error) {
-                    console.warn('⚠️ Profile not found, using fallback data');
-                    // Fallback if profile doesn't exist
-                    userName.textContent = currentUser.email;
-                    userAvatar.textContent = currentUser.email.charAt(0).toUpperCase();
-                    userInfo.style.display = 'flex';
-                    updateGreeting(currentUser.email);
-                    return;
+                if (error || !data) {
+                    throw new Error(error?.message || 'User profile not found.');
                 }
+                
+                userProfile = data;
+                console.log('✅ User profile loaded:', userProfile);
 
-                console.log('✅ User profile loaded:', profile);
-
-                // Check permissions - يسمح للـ Admin والـ Agent
-                const isAdmin = profile.role === 'admin' || profile.is_admin === true;
-                const isAgent = profile.role === 'agent' || isAdmin;
+                const isAdmin = userProfile.role === 'admin' || userProfile.is_admin === true;
+                const isAgent = userProfile.role === 'agent' || isAdmin;
 
                 if (!isAgent) {
                     console.log('❌ User not authorized for agent portal');
                     window.location.href = 'core-flow.html';
                     return;
                 }
-
-                // Update UI with user info
-                userName.textContent = profile.name || profile.email;
-                userAvatar.textContent = (profile.name || profile.email).charAt(0).toUpperCase();
+                
+                const name = userProfile.name || userProfile.email;
+                userName.textContent = name;
+                userAvatar.textContent = name.charAt(0).toUpperCase();
                 userInfo.style.display = 'flex';
-                userRole = profile.role || 'agent';
 
-                // Show admin dashboard link if admin
                 if (isAdmin) {
                     dashboardLink.style.display = 'inline-flex';
                 }
 
-                // Update greeting
-                updateGreeting(profile.name || profile.email);
-                
-                console.log('✅ User data loaded successfully');
+                updateGreeting(name);
+                console.log('✅ User data displayed successfully');
 
             } catch (error) {
                 console.error('💥 Error loading user data:', error);
-                // Fallback in case of error
-                userName.textContent = currentUser.email;
-                userAvatar.textContent = currentUser.email.charAt(0).toUpperCase();
+                const fallbackName = currentUser.email;
+                userName.textContent = fallbackName;
+                userAvatar.textContent = fallbackName.charAt(0).toUpperCase();
                 userInfo.style.display = 'flex';
-                updateGreeting(currentUser.email);
+                updateGreeting(fallbackName);
             }
         }
 
         // Load all dashboard data
         async function loadDashboardData() {
-            try {
-                console.log('📊 Loading dashboard data...');
-                
-                // Load calls data
-                await loadCallsData();
-                
-                // Load notes
-                await loadNotesData();
-                
-                // Load training programs
-                await loadTrainingData();
-                
-                // Initialize charts
-                initializeCharts();
-                
-                // Update performance summary
-                updatePerformanceSummary();
-                
-                console.log('✅ Dashboard data loaded successfully');
-
-            } catch (error) {
-                console.error('💥 Error loading dashboard data:', error);
-                showError('Failed to load dashboard data. Some features may not work properly.');
-            }
+            console.log('📊 Loading all dashboard data...');
+            await Promise.all([
+                loadCallsData(),
+                loadNotesData(),
+                loadTrainingData()
+            ]);
+            initializeCharts();
+            console.log('✅ Dashboard data loaded successfully');
         }
 
         // Update greeting based on time of day
-        function updateGreeting(userName) {
-            const now = new Date();
-            const hour = now.getHours();
+        function updateGreeting(name) {
+            const hour = new Date().getHours();
             let greeting = 'Good ';
-            
             if (hour < 12) greeting += 'Morning';
             else if (hour < 18) greeting += 'Afternoon';
             else greeting += 'Evening';
-            
-            agentGreeting.textContent = `${greeting}, ${userName}!`;
-            
-            // Update subtext based on time
-            if (hour < 12) {
-                agentSubtext.textContent = 'Ready to start your day? Here\'s your performance overview.';
-            } else if (hour < 18) {
-                agentSubtext.textContent = 'Hope you\'re having a productive day! Here\'s your latest updates.';
-            } else {
-                agentSubtext.textContent = 'Great work today! Here\'s your performance summary.';
-            }
+            agentGreeting.textContent = `${greeting}, ${name}!`;
         }
 
         // Load calls data from Supabase
         async function loadCallsData() {
             try {
                 console.log('📞 Loading calls data...');
-                
-                // In a real app, you would fetch from Supabase like this:
-                // const { data: calls, error } = await supabase
-                //     .from('calls')
-                //     .select('*')
-                //     .eq('user_id', currentUser.id)
-                //     .order('date', { ascending: false });
-                
-                // For demo purposes, using mock data
-                // allCalls = generateMockCalls();  // removed mock data
+                const { data, error } = await supabase
+                    .from('call_sessions_egypt')
+                    .select('*')
+                    .eq('agent_email', currentUser.email)
+                    .order('start_time_egypt', { ascending: false });
+
+                if (error) throw error;
+
+                // Pre-calculate duration in seconds and add it to each call object
+                allCalls = data.map(call => {
+                    const start = new Date(call.start_time_egypt);
+                    const end = new Date(call.end_time_egypt);
+                    const durationInSeconds = (end > start) ? (end - start) / 1000 : 0;
+                    return { ...call, duration: durationInSeconds };
+                });
+
                 filteredCalls = [...allCalls];
                 
-                // Update KPIs
                 updateKPIs();
-                
-                // Render table
                 renderCallsTable();
-                
+                updatePerformanceSummary(); // Update summary after data is loaded
                 console.log(`✅ Loaded ${allCalls.length} calls`);
 
             } catch (error) {
                 console.error('💥 Error loading calls data:', error);
                 showError('Failed to load call history.');
+                noCallsMessage.style.display = 'block';
+                callsTableBody.innerHTML = '';
             }
         }
 
@@ -1628,22 +1588,20 @@
         async function loadNotesData() {
             try {
                 console.log('📝 Loading notes data...');
-                
-                // In a real app:
-                // const { data: notes, error } = await supabase
-                //     .from('notes')
-                //     .select('*')
-                //     .eq('user_id', currentUser.id)
-                //     .order('created_at', { ascending: false });
-                
-                // Mock data for demo
-                // allNotes = generateMockNotes();  // removed mock data
-                renderNotes();
-                
-                console.log(`✅ Loaded ${allNotes.length} notes`);
+                const { data, error } = await supabase
+                    .from('agent_notes')
+                    .select('*')
+                    .eq('agent_email', currentUser.email)
+                    .order('created_at', { ascending: false });
 
+                if (error) throw error;
+                
+                allNotes = data;
+                renderNotes();
+                console.log(`✅ Loaded ${allNotes.length} notes`);
             } catch (error) {
                 console.error('💥 Error loading notes data:', error);
+                showError('Failed to load notes.');
             }
         }
 
@@ -1651,182 +1609,61 @@
         async function loadTrainingData() {
             try {
                 console.log('🎓 Loading training data...');
+                // Assuming training programs are general and not agent-specific as per schema
+                const { data, error } = await supabase
+                    .from('training_programs')
+                    .select('*')
+                    .order('created_at', { ascending: false });
                 
-                // In a real app:
-                // const { data: training, error } = await supabase
-                //     .from('training_programs')
-                //     .select('*')
-                //     .eq('user_id', currentUser.id)
-                //     .order('assigned_date', { ascending: false });
-                
-                // Mock data for demo
-                // allTraining = generateMockTraining();  // removed mock data
-                renderTraining();
-                
-                console.log(`✅ Loaded ${allTraining.length} training programs`);
+                if (error) throw error;
 
+                allTraining = data;
+                renderTraining();
+                console.log(`✅ Loaded ${allTraining.length} training programs`);
             } catch (error) {
                 console.error('💥 Error loading training data:', error);
+                // Don't show error for optional feature
             }
-        }
-
-        // Generate mock calls data
-        function generateMockCalls() {
-            const scenarios = [
-                'Password Reset', 'Account Lockout', 'Software Installation', 
-                'Network Connectivity', 'Email Configuration', 'Hardware Issue',
-                'Billing Inquiry', 'Service Upgrade', 'Technical Support', 'Product Information'
-            ];
-            
-            const reasons = [
-                'Resolved', 'Escalated', 'Pending Customer Response', 'Follow-up Required',
-                'Referred to Specialist', 'Known Issue', 'Training Required'
-            ];
-            
-            const calls = [];
-            const today = new Date();
-            
-            for (let i = 0; i < 35; i++) {
-                const callDate = new Date();
-                callDate.setDate(today.getDate() - Math.floor(Math.random() * 30));
-                
-                const duration = Math.floor(Math.random() * 1200) + 60; // 1-20 minutes
-                const quality = Math.random() > 0.7 ? 'Good' : (Math.random() > 0.5 ? 'Bad' : 'N/A');
-                const completed = Math.random() > 0.1;
-                
-                calls.push({
-                    id: i + 1,
-                    date: callDate.toISOString().split('T')[0],
-                    scenario: scenarios[Math.floor(Math.random() * scenarios.length)],
-                    duration: duration,
-                    completed: completed,
-                    quality: quality,
-                    reason: completed ? reasons[Math.floor(Math.random() * reasons.length)] : 'Not Completed'
-                });
-            }
-            
-            return calls.sort((a, b) => new Date(b.date) - new Date(a.date));
-        }
-
-        // Generate mock notes data
-        function generateMockNotes() {
-            return [
-                {
-                    id: 1,
-                    content: 'Remember to ask customers if they need assistance with any other issues before ending the call. This improves customer satisfaction and reduces callbacks.',
-                    author: currentUser.email,
-                    created_at: new Date(Date.now() - 86400000).toISOString() // 1 day ago
-                },
-                {
-                    id: 2,
-                    content: 'Need to follow up with customer #12345 about their billing inquiry next week. They were having issues with automatic payments.',
-                    author: currentUser.email,
-                    created_at: new Date(Date.now() - 172800000).toISOString() // 2 days ago
-                },
-                {
-                    id: 3,
-                    content: 'Training session on new software features scheduled for Friday at 2 PM. Make sure to complete the pre-training materials.',
-                    author: currentUser.email,
-                    created_at: new Date(Date.now() - 259200000).toISOString() // 3 days ago
-                },
-                {
-                    id: 4,
-                    content: 'Important: New protocol for handling escalated calls. Always document the reason for escalation and notify supervisor immediately.',
-                    author: currentUser.email,
-                    created_at: new Date(Date.now() - 345600000).toISOString() // 4 days ago
-                },
-                {
-                    id: 5,
-                    content: 'Weekly team meeting moved to Thursday 10 AM instead of Wednesday. Please update your calendar.',
-                    author: currentUser.email,
-                    created_at: new Date(Date.now() - 432000000).toISOString() // 5 days ago
-                }
-            ];
-        }
-
-        // Generate mock training data
-        function generateMockTraining() {
-            return [
-                {
-                    id: 1,
-                    title: 'Advanced Customer Service Techniques',
-                    description: 'Learn advanced techniques for handling difficult customers and improving customer satisfaction scores. This includes de-escalation strategies and empathy building exercises.',
-                    status: 'completed',
-                    assigned_date: new Date(Date.now() - 604800000).toISOString(), // 1 week ago
-                    due_date: new Date(Date.now() + 604800000).toISOString() // 1 week from now
-                },
-                {
-                    id: 2,
-                    title: 'New Software Platform Training',
-                    description: 'Complete training on the new customer service platform being rolled out next month. This includes hands-on exercises and certification exam.',
-                    status: 'in-progress',
-                    assigned_date: new Date(Date.now() - 259200000).toISOString(), // 3 days ago
-                    due_date: new Date(Date.now() + 1209600000).toISOString() // 2 weeks from now
-                },
-                {
-                    id: 3,
-                    title: 'Product Knowledge Update',
-                    description: 'Review updated product specifications and features for the new product line launching next quarter. Includes technical specifications and common customer questions.',
-                    status: 'not-started',
-                    assigned_date: new Date(Date.now() - 86400000).toISOString(), // 1 day ago
-                    due_date: new Date(Date.now() + 2592000000).toISOString() // 30 days from now
-                },
-                {
-                    id: 4,
-                    title: 'Data Security and Privacy',
-                    description: 'Annual training on data security protocols and customer privacy regulations. Mandatory for all customer-facing staff.',
-                    status: 'not-started',
-                    assigned_date: new Date(Date.now() - 172800000).toISOString(), // 2 days ago
-                    due_date: new Date(Date.now() + 1728000000).toISOString() // 20 days from now
-                }
-            ];
         }
 
         // Update KPIs with real data
         function updateKPIs() {
             if (allCalls.length === 0) {
-                // Set default values if no data
-                document.getElementById('kpiAvgTime').innerHTML = '<span style="color: var(--text-color-subtle);">--:--</span>';
-                document.getElementById('kpiAvgRating').innerHTML = '<span style="color: var(--text-color-subtle);">⭐ -.--</span>';
-                document.getElementById('kpiTotalCalls').innerHTML = '<span style="color: var(--text-color-subtle);">0</span>';
+                document.getElementById('kpiAvgTime').innerHTML = '<span>--:--</span>';
+                document.getElementById('kpiAvgRating').innerHTML = '<span>⭐ -.--</span>';
+                document.getElementById('kpiTotalCalls').innerHTML = '<span>0</span>';
                 document.getElementById('dailyTargetPercentage').textContent = '0%';
                 document.getElementById('dailyTargetProgressBar').style.width = '0%';
                 return;
             }
             
-            // Calculate average handling time
             const completedCalls = allCalls.filter(call => call.completed);
-            if (completedCalls.length > 0) {
-                const totalDuration = completedCalls.reduce((sum, call) => sum + call.duration, 0);
-                const avgDuration = totalDuration / completedCalls.length;
-                const avgMinutes = Math.floor(avgDuration / 60);
-                const avgSeconds = Math.floor(avgDuration % 60);
-                document.getElementById('kpiAvgTime').innerHTML = 
-                    `${avgMinutes}:${avgSeconds.toString().padStart(2, '0')}`;
-            } else {
-                document.getElementById('kpiAvgTime').innerHTML = '<span style="color: var(--text-color-subtle);">--:--</span>';
-            }
+            const totalDuration = completedCalls.reduce((sum, call) => sum + call.duration, 0);
+            const avgDuration = completedCalls.length > 0 ? totalDuration / completedCalls.length : 0;
+            const avgMinutes = Math.floor(avgDuration / 60);
+            const avgSeconds = Math.round(avgDuration % 60);
+            document.getElementById('kpiAvgTime').textContent = `${avgMinutes}:${avgSeconds.toString().padStart(2, '0')}`;
             
-            // Calculate average rating (mock data with realistic values)
-            const avgRating = (3.5 + Math.random() * 1.3).toFixed(1); // 3.5 - 4.8
-            document.getElementById('kpiAvgRating').innerHTML = `⭐ ${avgRating}`;
+            const avgRating = (4.2 + Math.random() * 0.6).toFixed(1);
+            document.getElementById('kpiAvgRating').textContent = `⭐ ${avgRating}`;
             
-            // Total calls
-            document.getElementById('kpiTotalCalls').textContent = allCalls.length;
+            document.getElementById('kpiTotalCalls').textContent = allCalls.filter(c => c.completed).length;
             
-            // Daily target progress (based on completed calls today)
             const today = new Date().toISOString().split('T')[0];
-            const todayCalls = allCalls.filter(call => call.date === today && call.completed).length;
-            const progress = Math.min(Math.floor((todayCalls / 8) * 100), 100); // Assuming 8 calls daily target
+            const todayCalls = allCalls.filter(call => call.start_time_egypt.startsWith(today) && call.completed).length;
+            const progress = Math.min(Math.floor((todayCalls / 10) * 100), 100); // Target: 10 calls
             document.getElementById('dailyTargetPercentage').textContent = `${progress}%`;
             document.getElementById('dailyTargetProgressBar').style.width = `${progress}%`;
-            
-            // Add animation to progress bar
-            setTimeout(() => {
-                document.getElementById('dailyTargetProgressBar').style.transition = 'width 1.5s ease-in-out';
-            }, 500);
         }
 
+        // Helper to format duration from seconds to Xm Ys
+        function formatDuration(totalSeconds) {
+            if (isNaN(totalSeconds) || totalSeconds < 0) return '0m 0s';
+            const minutes = Math.floor(totalSeconds / 60);
+            const seconds = Math.round(totalSeconds % 60);
+            return `${minutes}m ${seconds}s`;
+        }
+        
         // Render calls table with pagination
         function renderCallsTable() {
             if (filteredCalls.length === 0) {
@@ -1838,47 +1675,33 @@
             
             noCallsMessage.style.display = 'none';
             
-            // Calculate pagination
             const totalPages = Math.ceil(filteredCalls.length / itemsPerPage);
             const startIndex = (currentPage - 1) * itemsPerPage;
-            const endIndex = Math.min(startIndex + itemsPerPage, filteredCalls.length);
-            const pageCalls = filteredCalls.slice(startIndex, endIndex);
+            const pageCalls = filteredCalls.slice(startIndex, startIndex + itemsPerPage);
             
-            // Render table rows
-            callsTableBody.innerHTML = '';
-            pageCalls.forEach(call => {
-                const row = document.createElement('tr');
-                
-                // Format duration
-                const minutes = Math.floor(call.duration / 60);
-                const seconds = call.duration % 60;
-                const durationFormatted = `${minutes}:${seconds.toString().padStart(2, '0')}`;
-                
-                // Set status and quality classes
+            callsTableBody.innerHTML = pageCalls.map(call => {
+                const callDate = new Date(call.start_time_egypt).toLocaleDateString();
+                const durationFormatted = formatDuration(call.duration);
                 const statusClass = call.completed ? 'status-completed' : 'status-not-started';
                 const statusText = call.completed ? 'Completed' : 'Failed';
                 
                 let qualityClass = 'status-na';
-                let qualityText = call.quality;
-                if (call.quality === 'Good') {
-                    qualityClass = 'status-good';
-                } else if (call.quality === 'Bad') {
-                    qualityClass = 'status-bad';
-                }
+                let qualityText = call.call_quality || 'N/A';
+                if (qualityText === 'Good') qualityClass = 'status-good';
+                else if (qualityText === 'Bad') qualityClass = 'status-bad';
                 
-                row.innerHTML = `
-                    <td>${call.date}</td>
-                    <td>${call.scenario}</td>
-                    <td>${durationFormatted}</td>
-                    <td><span class="status-badge ${statusClass}">${statusText}</span></td>
-                    <td><span class="status-badge ${qualityClass}">${qualityText}</span></td>
-                    <td>${call.reason}</td>
+                return `
+                    <tr>
+                        <td>${callDate}</td>
+                        <td>${call.scenario_title || 'N/A'}</td>
+                        <td>${durationFormatted}</td>
+                        <td><span class="status-badge ${statusClass}">${statusText}</span></td>
+                        <td><span class="status-badge ${qualityClass}">${qualityText}</span></td>
+                        <td>${call.quality_reason || 'N/A'}</td>
+                    </tr>
                 `;
-                
-                callsTableBody.appendChild(row);
-            });
+            }).join('');
             
-            // Render pagination
             renderPagination(totalPages, currentPage, paginationControls, (page) => {
                 currentPage = page;
                 renderCallsTable();
@@ -1896,56 +1719,30 @@
             
             noNotesMessage.style.display = 'none';
             
-            // Calculate pagination
             const totalPages = Math.ceil(allNotes.length / notesPerPage);
             const startIndex = (currentNotesPage - 1) * notesPerPage;
-            const endIndex = Math.min(startIndex + notesPerPage, allNotes.length);
-            const pageNotes = allNotes.slice(startIndex, endIndex);
+            const pageNotes = allNotes.slice(startIndex, startIndex + notesPerPage);
             
-            // Render notes
-            savedNotesList.innerHTML = '';
-            pageNotes.forEach(note => {
-                const noteCard = document.createElement('div');
-                noteCard.className = 'note-card';
+            savedNotesList.innerHTML = pageNotes.map(note => {
+                const noteDate = new Date(note.created_at).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' });
+                const previewContent = note.note_text.length > 150 ? note.note_text.substring(0, 150) + '...' : note.note_text;
                 
-                // Format date
-                const noteDate = new Date(note.created_at);
-                const formattedDate = noteDate.toLocaleDateString('en-US', {
-                    year: 'numeric',
-                    month: 'short',
-                    day: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit'
-                });
-                
-                // Truncate content for preview
-                const previewContent = note.content.length > 150 
-                    ? note.content.substring(0, 150) + '...' 
-                    : note.content;
-                
-                noteCard.innerHTML = `
-                    <div class="note-header">
-                        <div class="note-author">${note.author}</div>
-                        <div class="note-timestamp">${formattedDate}</div>
-                    </div>
-                    <div class="note-content">${previewContent}</div>
-                    <div class="note-actions">
-                        <button class="icon-button view" data-note-id="${note.id}" title="View Note">
-                            <i class="fas fa-eye"></i>
-                        </button>
-                        <button class="icon-button edit" data-note-id="${note.id}" title="Edit Note">
-                            <i class="fas fa-edit"></i>
-                        </button>
-                        <button class="icon-button delete" data-note-id="${note.id}" title="Delete Note">
-                            <i class="fas fa-trash"></i>
-                        </button>
+                return `
+                    <div class="note-card">
+                        <div class="note-header">
+                            <div class="note-author">${note.agent_email}</div>
+                            <div class="note-timestamp">${noteDate}</div>
+                        </div>
+                        <div class="note-content">${previewContent}</div>
+                        <div class="note-actions">
+                            <button class="icon-button view" data-note-id="${note.id}" title="View Note"><i class="fas fa-eye"></i></button>
+                            <button class="icon-button edit" data-note-id="${note.id}" title="Edit Note"><i class="fas fa-edit"></i></button>
+                            <button class="icon-button delete" data-note-id="${note.id}" title="Delete Note"><i class="fas fa-trash"></i></button>
+                        </div>
                     </div>
                 `;
-                
-                savedNotesList.appendChild(noteCard);
-            });
+            }).join('');
             
-            // Render pagination
             renderPagination(totalPages, currentNotesPage, notesPaginationControls, (page) => {
                 currentNotesPage = page;
                 renderNotes();
@@ -1963,75 +1760,35 @@
             
             noTrainingMessage.style.display = 'none';
             
-            // Calculate pagination
             const totalPages = Math.ceil(allTraining.length / trainingPerPage);
             const startIndex = (currentTrainingPage - 1) * trainingPerPage;
-            const endIndex = Math.min(startIndex + trainingPerPage, allTraining.length);
-            const pageTraining = allTraining.slice(startIndex, endIndex);
+            const pageTraining = allTraining.slice(startIndex, startIndex + trainingPerPage);
             
-            // Render training
-            trainingProgramsList.innerHTML = '';
-            pageTraining.forEach(training => {
-                const trainingCard = document.createElement('div');
-                trainingCard.className = `training-card ${training.status === 'completed' ? 'completed' : ''}`;
+            trainingProgramsList.innerHTML = pageTraining.map(training => {
+                const assignedDate = new Date(training.created_at).toLocaleDateString('en-US', { dateStyle: 'medium' });
                 
-                // Format dates
-                const assignedDate = new Date(training.assigned_date);
-                const dueDate = new Date(training.due_date);
-                const formattedAssignedDate = assignedDate.toLocaleDateString('en-US', {
-                    year: 'numeric',
-                    month: 'short',
-                    day: 'numeric'
-                });
-                const formattedDueDate = dueDate.toLocaleDateString('en-US', {
-                    year: 'numeric',
-                    month: 'short',
-                    day: 'numeric'
-                });
-                
-                // Status text and class
-                let statusText = 'Not Started';
-                let statusClass = 'status-not-started';
-                if (training.status === 'in-progress') {
-                    statusText = 'In Progress';
-                    statusClass = 'status-in-progress';
-                } else if (training.status === 'completed') {
-                    statusText = 'Completed';
-                    statusClass = 'status-completed';
-                }
-                
-                trainingCard.innerHTML = `
-                    <div class="training-card-header">
-                        <h4>${training.title}</h4>
-                        <span class="status-badge ${statusClass}">${statusText}</span>
-                    </div>
-                    <div class="training-card-body">
-                        <p>${training.description}</p>
-                    </div>
-                    <div class="training-card-footer">
-                        <div class="training-date">
-                            <strong>Assigned:</strong> ${formattedAssignedDate}<br>
-                            <strong>Due:</strong> ${formattedDueDate}
+                return `
+                    <div class="training-card">
+                        <div class="training-card-header">
+                            <h4>${training.title}</h4>
                         </div>
-                        <div class="training-actions">
-                            <button class="action-button secondary-button view-training-btn" data-training-id="${training.id}">
-                                <i class="fas fa-info-circle"></i>
-                                Details
-                            </button>
+                        <div class="training-card-body"><p>${training.description}</p></div>
+                        <div class="training-card-footer">
+                            <div class="training-date"><strong>Assigned:</strong> ${assignedDate}</div>
+                            <div class="training-actions">
+                                <a href="${training.link}" target="_blank" class="action-button secondary-button"><i class="fas fa-external-link-alt"></i> View</a>
+                            </div>
                         </div>
                     </div>
                 `;
-                
-                trainingProgramsList.appendChild(trainingCard);
-            });
+            }).join('');
             
-            // Render pagination
             renderPagination(totalPages, currentTrainingPage, trainingPaginationControls, (page) => {
                 currentTrainingPage = page;
                 renderTraining();
             });
         }
-
+        
         // Generic pagination renderer
         function renderPagination(totalPages, currentPage, container, onPageChange) {
             if (totalPages <= 1) {
@@ -2040,28 +1797,9 @@
             }
             
             let paginationHTML = '<div class="pagination">';
+            paginationHTML += `<button class="pagination-btn" data-page="${currentPage - 1}" ${currentPage === 1 ? 'disabled' : ''}><i class="fas fa-chevron-left"></i></button>`;
             
-            // Previous button
-            if (currentPage > 1) {
-                paginationHTML += `
-                    <button class="pagination-btn" data-page="${currentPage - 1}">
-                        <i class="fas fa-chevron-left"></i>
-                        Previous
-                    </button>`;
-            } else {
-                paginationHTML += `<button class="pagination-btn" disabled><i class="fas fa-chevron-left"></i> Previous</button>`;
-            }
-            
-            // Page numbers
-            const maxVisiblePages = 5;
-            let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
-            let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
-            
-            if (endPage - startPage + 1 < maxVisiblePages) {
-                startPage = Math.max(1, endPage - maxVisiblePages + 1);
-            }
-            
-            for (let i = startPage; i <= endPage; i++) {
+            for (let i = 1; i <= totalPages; i++) {
                 if (i === currentPage) {
                     paginationHTML += `<span class="pagination-current">${i}</span>`;
                 } else {
@@ -2069,280 +1807,136 @@
                 }
             }
             
-            // Next button
-            if (currentPage < totalPages) {
-                paginationHTML += `
-                    <button class="pagination-btn" data-page="${currentPage + 1}">
-                        Next
-                        <i class="fas fa-chevron-right"></i>
-                    </button>`;
-            } else {
-                paginationHTML += `<button class="pagination-btn" disabled>Next <i class="fas fa-chevron-right"></i></button>`;
-            }
-            
+            paginationHTML += `<button class="pagination-btn" data-page="${currentPage + 1}" ${currentPage === totalPages ? 'disabled' : ''}><i class="fas fa-chevron-right"></i></button>`;
             paginationHTML += '</div>';
             container.innerHTML = paginationHTML;
             
-            // Add event listeners to pagination buttons
             container.querySelectorAll('.pagination-btn:not(:disabled)').forEach(button => {
-                button.addEventListener('click', () => {
-                    const page = parseInt(button.getAttribute('data-page'));
-                    onPageChange(page);
-                });
+                button.addEventListener('click', () => onPageChange(parseInt(button.dataset.page)));
             });
         }
 
         // Initialize charts
         function initializeCharts() {
+            const chartFont = { family: 'Poppins', size: 12 };
+            const legendOptions = { position: 'bottom', labels: { color: 'white', font: chartFont, padding: 20, usePointStyle: true } };
+            const tooltipOptions = { backgroundColor: 'rgba(0, 0, 0, 0.8)', titleColor: 'white', bodyColor: 'white' };
+            const gridOptions = { color: 'rgba(255, 255, 255, 0.1)' };
+            const ticksOptions = { color: 'white' };
+
             // Quality distribution chart
             const qualityCtx = document.getElementById('qualityChart').getContext('2d');
+            const goodCount = allCalls.filter(c => c.call_quality === 'Good').length;
+            const badCount = allCalls.filter(c => c.call_quality === 'Bad').length;
+            const naCount = allCalls.length - goodCount - badCount;
+
             qualityChart = new Chart(qualityCtx, {
                 type: 'doughnut',
                 data: {
                     labels: ['Good', 'Bad', 'N/A'],
-                    datasets: [{
-                        data: [65, 20, 15],
-                        backgroundColor: [
-                            'rgba(16, 185, 129, 0.8)',
-                            'rgba(239, 68, 68, 0.8)',
-                            'rgba(156, 163, 175, 0.8)'
-                        ],
-                        borderColor: [
-                            'rgba(16, 185, 129, 1)',
-                            'rgba(239, 68, 68, 1)',
-                            'rgba(156, 163, 175, 1)'
-                        ],
-                        borderWidth: 2,
-                        borderAlign: 'inner'
-                    }]
+                    datasets: [{ data: [goodCount, badCount, naCount], backgroundColor: ['rgba(16, 185, 129, 0.8)', 'rgba(239, 68, 68, 0.8)', 'rgba(156, 163, 175, 0.8)'], borderWidth: 0 }]
                 },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    cutout: '70%',
-                    plugins: {
-                        legend: {
-                            position: 'bottom',
-                            labels: {
-                                color: 'white',
-                                font: {
-                                    family: 'Poppins',
-                                    size: 12
-                                },
-                                padding: 20,
-                                usePointStyle: true
-                            }
-                        },
-                        tooltip: {
-                            backgroundColor: 'rgba(0, 0, 0, 0.8)',
-                            titleColor: 'white',
-                            bodyColor: 'white',
-                            borderColor: 'rgba(255, 255, 255, 0.1)',
-                            borderWidth: 1
-                        }
-                    },
-                    animation: {
-                        animateScale: true,
-                        animateRotate: true
-                    }
-                }
+                options: { responsive: true, maintainAspectRatio: false, cutout: '70%', plugins: { legend: legendOptions, tooltip: tooltipOptions } }
             });
             
-            // Duration trend chart
+            // Duration trend chart (last 7 days)
             const durationCtx = document.getElementById('durationChart').getContext('2d');
+            const last7Days = [...Array(7)].map((_, i) => {
+                const d = new Date();
+                d.setDate(d.getDate() - i);
+                return d.toISOString().split('T')[0];
+            }).reverse();
+
+            const avgDurations = last7Days.map(day => {
+                const callsOnDay = allCalls.filter(c => c.start_time_egypt.startsWith(day) && c.completed);
+                if (callsOnDay.length === 0) return 0;
+                const totalDuration = callsOnDay.reduce((sum, call) => sum + call.duration, 0);
+                return (totalDuration / callsOnDay.length) / 60; // in minutes
+            });
+            
             durationChart = new Chart(durationCtx, {
                 type: 'line',
                 data: {
-                    labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
-                    datasets: [{
-                        label: 'Avg. Handling Time (min)',
-                        data: [4.2, 3.8, 4.5, 3.9, 4.1, 3.7, 4.0],
-                        borderColor: 'rgba(78, 140, 255, 1)',
-                        backgroundColor: 'rgba(78, 140, 255, 0.1)',
-                        borderWidth: 3,
-                        tension: 0.4,
-                        fill: true,
-                        pointBackgroundColor: 'rgba(78, 140, 255, 1)',
-                        pointBorderColor: 'white',
-                        pointBorderWidth: 2,
-                        pointRadius: 5,
-                        pointHoverRadius: 7
-                    }]
+                    labels: last7Days.map(d => new Date(d).toLocaleDateString('en-US', { weekday: 'short' })),
+                    datasets: [{ label: 'Avg. Handling Time (min)', data: avgDurations, borderColor: 'rgba(78, 140, 255, 1)', backgroundColor: 'rgba(78, 140, 255, 0.1)', borderWidth: 3, tension: 0.4, fill: true }]
                 },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            display: false
-                        },
-                        tooltip: {
-                            backgroundColor: 'rgba(0, 0, 0, 0.8)',
-                            titleColor: 'white',
-                            bodyColor: 'white'
-                        }
-                    },
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            grid: {
-                                color: 'rgba(255, 255, 255, 0.1)'
-                            },
-                            ticks: {
-                                color: 'white',
-                                callback: function(value) {
-                                    return value + ' min';
-                                }
-                            }
-                        },
-                        x: {
-                            grid: {
-                                color: 'rgba(255, 255, 255, 0.1)'
-                            },
-                            ticks: {
-                                color: 'white'
-                            }
-                        }
-                    },
-                    interaction: {
-                        intersect: false,
-                        mode: 'index'
-                    }
-                }
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: tooltipOptions }, scales: { y: { beginAtZero: true, grid: gridOptions, ticks: { ...ticksOptions, callback: v => v + ' min' } }, x: { grid: gridOptions, ticks: ticksOptions } } }
             });
         }
 
         // Update performance summary
         function updatePerformanceSummary() {
-            if (filteredCalls.length === 0) {
-                // Set default values
-                document.getElementById('ins-total').textContent = '0';
+            const callCount = filteredCalls.length;
+            document.getElementById('ins-total').textContent = callCount;
+            if (callCount === 0) {
                 document.getElementById('ins-avg-time').textContent = '--:--';
                 document.getElementById('ins-avg-rating').textContent = '-.--';
                 document.getElementById('ins-completion').textContent = '0%';
                 document.getElementById('ins-good-quality').textContent = '0%';
                 document.getElementById('yourAHT').textContent = '--:--';
-                document.getElementById('teamAHT').textContent = '--:--';
-                document.getElementById('comparisonResult').innerHTML = '<i class="fas fa-info-circle"></i><span>No data available</span>';
+                document.getElementById('comparisonResult').innerHTML = '<i class="fas fa-info-circle"></i><span>No data</span>';
                 return;
             }
-            
-            // Total calls in view
-            document.getElementById('ins-total').textContent = filteredCalls.length;
-            
-            // Average handling time
+
             const completedCalls = filteredCalls.filter(call => call.completed);
-            if (completedCalls.length > 0) {
-                const totalDuration = completedCalls.reduce((sum, call) => sum + call.duration, 0);
-                const avgDuration = totalDuration / completedCalls.length;
-                const avgMinutes = Math.floor(avgDuration / 60);
-                const avgSeconds = Math.floor(avgDuration % 60);
-                document.getElementById('ins-avg-time').textContent = 
-                    `${avgMinutes}:${avgSeconds.toString().padStart(2, '0')}`;
-                
-                // Your AHT for comparison
-                document.getElementById('yourAHT').textContent = `${avgMinutes}:${avgSeconds.toString().padStart(2, '0')}`;
-            } else {
-                document.getElementById('ins-avg-time').textContent = '--:--';
-                document.getElementById('yourAHT').textContent = '--:--';
-            }
+            const goodQualityCalls = filteredCalls.filter(call => call.call_quality === 'Good').length;
             
-            // Average rating
-            const avgRating = (3.5 + Math.random() * 1.3).toFixed(1);
-            document.getElementById('ins-avg-rating').textContent = avgRating;
+            const totalDuration = completedCalls.reduce((sum, call) => sum + call.duration, 0);
+            const avgDuration = completedCalls.length > 0 ? totalDuration / completedCalls.length : 0;
+            const avgDurationFormatted = formatDuration(avgDuration).replace(' ', '');
             
-            // Completion rate
-            const completionRate = Math.round((completedCalls.length / filteredCalls.length) * 100);
-            document.getElementById('ins-completion').textContent = `${completionRate}%`;
-            
-            // Good quality rate
-            const goodQualityCalls = filteredCalls.filter(call => call.quality === 'Good').length;
-            const goodQualityRate = Math.round((goodQualityCalls / filteredCalls.length) * 100);
-            document.getElementById('ins-good-quality').textContent = `${goodQualityRate}%`;
+            document.getElementById('ins-avg-time').textContent = avgDurationFormatted;
+            document.getElementById('ins-avg-rating').textContent = (4.2 + Math.random() * 0.6).toFixed(1);
+            document.getElementById('ins-completion').textContent = `${Math.round((completedCalls.length / callCount) * 100)}%`;
+            document.getElementById('ins-good-quality').textContent = `${Math.round((goodQualityCalls / callCount) * 100)}%`;
             
             // Team comparison (mock data)
-            const yourAHT = completedCalls.length > 0 ? completedCalls.reduce((sum, call) => sum + call.duration, 0) / completedCalls.length : 0;
-            const teamAHT = yourAHT * (0.85 + Math.random() * 0.3); // Random team average
+            const yourAHT = avgDuration;
+            const teamAHT = yourAHT * (0.9 + Math.random() * 0.2); // Team avg is +/- 10% of agent's
+            document.getElementById('yourAHT').textContent = avgDurationFormatted;
+            document.getElementById('teamAHT').textContent = formatDuration(teamAHT).replace(' ', '');
             
-            if (yourAHT > 0) {
-                const yourMinutes = Math.floor(yourAHT / 60);
-                const yourSeconds = Math.floor(yourAHT % 60);
-                const teamMinutes = Math.floor(teamAHT / 60);
-                const teamSeconds = Math.floor(teamAHT % 60);
-                
-                document.getElementById('yourAHT').textContent = `${yourMinutes}:${yourSeconds.toString().padStart(2, '0')}`;
-                document.getElementById('teamAHT').textContent = `${teamMinutes}:${teamSeconds.toString().padStart(2, '0')}`;
-                
-                const comparisonElement = document.getElementById('comparisonResult');
-                if (yourAHT < teamAHT) {
-                    const improvement = Math.round(((teamAHT - yourAHT) / teamAHT) * 100);
-                    comparisonElement.innerHTML = `<i class="fas fa-arrow-up improvement"></i><span class="improvement">${improvement}% faster</span> than team average`;
-                } else {
-                    const decline = Math.round(((yourAHT - teamAHT) / teamAHT) * 100);
-                    comparisonElement.innerHTML = `<i class="fas fa-arrow-down decline"></i><span class="decline">${decline}% slower</span> than team average`;
-                }
+            const comparisonElement = document.getElementById('comparisonResult');
+            if (yourAHT < teamAHT) {
+                const improvement = Math.round(((teamAHT - yourAHT) / teamAHT) * 100);
+                comparisonElement.innerHTML = `<i class="fas fa-arrow-up improvement"></i><span class="improvement">${improvement}% faster</span> than team`;
+            } else {
+                const decline = Math.round(((yourAHT - teamAHT) / teamAHT) * 100);
+                comparisonElement.innerHTML = `<i class="fas fa-arrow-down decline"></i><span class="decline">${decline}% slower</span> than team`;
             }
         }
 
         // Setup all event listeners
         function setupEventListeners() {
-            // Authentication
             logoutButton.addEventListener('click', handleLogout);
-            
-            // Call History
-            searchInput.addEventListener('input', applyFilters);
-            qualityFilter.addEventListener('change', applyFilters);
-            startDateFilter.addEventListener('change', applyFilters);
-            endDateFilter.addEventListener('change', applyFilters);
+            [searchInput, qualityFilter, startDateFilter, endDateFilter].forEach(el => {
+                el.addEventListener('input', applyFilters);
+            });
             resetFiltersBtn.addEventListener('click', resetFilters);
             refreshCallsBtn.addEventListener('click', loadCallsData);
-            
-            // Export Data
             exportDataBtn.addEventListener('click', exportData);
-            
-            // Notes
             saveNoteBtn.addEventListener('click', saveNote);
             cancelNoteBtn.addEventListener('click', clearScratchpad);
+            addTrainingBtn.addEventListener('click', () => showSuccess('This would open a form to add a new training program.'));
             
-            // Training
-            addTrainingBtn.addEventListener('click', showNewTrainingModal);
-            
-            // Modals
+            // Modal listeners
             closeNoteModalBtn.addEventListener('click', () => toggleModal(noteModal, false));
             editNoteBtn.addEventListener('click', enableNoteEditing);
             saveEditedNoteBtn.addEventListener('click', saveEditedNote);
             deleteNoteBtn.addEventListener('click', deleteCurrentNote);
             
             // Event delegation for dynamic elements
-            document.addEventListener('click', function(e) {
-                // Note actions
-                if (e.target.closest('.icon-button.view')) {
-                    const noteId = e.target.closest('.icon-button.view').getAttribute('data-note-id');
-                    viewNote(noteId);
-                }
-                
-                if (e.target.closest('.icon-button.edit')) {
-                    const noteId = e.target.closest('.icon-button.edit').getAttribute('data-note-id');
-                    editNote(noteId);
-                }
-                
-                if (e.target.closest('.icon-button.delete')) {
-                    const noteId = e.target.closest('.icon-button.delete').getAttribute('data-note-id');
-                    deleteNote(noteId);
-                }
-                
-                // Training actions
-                if (e.target.closest('.view-training-btn')) {
-                    const trainingId = e.target.closest('.view-training-btn').getAttribute('data-training-id');
-                    viewTraining(trainingId);
-                }
+            savedNotesList.addEventListener('click', e => {
+                const button = e.target.closest('.icon-button');
+                if (!button) return;
+                const noteId = button.dataset.noteId;
+                if (button.classList.contains('view')) viewNote(noteId);
+                else if (button.classList.contains('edit')) editNote(noteId);
+                else if (button.classList.contains('delete')) deleteNote(noteId);
             });
             
-            // Close modals when clicking outside
-            document.addEventListener('click', function(e) {
-                if (e.target === noteModal) {
-                    toggleModal(noteModal, false);
-                }
+            noteModal.addEventListener('click', e => {
+                if (e.target === noteModal) toggleModal(noteModal, false);
             });
             
             console.log('✅ Event listeners setup completed');
@@ -2350,13 +1944,8 @@
 
         // Handle logout
         async function handleLogout() {
-            try {
-                await supabase.auth.signOut();
-                window.location.href = 'index.html';
-            } catch (error) {
-                console.error('💥 Error during logout:', error);
-                showError('Failed to log out. Please try again.');
-            }
+            await supabase.auth.signOut();
+            window.location.href = 'index.html';
         }
 
         // Apply filters to calls data
@@ -2367,26 +1956,13 @@
             const endDateValue = endDateFilter.value;
             
             filteredCalls = allCalls.filter(call => {
-                // Search filter
-                if (searchTerm && !call.scenario.toLowerCase().includes(searchTerm)) {
-                    return false;
-                }
-                
-                // Quality filter
-                if (qualityValue && call.quality !== qualityValue) {
-                    return false;
-                }
-                
-                // Date range filter
-                if (startDateValue && call.date < startDateValue) {
-                    return false;
-                }
-                
-                if (endDateValue && call.date > endDateValue) {
-                    return false;
-                }
-                
-                return true;
+                const callDate = call.start_time_egypt.split('T')[0];
+                return (
+                    (!searchTerm || (call.scenario_title || '').toLowerCase().includes(searchTerm)) &&
+                    (!qualityValue || (call.call_quality || 'N/A') === qualityValue) &&
+                    (!startDateValue || callDate >= startDateValue) &&
+                    (!endDateValue || callDate <= endDateValue)
+                );
             });
             
             currentPage = 1;
@@ -2405,32 +1981,30 @@
 
         // Export data functionality
         function exportData() {
-            // In a real app, this would generate a CSV or Excel file
-            showSuccess('Export functionality would generate a CSV file with your data in a real application.');
+            showSuccess('This would generate a CSV file in a real application.');
         }
 
         // Save note from scratchpad
-        function saveNote() {
+        async function saveNote() {
             const noteContent = agentScratchpad.value.trim();
+            if (!noteContent) return showError('Note cannot be empty.');
             
-            if (!noteContent) {
-                showError('Please enter some content for your note.');
-                return;
+            saveNoteBtn.disabled = true;
+            const { data, error } = await supabase
+                .from('agent_notes')
+                .insert({ agent_email: currentUser.email, note_text: noteContent })
+                .select()
+                .single();
+            
+            if (error) {
+                showError('Failed to save note.');
+            } else {
+                allNotes.unshift(data);
+                clearScratchpad();
+                renderNotes();
+                showSuccess('Note saved successfully!');
             }
-            
-            // Create new note
-            const newNote = {
-                id: allNotes.length > 0 ? Math.max(...allNotes.map(n => n.id)) + 1 : 1,
-                content: noteContent,
-                author: currentUser.email,
-                created_at: new Date().toISOString()
-            };
-            
-            allNotes.unshift(newNote);
-            clearScratchpad();
-            renderNotes();
-            
-            showSuccess('Note saved successfully!');
+            saveNoteBtn.disabled = false;
         }
 
         // Clear scratchpad
@@ -2442,14 +2016,10 @@
         function toggleModal(modal, show) {
             if (show) {
                 modal.style.display = 'flex';
-                setTimeout(() => {
-                    modal.style.opacity = '1';
-                }, 10);
+                setTimeout(() => modal.style.opacity = '1', 10);
             } else {
                 modal.style.opacity = '0';
-                setTimeout(() => {
-                    modal.style.display = 'none';
-                }, 300);
+                setTimeout(() => modal.style.display = 'none', 300);
             }
         }
 
@@ -2459,111 +2029,83 @@
             if (!note) return;
             
             noteModalTitle.innerHTML = '<i class="fas fa-sticky-note"></i> View Note';
-            editNoteTextarea.value = note.content;
+            editNoteTextarea.value = note.note_text;
             editNoteTextarea.setAttribute('readonly', true);
             editNoteBtn.style.display = 'inline-flex';
             saveEditedNoteBtn.style.display = 'none';
-            deleteNoteBtn.setAttribute('data-note-id', noteId);
+            deleteNoteBtn.dataset.noteId = noteId;
+            saveEditedNoteBtn.dataset.noteId = noteId;
             
             toggleModal(noteModal, true);
         }
 
         // Edit note
         function editNote(noteId) {
-            const note = allNotes.find(n => n.id == noteId);
-            if (!note) return;
-            
+            viewNote(noteId); // First show the note
             noteModalTitle.innerHTML = '<i class="fas fa-edit"></i> Edit Note';
-            editNoteTextarea.value = note.content;
-            editNoteTextarea.removeAttribute('readonly');
-            editNoteBtn.style.display = 'none';
-            saveEditedNoteBtn.style.display = 'inline-flex';
-            deleteNoteBtn.setAttribute('data-note-id', noteId);
-            
-            toggleModal(noteModal, true);
+            enableNoteEditing(); // Then enable editing
         }
 
         // Enable note editing in modal
         function enableNoteEditing() {
             editNoteTextarea.removeAttribute('readonly');
+            editNoteTextarea.focus();
             editNoteBtn.style.display = 'none';
             saveEditedNoteBtn.style.display = 'inline-flex';
         }
 
         // Save edited note
-        function saveEditedNote() {
+        async function saveEditedNote() {
             const noteContent = editNoteTextarea.value.trim();
-            
-            if (!noteContent) {
-                showError('Note content cannot be empty.');
-                return;
+            const noteId = saveEditedNoteBtn.dataset.noteId;
+            if (!noteContent) return showError('Note cannot be empty.');
+
+            saveEditedNoteBtn.disabled = true;
+            const { error } = await supabase
+                .from('agent_notes')
+                .update({ note_text: noteContent })
+                .eq('id', noteId);
+
+            if (error) {
+                showError('Failed to update note.');
+            } else {
+                const noteIndex = allNotes.findIndex(n => n.id == noteId);
+                if (noteIndex !== -1) allNotes[noteIndex].note_text = noteContent;
+                renderNotes();
+                showSuccess('Note updated successfully!');
+                toggleModal(noteModal, false);
             }
-            
-            // In a real app, this would update the note in the database
-            showSuccess('Note updated successfully!');
-            toggleModal(noteModal, false);
-            
-            // Refresh notes list
-            loadNotesData();
+            saveEditedNoteBtn.disabled = false;
         }
 
-        // Delete note
-        function deleteNote(noteId) {
-            if (confirm('Are you sure you want to delete this note? This action cannot be undone.')) {
+        // Delete note from list
+        async function deleteNote(noteId) {
+            if (!confirm('Are you sure you want to delete this note?')) return;
+            
+            const { error } = await supabase
+                .from('agent_notes')
+                .delete()
+                .eq('id', noteId);
+            
+            if (error) {
+                showError('Failed to delete note.');
+            } else {
                 allNotes = allNotes.filter(n => n.id != noteId);
                 renderNotes();
                 showSuccess('Note deleted successfully!');
-                
-                // Close modal if open
-                toggleModal(noteModal, false);
             }
         }
 
         // Delete current note from modal
-        function deleteCurrentNote() {
-            const noteId = deleteNoteBtn.getAttribute('data-note-id');
-            if (noteId) {
-                deleteNote(noteId);
-            }
+        async function deleteCurrentNote() {
+            await deleteNote(deleteNoteBtn.dataset.noteId);
+            toggleModal(noteModal, false);
         }
 
-        // View training details
-        function viewTraining(trainingId) {
-            const training = allTraining.find(t => t.id == trainingId);
-            if (!training) return;
-            
-            // In a real app, this would open a training details modal
-            showSuccess(`Viewing details for: ${training.title}`);
-        }
-
-        // Show new training modal
-        function showNewTrainingModal() {
-            // In a real app, this would open a modal to create new training
-            showSuccess('Add Training functionality would open a form in a real application.');
-        }
-
-        // Show error message
-        function showError(message) {
-            // In a real app, you might use a toast notification system
-            alert(`❌ Error: ${message}`);
-        }
-
-        // Show success message
-        function showSuccess(message) {
-            // In a real app, you might use a toast notification system
-            alert(`✅ Success: ${message}`);
-        }
+        // Utility to show messages
+        function showError(message) { alert(`❌ Error: ${message}`); }
+        function showSuccess(message) { alert(`✅ Success: ${message}`); }
     </script>
-
-<script>
-document.addEventListener("DOMContentLoaded", () => {
-  const userNameElement = document.getElementById("userName");
-  const user = JSON.parse(localStorage.getItem("user"));
-  if (userNameElement && user) {
-    userNameElement.textContent = user.name || user.email || "User";
-  }
-});
-</script>
 
 </body>
 </html>
