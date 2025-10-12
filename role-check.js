@@ -59,9 +59,9 @@ function showAccessDeniedModal() {
                 <div style="font-size: 4rem; margin-bottom: 1.5rem;">⚠️</div>
                 <h3 style="color: #f0f0f0; font-size: 1.8rem; margin-bottom: 1rem; font-weight: 700;">Access Restricted</h3>
                 <p style="color: #a0a0b0; font-size: 1.1rem; line-height: 1.6; margin-bottom: 2rem;">
-                    You don't have permission to view this page. This section is available for <strong style="color: #4e8cff;">Admins</strong> only.
+                    You don't have permission to view this page. This section is available for <strong style="color: #4e8cff;">Admins</strong> and <strong style="color: #4e8cff;">Managers</strong> only.
                 </p>
-                <button onclick="window.location.href='dashboard.html'" style="
+                <button onclick="window.location.href='core-flow.html'" style="
                     background: linear-gradient(135deg, #4e8cff, #3d7eff);
                     color: white;
                     border: none;
@@ -73,7 +73,7 @@ function showAccessDeniedModal() {
                     transition: all 0.3s ease;
                 " onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 20px rgba(78, 140, 255, 0.4)'" 
                 onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='none'">
-                    🔙 Back to My Dashboard
+                    🔙 Back to Core Flow
                 </button>
             </div>
         </div>
@@ -86,6 +86,7 @@ async function checkAdminAccess() {
     if (!userData) return false;
 
     if (userData.role === 'admin' || userData.role === 'manager') {
+        updateUserInterface(userData);
         return userData;
     } else {
         showAccessDeniedModal();
@@ -98,6 +99,7 @@ async function checkAgentAccess() {
     if (!userData) return false;
 
     if (userData.role === 'admin' || userData.role === 'manager' || userData.role === 'agent') {
+        updateUserInterface(userData);
         return userData;
     } else {
         window.location.href = 'login.html';
@@ -105,21 +107,35 @@ async function checkAgentAccess() {
     }
 }
 
-// تحديث واجهة المستخدم بمعلومات المستخدم
 function updateUserInterface(userData) {
-    // تحديث اسم المستخدم في الرأس إذا كان العنصر موجوداً
+    console.log('Updating UI with user data:', userData);
+    
+    // تحديث اسم المستخدم في كل العناصر
     const userNameElements = document.querySelectorAll('#userName, .user-name-display');
     userNameElements.forEach(element => {
         if (element) {
             element.textContent = userData.name || userData.email;
+            console.log('Updated element:', element, 'with:', userData.name || userData.email);
         }
     });
-    
-    // تحديث رابط Dashboard بناءً على الصلاحية
+
+    // إظهار/إخفاء رابط Dashboard بناءً على الصلاحية
     const dashboardLinks = document.querySelectorAll('#dashboardLink, .nav-link[href="dashboard.html"]');
     dashboardLinks.forEach(link => {
         if (link) {
-            link.style.display = (userData.role === 'admin' || userData.role === 'manager') ? 'inline-block' : 'none';
+            if (userData.role === 'admin' || userData.role === 'manager') {
+                link.style.display = 'inline-block';
+            } else {
+                link.style.display = 'none';
+            }
+        }
+    });
+
+    // إظهار user info
+    const userInfoDivs = document.querySelectorAll('#userInfo, .user-info');
+    userInfoDivs.forEach(div => {
+        if (div) {
+            div.style.display = 'flex';
         }
     });
 }
@@ -129,3 +145,11 @@ window.roleCheck = {
     checkAgentAccess,
     updateUserInterface
 };
+
+// مسح البيانات القديمة عند التحميل
+document.addEventListener('DOMContentLoaded', function() {
+    // مسح البيانات القديمة من localStorage
+    localStorage.removeItem('elevoCoreUserData');
+    localStorage.removeItem('user');
+    console.log('Cleaned old localStorage data');
+});
