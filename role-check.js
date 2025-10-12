@@ -148,7 +148,9 @@ if (window.location.pathname.includes('dashboard.html')) {
   checkAccess(['admin', 'manager']);
 }
 
-// للكور فلو (Agents + Managers + Admins)
-if (window.location.pathname.includes('core-flow.html')) {
-  checkAccess(['agent', 'manager', 'admin']);
-}
+window.roleCheck = {
+  checkUserRole,
+  checkAccess,
+  updateUserInterface,
+  showAccessDeniedModal
+};
