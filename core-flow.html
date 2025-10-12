@@ -57,6 +57,7 @@
             flex-direction: column; 
             align-items: center; 
             justify-content: flex-start;
+            margin-top: 2rem; /* Added margin to push the card down */
         }
 
         .app-header {
@@ -386,7 +387,7 @@
 
         #timer-container { 
             position: fixed; 
-            top: 100px; 
+            top: 130px; /* Adjusted position */
             left: 50%; 
             transform: translateX(-50%); 
             z-index: 1000; 
@@ -483,6 +484,48 @@
         #callSummaryContent .quality-text.quality-na { 
             color: var(--text-color-secondary); 
             font-style: italic; 
+        }
+
+        /* New Summary Layout Styles */
+        #postCallSummary {
+            max-height: 85vh;
+            overflow-y: auto;
+        }
+        
+        #callSummaryContent .summary-steps-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1rem;
+            padding-left: 0;
+            list-style: none;
+            margin-top: 1rem;
+        }
+
+        #callSummaryContent .summary-step-item {
+            background: var(--input-background-color);
+            border-radius: 8px;
+            padding: 1rem;
+            flex-basis: calc(50% - 0.5rem);
+            flex-grow: 1;
+            box-sizing: border-box;
+            border: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        #callSummaryContent .summary-step-item .step-text {
+            margin: 0 0 0.75rem 0;
+            font-size: 0.95rem;
+            line-height: 1.5;
+            color: var(--text-color-secondary);
+        }
+
+        #callSummaryContent .summary-step-item .step-duration {
+            font-size: 1.1rem;
+            color: var(--primary-color);
+            font-weight: 700;
+            align-self: flex-end;
         }
         
         .initial-card-left { 
@@ -672,6 +715,58 @@
         .custom-toast .toast-icon {
             font-size: 1.5rem;
         }
+        
+        /* New Custom Confirm Modal Styles */
+        .custom-confirm-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.6);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10000;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s ease;
+        }
+        .custom-confirm-overlay.show {
+            opacity: 1;
+            visibility: visible;
+        }
+        .custom-confirm-box {
+            background: var(--card-background-color);
+            padding: 2.5rem;
+            border-radius: var(--border-radius);
+            box-shadow: 0 5px 25px rgba(0, 0, 0, 0.4);
+            border: 1px solid var(--border-color);
+            width: 90%;
+            max-width: 450px;
+            text-align: center;
+            transform: scale(0.9);
+            transition: transform 0.3s ease;
+        }
+        .custom-confirm-overlay.show .custom-confirm-box {
+            transform: scale(1);
+        }
+        .custom-confirm-box p {
+            font-size: 1.2rem;
+            color: var(--text-color);
+            margin-top: 0;
+            margin-bottom: 2rem;
+        }
+        .custom-confirm-buttons {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+        }
+        .custom-confirm-buttons button {
+            padding: 0.8rem 1.8rem;
+            font-size: 1rem;
+        }
+
 
         @media (max-width: 1200px) {
             .initial-card {
@@ -725,6 +820,10 @@
             
             .action-button, .nav-button {
                 width: 100%;
+            }
+
+            #callSummaryContent .summary-step-item {
+                flex-basis: 100%; /* One item per row on smaller screens */
             }
         }
 
@@ -915,6 +1014,18 @@
         <button id="accessDeniedCloseBtn" class="action-button primary-button" style="padding: 0.75rem 1.5rem; font-size: 1rem;">Close</button>
       </div>
     </div>
+    
+    <!-- New Custom Confirm Modal -->
+    <div id="customConfirmModal" class="custom-confirm-overlay" style="display: none;">
+        <div class="custom-confirm-box">
+            <p id="customConfirmMessage"></p>
+            <div class="custom-confirm-buttons">
+                <button id="customConfirmCancel" class="nav-button secondary-button">Cancel</button>
+                <button id="customConfirmOk" class="nav-button danger-button" style="background-color: var(--danger-color); color: white;">End Ticket</button>
+            </div>
+        </div>
+    </div>
+
 
     <script type="module">
         const SUPABASE_URL = 'https://aefiigottnlcmjzilqnh.supabase.co';
@@ -953,6 +1064,14 @@
         const searchScenarioInput = document.getElementById('searchScenarioInput');
         const scenarioPreviewTooltip = document.getElementById('scenario-preview-tooltip');
         document.getElementById('currentYear').textContent = new Date().getFullYear();
+        
+        // Custom Confirm Modal Elements
+        const customConfirmModal = document.getElementById('customConfirmModal');
+        const customConfirmMessage = document.getElementById('customConfirmMessage');
+        const customConfirmOk = document.getElementById('customConfirmOk');
+        const customConfirmCancel = document.getElementById('customConfirmCancel');
+        let confirmCallback = null;
+
 
         let currentUser = null; 
         let currentScenario = null; 
@@ -1024,6 +1143,34 @@
                 }, 4000);
             }
         }
+        
+        // New functions for custom confirm modal
+        function showCustomConfirm(message, callback) {
+            customConfirmMessage.textContent = message;
+            confirmCallback = callback;
+            customConfirmModal.style.display = 'flex';
+            setTimeout(() => customConfirmModal.classList.add('show'), 10);
+        }
+
+        function hideCustomConfirm() {
+            customConfirmModal.classList.remove('show');
+            setTimeout(() => {
+                customConfirmModal.style.display = 'none';
+                confirmCallback = null;
+            }, 300);
+        }
+
+        customConfirmOk.addEventListener('click', () => {
+            if (typeof confirmCallback === 'function') {
+                confirmCallback();
+            }
+            hideCustomConfirm();
+        });
+
+        customConfirmCancel.addEventListener('click', () => {
+            hideCustomConfirm();
+        });
+
 
         async function initializeApp() {
             if (!supabase) { 
@@ -1444,10 +1591,10 @@
         });
         
         endCallBtn.addEventListener('click', () => { 
-            if (confirm("Are you sure you want to end this ticket?")) {
+            showCustomConfirm("Are you sure you want to end this ticket?", () => {
                 stopAndRecordStepTimer(); 
                 finishCall(false, "Ticket ended by agent"); 
-            }
+            });
         });
 
         function startStepTimer() {
@@ -1504,25 +1651,30 @@
                 <p><strong>Total Handle Time:</strong> ${Math.floor(totalDurationSeconds / 60)}m ${totalDurationSeconds % 60}s</p>
                 <hr style="margin: 1.5rem 0; border-color: var(--border-color);">
                 <p><strong>Time Spent on Steps:</strong></p>
-                <ul style="list-style: none; padding-left: 0;">
+                <div class="summary-steps-grid">
             `;
 
             if (currentScenario?.steps) {
-                let visitedSteps = [...new Set([...stepHistory, currentStepId])].filter(id => id != null);
+                const visitedSteps = [...new Set([...stepHistory, currentStepId])].filter(id => id != null);
+                let stepsRendered = 0;
                 visitedSteps.forEach(stepId => {
                     const stepObject = currentScenario.steps.find(s => s?.id === stepId); 
                     const duration = accumulatedStepDurations[stepId] || 0;
                     if (stepObject && duration > 0) {
-                        summaryHTML += `<li style="margin-bottom: 0.75rem; padding: 0.75rem; background: var(--input-background-color); border-radius: 6px;">
-                            "${stepObject.text.substring(0,60)}..."<br>
-                            <strong style="color: var(--primary-color);">${duration}s</strong>
-                        </li>`;
+                        summaryHTML += `<div class="summary-step-item">
+                            <p class="step-text">"${stepObject.text.substring(0,60)}..."</p>
+                            <span class="step-duration">${duration}s</span>
+                        </div>`;
+                        stepsRendered++;
                     }
                 });
+                if (stepsRendered === 0) {
+                     summaryHTML += `<div style="color: var(--text-color-secondary); font-style: italic; width: 100%;">No step duration data available.</div>`;
+                }
             } else { 
-                summaryHTML += `<li style="color: var(--text-color-secondary); font-style: italic;">No step data available.</li>`; 
+                summaryHTML += `<div style="color: var(--text-color-secondary); font-style: italic; width: 100%;">No step data available.</div>`; 
             }
-            summaryHTML += `</ul>`;
+            summaryHTML += `</div>`;
             callSummaryContentDiv.innerHTML = summaryHTML;
             switchToSummaryView();
         }
@@ -1589,6 +1741,8 @@
             const scenarios = document.querySelectorAll('.scenario-item');
             let hasVisibleItems = false;
             
+            document.getElementById('no-results-message')?.remove();
+
             scenarios.forEach(scenario => {
                 const title = scenario.textContent.toLowerCase();
                 const isVisible = title.includes(searchTerm);
@@ -1598,7 +1752,9 @@
 
             if (!hasVisibleItems && searchTerm) {
                 const noResults = document.createElement('div');
+                noResults.id = 'no-results-message';
                 noResults.className = 'scenario-item';
+                noResults.style.justifyContent = 'center';
                 noResults.innerHTML = `
                     <div style="text-align: center; width: 100%; color: var(--text-color-secondary);">
                         <div style="font-size: 2rem; margin-bottom: 0.5rem;">🔍</div>
