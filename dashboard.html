@@ -1044,14 +1044,6 @@ body.dark {
             
             // Start auto-refresh
             startAutoRefresh();
-            // Start real-time auto-refresh for summary boxes and recent tickets
-            startAutoRefreshRealTime([loadTicketCounts, loadRecentTickets], 30);
-            
-            // Add sample notifications for demonstration
-            setTimeout(() => {
-                addNotification('Dashboard data loaded successfully', 'success');
-                addNotification('There are 5 delayed tickets that need review', 'warning');
-            }, 2000);
         });
 
         // ========== START: JAVASCRIPT MODIFICATION ==========
@@ -1064,42 +1056,35 @@ body.dark {
                     return;
                 }
                 
-                // Fetch the user's full profile from the 'users' table
                 const { data: profile, error: profileError } = await supabaseClient
                     .from('users')
-                    .select('name, role') // We fetch 'name' and 'role'
+                    .select('name, role')
                     .eq('id', user.id)
                     .single();
 
                 if (profileError) {
-                    // Handle case where profile might not exist but user is authenticated
                     console.warn("Could not fetch user profile:", profileError.message);
-                    // Redirect or show an error, but ensure it's an admin
-                    // For now, we will assume non-profile users are not admins.
                     window.location.href = 'core-flow.html';
                     return;
                 }
 
                 const isAdmin = profile?.role === 'admin';
 
-                if (!profile || !isAdmin) {
-                    // Redirect non-admins to the main application page
+                if (!isAdmin) {
                     window.location.href = 'core-flow.html';
                     return;
                 }
                 
-                // Set the currentUser object with full details
                 currentUser = {
                     id: user.id,
                     email: user.email,
-                    name: profile.name || user.email // Use name, fallback to email
+                    name: profile.name || user.email,
+                    role: profile.role
                 };
                 
-                // Show user info using the fetched name
                 document.getElementById('userInfo').style.display = 'flex';
                 document.getElementById('userName').textContent = currentUser.name;
                 
-                // Load dashboard data now that we are authenticated and authorized
                 await loadDashboardData();
                 
             } catch (error) {
@@ -1114,6 +1099,7 @@ body.dark {
             // Logout button
             document.getElementById('logoutButton').addEventListener('click', async () => {
                 await supabaseClient.auth.signOut();
+                localStorage.removeItem('elevoCoreUserData');
                 window.location.href = 'index.html';
             });
             
@@ -1145,14 +1131,19 @@ body.dark {
             updateNotificationBadge();
             renderNotifications();
             
-            document.getElementById('notificationsBtn').addEventListener('click', toggleNotifications);
-            document.getElementById('clearNotifications').addEventListener('click', clearNotifications);
+            const notificationsBtn = document.getElementById('notificationsBtn');
+            if (notificationsBtn) {
+                notificationsBtn.addEventListener('click', toggleNotifications);
+            }
+            const clearNotificationsBtn = document.getElementById('clearNotifications');
+            if (clearNotificationsBtn) {
+                clearNotificationsBtn.addEventListener('click', clearNotifications);
+            }
             
-            // Close notifications when clicking outside
             document.addEventListener('click', (e) => {
                 const panel = document.getElementById('notificationsPanel');
                 const btn = document.getElementById('notificationsBtn');
-                if (panel && panel.style.display === 'block' && !panel.contains(e.target) && !btn.contains(e.target)) {
+                if (panel && btn && panel.style.display === 'block' && !panel.contains(e.target) && !btn.contains(e.target)) {
                     panel.style.display = 'none';
                 }
             });
@@ -1160,7 +1151,9 @@ body.dark {
 
         function toggleNotifications() {
             const panel = document.getElementById('notificationsPanel');
-            panel.style.display = panel.style.display === 'block' ? 'none' : 'block';
+            if (panel) {
+                panel.style.display = panel.style.display === 'block' ? 'none' : 'block';
+            }
         }
 
         function addNotification(message, type = 'info') {
@@ -1173,13 +1166,11 @@ body.dark {
             };
             
             notifications.unshift(notification);
-            if (notifications.length > 50) notifications.pop(); // Limit to 50 notifications
+            if (notifications.length > 50) notifications.pop();
             
             localStorage.setItem('elevo_notifications', JSON.stringify(notifications));
             updateNotificationBadge();
             renderNotifications();
-            
-            // Show toast notification
             showToast(message, type);
         }
 
@@ -1193,15 +1184,20 @@ body.dark {
             }
             
             list.innerHTML = notifications.map(notif => `
-                <div class="notification-item ${notif.read ? '' : 'unread'}" onclick="markAsRead(${notif.id})">
+                <div class="notification-item ${notif.read ? '' : 'unread'}" data-id="${notif.id}">
                     <div>${notif.message}</div>
                     <div class="notification-time">${formatTime(notif.timestamp)}</div>
                 </div>
             `).join('');
+
+            list.querySelectorAll('.notification-item').forEach(item => {
+                item.addEventListener('click', () => markAsRead(parseInt(item.dataset.id)));
+            });
         }
 
         function updateNotificationBadge() {
             const badge = document.getElementById('notificationBadge');
+            if (!badge) return;
             const unreadCount = notifications.filter(n => !n.read).length;
             
             if (unreadCount > 0) {
@@ -1212,7 +1208,7 @@ body.dark {
             }
         }
 
-        window.markAsRead = function(id) { // Make it globally accessible from inline onclick
+        function markAsRead(id) {
             notifications = notifications.map(notif => 
                 notif.id === id ? {...notif, read: true} : notif
             );
@@ -1251,34 +1247,25 @@ body.dark {
         function highlightSearchResults(term) {
             clearSearchHighlights();
             
-            // Search in table
             const table = document.getElementById('recentTicketsTable');
             if (table) {
-                const rows = table.querySelectorAll('tbody tr');
-                rows.forEach(row => {
-                    const text = row.textContent.toLowerCase();
-                    if (text.includes(term)) {
+                table.querySelectorAll('tbody tr').forEach(row => {
+                    if (row.textContent.toLowerCase().includes(term)) {
                         row.classList.add('highlight-row');
                     }
                 });
             }
             
-            // Search in cards
-            const cards = document.querySelectorAll('.dashboard-card');
-            cards.forEach(card => {
-                const text = card.textContent.toLowerCase();
-                if (text.includes(term)) {
+            document.querySelectorAll('.dashboard-card').forEach(card => {
+                if (card.textContent.toLowerCase().includes(term)) {
                     card.style.boxShadow = '0 0 0 2px var(--primary-color)';
                 }
             });
         }
 
         function clearSearchHighlights() {
-            const highlighted = document.querySelectorAll('.highlight-row');
-            highlighted.forEach(el => el.classList.remove('highlight-row'));
-            
-            const cards = document.querySelectorAll('.dashboard-card');
-            cards.forEach(card => card.style.boxShadow = '');
+            document.querySelectorAll('.highlight-row').forEach(el => el.classList.remove('highlight-row'));
+            document.querySelectorAll('.dashboard-card').forEach(card => card.style.boxShadow = '');
         }
 
         // Toast notifications
@@ -1303,104 +1290,63 @@ body.dark {
 
         // Load dashboard data
         async function loadDashboardData() {
-            try {
-                // Show loading state
-                document.getElementById('auth-loading').style.display = 'flex';
-                document.getElementById('dashboardContent').style.display = 'none';
-                
-                // Load data from all required views
-                await Promise.all([
-                    loadTicketCounts(),
-                    loadCallQualitySummary(),
-                    loadTopAgents(),
-                    loadTopScenario(),
-                    loadVolumeTrends(),
-                    loadAgentPerformance(),
-                    loadQuickStats(),
-                    loadRecentTickets()
-                ]);
-                
-                // Hide loading and show content
-                document.getElementById('auth-loading').style.display = 'none';
-                document.getElementById('dashboardContent').style.display = 'block';
-                
-            } catch (error) {
-                console.error('Error loading dashboard data:', error);
-                document.getElementById('auth-loading').innerHTML = '<p>Error loading data. Please try again.</p>';
-                addNotification('Error loading dashboard data', 'error');
-            }
+            document.getElementById('auth-loading').style.display = 'flex';
+            document.getElementById('dashboardContent').style.display = 'none';
+            
+            await Promise.all([
+                loadTicketCounts(),
+                loadCallQualitySummary(),
+                loadTopAgents(),
+                loadTopScenario(),
+                loadVolumeTrends(),
+                loadAgentPerformance(),
+                loadQuickStats(),
+                loadRecentTickets()
+            ]);
+            
+            document.getElementById('auth-loading').style.display = 'none';
+            document.getElementById('dashboardContent').style.display = 'block';
         }
+        
+        // ========== START: REVERTED FUNCTIONS ==========
+        // These functions now use client-side aggregation instead of RPC calls.
 
-        // Load ticket counts from call_sessions table
         async function loadTicketCounts() {
             try {
-                // Load live tickets count - Active sessions
-                const { data: liveData, error: liveError } = await supabaseClient
-                    .from('call_sessions')
-                    .select('id', { count: 'exact' })
-                    .is('end_time_egypt', null);
-                    
-                if (!liveError) {
-                    document.getElementById('liveTicketsCount').textContent = liveData.length;
-                }
-                
-                // Load delayed tickets count - Delayed more than 5 minutes
-                const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
-                const { data: delayedData, error: delayedError } = await supabaseClient
-                    .from('call_sessions')
-                    .select('id', { count: 'exact' })
-                    .is('end_time_egypt', null)
-                    .lt('start_time_egypt', fiveMinutesAgo);
-                    
-                if (!delayedError) {
-                    document.getElementById('delayedTicketsCount').textContent = delayedData.length;
-                }
-                
-                // Load recent tickets count - Last 10 minutes
-                const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
-                const { data: recentData, error: recentError } = await supabaseClient
-                    .from('call_sessions')
-                    .select('id', { count: 'exact' })
-                    .not('end_time_egypt', 'is', null)
-                    .gte('end_time_egypt', tenMinutesAgo);
-                    
-                if (!recentError) {
-                    document.getElementById('recentTicketsCount').textContent = recentData.length;
-                }
-                
-                // Load total calls today
                 const today = new Date();
                 today.setHours(0, 0, 0, 0);
                 const tomorrow = new Date(today);
                 tomorrow.setDate(tomorrow.getDate() + 1);
+                const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+                const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
 
-                const { data: todayData, error: todayError } = await supabaseClient
+                const { data, error } = await supabaseClient
                     .from('call_sessions')
-                    .select('id', { count: 'exact' })
-                    .gte('start_time_egypt', today.toISOString())
-                    .lt('start_time_egypt', tomorrow.toISOString());
-                    
-                if (!todayError) {
-                    document.getElementById('totalCallsToday').textContent = todayData.length;
-                }
-                
+                    .select('start_time_egypt, end_time_egypt');
+
+                if (error) throw error;
+
+                const liveTickets = data.filter(s => s.end_time_egypt === null);
+                const delayedTickets = liveTickets.filter(s => new Date(s.start_time_egypt) < new Date(fiveMinutesAgo));
+                const recentTickets = data.filter(s => s.end_time_egypt !== null && new Date(s.end_time_egypt) >= new Date(tenMinutesAgo));
+                const todayTickets = data.filter(s => new Date(s.start_time_egypt) >= today && new Date(s.start_time_egypt) < tomorrow);
+
+                document.getElementById('liveTicketsCount').textContent = liveTickets.length;
+                document.getElementById('delayedTicketsCount').textContent = delayedTickets.length;
+                document.getElementById('recentTicketsCount').textContent = recentTickets.length;
+                document.getElementById('totalCallsToday').textContent = todayTickets.length;
             } catch (error) {
                 console.error('Error loading ticket counts:', error);
             }
         }
 
-        // Load call quality summary from call_sessions
         async function loadCallQualitySummary() {
             try {
                 const { data, error } = await supabaseClient
                     .from('call_sessions')
                     .select('call_quality')
                     .not('call_quality', 'is', null);
-                    
-                if (error) {
-                    console.error('Error fetching call quality summary:', error);
-                    return;
-                }
+                if (error) throw error;
                 
                 const qualityCounts = data.reduce((acc, { call_quality }) => {
                     acc[call_quality] = (acc[call_quality] || 0) + 1;
@@ -1409,237 +1355,207 @@ body.dark {
 
                 const labels = Object.keys(qualityCounts);
                 const values = Object.values(qualityCounts);
-                const colors = labels.map(quality => {
-                    if (quality.toLowerCase() === 'good') return '#10B981';
-                    if (quality.toLowerCase() === 'bad') return '#EF4444';
-                    return '#6B7280';
-                });
+                const colors = labels.map(q => q.toLowerCase() === 'good' ? '#10B981' : (q.toLowerCase() === 'bad' ? '#EF4444' : '#6B7280'));
                 
                 const ctx = document.getElementById('qualitySummaryChart').getContext('2d');
-                
-                if (qualitySummaryChart) {
-                    qualitySummaryChart.destroy();
-                }
+                if (qualitySummaryChart) qualitySummaryChart.destroy();
                 
                 qualitySummaryChart = new Chart(ctx, {
                     type: 'doughnut',
-                    data: {
-                        labels: labels,
-                        datasets: [{
-                            data: values,
-                            backgroundColor: colors,
-                            borderColor: '#1f2937',
-                            borderWidth: 4
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: {
-                            legend: {
-                                display: false
-                            },
-                            title: {
-                                display: false
-                            }
-                        },
-                        cutout: '70%'
-                    }
+                    data: { labels, datasets: [{ data: values, backgroundColor: colors, borderColor: '#1f2937', borderWidth: 4 }] },
+                    options: { responsive: true, maintainAspectRatio: false, cutout: '70%', plugins: { legend: { display: false } } }
                 });
                 
                 const legendContainer = document.getElementById('qualityLegend');
                 if (legendContainer) {
                     legendContainer.innerHTML = labels.map((label, i) => `
-                        <div class="legend-item">
-                            <div class="legend-color" style="background-color: ${colors[i]}"></div>
-                            <span>${label}: ${values[i]}</span>
-                        </div>
+                        <div class="legend-item"><div class="legend-color" style="background-color: ${colors[i]}"></div><span>${label}: ${values[i]}</span></div>
                     `).join('');
                 }
-                
             } catch (error) {
                 console.error('Error loading call quality summary:', error);
             }
         }
 
-        // Load top 5 agents from call_sessions
         async function loadTopAgents() {
             try {
                 const today = new Date();
                 today.setHours(0, 0, 0, 0);
+                
                 const { data, error } = await supabaseClient
-                    .rpc('get_top_agents_today', { from_date: today.toISOString() });
+                    .from('call_sessions')
+                    .select('agent_name')
+                    .gte('start_time_egypt', today.toISOString());
+                if (error) throw error;
 
-                if (error) {
-                    console.error('Error fetching top agents:', error);
-                    return;
-                }
-                
+                const agentCounts = data.reduce((acc, { agent_name }) => {
+                    if (agent_name) acc[agent_name] = (acc[agent_name] || 0) + 1;
+                    return acc;
+                }, {});
+
+                const topAgents = Object.entries(agentCounts)
+                    .sort(([, a], [, b]) => b - a)
+                    .slice(0, 5);
+
                 const topAgentsList = document.getElementById('topAgentsList');
-                
-                if (!data || data.length === 0) {
+                if (topAgents.length === 0) {
                     topAgentsList.innerHTML = '<li class="top-agent-item"><span class="agent-name">No data available</span></li>';
                     return;
                 }
-                
-                topAgentsList.innerHTML = data.map(agent => `
-                    <li class="top-agent-item">
-                        <span class="agent-name">${agent.agent_name || 'Unknown'}</span>
-                        <span class="agent-count">${agent.call_count}</span>
-                    </li>
+                topAgentsList.innerHTML = topAgents.map(([name, count]) => `
+                    <li class="top-agent-item"><span class="agent-name">${name}</span><span class="agent-count">${count}</span></li>
                 `).join('');
-                
             } catch (error) {
                 console.error('Error loading top agents:', error);
             }
         }
 
-        // Load top scenario
         async function loadTopScenario() {
             try {
                 const today = new Date();
                 today.setHours(0, 0, 0, 0);
+                
                 const { data, error } = await supabaseClient
-                    .rpc('get_top_scenario_today', { from_date: today.toISOString() });
+                    .from('call_sessions_egypt')
+                    .select('scenario_title')
+                    .gte('start_time_egypt', today.toISOString());
+                if (error) throw error;
 
-                if (error) {
-                    console.error('Error fetching top scenario:', error);
-                    return;
-                }
+                const scenarioCounts = data.reduce((acc, { scenario_title }) => {
+                    if(scenario_title) acc[scenario_title] = (acc[scenario_title] || 0) + 1;
+                    return acc;
+                }, {});
+
+                const topScenario = Object.entries(scenarioCounts).sort(([, a], [, b]) => b - a)[0];
                 
                 const topScenarioContainer = document.getElementById('topScenarioContainer');
-                
-                if (!data || data.length === 0) {
+                if (!topScenario) {
                     topScenarioContainer.innerHTML = '<div class="top-scenario-item"><span class="scenario-name">No data available</span></div>';
                     return;
                 }
-
-                topScenarioContainer.innerHTML = data.map(scenario => `
-                    <div class="top-scenario-item">
-                        <span class="scenario-name">${scenario.scenario_title || 'Unknown'}</span>
-                        <span class="scenario-count">${scenario.run_count}</span>
-                    </div>`).join('');
-                
+                topScenarioContainer.innerHTML = `
+                    <div class="top-scenario-item"><span class="scenario-name">${topScenario[0]}</span><span class="scenario-count">${topScenario[1]}</span></div>
+                `;
             } catch (error) {
                 console.error('Error loading top scenario:', error);
             }
         }
 
-        // Load volume trends (last 7 days)
         async function loadVolumeTrends() {
             try {
-                const { data, error } = await supabaseClient.rpc('get_daily_call_volume_last_7_days');
+                const sevenDaysAgo = new Date();
+                sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+                sevenDaysAgo.setHours(0, 0, 0, 0);
                 
+                const { data, error } = await supabaseClient
+                    .from('call_sessions')
+                    .select('start_time_egypt')
+                    .gte('start_time_egypt', sevenDaysAgo.toISOString());
                 if (error) throw error;
-                
-                const labels = data.map(d => new Date(d.day).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
-                const values = data.map(d => d.call_count);
+
+                const volumeByDay = {};
+                for (let i = 0; i < 7; i++) {
+                    const d = new Date(sevenDaysAgo);
+                    d.setDate(d.getDate() + i);
+                    volumeByDay[d.toISOString().split('T')[0]] = 0;
+                }
+
+                data.forEach(session => {
+                    const day = session.start_time_egypt.split('T')[0];
+                    if (day in volumeByDay) {
+                        volumeByDay[day]++;
+                    }
+                });
+
+                const labels = Object.keys(volumeByDay).map(d => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
+                const values = Object.values(volumeByDay);
                 
                 const ctx = document.getElementById('volumeTrendChart').getContext('2d');
-                
-                if (volumeTrendChart) {
-                    volumeTrendChart.destroy();
-                }
+                if (volumeTrendChart) volumeTrendChart.destroy();
                 
                 volumeTrendChart = new Chart(ctx, {
                     type: 'line',
-                    data: {
-                        labels: labels,
-                        datasets: [{
-                            label: 'Call Volume',
-                            data: values,
-                            borderColor: '#4e8cff',
-                            backgroundColor: 'rgba(78, 140, 255, 0.1)',
-                            borderWidth: 2,
-                            fill: true,
-                            tension: 0.4
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: { legend: { display: false } },
-                        scales: {
-                            x: { ticks: { color: '#9CA3AF' }, grid: { color: '#374151' } },
-                            y: { ticks: { color: '#9CA3AF' }, grid: { color: '#374151' }, beginAtZero: true }
-                        }
-                    }
+                    data: { labels, datasets: [{ label: 'Call Volume', data: values, borderColor: '#4e8cff', backgroundColor: 'rgba(78, 140, 255, 0.1)', borderWidth: 2, fill: true, tension: 0.4 }] },
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#9CA3AF' }, grid: { color: '#374151' } }, y: { ticks: { color: '#9CA3AF' }, grid: { color: '#374151' }, beginAtZero: true } } }
                 });
-                
             } catch (error) {
                 console.error('Error loading volume trends:', error);
             }
         }
 
-        // Load agent performance distribution
         async function loadAgentPerformance() {
             try {
                 const today = new Date();
                 today.setHours(0, 0, 0, 0);
                 const { data, error } = await supabaseClient
-                    .rpc('get_agent_performance_today', { from_date: today.toISOString() });
-
+                    .from('call_sessions')
+                    .select('agent_name')
+                    .gte('start_time_egypt', today.toISOString());
                 if (error) throw error;
-                
-                const labels = data.map(d => d.agent_name || 'Unknown');
-                const values = data.map(d => d.call_count);
+
+                const agentCounts = data.reduce((acc, { agent_name }) => {
+                    if (agent_name) acc[agent_name] = (acc[agent_name] || 0) + 1;
+                    return acc;
+                }, {});
+
+                const labels = Object.keys(agentCounts);
+                const values = Object.values(agentCounts);
                 
                 const ctx = document.getElementById('agentPerformanceChart').getContext('2d');
-                
-                if (agentPerformanceChart) {
-                    agentPerformanceChart.destroy();
-                }
-                
+                if (agentPerformanceChart) agentPerformanceChart.destroy();
+
                 agentPerformanceChart = new Chart(ctx, {
                     type: 'bar',
-                    data: {
-                        labels: labels,
-                        datasets: [{
-                            label: 'Calls Today',
-                            data: values,
-                            backgroundColor: 'rgba(78, 140, 255, 0.7)',
-                            borderColor: '#4e8cff',
-                            borderWidth: 1
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: { legend: { display: false } },
-                        scales: {
-                            x: { ticks: { color: '#9CA3AF' }, grid: { display: false } },
-                            y: { ticks: { color: '#9CA3AF' }, grid: { color: '#374151' }, beginAtZero: true }
-                        }
-                    }
+                    data: { labels, datasets: [{ label: 'Calls Today', data: values, backgroundColor: 'rgba(78, 140, 255, 0.7)' }] },
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#9CA3AF' }, grid: { display: false } }, y: { ticks: { color: '#9CA3AF' }, grid: { color: '#374151' }, beginAtZero: true } } }
                 });
-                
             } catch (error) {
                 console.error('Error loading agent performance:', error);
             }
         }
 
-        // Load quick stats
         async function loadQuickStats() {
             try {
-                const { data, error } = await supabaseClient.rpc('get_today_quick_stats').single();
-                
-                if (error) throw error;
-                
-                const avgSeconds = data.avg_handle_time || 0;
-                const avgMinutes = Math.floor(avgSeconds / 60);
-                const remSeconds = Math.floor(avgSeconds % 60);
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
 
-                document.getElementById('avgHandleTime').textContent = `${avgMinutes}m ${remSeconds}s`;
-                document.getElementById('completionRate').textContent = `${Math.round(data.completion_rate || 0)}%`;
-                document.getElementById('goodQualityRate').textContent = `${Math.round(data.good_quality_rate || 0)}%`;
-                document.getElementById('activeAgents').textContent = data.active_agents || 0;
+                const { data: todayCalls, error } = await supabaseClient
+                    .from('call_sessions')
+                    .select('duration_interval, completed, call_quality, agent_name')
+                    .gte('start_time_egypt', today.toISOString());
+                if (error) throw error;
+
+                const completedCalls = todayCalls.filter(call => call.completed);
                 
+                let totalSeconds = 0;
+                completedCalls.forEach(call => {
+                    if (call.duration_interval) {
+                         const parts = call.duration_interval.match(/(\d{2}):(\d{2}):(\d{2})/);
+                         if(parts) {
+                            totalSeconds += parseInt(parts[1]) * 3600 + parseInt(parts[2]) * 60 + parseFloat(parts[3]);
+                         }
+                    }
+                });
+
+                const avgSeconds = completedCalls.length > 0 ? totalSeconds / completedCalls.length : 0;
+                document.getElementById('avgHandleTime').textContent = `${Math.floor(avgSeconds / 60)}m ${Math.floor(avgSeconds % 60)}s`;
+
+                const completionRate = todayCalls.length > 0 ? (completedCalls.length / todayCalls.length) * 100 : 0;
+                document.getElementById('completionRate').textContent = `${Math.round(completionRate)}%`;
+
+                const goodQualityCalls = todayCalls.filter(c => c.call_quality === 'Good').length;
+                const goodQualityRate = todayCalls.length > 0 ? (goodQualityCalls / todayCalls.length) * 100 : 0;
+                document.getElementById('goodQualityRate').textContent = `${Math.round(goodQualityRate)}%`;
+
+                const activeAgents = new Set(todayCalls.map(c => c.agent_name).filter(Boolean)).size;
+                document.getElementById('activeAgents').textContent = activeAgents;
             } catch (error) {
                 console.error('Error loading quick stats:', error);
             }
         }
 
-        // Load recent tickets with pagination
+        // ========== END: REVERTED FUNCTIONS ==========
+
         async function loadRecentTickets(page = 1) {
             try {
                 recentTicketsPage = page;
@@ -1684,33 +1600,23 @@ body.dark {
                 </tr>`).join('');
         }
 
-        // Start auto-refresh
         function startAutoRefresh() {
             if(autoRefreshInterval) clearInterval(autoRefreshInterval);
-            autoRefreshInterval = setInterval(loadDashboardData, 30000); // Refresh every 30 seconds
+            autoRefreshInterval = setInterval(loadDashboardData, 60000); // Refresh every 60 seconds
         }
 
-        // Stop auto-refresh
         function stopAutoRefresh() {
-            if (autoRefreshInterval) {
-                clearInterval(autoRefreshInterval);
-                autoRefreshInterval = null;
-            }
+            if (autoRefreshInterval) clearInterval(autoRefreshInterval);
         }
 
-        // Export dashboard report
         function exportDashboardReport() {
-            addNotification('Export feature coming soon!', 'info');
+            addNotification('Export feature is a work in progress.', 'info');
         }
 
-        // Helper functions
         function debounce(func, wait) {
             let timeout;
             return function executedFunction(...args) {
-                const later = () => {
-                    clearTimeout(timeout);
-                    func(...args);
-                };
+                const later = () => { clearTimeout(timeout); func(...args); };
                 clearTimeout(timeout);
                 timeout = setTimeout(later, wait);
             };
@@ -1720,7 +1626,6 @@ body.dark {
             const date = new Date(dateStr);
             const now = new Date();
             const diffSeconds = Math.round((now - date) / 1000);
-            
             if (diffSeconds < 60) return 'Just now';
             const diffMinutes = Math.round(diffSeconds / 60);
             if (diffMinutes < 60) return `${diffMinutes}m ago`;
@@ -1729,14 +1634,7 @@ body.dark {
             return date.toLocaleDateString('en-US');
         }
         
-        function startAutoRefreshRealTime(updaters = [], intervalSec = 30) {
-            // Implementation...
-        }
-
-        // Clean up on page unload
-        window.addEventListener('beforeunload', () => {
-            stopAutoRefresh();
-        });
+        window.addEventListener('beforeunload', stopAutoRefresh);
 
     </script>
 </body>
