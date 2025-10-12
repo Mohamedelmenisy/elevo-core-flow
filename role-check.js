@@ -105,18 +105,21 @@ async function checkAgentAccess() {
     }
 }
 
+// تحديث واجهة المستخدم بمعلومات المستخدم
 function updateUserInterface(userData) {
+    // تحديث اسم المستخدم في الرأس إذا كان العنصر موجوداً
     const userNameElements = document.querySelectorAll('#userName, .user-name-display');
     userNameElements.forEach(element => {
         if (element) {
             element.textContent = userData.name || userData.email;
         }
     });
-
+    
+    // تحديث رابط Dashboard بناءً على الصلاحية
     const dashboardLinks = document.querySelectorAll('#dashboardLink, .nav-link[href="dashboard.html"]');
     dashboardLinks.forEach(link => {
-        if (link && (userData.role === 'admin' || userData.role === 'manager')) {
-            link.style.display = 'inline-block';
+        if (link) {
+            link.style.display = (userData.role === 'admin' || userData.role === 'manager') ? 'inline-block' : 'none';
         }
     });
 }
