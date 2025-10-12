@@ -30,64 +30,57 @@ async function checkUserRole() {
 }
 
 function showAccessDeniedModal() {
-  // ✅ منع تكرار المودال
   if (document.getElementById('accessDeniedModal')) return;
 
   const modalHTML = `
-    <div id="accessDeniedModal" ...>
-       ...
+    <div id="accessDeniedModal" style="
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.85);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 10000;
+        backdrop-filter: blur(10px);
+    ">
+        <div style="
+            background: #2b2b3d;
+            border-radius: 16px;
+            padding: 3rem;
+            text-align: center;
+            max-width: 500px;
+            width: 90%;
+            border: 1px solid #444444;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        ">
+            <div style="font-size: 4rem; margin-bottom: 1.5rem;">⚠️</div>
+            <h3 style="color: #f0f0f0; font-size: 1.8rem; margin-bottom: 1rem; font-weight: 700;">Access Restricted</h3>
+            <p style="color: #a0a0b0; font-size: 1.1rem; line-height: 1.6; margin-bottom: 2rem;">
+                You don't have permission to view this page. This section is available for <strong style="color: #4e8cff;">Admins</strong> and <strong style="color: #4e8cff;">Managers</strong> only.
+            </p>
+            <button onclick="window.location.href='core-flow.html'" style="
+                background: linear-gradient(135deg, #4e8cff, #3d7eff);
+                color: white;
+                border: none;
+                border-radius: 12px;
+                padding: 1rem 2rem;
+                font-weight: 600;
+                cursor: pointer;
+                font-size: 1.1rem;
+                transition: all 0.3s ease;
+            " onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 20px rgba(78, 140, 255, 0.4)'"
+            onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='none'">
+                🔙 Back to Core Flow
+            </button>
+        </div>
     </div>
   `;
   document.body.insertAdjacentHTML('beforeend', modalHTML);
 }
-    const modalHTML = `
-        <div id="accessDeniedModal" style="
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.85);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 10000;
-            backdrop-filter: blur(10px);
-        ">
-            <div style="
-                background: #2b2b3d;
-                border-radius: 16px;
-                padding: 3rem;
-                text-align: center;
-                max-width: 500px;
-                width: 90%;
-                border: 1px solid #444444;
-                box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
-            ">
-                <div style="font-size: 4rem; margin-bottom: 1.5rem;">⚠️</div>
-                <h3 style="color: #f0f0f0; font-size: 1.8rem; margin-bottom: 1rem; font-weight: 700;">Access Restricted</h3>
-                <p style="color: #a0a0b0; font-size: 1.1rem; line-height: 1.6; margin-bottom: 2rem;">
-                    You don't have permission to view this page. This section is available for <strong style="color: #4e8cff;">Admins</strong> and <strong style="color: #4e8cff;">Managers</strong> only.
-                </p>
-                <button onclick="window.location.href='core-flow.html'" style="
-                    background: linear-gradient(135deg, #4e8cff, #3d7eff);
-                    color: white;
-                    border: none;
-                    border-radius: 12px;
-                    padding: 1rem 2rem;
-                    font-weight: 600;
-                    cursor: pointer;
-                    font-size: 1.1rem;
-                    transition: all 0.3s ease;
-                " onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 20px rgba(78, 140, 255, 0.4)'" 
-                onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='none'">
-                    🔙 Back to Core Flow
-                </button>
-            </div>
-        </div>
-    `;
-    document.body.insertAdjacentHTML('beforeend', modalHTML);
-}
+
 
 async function checkAccess(allowedRoles = []) {
   const userData = await checkUserRole();
