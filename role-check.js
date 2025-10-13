@@ -1,222 +1,375 @@
-/**
- * role-check.js - نظام التحقق من الصلاحيات والوظائف المساعدة لمشروع Elevo Core
- *
- * يوفر هذا الملف:
- * 1. دالة مركزية للتحقق من صلاحيات المستخدم (checkAccess).
- * 2. دوال مساعدة لإنشاء وإدارة النوافذ المنبثقة (Modals) والإشعارات (Toasts) بشكل متناسق.
- * 3. يعتمد على وجود متغير `supabase` مُعرف مسبقًا في الصفحة.
- */
+// role-check.js
+// نظام التحقق من الصلاحيات - يستخدم عميل Supabase الموجود في الصفحة (لا ينشئ اتصال جديد)
+// تأكد أن الصفحة تجهز "supabase client" على window.supabaseClient أو window.supabase قبل تحميل هذا الملف.
 
-window.elevo = {
-    /**
-     * للتحقق من صلاحية وصول المستخدم بناءً على قائمة من الأدوار المسموح بها.
-     * @param {string[]} allowedRoles - مصفوفة تحتوي على الأدوار المسموح لها بالوصول (مثال: ['admin', 'manager']).
-     * @returns {Promise<object|null>} - يُرجع بيانات المستخدم في حال النجاح، أو null في حال فشل التحقق.
-     */
-    async checkAccess(allowedRoles) {
-        const mainContent = document.querySelector('#dashboardContent, #portalContent, #appContainerContent, #initial-view');
-        const authLoading = document.getElementById('auth-loading');
+(function () {
+  'use strict';
 
-        if (mainContent) mainContent.style.display = 'none';
-        if (authLoading) authLoading.style.display = 'flex';
+  /**
+   * محاولة الحصول على كائن عميل Supabase الموجود في الصفحة.
+   * لا ننشئ createClient جديد هنا — هذا ملف صلاحيات فقط ويعتمد على العميل الموجود مسبقاً.
+   */
+  function getSupabaseClient() {
+    // الأولوية: window.supabaseClient (واضح ومخصص)
+    if (window.supabaseClient) return window.supabaseClient;
 
-        try {
-            if (typeof supabase === 'undefined') {
-                throw new Error('Supabase client is not available.');
-            }
-
-            const { data: { user } } = await supabase.auth.getUser();
-            if (!user) {
-                window.location.replace("login.html");
-                return null;
-            }
-
-            const { data: userData, error } = await supabase
-                .from('users')
-                .select('id, name, email, role')
-                .eq('id', user.id)
-                .single();
-
-            if (error || !userData) {
-                throw new Error(error ? error.message : 'User data not found.');
-            }
-
-            if (allowedRoles.includes(userData.role)) {
-                this.updateUserInterface(userData);
-                if (authLoading) authLoading.style.display = 'none';
-                
-                const displayStyle = mainContent && mainContent.classList.contains('initial-card') ? 'grid' : 'block';
-                if (mainContent) mainContent.style.display = displayStyle;
-
-                return userData;
-            } else {
-                throw new Error(`Access Denied: User role '${userData.role}' is not in [${allowedRoles.join(', ')}].`);
-            }
-
-        } catch (err) {
-            console.error('Access Check Failed:', err.message);
-            this.showAccessDenied();
-            return null;
-        }
-    },
-
-    /**
-     * يعرض نافذة "الوصول مرفوض".
-     */
-    showAccessDenied() {
-        document.querySelectorAll('#dashboardContent, #portalContent, #appContainerContent, #initial-view, #auth-loading').forEach(el => el.style.display = 'none');
-        
-        const accessDeniedModal = document.querySelector('#accessDeniedModal, #accessRestrictedModal');
-        if (accessDeniedModal) {
-            accessDeniedModal.style.display = 'flex';
-            accessDeniedModal.style.opacity = '1';
-            
-            const backButton = accessDeniedModal.querySelector('#returnToAppBtn, #backToDashboardBtn, #returnToDashboardBtn');
-            if (backButton) {
-                backButton.onclick = () => window.location.href = 'core-flow.html';
-            }
-        } else {
-            document.body.innerHTML = `<div style="text-align: center; padding-top: 50px; color: white;"><h1>Access Denied</h1><p>You do not have permission to view this page.</p></div>`;
-        }
-    },
-
-    /**
-     * يحدّث واجهة المستخدم بمعلومات المستخدم.
-     * @param {object} userData - بيانات المستخدم.
-     */
-    updateUserInterface(userData) {
-        document.querySelectorAll('#userName, .user-name-display').forEach(el => {
-            if (el) el.textContent = userData.name || userData.email;
-        });
-
-        const adminLinks = document.querySelectorAll('a[href="dashboard.html"], a[href="rtm-dashboard.html"]');
-        if (userData.role === 'admin' || userData.role === 'manager') {
-            adminLinks.forEach(link => link.style.display = 'inline-flex');
-        } else {
-            adminLinks.forEach(link => link.style.display = 'none');
-        }
-    },
-
-    /**
-     * ينشئ ويعرض نافذة منبثقة (Modal) بتصميم موحد.
-     * @param {string} title - عنوان النافذة.
-     * @param {string} contentHtml - محتوى HTML للنافذة.
-     * @param {object[]} buttons - مصفوفة من الأزرار (مثال: [{ text: 'Save', className: 'primary', onClick: () => {} }]).
-     */
-    showModal(title, contentHtml, buttons = []) {
-        this.removeModal(); // إزالة أي نافذة قديمة أولاً
-
-        const modalOverlay = document.createElement('div');
-        modalOverlay.className = 'modal-overlay';
-        modalOverlay.id = 'elevo-modal';
-        modalOverlay.style.cssText = `
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0, 0, 0, 0.7); display: flex;
-            justify-content: center; align-items: center; z-index: 1001;
-            backdrop-filter: blur(5px); animation: fadeIn 0.3s ease;
-        `;
-
-        const modalContent = document.createElement('div');
-        modalContent.className = 'modal-content';
-        modalContent.style.cssText = `
-            background: #1f2937; border-radius: 12px; padding: 2rem;
-            width: 90%; max-width: 500px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-            border: 1px solid #374151; animation: slideIn 0.3s ease-out;
-            color: var(--text-color);
-        `;
-
-        const modalHeader = document.createElement('h3');
-        modalHeader.textContent = title;
-        modalHeader.style.cssText = `font-size: 1.5rem; margin: 0 0 1.5rem 0; color: var(--primary-color);`;
-
-        const modalBody = document.createElement('div');
-        modalBody.innerHTML = contentHtml;
-
-        const modalFooter = document.createElement('div');
-        modalFooter.style.cssText = `display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 2rem;`;
-
-        buttons.forEach(btnInfo => {
-            const button = document.createElement('button');
-            button.textContent = btnInfo.text;
-            button.className = `action-button ${btnInfo.className || 'secondary'}-button`;
-            button.onclick = (e) => {
-                e.preventDefault();
-                btnInfo.onClick(e);
-            };
-            modalFooter.appendChild(button);
-        });
-        
-        // زر الإغلاق كجزء أساسي
-        const closeButton = { text: 'Cancel', className: 'secondary', onClick: () => this.removeModal() };
-        const cancelButton = document.createElement('button');
-        cancelButton.textContent = closeButton.text;
-        cancelButton.className = `action-button ${closeButton.className}-button`;
-        cancelButton.onclick = closeButton.onClick;
-        if (!buttons.some(b => b.text.toLowerCase() === 'cancel')) {
-            modalFooter.appendChild(cancelButton);
-        }
-
-        modalContent.appendChild(modalHeader);
-        modalContent.appendChild(modalBody);
-        modalContent.appendChild(modalFooter);
-        modalOverlay.appendChild(modalContent);
-        document.body.appendChild(modalOverlay);
-
-        // إضافة الأنميشن
-        const style = document.createElement('style');
-        style.textContent = `
-            @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-            @keyframes slideIn { from { transform: translateY(-20px) scale(0.95); opacity: 0; } to { transform: translateY(0) scale(1); opacity: 1; } }
-        `;
-        document.head.appendChild(style);
-    },
-
-    /**
-     * يزيل النافذة المنبثقة من الصفحة.
-     */
-    removeModal() {
-        const modal = document.getElementById('elevo-modal');
-        if (modal) {
-            modal.remove();
-        }
-    },
-
-    /**
-     * يعرض إشعارًا مؤقتًا (Toast).
-     * @param {string} message - نص الرسالة.
-     * @param {string} type - نوع الإشعار ('success', 'error', 'warning').
-     */
-    showToast(message, type = 'success') {
-        const toastContainer = document.getElementById('toast-container') || (() => {
-            const container = document.createElement('div');
-            container.id = 'toast-container';
-            container.style.cssText = `position: fixed; top: 20px; right: 20px; z-index: 2000; display: flex; flex-direction: column; gap: 0.75rem;`;
-            document.body.appendChild(container);
-            return container;
-        })();
-
-        const toast = document.createElement('div');
-        const colors = { success: 'var(--success-color)', error: 'var(--danger-color)', warning: 'var(--warning-color)' };
-        
-        toast.style.cssText = `
-            padding: 1rem 1.5rem; border-radius: 8px; color: #fff; font-weight: 500;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3); display: flex; align-items: center; gap: 0.75rem;
-            opacity: 0; transform: translateX(100%); animation: slideInToast 0.3s forwards;
-            background-color: ${colors[type] || colors.success};
-        `;
-        toast.innerHTML = `<span>${message}</span>`;
-        toastContainer.appendChild(toast);
-        
-        const style = document.createElement('style');
-        style.textContent = `
-            @keyframes slideInToast { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
-            @keyframes slideOutToast { from { transform: translateX(0); opacity: 1; } to { transform: translateX(120%); opacity: 0; } }
-        `;
-        document.head.appendChild(style);
-
-        setTimeout(() => {
-            toast.style.animation = 'slideOutToast 0.3s forwards';
-            setTimeout(() => toast.remove(), 300);
-        }, 3000);
+    // ثانياً: window.supabase قد يكون هو client نفسه (بعض مشاريع تربطه هناك)
+    if (window.supabase && typeof window.supabase === 'object') {
+      // بعض المشاريع يضعون createClient تحت window.supabase.createClient
+      // وفي هذه الحالة لا ننشئ client هنا لأنك طلبت صراحة عدم فتح اتصال جديد.
+      // إذا كان window.supabase فعلاً client (مثلاً نتيجة createClient) نستخدمه.
+      // أفضل فحص بسيط: وجود طرق أساسية على كائن client
+      if (typeof window.supabase.from === 'function' || typeof window.supabase.auth === 'object') {
+        return window.supabase;
+      }
     }
-};
+
+    // لا يوجد client جاهز
+    return null;
+  }
+
+  // Internal state
+  let _supabase = getSupabaseClient();
+  let currentUser = null; // supabase user object
+  let userProfile = null; // row from users table (expects columns: id, name, role, email, ...) 
+  let userRole = null;
+  let userName = null;
+
+  /**
+   * Helper: show an informative modal telling developer to wire supabase client,
+   * or show access restricted if client exists but user not allowed.
+   */
+  function showDeveloperSupabaseMissingModal() {
+    const existing = document.getElementById('accessDeniedModal');
+    if (existing) return;
+
+    const modalHTML = `
+      <div id="accessDeniedModal" style="
+        position: fixed;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(0,0,0,0.8);
+        z-index: 99999;
+        backdrop-filter: blur(8px);
+      ">
+        <div style="
+          max-width: 640px;
+          width: 92%;
+          background: #2b2b3d;
+          color: #f0f0f0;
+          border: 1px solid #444;
+          border-radius: 16px;
+          padding: 28px;
+          text-align: center;
+          box-shadow: 0 20px 60px rgba(0,0,0,.6);
+        ">
+          <h2 style="margin:0 0 8px;font-size:1.4rem;color:#FFC107;">Configuration required</h2>
+          <p style="color:#a0a0b0;margin:0 0 16px;line-height:1.6;">
+            role-check.js expects a Supabase client to be available on the page.
+            Please initialize the client in your HTML before loading role-check.js, for example:
+          </p>
+          <pre style="text-align:left;background:#111;padding:12px;border-radius:8px;color:#dcdcdc;overflow:auto;font-size:0.9rem;">
+&lt;script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"&gt;&lt;/script&gt;
+&lt;script&gt;
+  // create client once and attach to window
+  // window.supabaseClient = supabase.createClient('https://your.supabase.url', 'anon-key');
+&lt;/script&gt;
+&lt;script src="role-check.js"&gt;&lt;/script&gt;
+          </pre>
+          <div style="margin-top:18px;">
+            <button id="closeDevModal" style="
+              padding:10px 18px;border-radius:10px;border:none;background:linear-gradient(135deg,#4e8cff,#3d7eff);color:#fff;font-weight:700;cursor:pointer;
+            ">Close</button>
+          </div>
+        </div>
+      </div>
+    `;
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
+    document.getElementById('closeDevModal').addEventListener('click', () => {
+      const m = document.getElementById('accessDeniedModal');
+      if (m) m.remove();
+    });
+  }
+
+  /**
+   * Show "Access Restricted" modal (user-facing). Matches aesthetic of project.
+   * Accepts optional message override and redirect URL for back button.
+   */
+  function showAccessRestrictedModal(options = {}) {
+    const title = options.title || 'Access Restricted';
+    const message = options.message || 'This page is restricted. You do not have permission to view it.';
+    const allowedRolesText = options.allowedRolesText || '';
+
+    // If modal exists, update message and show
+    let modal = document.getElementById('accessDeniedModal');
+    if (!modal) {
+      const html = `
+        <div id="accessDeniedModal" style="
+          position: fixed;
+          inset: 0;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: rgba(0,0,0,0.8);
+          z-index: 99999;
+          backdrop-filter: blur(8px);
+        ">
+          <div class="access-denied-content" style="
+            max-width: 520px;
+            width: 94%;
+            background: #2b2b3d;
+            color: #f0f0f0;
+            border-radius: 16px;
+            padding: 28px;
+            text-align: center;
+            box-shadow: 0 20px 60px rgba(0,0,0,.6);
+            border: 1px solid #444444;
+          ">
+            <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#FFC107" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom: 12px;">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="15" y1="9" x2="9" y2="15"></line>
+              <line x1="9" y1="9" x2="15" y2="15"></line>
+            </svg>
+            <h3 id="accessDeniedTitle" style="font-size:1.6rem;margin:0 0 8px;color:#f0f0f0;">${title}</h3>
+            <p id="accessDeniedMessage" style="color:#a0a0b0;font-size:1rem;line-height:1.6;margin:0 0 18px;">
+              ${message} ${allowedRolesText}
+            </p>
+            <div style="display:flex;gap:12px;justify-content:center;margin-top:10px;flex-wrap:wrap;">
+              <button id="backToDashboardBtnModal" style="
+                background: linear-gradient(135deg, #4e8cff, #3d7eff);
+                color: white;
+                border: none;
+                border-radius: 12px;
+                padding: 10px 18px;
+                font-weight: 700;
+                cursor: pointer;
+              ">Back to Dashboard</button>
+              <button id="logoutBtnModal" style="
+                background: transparent;
+                color: #f0f0f0;
+                border: 1px solid rgba(255,255,255,.06);
+                border-radius: 12px;
+                padding: 10px 14px;
+                font-weight: 600;
+                cursor:pointer;
+              ">Logout</button>
+            </div>
+          </div>
+        </div>
+      `;
+      document.body.insertAdjacentHTML('beforeend', html);
+
+      document.getElementById('backToDashboardBtnModal').addEventListener('click', () => {
+        window.location.href = 'dashboard.html';
+      });
+      document.getElementById('logoutBtnModal').addEventListener('click', async () => {
+        try {
+          if (_supabase && _supabase.auth && typeof _supabase.auth.signOut === 'function') {
+            await _supabase.auth.signOut();
+          }
+        } catch (e) {
+          console.warn('Error signing out:', e);
+        } finally {
+          window.location.href = 'index.html';
+        }
+      });
+    } else {
+      // update contents
+      const titleEl = modal.querySelector('#accessDeniedTitle');
+      const msgEl = modal.querySelector('#accessDeniedMessage');
+      if (titleEl) titleEl.textContent = title;
+      if (msgEl) msgEl.innerHTML = `${message} ${allowedRolesText}`;
+      modal.style.display = 'flex';
+    }
+  }
+
+  /**
+   * Update header/user elements with name (not email).
+   * Looks for #userName and .user-name-display elements and fills them.
+   */
+  function updateUserInterface() {
+    const nameToShow = userName || (userProfile && userProfile.name) || (currentUser && currentUser.email) || '';
+    const els = document.querySelectorAll('#userName, .user-name-display');
+    els.forEach(el => {
+      if (el) el.textContent = nameToShow;
+    });
+
+    // show container if exists
+    const userInfo = document.getElementById('userInfo');
+    if (userInfo) userInfo.style.display = nameToShow ? 'flex' : 'none';
+  }
+
+  /**
+   * Internal: fetch profile row from `users` table (expects column `role` and `name`)
+   * If the project uses a different table/name, adjust or store the row in user metadata.
+   */
+  async function fetchUserProfile(userId) {
+    if (!_supabase) return null;
+    try {
+      const { data, error } = await _supabase
+        .from('users')
+        .select('id, name, email, role')
+        .eq('id', userId)
+        .single();
+
+      if (error) {
+        console.warn('fetchUserProfile error:', error);
+        return null;
+      }
+      return data;
+    } catch (err) {
+      console.warn('fetchUserProfile exception:', err);
+      return null;
+    }
+  }
+
+  /**
+   * Public: checkAccess(allowedRoles)
+   * - allowedRoles: array of role strings (e.g. ['admin', 'manager'])
+   * Behavior:
+   * - If no supabase client on page: show developer modal that instructs to wire client (does NOT redirect).
+   * - If user not logged in: redirect to index.html (login).
+   * - If user's role is in allowedRoles -> returns the current user object (and sets UI name).
+   * - Else shows Access Restricted modal and returns null.
+   */
+  async function checkAccess(allowedRoles = []) {
+    // refresh supabase client reference if it was not found earlier but maybe set later
+    if (!_supabase) _supabase = getSupabaseClient();
+
+    if (!_supabase) {
+      // Developer forgot to provide supabase client on the page.
+      // Show a modal that instructs how to initialize client in HTML.
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', showDeveloperSupabaseMissingModal);
+      } else {
+        showDeveloperSupabaseMissingModal();
+      }
+      return null;
+    }
+
+    // if supabase available but no auth functions, warn dev
+    if (!_supabase.auth || typeof _supabase.auth.getUser !== 'function') {
+      console.warn('Supabase client found but auth API not available. Ensure you are using supabase-js v2 createClient.');
+    }
+
+    try {
+      // get current user from supabase auth
+      let user = null;
+      if (_supabase.auth && typeof _supabase.auth.getUser === 'function') {
+        const result = await _supabase.auth.getUser();
+        user = result && result.data && result.data.user ? result.data.user : null;
+      } else if (_supabase.auth && _supabase.auth.user) {
+        user = _supabase.auth.user();
+      }
+
+      if (!user) {
+        // not authenticated
+        window.location.href = 'index.html';
+        return null;
+      }
+
+      currentUser = user;
+
+      // try to get profile/role from users table
+      const profile = await fetchUserProfile(user.id);
+      if (profile) {
+        userProfile = profile;
+        userRole = profile.role;
+        userName = profile.name || profile.email || (user.user_metadata && user.user_metadata.full_name) || user.email;
+      } else {
+        // fallback: try to read role from user metadata if present
+        userRole = (user.user_metadata && user.user_metadata.role) ? user.user_metadata.role : null;
+        userName = (user.user_metadata && (user.user_metadata.name || user.user_metadata.full_name)) || user.email;
+      }
+
+      updateUserInterface();
+
+      // Normalize allowedRoles to strings lowercased
+      const normalizedAllowed = Array.isArray(allowedRoles) ? allowedRoles.map(r => String(r).toLowerCase()) : [];
+
+      if (normalizedAllowed.length === 0) {
+        // No restrictions -> allow
+        return currentUser;
+      }
+
+      const roleNormalized = userRole ? String(userRole).toLowerCase() : null;
+
+      if (roleNormalized && normalizedAllowed.includes(roleNormalized)) {
+        return currentUser;
+      } else {
+        // Not allowed -> show access restricted
+        const allowedText = normalizedAllowed.length ? `Allowed roles: <strong style="color:#4e8cff;">${normalizedAllowed.join(', ')}</strong>.` : '';
+        showAccessRestrictedModal({
+          title: 'Access Restricted',
+          message: 'This page is for specific roles only.',
+          allowedRolesText: allowedText
+        });
+        return null;
+      }
+    } catch (err) {
+      console.error('checkAccess error:', err);
+      showAccessRestrictedModal({
+        title: 'Access Error',
+        message: 'There was an error verifying your permissions. Please contact support.'
+      });
+      return null;
+    }
+  }
+
+  /**
+   * Convenience wrappers: for common pages
+   */
+  async function checkAccessAdminManager() {
+    return checkAccess(['admin', 'manager']);
+  }
+  async function checkAccessAgentAdminManager() {
+    return checkAccess(['agent', 'admin', 'manager']);
+  }
+
+  // Expose public API on window
+  window.RoleCheck = {
+    checkAccess,
+    checkAccessAdminManager,
+    checkAccessAgentAdminManager,
+    getCurrentUser: () => currentUser,
+    getUserProfile: () => userProfile,
+    getUserRole: () => userRole,
+    getUserName: () => userName,
+    // For debugging: allow re-binding to a client if the page sets it later
+    bindSupabaseClient: function (client) {
+      _supabase = client;
+    }
+  };
+
+  // Auto-run small initializer after DOM ready to populate name if possible
+  document.addEventListener('DOMContentLoaded', async function () {
+    // Attempt a silent check to fill the name in header without forcing modal/redirect.
+    if (!_supabase) _supabase = getSupabaseClient();
+    if (_supabase && _supabase.auth && typeof _supabase.auth.getUser === 'function') {
+      try {
+        const result = await _supabase.auth.getUser();
+        const user = result && result.data && result.data.user ? result.data.user : null;
+        if (user) {
+          currentUser = user;
+          // fetch profile but ignore failures
+          try {
+            const profile = await fetchUserProfile(user.id);
+            if (profile) {
+              userProfile = profile;
+              userRole = profile.role;
+              userName = profile.name || profile.email;
+            } else {
+              userName = (user.user_metadata && (user.user_metadata.name || user.user_metadata.full_name)) || user.email;
+            }
+            updateUserInterface();
+          } catch (e) { /* ignore */ }
+        }
+      } catch (e) {
+        // ignore silent fetch errors
+      }
+    }
+  });
+
+})();
