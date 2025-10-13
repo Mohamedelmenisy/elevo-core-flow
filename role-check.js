@@ -3,30 +3,30 @@ window.roleCheck = {
   supabase: null,
   currentUser: null,
 
-  // This function is called by the main application to check access
-  async checkAgentAccess() {
-    // 1. Initialize Supabase Client
+  // 🔹 Common check for any page
+  async checkAccessByRole(allowedRoles = []) {
+    // 1. Initialize Supabase
     if (!this.supabase) {
       const SUPABASE_URL = "https://aefiigottnlcmjzilqnh.supabase.co";
       const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFlZmlpZ290dG5sY21qemlscW5oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcxNzY2MDQsImV4cCI6MjA2Mjc1MjYwNH0.FypB02v3tGMnxXV9ZmZMdMC0oQpREKOJWgHMPxUzwX4";
       try {
-          this.supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        this.supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
       } catch (e) {
-          console.error("Supabase client initialization failed:", e);
-          this.showAccessDenied("Service connection error");
-          return null;
+        console.error("Supabase client initialization failed:", e);
+        this.showAccessDenied("Service connection error");
+        return null;
       }
     }
 
     try {
-      // 2. Get the authenticated user
+      // 2. Get Authenticated User
       const { data: { user } } = await this.supabase.auth.getUser();
       if (!user) {
         window.location.replace("login.html");
         return null;
       }
 
-      // 3. Fetch user details and role from the 'users' table
+      // 3. Get User Data
       const { data: userData, error } = await this.supabase
         .from("users")
         .select("id, name, email, role")
@@ -38,27 +38,17 @@ window.roleCheck = {
         window.location.replace("login.html");
         return null;
       }
-      
-      this.currentUser = userData;
 
-      // 4. Update the UI with the user's name
+      this.currentUser = userData;
       this.updateUserInterface(userData);
 
-      // 5. Perform role-based redirection
-      if (userData.role === 'agent') {
-        window.location.href = 'agent-portal.html';
-        return null; // Return null to halt execution on the current page
-      }
-
-      // 6. Check if the user has permission for the current page (non-agents)
-      const allowedRoles = ['admin', 'manager', 'owner'];
+      // 4. Role Validation
       if (!allowedRoles.includes(userData.role)) {
         this.showAccessDenied(userData.role);
         return null;
       }
 
-      // 7. If all checks pass, return the user data to the application
-      console.log(`Access granted for: ${userData.role}`);
+      console.log(`✅ Access granted for ${userData.role}`);
       return userData;
 
     } catch (err) {
@@ -68,38 +58,56 @@ window.roleCheck = {
     }
   },
 
+  // 🔹 Check for Agent
+  async checkAgentAccess() {
+    return await this.checkAccessByRole(['agent']);
+  },
+
+  // 🔹 Check for Admin / Manager
+  async checkAdminAccess() {
+    return await this.checkAccessByRole(['admin', 'manager']);
+  },
+
+  // 🔹 Update Name / Header Info
   updateUserInterface(userData) {
     const nameEl = document.getElementById("userName");
     if (nameEl) {
       nameEl.textContent = userData.name || userData.email || "User";
     }
-    const dashboardLink = document.getElementById("dashboardLink");
-    if (dashboardLink && (userData.role === 'admin' || userData.role === 'manager')) {
-        dashboardLink.style.display = 'inline-flex';
-    }
   },
 
+  // 🔹 Access Denied UI
   showAccessDenied(role = "unknown") {
-    // Hide the main application content
     const mainViews = ['auth-loading', 'initial-view', 'call-flow-view', 'postCallSummary'];
     mainViews.forEach(id => {
-        const el = document.getElementById(id);
-        if(el) el.style.display = 'none';
+      const el = document.getElementById(id);
+      if (el) el.style.display = 'none';
     });
-    
-    // Show the modal
-    const modal = document.getElementById("accessDeniedModal");
-    if (modal) {
-      const desc = document.getElementById("accessDeniedDesc");
-      if(desc) desc.innerHTML = `You don't have permission to view this page. This section is available for <strong>Admins</strong> only.`;
-      
-      modal.style.display = "flex";
-      
-      const returnBtn = document.getElementById("returnToAppBtn");
-      if(returnBtn) returnBtn.addEventListener('click', () => {
-          // Attempt to log out before redirecting
-          if(this.supabase) this.supabase.auth.signOut();
-          window.location.href = 'login.html';
+
+    // Create modal dynamically if not exists
+    if (!document.getElementById("accessDeniedModal")) {
+      const modalHTML = `
+        <div id="accessDeniedModal" style="position:fixed;top:0;left:0;width:100%;height:100%;
+          background:rgba(0,0,0,0.85);display:flex;align-items:center;justify-content:center;z-index:9999;">
+          <div style="background:#1e1e2f;color:white;padding:2rem;border-radius:14px;text-align:center;width:380px;">
+            <h2 style="margin-bottom:1rem;">Access Denied</h2>
+            <p>You don't have permission to access this page.<br><br>
+            This section is for <strong>Admins / Managers</strong> only.</p>
+            <button id="returnToAppBtn" style="margin-top:1.5rem;background:#4e8cff;
+              color:white;border:none;border-radius:8px;padding:0.7rem 1.5rem;cursor:pointer;">
+              🔙 Return to Login
+            </button>
+          </div>
+        </div>`;
+      document.body.insertAdjacentHTML('beforeend', modalHTML);
+    }
+
+    // Handle return
+    const returnBtn = document.getElementById("returnToAppBtn");
+    if (returnBtn) {
+      returnBtn.addEventListener('click', async () => {
+        if (this.supabase) await this.supabase.auth.signOut();
+        window.location.href = "login.html";
       });
     }
   }
