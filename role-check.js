@@ -1,86 +1,87 @@
-/**
- * role-check.js - نظام الصلاحيات الموثوق لـ Elevo Core
- * 
- * يعتمد على نفس Supabase client اللي بيكون مهيأ داخل الصفحة.
- * لازم الكود ده يتحط بعد تعريف `const supabase = ...`
- */
-
+// ✅ role-check.js - Unified Role Validation System
 window.roleCheck = {
-  /**
-   * التحقق من الصلاحيات
-   * @param {string[]} allowedRoles - الأدوار المسموح بها
-   */
-  async checkAccess(allowedRoles) {
-    const mainContent = document.querySelector('#dashboardContent, #portalContent, #appContainerContent, #initial-view');
-    const authLoading = document.getElementById('auth-loading');
-
-    if (mainContent) mainContent.style.display = 'none';
-    if (authLoading) authLoading.style.display = 'flex';
-
+  async init(allowedRoles = []) {
     try {
-      if (typeof supabase === 'undefined') {
-        throw new Error('Supabase not initialized.');
-      }
+      if (!window.supabase) throw new Error("Supabase not loaded");
 
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
-        window.location.href = "login.html";
-        return;
+        window.location.replace("login.html");
+        return null;
       }
 
-      const { data, error } = await supabase
-        .from('users')
-        .select('id, name, email, role')
-        .eq('id', user.id)
+      const { data: userData, error } = await supabase
+        .from("users")
+        .select("id, name, email, role")
+        .eq("id", user.id)
         .single();
 
-      if (error || !data) {
-        throw new Error(error?.message || 'User data not found');
+      if (error || !userData) {
+        console.error("User data fetch failed:", error);
+        window.location.replace("login.html");
+        return null;
       }
 
-      const role = data.role?.toLowerCase();
+      // ✅ تحديث واجهة المستخدم
+      this.updateUI(userData);
 
-      if (!allowedRoles.includes(role)) {
-        this.showAccessDenied(role);
-        return;
+      // ✅ التحقق من الصلاحيات
+      if (allowedRoles.includes(userData.role)) {
+        console.log(`✅ Access granted for ${userData.role}`);
+        return userData;
+      } else {
+        this.showAccessDenied(userData.role);
+        return null;
       }
 
-      this.updateUserUI(data);
-
-      if (authLoading) authLoading.style.display = 'none';
-      if (mainContent) mainContent.style.display = mainContent.classList.contains('initial-card') ? 'grid' : 'block';
-
-      return data;
     } catch (err) {
-      console.error('Access check error:', err.message);
+      console.error("Access Error:", err.message);
       this.showAccessDenied();
+      return null;
     }
   },
 
-  showAccessDenied(role) {
-    document.body.innerHTML = `
-      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;background:#0f172a;color:white;text-align:center;">
-        <h1>Access Denied</h1>
-        <p>Your role (${role || "unknown"}) doesn't have access to this page.</p>
-        <button style="margin-top:20px;padding:10px 20px;border:none;border-radius:8px;background:#3b82f6;color:white;cursor:pointer;"
-          onclick="window.location.href='core-flow.html'">
-          🔙 Return to App
-        </button>
-      </div>`;
+  updateUI(userData) {
+    document.querySelectorAll("#userName, .user-name-display").forEach(el => {
+      el.textContent = userData.name || userData.email;
+    });
+
+    const dashboardLink = document.querySelector('a[href="dashboard.html"]');
+    const rtmLink = document.querySelector('a[href="rtm-dashboard.html"]');
+    const kbLink = document.querySelector('a[href="knowledge-base.html"]');
+
+    // إخفاء الكل في البداية
+    [dashboardLink, rtmLink, kbLink].forEach(l => l && (l.style.display = "none"));
+
+    if (userData.role === "admin" || userData.role === "manager") {
+      if (dashboardLink) dashboardLink.style.display = "inline-flex";
+      if (rtmLink) rtmLink.style.display = "inline-flex";
+    }
+
+    if (kbLink) kbLink.style.display = "inline-flex"; // الكل يشوفها
   },
 
-  updateUserUI(userData) {
-    // تحديث اسم المستخدم في الواجهة
-    document.querySelectorAll('#userName, .user-name-display').forEach(el => {
-      el.textContent = userData.name || userData.email || 'User';
-    });
-
-    // إظهار روابط الأدمن فقط إن وُجدت
-    const adminLinks = document.querySelectorAll(
-      '#dashboardLink, a[href="dashboard.html"], a[href="rtm-dashboard.html"]'
-    );
-    adminLinks.forEach(link => {
-      link.style.display = (userData.role === 'admin' || userData.role === 'manager') ? 'inline-flex' : 'none';
-    });
+  showAccessDenied(role = "unknown") {
+    const modal = document.createElement("div");
+    modal.innerHTML = `
+      <div style="
+        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(0,0,0,0.8); display: flex; justify-content: center;
+        align-items: center; z-index: 9999; color: white; text-align: center;
+        flex-direction: column;
+      ">
+        <h1 style="color: #ff4d4d;">Access Restricted</h1>
+        <p>Your role <strong>${role}</strong> does not have permission to access this page.</p>
+        <button style="
+          background: #4e8cff; border: none; padding: 0.75rem 1.5rem;
+          border-radius: 10px; color: white; font-weight: 600; cursor: pointer;
+          margin-top: 1rem;
+        " onclick="window.location.href='core-flow.html'">
+          🔙 Return to Core Flow
+        </button>
+      </div>
+    `;
+    document.body.innerHTML = "";
+    document.body.appendChild(modal);
   }
 };
