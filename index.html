@@ -16,23 +16,56 @@
   </style>
 </head>
 <body>
-  <script type="text/javascript">
-    // --- FIX: Change default target to the main application page ---
-    let target = "core-flow.html"; 
-    const hash = window.location.hash;
+  <script type="module">
+  import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm";
 
-    if (hash && hash.includes("access_token")) {
-      // If there's an access token (from email link), go to login to process it
-      target = "login.html" + hash;
+  const SUPABASE_URL = "https://aefiigottnlcmjzilqnh.supabase.co";
+  const SUPABASE_ANON_KEY =
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFlZmlpZ290dG5sY21qemlscW5oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcxNzY2MDQsImV4cCI6MjA2Mjc1MjYwNH0.FypB02v3tGMnxXV9ZmZMdMC0oQpREKOJWgHMPxUzwX4";
+
+  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  document.body.style.display = "none";
+
+  // --- الوظيفة الأساسية: تحديد الصفحة حسب حالة المستخدم والدور
+  async function redirectUser() {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+
+      if (!user) {
+        // لو المستخدم مش داخل
+        window.location.href = "login.html";
+        return;
+      }
+
+      // لو داخل فعلاً → نجيب الدور من جدول users
+      const { data, error } = await supabase
+        .from("users")
+        .select("role")
+        .eq("id", user.id)
+        .single();
+
+      if (error || !data) {
+        console.error("Error fetching user role:", error?.message);
+        window.location.href = "login.html";
+        return;
+      }
+
+      // توجيه حسب الدور
+      if (data.role === "admin" || data.role === "manager") {
+        window.location.href = "dashboard.html";
+      } else {
+        window.location.href = "core-flow.html";
+      }
+    } catch (err) {
+      console.error("Redirect Error:", err.message);
+      window.location.href = "login.html";
     }
+  }
 
-    const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.get('new') === 'true') {
-      target = "signup.html";
-    }
-
-    // Redirect immediately
-    window.location.href = target;
-  </script>
+  // انتظار بسيط لضمان تحميل Supabase
+  setTimeout(redirectUser, 500);
+</script>
 </body>
 </html>
+
