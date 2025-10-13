@@ -2,6 +2,21 @@
 // نظام التحقق من الصلاحيات - يستخدم عميل Supabase الموجود في الصفحة (لا ينشئ اتصال جديد)
 // تأكد أن الصفحة تجهز "supabase client" على window.supabaseClient أو window.supabase قبل تحميل هذا الملف.
 
+// 🛑 منع اللوب بين الصفحات
+const currentPage = window.location.pathname;
+
+if (
+  currentPage.includes("agent-portal.html") ||
+  currentPage.includes("admin-dashboard.html") ||
+  currentPage.includes("core-flow.html")
+) {
+  // هنا بيتكمل الكود العادي للـ role-check
+  console.log("Role check running on:", currentPage);
+} else {
+  console.log("Skipped role-check on:", currentPage);
+  return; // متعملش أي حاجة لو صفحة مش معروفة
+}
+
 (function () {
   'use strict';
 
