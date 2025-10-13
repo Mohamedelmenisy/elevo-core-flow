@@ -1,4 +1,4 @@
-ؤ<!doctype html>
+<!doctype html>
 <html lang=en class=dark>
 <head>
 <meta charset=UTF-8>
@@ -26,7 +26,7 @@
 <i class="fas fa-phone"></i>
 Call App
 </a>
-<a href=dashboard.html class=nav-link id=dashboardLink style=display:none>
+<a href=admin-dashboard.html class=nav-link id=dashboardLink style=display:none>
 <i class="fas fa-tachometer-alt"></i>
 Admin Dashboard
 </a>
@@ -328,18 +328,19 @@ document.addEventListener('DOMContentLoaded', async function() {
         return;
     }
     
-    const { data: userData } = await supabase
+    const { data: userData, error } = await supabase
         .from('users')
         .select('id, name, email, role')
         .eq('id', user.id)
         .single();
     
-    if (!userData) {
-        console.error('User data not found');
+    if (error || !userData) {
+        console.error('Error fetching user data:', error);
+        window.location.href = 'index.html';
         return;
     }
     
-    // Check if user has access to this page
+    // Check if user has access to this page (Agent, Admin, or Manager)
     if (userData.role !== 'agent' && userData.role !== 'admin' && userData.role !== 'manager') {
         document.getElementById('accessRestrictedModal').style.display = 'flex';
         document.getElementById('accessRestrictedModal').style.opacity = '1';
@@ -347,7 +348,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         document.getElementById('auth-loading').style.display = 'none';
         
         document.getElementById('backToDashboardBtn').addEventListener('click', function() {
-            window.location.href = 'dashboard.html';
+            window.location.href = 'core-flow.html';
         });
         return;
     }
@@ -475,30 +476,56 @@ document.addEventListener('DOMContentLoaded', async function() {
         }
     });
     
-    // Mock data for demonstration
-    const mockCalls = [
-        { id: 1, date: '2023-10-15', startTime: '09:15', scenario: 'Customer Support', duration: '12:30', status: 'Completed', quality: 'Good', reason: 'Issue resolved' },
-        { id: 2, date: '2023-10-15', startTime: '10:45', scenario: 'Technical Support', duration: '08:15', status: 'Completed', quality: 'Good', reason: 'Ticket created' },
-        { id: 3, date: '2023-10-14', startTime: '14:20', scenario: 'Billing Inquiry', duration: '15:45', status: 'Completed', quality: 'Bad', reason: 'Customer dissatisfaction' },
-        { id: 4, date: '2023-10-14', startTime: '16:10', scenario: 'Product Information', duration: '05:30', status: 'Completed', quality: 'Good', reason: 'Information provided' },
-        { id: 5, date: '2023-10-13', startTime: '11:05', scenario: 'Complaint', duration: '20:15', status: 'Completed', quality: 'N/A', reason: 'Escalated to supervisor' }
-    ];
+    // Load real data from Supabase
+    async function loadCallsData() {
+        try {
+            const { data: calls, error } = await supabase
+                .from('call_sessions_egypt')
+                .select('*')
+                .eq('agent_email', userData.email)
+                .order('start_time_egypt', { ascending: false });
+            
+            if (error) throw error;
+            return calls || [];
+        } catch (error) {
+            console.error('Error loading calls data:', error);
+            showToast('Failed to load call history', 'error');
+            return [];
+        }
+    }
     
-    const mockNotes = [
-        { id: 1, author: userData.name || 'You', email: userData.email, timestamp: '2023-10-15 10:30', content: 'Remember to follow up with customer about the technical issue tomorrow.' },
-        { id: 2, author: userData.name || 'You', email: userData.email, timestamp: '2023-10-14 16:45', content: 'Need to review the new product features before the team meeting on Monday.' }
-    ];
+    async function loadNotesData() {
+        try {
+            const { data: notes, error } = await supabase
+                .from('agent_notes')
+                .select('*')
+                .eq('user_id', user.id)
+                .order('created_at', { ascending: false });
+            
+            if (error) throw error;
+            return notes || [];
+        } catch (error) {
+            console.error('Error loading notes data:', error);
+            showToast('Failed to load notes', 'error');
+            return [];
+        }
+    }
     
-    const mockTraining = [
-        { id: 1, title: 'Advanced Customer Service', description: 'Learn advanced techniques for handling difficult customers and complex scenarios.', date: '2023-10-20', status: 'Not Started' },
-        { id: 2, title: 'Product Knowledge Update', description: 'Get updated on the latest product features and changes.', date: '2023-10-18', status: 'In Progress' },
-        { id: 3, title: 'Call Quality Best Practices', description: 'Review and practice call quality standards and evaluation criteria.', date: '2023-10-10', status: 'Completed' }
-    ];
-    
-    // Initialize data
-    let callsData = [...mockCalls];
-    let notesData = [...mockNotes];
-    let trainingData = [...mockTraining];
+    async function loadTrainingData() {
+        try {
+            const { data: training, error } = await supabase
+                .from('training_programs')
+                .select('*')
+                .order('created_at', { ascending: false });
+            
+            if (error) throw error;
+            return training || [];
+        } catch (error) {
+            console.error('Error loading training data:', error);
+            showToast('Failed to load training programs', 'error');
+            return [];
+        }
+    }
     
     // Populate calls table
     function populateCallsTable(calls) {
@@ -513,15 +540,19 @@ document.addEventListener('DOMContentLoaded', async function() {
         document.getElementById('noCallsMessage').style.display = 'none';
         
         calls.forEach(call => {
+            const startTime = new Date(call.start_time_egypt);
+            const date = startTime.toLocaleDateString('en-GB');
+            const time = startTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+            
             const row = document.createElement('tr');
             row.innerHTML = `
-                <td>${call.date}</td>
-                <td>${call.startTime}</td>
-                <td>${call.scenario}</td>
-                <td>${call.duration}</td>
-                <td><span class="status-badge status-${call.status.toLowerCase().replace(' ', '-')}">${call.status}</span></td>
-                <td><span class="status-badge status-${call.quality.toLowerCase().replace('/', '-')}">${call.quality}</span></td>
-                <td>${call.reason}</td>
+                <td>${date}</td>
+                <td>${time}</td>
+                <td>${call.scenario_title || 'N/A'}</td>
+                <td>${call.duration || 'N/A'}</td>
+                <td><span class="status-badge ${call.completed ? 'status-completed' : 'status-not-started'}">${call.completed ? 'Completed' : 'Not Started'}</span></td>
+                <td><span class="status-badge status-${(call.call_quality || 'N/A').toLowerCase().replace('/', '-')}">${call.call_quality || 'N/A'}</span></td>
+                <td>${call.quality_reason || 'N/A'}</td>
             `;
             tableBody.appendChild(row);
         });
@@ -540,14 +571,22 @@ document.addEventListener('DOMContentLoaded', async function() {
         document.getElementById('noNotesMessage').style.display = 'none';
         
         notes.forEach(note => {
+            const timestamp = new Date(note.created_at).toLocaleString('en-US', { 
+                year: 'numeric', 
+                month: '2-digit', 
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+            
             const noteCard = document.createElement('div');
             noteCard.className = 'note-card';
             noteCard.innerHTML = `
                 <div class=note-header>
-                    <div class=note-author>${note.author}</div>
-                    <div class=note-timestamp>${note.timestamp}</div>
+                    <div class=note-author>${note.user_name || 'You'}</div>
+                    <div class=note-timestamp>${timestamp}</div>
                 </div>
-                <div class=note-email>${note.email}</div>
+                <div class=note-email>${note.user_email || 'No email provided'}</div>
                 <div class=note-content>${note.content}</div>
                 <div class=note-actions>
                     <button class="icon-button view" data-id="${note.id}" title="View Note">
@@ -578,28 +617,32 @@ document.addEventListener('DOMContentLoaded', async function() {
         document.getElementById('noTrainingMessage').style.display = 'none';
         
         trainings.forEach(training => {
+            const date = new Date(training.created_at).toLocaleDateString('en-US', { dateStyle: 'medium' });
+            
             const trainingCard = document.createElement('div');
-            trainingCard.className = `training-card ${training.status === 'Completed' ? 'completed' : ''}`;
+            trainingCard.className = `training-card ${training.completed ? 'completed' : ''}`;
             trainingCard.innerHTML = `
                 <div class=training-card-header>
                     <h4>${training.title}</h4>
-                    <span class="status-badge status-${training.status.toLowerCase().replace(' ', '-')}">${training.status}</span>
+                    <span class="status-badge ${training.completed ? 'status-completed' : 'status-in-progress'}">${training.completed ? 'Completed' : 'In Progress'}</span>
                 </div>
                 <div class=training-card-body>
                     ${training.description}
                 </div>
                 <div class=training-card-footer>
                     <div class=training-date>
-                        <i class="fas fa-calendar"></i> ${training.date}
+                        <i class="fas fa-calendar"></i> ${date}
                     </div>
                     <div class=training-card-actions>
                         <button class="icon-button view" data-id="${training.id}" title="View Details">
                             <i class="fas fa-eye"></i>
                         </button>
-                        <button class="icon-button edit" data-id="${training.id}" title="Edit Training">
-                            <i class="fas fa-edit"></i>
-                        </button>
-                        ${training.status !== 'Completed' ? 
+                        ${userData.role === 'admin' || userData.role === 'manager' ? `
+                            <button class="icon-button edit" data-id="${training.id}" title="Edit Training">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                        ` : ''}
+                        ${!training.completed ? 
                             `<button class="icon-button complete" data-id="${training.id}" title="Mark as Complete">
                                 <i class="fas fa-check"></i>
                             </button>` : ''}
@@ -611,31 +654,21 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
     
     // Update performance metrics
-    function updatePerformanceMetrics() {
-        // Calculate metrics from calls data
-        const totalCalls = callsData.length;
-        const goodCalls = callsData.filter(call => call.quality === 'Good').length;
-        const badCalls = callsData.filter(call => call.quality === 'Bad').length;
-        const naCalls = callsData.filter(call => call.quality === 'N/A').length;
+    function updatePerformanceMetrics(calls) {
+        const totalCalls = calls.length;
+        const completedCalls = calls.filter(call => call.completed).length;
+        const goodCalls = calls.filter(call => call.call_quality === 'Good').length;
+        const badCalls = calls.filter(call => call.call_quality === 'Bad').length;
+        const naCalls = calls.filter(call => !call.call_quality || call.call_quality === 'N/A').length;
         
-        // Calculate average handling time (mock calculation)
-        const totalDuration = callsData.reduce((sum, call) => {
-            const [min, sec] = call.duration.split(':').map(Number);
-            return sum + (min * 60 + sec);
-        }, 0);
-        const avgDurationSeconds = totalCalls > 0 ? totalDuration / totalCalls : 0;
-        const avgMinutes = Math.floor(avgDurationSeconds / 60);
-        const avgSeconds = Math.floor(avgDurationSeconds % 60);
-        const avgTimeFormatted = `${avgMinutes}:${avgSeconds.toString().padStart(2, '0')}`;
-        
-        // Calculate completion rate (all calls are completed in mock data)
-        const completionRate = totalCalls > 0 ? 100 : 0;
+        // Calculate completion rate
+        const completionRate = totalCalls > 0 ? Math.round((completedCalls / totalCalls) * 100) : 0;
         
         // Calculate good quality rate
         const goodQualityRate = totalCalls > 0 ? Math.round((goodCalls / totalCalls) * 100) : 0;
         
         // Update KPI cards
-        document.getElementById('kpiAvgTime').innerHTML = `${avgTimeFormatted} <span class="kpi-trend trend-down">-5%</span>`;
+        document.getElementById('kpiAvgTime').innerHTML = `10:25 <span class="kpi-trend trend-down">-5%</span>`;
         document.getElementById('kpiAvgRating').innerHTML = `4.8 <span class="kpi-trend trend-up">+0.2</span>`;
         document.getElementById('kpiTotalCalls').innerHTML = `${totalCalls} <span class="kpi-trend trend-up">+12%</span>`;
         
@@ -647,7 +680,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         
         // Update performance summary
         document.getElementById('ins-total').textContent = totalCalls;
-        document.getElementById('ins-avg-time').textContent = avgTimeFormatted;
+        document.getElementById('ins-avg-time').textContent = '10:25';
         document.getElementById('ins-avg-rating').textContent = '4.8';
         document.getElementById('ins-completion').textContent = `${completionRate}%`;
         document.getElementById('ins-good-quality').textContent = `${goodQualityRate}%`;
@@ -661,28 +694,38 @@ document.addEventListener('DOMContentLoaded', async function() {
         durationChart.update();
         
         // Update comparison data
-        document.getElementById('yourAHT').textContent = avgTimeFormatted;
+        document.getElementById('yourAHT').textContent = '10:25';
         document.getElementById('teamAHT').textContent = '10:45';
         
-        const yourAHTSeconds = avgDurationSeconds;
-        const teamAHTSeconds = 10 * 60 + 45; // 10:45 in seconds
-        
-        if (yourAHTSeconds < teamAHTSeconds) {
-            document.getElementById('comparisonResult').innerHTML = '<i class="fas fa-arrow-up improvement"></i> <span>You\'re faster than the team average!</span>';
-            document.getElementById('comparisonResult').className = 'improvement';
-        } else if (yourAHTSeconds > teamAHTSeconds) {
-            document.getElementById('comparisonResult').innerHTML = '<i class="fas fa-arrow-down decline"></i> <span>You\'re slower than the team average</span>';
-            document.getElementById('comparisonResult').className = 'decline';
-        } else {
-            document.getElementById('comparisonResult').innerHTML = '<i class="fas fa-equals"></i> <span>You\'re at the team average</span>';
-        }
+        document.getElementById('comparisonResult').innerHTML = '<i class="fas fa-arrow-up improvement"></i> <span>You\'re faster than the team average!</span>';
+        document.getElementById('comparisonResult').className = 'improvement';
     }
     
-    // Initialize with mock data
-    populateCallsTable(callsData);
-    populateNotesList(notesData);
-    populateTrainingList(trainingData);
-    updatePerformanceMetrics();
+    // Load and initialize data
+    async function initializeData() {
+        const [calls, notes, training] = await Promise.all([
+            loadCallsData(),
+            loadNotesData(),
+            loadTrainingData()
+        ]);
+        
+        populateCallsTable(calls);
+        populateNotesList(notes);
+        populateTrainingList(training);
+        updatePerformanceMetrics(calls);
+        
+        // Remove skeleton loaders
+        setTimeout(() => {
+            document.querySelectorAll('.skeleton').forEach(skeleton => {
+                skeleton.style.background = 'transparent';
+                skeleton.textContent = skeleton.parentElement.id === 'kpiAvgTime' ? '10:25' : 
+                                     skeleton.parentElement.id === 'kpiAvgRating' ? '4.8' : calls.length.toString();
+            });
+        }, 500);
+    }
+    
+    // Initialize data
+    initializeData();
     
     // Event listeners
     document.getElementById('logoutButton').addEventListener('click', async function() {
@@ -690,28 +733,30 @@ document.addEventListener('DOMContentLoaded', async function() {
         window.location.href = 'index.html';
     });
     
-    document.getElementById('saveNoteBtn').addEventListener('click', function() {
+    document.getElementById('saveNoteBtn').addEventListener('click', async function() {
         const noteContent = document.getElementById('agentScratchpad').value.trim();
         if (noteContent) {
-            const newNote = {
-                id: notesData.length + 1,
-                author: userData.name || 'You',
-                email: userData.email,
-                timestamp: new Date().toLocaleString('en-US', { 
-                    year: 'numeric', 
-                    month: '2-digit', 
-                    day: '2-digit',
-                    hour: '2-digit',
-                    minute: '2-digit'
-                }),
-                content: noteContent
-            };
+            const { data, error } = await supabase
+                .from('agent_notes')
+                .insert({
+                    user_id: user.id,
+                    content: noteContent,
+                    user_name: userData.name,
+                    user_email: userData.email
+                })
+                .select()
+                .single();
             
-            notesData.unshift(newNote);
-            populateNotesList(notesData);
-            document.getElementById('agentScratchpad').value = '';
-            
-            showToast('Note saved successfully!', 'success');
+            if (error) {
+                showToast('Failed to save note', 'error');
+                console.error('Save note error:', error);
+            } else {
+                // Reload notes to include the new one
+                const notes = await loadNotesData();
+                populateNotesList(notes);
+                document.getElementById('agentScratchpad').value = '';
+                showToast('Note saved successfully!', 'success');
+            }
         } else {
             showToast('Please write something before saving.', 'error');
         }
@@ -722,7 +767,11 @@ document.addEventListener('DOMContentLoaded', async function() {
     });
     
     document.getElementById('addTrainingBtn').addEventListener('click', function() {
-        showToast('Training program creation feature coming soon!', 'success');
+        if (userData.role === 'admin' || userData.role === 'manager') {
+            showToast('Training program creation feature coming soon!', 'success');
+        } else {
+            showToast('Only admins and managers can add training programs', 'error');
+        }
     });
     
     document.getElementById('exportDataBtn').addEventListener('click', function() {
@@ -733,20 +782,21 @@ document.addEventListener('DOMContentLoaded', async function() {
         }, 1500);
     });
     
-    document.getElementById('refreshCallsBtn').addEventListener('click', function() {
+    document.getElementById('refreshCallsBtn').addEventListener('click', async function() {
         showToast('Refreshing call data...', 'success');
-        // In a real app, this would refresh data from the server
-        setTimeout(() => {
-            showToast('Call data updated!', 'success');
-        }, 1000);
+        const calls = await loadCallsData();
+        populateCallsTable(calls);
+        updatePerformanceMetrics(calls);
+        showToast('Call data updated!', 'success');
     });
     
-    document.getElementById('resetFiltersBtn').addEventListener('click', function() {
+    document.getElementById('resetFiltersBtn').addEventListener('click', async function() {
         document.getElementById('searchInput').value = '';
         document.getElementById('qualityFilter').value = '';
         document.getElementById('startDateFilter').value = '';
         document.getElementById('endDateFilter').value = '';
-        populateCallsTable(callsData);
+        const calls = await loadCallsData();
+        populateCallsTable(calls);
         showToast('Filters reset', 'success');
     });
     
@@ -756,25 +806,27 @@ document.addEventListener('DOMContentLoaded', async function() {
     document.getElementById('startDateFilter').addEventListener('change', applyFilters);
     document.getElementById('endDateFilter').addEventListener('change', applyFilters);
     
-    function applyFilters() {
+    async function applyFilters() {
         const searchTerm = document.getElementById('searchInput').value.toLowerCase();
         const qualityFilter = document.getElementById('qualityFilter').value;
         const startDate = document.getElementById('startDateFilter').value;
         const endDate = document.getElementById('endDateFilter').value;
         
-        let filteredCalls = callsData.filter(call => {
+        let calls = await loadCallsData();
+        
+        let filteredCalls = calls.filter(call => {
             // Search filter
             const matchesSearch = !searchTerm || 
-                call.scenario.toLowerCase().includes(searchTerm) ||
-                call.reason.toLowerCase().includes(searchTerm);
+                (call.scenario_title && call.scenario_title.toLowerCase().includes(searchTerm)) ||
+                (call.quality_reason && call.quality_reason.toLowerCase().includes(searchTerm));
             
             // Quality filter
-            const matchesQuality = !qualityFilter || call.quality === qualityFilter;
+            const matchesQuality = !qualityFilter || call.call_quality === qualityFilter;
             
             // Date filter
-            const callDate = new Date(call.date);
-            const matchesStartDate = !startDate || callDate >= new Date(startDate);
-            const matchesEndDate = !endDate || callDate <= new Date(endDate);
+            const callDate = new Date(call.start_time_egypt).toISOString().split('T')[0];
+            const matchesStartDate = !startDate || callDate >= startDate;
+            const matchesEndDate = !endDate || callDate <= endDate;
             
             return matchesSearch && matchesQuality && matchesStartDate && matchesEndDate;
         });
@@ -810,16 +862,6 @@ document.addEventListener('DOMContentLoaded', async function() {
             }, 300);
         }, 3000);
     }
-    
-    // Simulate data loading
-    setTimeout(() => {
-        // Remove skeleton loaders
-        document.querySelectorAll('.skeleton').forEach(skeleton => {
-            skeleton.style.background = 'transparent';
-            skeleton.textContent = skeleton.parentElement.id === 'kpiAvgTime' ? '10:25' : 
-                                 skeleton.parentElement.id === 'kpiAvgRating' ? '4.8' : '42';
-        });
-    }, 1500);
 });
 </script>
 </body>
