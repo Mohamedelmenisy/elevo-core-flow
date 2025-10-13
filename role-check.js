@@ -5,20 +5,21 @@
 // 🛑 منع اللوب بين الصفحات
 const currentPage = window.location.pathname;
 
-if (
+// 🧩 منع اللوب بين الصفحات + تشغيل الكود فقط في الصفحات المسموحة
+const currentPage = window.location.pathname;
+
+const isKnownPage =
   currentPage.includes("agent-portal.html") ||
   currentPage.includes("admin-dashboard.html") ||
-  currentPage.includes("core-flow.html")
-) {
-  // هنا بيتكمل الكود العادي للـ role-check
-  console.log("Role check running on:", currentPage);
-} else {
-  console.log("Skipped role-check on:", currentPage);
-  return; // متعملش أي حاجة لو صفحة مش معروفة
-}
+  currentPage.includes("core-flow.html");
 
-(function () {
-  'use strict';
+if (!isKnownPage) {
+  console.log("Skipped role-check on:", currentPage);
+} else {
+  console.log("Role check running on:", currentPage);
+
+  (function () {
+    'use strict';
 
   /**
    * محاولة الحصول على كائن عميل Supabase الموجود في الصفحة.
