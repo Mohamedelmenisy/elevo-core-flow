@@ -72,14 +72,28 @@ async function enforceRole() {
 
     try {
         // If no user, redirect to login (keep existing behavior)
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) {
-            // Allow pages to handle redirect themselves; but to be safe, send to login
-            window.location.href = 'index.html';
-            return;
-        }
+        let { data: { session } } = await supabase.auth.getSession();
+let user = session?.user;
 
-        // Ensure there's a user row in users table (sets default 'agent' if missing)
+// في حالة لسه Supabase بيحمّل الجلسة من localStorage
+if (!user) {
+  console.log("Waiting for Supabase session...");
+  for (let i = 0; i < 5; i++) { // يجرب 5 مرات كل 500ms
+    await new Promise(r => setTimeout(r, 500));
+    const { data: { session: s2 } } = await supabase.auth.getSession();
+    if (s2?.user) {
+      user = s2.user;
+      break;
+    }
+  }
+}
+
+if (!user) {
+  console.warn("No active session found. Redirecting to login...");
+  window.location.href = 'index.html';
+  return;
+}
+  // Ensure there's a user row in users table (sets default 'agent' if missing)
         await ensureUserRow();
 
         // Get role
