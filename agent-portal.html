@@ -1849,18 +1849,57 @@
             });
         }
     </script>
+
+<!-- agent-script-v2 -->
 <script type="module">
 import { enforcePageAccess } from './role-check.js';
-
 document.addEventListener('DOMContentLoaded', async () => {
-  const res = await enforcePageAccess(['manager']);
-  if (!res || !res.allowed) return; // modal + redirect handled by enforcePageAccess
-
-  // manager-only page logic here
-  const userNameEl = document.getElementById('userName');
-  if (userNameEl && res.userRow?.name) userNameEl.textContent = res.userRow.name;
+  const res = await enforcePageAccess(['agent','manager'], { blockAdminRedirect: false });
+  if (!res) return;
+  if (!res.allowed) {
+    document.querySelectorAll('button, a').forEach(el => {
+      if (!el.classList.contains('allow-when-banner')) el.setAttribute('disabled','true');
+    });
+    return;
+  }
+  if (res.role === 'manager') {
+    const note = document.createElement('div');
+    note.textContent = "Viewing Agent Dashboard as Manager.";
+    note.style.cssText = "background:linear-gradient(90deg,#0ea5e9,#2563eb); color:white; padding:8px 12px; border-radius:8px; text-align:center; margin-bottom:12px; font-weight:600;";
+    document.body.prepend(note);
+  }
+  document.querySelectorAll('.dashboard-card').forEach((c, i) => {
+    c.classList.add('fade-in');
+    c.style.animationDelay = (i * 70) + 'ms';
+  });
+  document.querySelectorAll('[data-duration]').forEach(td => {
+    const raw = parseInt(td.getAttribute('data-duration') || '0', 10);
+    if (!isNaN(raw)) {
+      const s = raw;
+      const m = Math.floor(s / 60);
+      const sec = s % 60;
+      td.textContent = (m > 0 ? m + 'm ' : '') + sec + 's';
+    }
+  });
+  const exportBtn = document.getElementById('exportCsvBtn');
+  if (exportBtn) {
+    exportBtn.addEventListener('click', () => {
+      const rows = Array.from(document.querySelectorAll('table tr')).map(tr => {
+        return Array.from(tr.querySelectorAll('th,td')).map(td => '"' + (td.textContent || '').replace(/"/g,'""') + '"').join(',');
+      });
+      const csv = rows.join('\n');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'agent-export.csv';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    });
+  }
 });
 </script>
-
 </body>
 </html>
