@@ -1,83 +1,79 @@
-import { supabase } from './supabaseClient.js';
+/* role-check.js - unified role helper and UI helper functions
+   - getCurrentUserRole() returns 'admin'|'manager'|'agent' or null
+   - applyNavVisibility(role) updates header links and attaches protection for admin-only pages
+   - showProtectedModal() shows a warning when agent tries to open admin-only pages
+*/
+import { supabase } from './supabase.js';
 
-const ADMIN_PAGES = ['dashboard.html', 'rtm-dashboard.html', 'audit.html', 'admin-dashboard.html'];
-const AGENT_PAGES = ['agent-portal.html'];
-const CORE_PAGE = 'core-flow.html';
-
-function basename(path) {
-  return path.split('/').pop().split('?')[0].toLowerCase();
-}
-
-async function getCurrentUserRole() {
+export async function getCurrentUserRole() {
   try {
-    const { data: { session } } = await supabase.auth.getSession();
-    const user = session?.user;
-    if (!user) return null;
-
-    const { data, error } = await supabase
+    // Supabase auth user
+    const { data: { user }, error: authErr } = await supabase.auth.getUser();
+    if (authErr || !user) return null;
+    // Read role column from users table
+    const { data: profile, error } = await supabase
       .from('users')
-      .select('role')
+      .select('id, role, name, email')
       .eq('id', user.id)
       .maybeSingle();
-
     if (error) {
-      console.error('getCurrentUserRole error:', error);
+      console.error('Error fetching profile', error);
       return null;
     }
-
-    return data?.role || 'agent';
+    const role = profile?.role || 'agent';
+    return role;
   } catch (e) {
-    console.error('Error fetching user role:', e);
+    console.error('getCurrentUserRole error', e);
     return null;
   }
 }
 
-function showAccessModal() {
-  let modal = document.getElementById('restricted-modal');
+export function applyNavVisibility(role) {
+  // header link elements must have data-role-required attributes if they are admin/manager-only
+  document.querySelectorAll('[data-role-required]').forEach(el => {
+    const req = el.getAttribute('data-role-required'); // e.g. "admin,manager"
+    if (!req) return;
+    const allowed = req.split(',').map(s => s.trim());
+    if (!role || !allowed.includes(role)) {
+      // disable link but keep visible
+      el.classList.add('protected-link');
+      el.addEventListener('click', protectedClickHandler);
+      el.setAttribute('aria-disabled','true');
+    } else {
+      el.classList.remove('protected-link');
+      el.removeEventListener('click', protectedClickHandler);
+      el.removeAttribute('aria-disabled');
+    }
+  });
+
+  // update any role label UI
+  const roleBadge = document.getElementById('role-badge');
+  if (roleBadge) roleBadge.textContent = role || 'guest';
+}
+
+function protectedClickHandler(e){
+  // allow sidebar viewing for agents, but warn when opening admin pages
+  e.preventDefault();
+  showProtectedModal();
+}
+
+export function showProtectedModal() {
+  let modal = document.getElementById('protected-modal');
   if (!modal) {
     modal = document.createElement('div');
-    modal.id = 'restricted-modal';
-    modal.style.cssText = `
-      position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:99999;
-    `;
+    modal.id = 'protected-modal';
+    modal.className = 'protected-modal';
     modal.innerHTML = `
-      <div style="background:rgba(255,255,255,0.1);backdrop-filter:blur(10px);border-radius:12px;padding:20px 25px;max-width:420px;text-align:center;color:#fff;">
-        <h3 style="margin:0 0 8px 0;">Access Restricted</h3>
-        <p style="margin:0 0 12px 0;">This area is for administrators or managers only.</p>
-        <button id="restricted-ok" style="padding:8px 16px;border:none;border-radius:8px;background:#4e8cff;color:#fff;cursor:pointer;">Okay</button>
+      <div class="protected-modal-card">
+        <h3>Restricted</h3>
+        <p>This area is for managers and administrators only. If you believe you should have access, please contact your admin.</p>
+        <div class="protected-modal-actions">
+          <button id="pm-close">Close</button>
+        </div>
       </div>
     `;
     document.body.appendChild(modal);
-    document.getElementById('restricted-ok').onclick = () => {
-      modal.remove();
-      window.location.href = CORE_PAGE;
-    };
+    document.getElementById('pm-close').addEventListener('click', ()=> modal.classList.remove('open'));
   }
-}
-
-async function checkRoleAccess() {
-  const page = basename(window.location.pathname);
-  const role = await getCurrentUserRole();
-
-  if (!role) {
-    console.log('No user session detected → showing as guest.');
-    return; // no redirect — just leave the page blank/limited
-  }
-
-  if (AGENT_PAGES.includes(page) && role !== 'agent') {
-    showAccessModal();
-    return;
-  }
-
-  if (ADMIN_PAGES.includes(page) && !['admin', 'manager'].includes(role)) {
-    showAccessModal();
-    return;
-  }
-}
-
-// Execute
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', checkRoleAccess);
-} else {
-  checkRoleAccess();
+  modal.classList.add('open');
 }
