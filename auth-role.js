@@ -1,79 +1,64 @@
-/* role-check.js - unified role helper and UI helper functions
-   - getCurrentUserRole() returns 'admin'|'manager'|'agent' or null
-   - applyNavVisibility(role) updates header links and attaches protection for admin-only pages
-   - showProtectedModal() shows a warning when agent tries to open admin-only pages
-*/
+// --- START OF FILE auth-role.js ---
+
+/* 
+ * auth-role.js - Unified helper for role-based access control.
+ * - getCurrentUserRole(): Fetches the role of the logged-in user.
+ * - showAccessDeniedModal(): Displays a full-screen modal for restricted access.
+ * - applyNavVisibility(): Hides or protects navigation links based on user role.
+ */
 import { supabase } from './supabaseClient.js';
 
+/**
+ * Gets the current user's role from the 'users' table.
+ * @returns {Promise<string|null>} The user's role (e.g., 'admin', 'agent') or null.
+ */
 export async function getCurrentUserRole() {
   try {
-    // Supabase auth user
     const { data: { user }, error: authErr } = await supabase.auth.getUser();
-    if (authErr || !user) return null;
-    // Read role column from users table
-    const { data: profile, error } = await supabase
-      .from('users')
-      .select('id, role, name, email')
-      .eq('id', user.id)
-      .maybeSingle();
-    if (error) {
-      console.error('Error fetching profile', error);
+    if (authErr || !user) {
       return null;
     }
-    const role = profile?.role || 'agent';
-    return role;
+
+    const { data: profile, error } = await supabase
+      .from('users')
+      .select('role')
+      .eq('id', user.id)
+      .single();
+
+    if (error) {
+      console.error('Error fetching user role. This might be due to RLS policies on the `users` table.', error);
+      return null; // Critical failure, likely RLS
+    }
+
+    return profile?.role || 'agent'; // Default to 'agent' if role is not set
   } catch (e) {
-    console.error('getCurrentUserRole error', e);
+    console.error('Exception occurred in getCurrentUserRole:', e);
     return null;
   }
 }
 
+/**
+ * Makes the "Access Denied" modal visible.
+ */
+export function showAccessDeniedModal() {
+  const modal = document.getElementById('accessDeniedModal');
+  if (modal) {
+    modal.style.display = 'flex';
+  }
+}
+
+/**
+ * Hides or protects navigation links based on user role.
+ * Links with `data-role-required="admin"` will be hidden from non-admins.
+ * @param {string|null} role The current user's role.
+ */
 export function applyNavVisibility(role) {
-  // header link elements must have data-role-required attributes if they are admin/manager-only
   document.querySelectorAll('[data-role-required]').forEach(el => {
-    const req = el.getAttribute('data-role-required'); // e.g. "admin,manager"
-    if (!req) return;
-    const allowed = req.split(',').map(s => s.trim());
-    if (!role || !allowed.includes(role)) {
-      // disable link but keep visible
-      el.classList.add('protected-link');
-      el.addEventListener('click', protectedClickHandler);
-      el.setAttribute('aria-disabled','true');
+    const requiredRole = el.getAttribute('data-role-required');
+    if (role !== requiredRole) {
+      el.style.display = 'none';
     } else {
-      el.classList.remove('protected-link');
-      el.removeEventListener('click', protectedClickHandler);
-      el.removeAttribute('aria-disabled');
+      el.style.display = ''; // Or 'inline-flex', 'block', etc., depending on the element.
     }
   });
-
-  // update any role label UI
-  const roleBadge = document.getElementById('role-badge');
-  if (roleBadge) roleBadge.textContent = role || 'guest';
-}
-
-function protectedClickHandler(e){
-  // allow sidebar viewing for agents, but warn when opening admin pages
-  e.preventDefault();
-  showProtectedModal();
-}
-
-export function showProtectedModal() {
-  let modal = document.getElementById('protected-modal');
-  if (!modal) {
-    modal = document.createElement('div');
-    modal.id = 'protected-modal';
-    modal.className = 'protected-modal';
-    modal.innerHTML = `
-      <div class="protected-modal-card">
-        <h3>Restricted</h3>
-        <p>This area is for managers and administrators only. If you believe you should have access, please contact your admin.</p>
-        <div class="protected-modal-actions">
-          <button id="pm-close">Close</button>
-        </div>
-      </div>
-    `;
-    document.body.appendChild(modal);
-    document.getElementById('pm-close').addEventListener('click', ()=> modal.classList.remove('open'));
-  }
-  modal.classList.add('open');
 }
