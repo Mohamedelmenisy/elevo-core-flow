@@ -59,3 +59,5 @@ supabase.auth.onAuthStateChange(async (event, session) => {
         }
     }
 });
+// ✅ Make supabase available globally for debugging
+window.supabase = supabase;
