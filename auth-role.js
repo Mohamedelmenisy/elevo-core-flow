@@ -3,7 +3,7 @@
    - applyNavVisibility(role) updates header links and attaches protection for admin-only pages
    - showProtectedModal() shows a warning when agent tries to open admin-only pages
 */
-import { supabase } from './supabase.js';
+import { supabase } from './supabaseClient.js';
 
 export async function getCurrentUserRole() {
   try {
