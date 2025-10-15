@@ -25,16 +25,24 @@
         }
         
         .dashboard-card {
-            background-color: var(--card-bg-color);
-            border-radius: var(--border-radius-lg);
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 14px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.25);
+            transition: transform 0.25s ease, background 0.25s ease;
             padding: 1.5rem;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            opacity: 0;
+            animation: fadeIn 0.5s ease-out forwards;
         }
-        
+
         .dashboard-card:hover {
             transform: translateY(-4px);
-            box-shadow: 0 10px 15px rgba(0, 0, 0, 0.2);
+            background: rgba(255, 255, 255, 0.07);
+        }
+
+        @keyframes fadeIn {
+          to { opacity: 1; }
         }
         
         .dashboard-card h3 {
@@ -164,7 +172,7 @@
                 <a href="core-flow.html" class="nav-link">Call App</a>
                 <a href="agent-portal.html" class="nav-link">Agent Portal</a>
                 <a href="rtm-dashboard.html" class="nav-link">RTM Dashboard</a>
-                <div class="user-info" id="userInfo" style="display: none;">
+                <div class="user-info" id="userInfo">
                     <span id="userName" class="user-name-display"></span>
                     <button id="logoutButton" class="logout-btn">
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
@@ -199,7 +207,6 @@
                 </div>
 
                 <div class="dashboard-grid">
-                    <!-- Live / Delayed / Recent Tickets Boxes -->
                     <div class="dashboard-card" style="border-left: 4px solid var(--primary-color);">
                         <h3>Live Tickets</h3>
                         <div class="value" id="liveTicketsCount">0</div>
@@ -236,7 +243,6 @@
                         </div>
                     </div>
 
-                    <!-- Call Quality Summary -->
                     <div class="dashboard-card card-large">
                         <h3>Call Quality Summary</h3>
                         <div class="chart-container">
@@ -244,7 +250,6 @@
                         </div>
                     </div>
 
-                    <!-- Top 5 Agents Today -->
                     <div class="dashboard-card">
                         <h3>Top 5 Agents Today</h3>
                         <ul class="top-agents-list" id="topAgentsList">
@@ -255,7 +260,6 @@
                         </ul>
                     </div>
 
-                    <!-- Top Scenario Today -->
                     <div class="dashboard-card">
                         <h3>Top Scenario Today</h3>
                         <div id="topScenarioContainer">
@@ -266,7 +270,6 @@
                         </div>
                     </div>
 
-                    <!-- Additional Charts -->
                     <div class="dashboard-card card-full">
                         <h3>Call Volume Trends (Last 7 Days)</h3>
                         <div class="chart-container">
@@ -312,79 +315,53 @@
     </div>
 
     <script type="module">
-        const SUPABASE_URL = 'https://aefiigottnlcmjzilqnh.supabase.co';
-        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFlZmlpZ290dG5sY21qemlscW5oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcxNzY2MDQsImV4cCI6MjA2Mjc1MjYwNH0.FypB02v3tGMnxXV9ZmZMdMC0oQpREKOJWgHMPxUzwX4';
-        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        import { supabase } from './supabaseClient.js';
+        import { protectPage } from './role-check.js';
 
         // Global variables
-        let currentUser = null;
         let qualitySummaryChart = null;
         let volumeTrendChart = null;
         let agentPerformanceChart = null;
         let autoRefreshInterval = null;
 
-        // Initialize the application
         document.addEventListener('DOMContentLoaded', async function() {
+            // Protect page for admins only
+            await protectPage(['admin']);
+            
             // Set current year in footer
             document.getElementById('currentYear').textContent = new Date().getFullYear();
             
-            // Check authentication and load data
-            await checkAuth();
+            // Initial data load
+            await loadDashboardData();
+            
+            // Setup event listeners
             setupEventListeners();
             
             // Start auto-refresh
             startAutoRefresh();
         });
 
-        // Authentication check
-        async function checkAuth() {
-            try {
-                const { data, error } = await supabase.auth.getUser();
-                if (error || !data.user) {
-                    window.location.href = 'index.html';
-                    return;
-                }
-                
-                currentUser = data.user;
-                
-                // Show user info
-                document.getElementById('userInfo').style.display = 'flex';
-                document.getElementById('userName').textContent = currentUser.email;
-                
-                // Load dashboard data
-                await loadDashboardData();
-                
-            } catch (error) {
-                console.error('Authentication error:', error);
-                window.location.href = 'index.html';
-            }
-        }
 
         // Setup event listeners
         function setupEventListeners() {
-            // Logout button
             document.getElementById('logoutButton').addEventListener('click', async () => {
                 await supabase.auth.signOut();
-                window.location.href = 'index.html';
+                window.location.href = 'login.html';
             });
             
-            // Refresh data button
             document.getElementById('refreshDataBtn').addEventListener('click', async () => {
                 await loadDashboardData();
             });
             
-            // Export report button
             document.getElementById('exportReportBtn').addEventListener('click', exportDashboardReport);
         }
 
         // Load dashboard data
         async function loadDashboardData() {
             try {
-                // Show loading state
                 document.getElementById('auth-loading').style.display = 'flex';
                 document.getElementById('dashboardContent').style.display = 'none';
                 
-                // Load data from all required views
                 await Promise.all([
                     loadTicketCounts(),
                     loadCallQualitySummary(),
@@ -395,7 +372,6 @@
                     loadQuickStats()
                 ]);
                 
-                // Hide loading and show content
                 document.getElementById('auth-loading').style.display = 'none';
                 document.getElementById('dashboardContent').style.display = 'block';
                 
@@ -408,44 +384,28 @@
         // Load ticket counts from views
         async function loadTicketCounts() {
             try {
-                // Load live tickets count
                 const { data: liveData, error: liveError } = await supabase
                     .from('live_tickets')
                     .select('id', { count: 'exact' });
-                    
-                if (!liveError) {
-                    document.getElementById('liveTicketsCount').textContent = liveData.length;
-                }
+                if (!liveError) document.getElementById('liveTicketsCount').textContent = liveData.length;
                 
-                // Load delayed tickets count
                 const { data: delayedData, error: delayedError } = await supabase
                     .from('delayed_tickets')
                     .select('id', { count: 'exact' });
-                    
-                if (!delayedError) {
-                    document.getElementById('delayedTicketsCount').textContent = delayedData.length;
-                }
+                if (!delayedError) document.getElementById('delayedTicketsCount').textContent = delayedData.length;
                 
-                // Load recent tickets count
                 const { data: recentData, error: recentError } = await supabase
                     .from('recent_tickets')
                     .select('id', { count: 'exact' });
-                    
-                if (!recentError) {
-                    document.getElementById('recentTicketsCount').textContent = recentData.length;
-                }
+                if (!recentError) document.getElementById('recentTicketsCount').textContent = recentData.length;
                 
-                // Load total calls today from call_sessions_egypt
                 const today = new Date().toISOString().split('T')[0];
                 const { data: todayData, error: todayError } = await supabase
                     .from('call_sessions_egypt')
                     .select('id', { count: 'exact' })
                     .gte('start_time_egypt', `${today}T00:00:00`)
                     .lt('start_time_egypt', `${today}T23:59:59`);
-                    
-                if (!todayError) {
-                    document.getElementById('totalCallsToday').textContent = todayData.length;
-                }
+                if (!todayError) document.getElementById('totalCallsToday').textContent = todayData.length;
                 
             } catch (error) {
                 console.error('Error loading ticket counts:', error);
@@ -455,79 +415,38 @@
         // Load call quality summary from v_call_quality_summary
         async function loadCallQualitySummary() {
             try {
-                const { data, error } = await supabase
-                    .from('v_call_quality_summary')
-                    .select('*');
-                    
+                const { data, error } = await supabase.from('v_call_quality_summary').select('*');
                 if (error) {
                     console.error('Error fetching call quality summary:', error);
                     return;
                 }
                 
-                // Prepare data for chart
-                const labels = [];
-                const values = [];
-                const colors = [];
-                
-                data.forEach(item => {
-                    const quality = item.call_quality;
-                    labels.push(quality.charAt(0).toUpperCase() + quality.slice(1));
-                    values.push(item.total);
-                    
-                    // Assign colors based on quality
-                    if (quality === 'good') {
-                        colors.push('#10B981');
-                    } else if (quality === 'bad') {
-                        colors.push('#EF4444');
-                    } else {
-                        colors.push('#6B7280');
-                    }
+                const labels = data.map(item => item.call_quality.charAt(0).toUpperCase() + item.call_quality.slice(1));
+                const values = data.map(item => item.total);
+                const colors = data.map(item => {
+                    if (item.call_quality === 'good') return '#22c55e';
+                    if (item.call_quality === 'bad') return '#ef4444';
+                    return '#64748b';
                 });
                 
-                // Create or update chart
                 const ctx = document.getElementById('qualitySummaryChart').getContext('2d');
-                
-                if (qualitySummaryChart) {
-                    qualitySummaryChart.destroy();
-                }
+                if (qualitySummaryChart) qualitySummaryChart.destroy();
                 
                 qualitySummaryChart = new Chart(ctx, {
                     type: 'doughnut',
                     data: {
                         labels: labels,
-                        datasets: [{
-                            data: values,
-                            backgroundColor: colors,
-                            borderColor: colors.map(color => color.replace('0.8', '1')),
-                            borderWidth: 2
-                        }]
+                        datasets: [{ data: values, backgroundColor: colors, borderWidth: 2, borderColor: '#2b2b3d' }]
                     },
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
                         plugins: {
-                            legend: {
-                                position: 'bottom',
-                                labels: {
-                                    color: '#D1D5DB',
-                                    font: {
-                                        size: 12
-                                    }
-                                }
-                            },
-                            title: {
-                                display: true,
-                                text: 'Call Quality Distribution',
-                                color: '#F9FAFB',
-                                font: {
-                                    size: 14,
-                                    weight: 'bold'
-                                }
-                            }
+                            legend: { position: 'bottom', labels: { color: '#D1D5DB', font: { size: 12 } } },
+                            title: { display: true, text: 'Call Quality Distribution', color: '#F9FAFB', font: { size: 14, weight: 'bold' } }
                         }
                     }
                 });
-                
             } catch (error) {
                 console.error('Error loading call quality summary:', error);
             }
@@ -536,18 +455,12 @@
         // Load top 5 agents from top_5_agents_today
         async function loadTopAgents() {
             try {
-                const { data, error } = await supabase
-                    .from('top_5_agents_today')
-                    .select('*')
-                    .order('total_tickets', { ascending: false });
-                    
+                const { data, error } = await supabase.from('top_5_agents_today').select('*').order('total_tickets', { ascending: false });
                 if (error) {
-                    console.error('Error fetching top agents:', error);
-                    return;
+                    console.error('Error fetching top agents:', error); return;
                 }
                 
                 const topAgentsList = document.getElementById('topAgentsList');
-                
                 if (data.length === 0) {
                     topAgentsList.innerHTML = '<li class="top-agent-item"><span class="agent-name">No data available</span><span class="agent-count">-</span></li>';
                     return;
@@ -557,9 +470,7 @@
                     <li class="top-agent-item">
                         <span class="agent-name">${agent.agent_name || 'Unknown'}</span>
                         <span class="agent-count">${agent.total_tickets}</span>
-                    </li>
-                `).join('');
-                
+                    </li>`).join('');
             } catch (error) {
                 console.error('Error loading top agents:', error);
             }
@@ -568,29 +479,13 @@
         // Load top scenario from top_scenario_today
         async function loadTopScenario() {
             try {
-                const { data, error } = await supabase
-                    .from('top_scenario_today')
-                    .select('*')
-                    .single();
-                    
+                const { data, error } = await supabase.from('top_scenario_today').select('*').single();
+                const container = document.getElementById('topScenarioContainer');
                 if (error) {
-                    console.error('Error fetching top scenario:', error);
-                    document.getElementById('topScenarioContainer').innerHTML = `
-                        <div class="top-scenario-item">
-                            <span class="scenario-name">No data available</span>
-                            <span class="scenario-count">-</span>
-                        </div>
-                    `;
+                    container.innerHTML = `<div class="top-scenario-item"><span class="scenario-name">No data available</span><span class="scenario-count">-</span></div>`;
                     return;
                 }
-                
-                document.getElementById('topScenarioContainer').innerHTML = `
-                    <div class="top-scenario-item">
-                        <span class="scenario-name">${data.scenario_title || 'Unknown'}</span>
-                        <span class="scenario-count">${data.total_runs}</span>
-                    </div>
-                `;
-                
+                container.innerHTML = `<div class="top-scenario-item"><span class="scenario-name">${data.scenario_title || 'Unknown'}</span><span class="scenario-count">${data.total_runs}</span></div>`;
             } catch (error) {
                 console.error('Error loading top scenario:', error);
             }
@@ -599,99 +494,41 @@
         // Load volume trends (last 7 days)
         async function loadVolumeTrends() {
             try {
-                // Get date range (last 7 days)
-                const dates = [];
-                for (let i = 6; i >= 0; i--) {
-                    const date = new Date();
-                    date.setDate(date.getDate() - i);
-                    dates.push(date.toISOString().split('T')[0]);
-                }
+                const dates = Array.from({ length: 7 }, (_, i) => {
+                    const d = new Date();
+                    d.setDate(d.getDate() - i);
+                    return d.toISOString().split('T')[0];
+                }).reverse();
                 
-                // Get call counts for each date
-                const volumeData = [];
-                
-                for (const date of dates) {
-                    const { data, error } = await supabase
+                const volumeData = await Promise.all(dates.map(async date => {
+                    const { count, error } = await supabase
                         .from('call_sessions_egypt')
-                        .select('id', { count: 'exact' })
+                        .select('id', { count: 'exact', head: true })
                         .gte('start_time_egypt', `${date}T00:00:00`)
                         .lt('start_time_egypt', `${date}T23:59:59`);
-                        
-                    if (!error) {
-                        volumeData.push(data.length);
-                    } else {
-                        volumeData.push(0);
-                    }
-                }
+                    return error ? 0 : count;
+                }));
                 
-                // Format dates for display
-                const formattedDates = dates.map(date => {
-                    const d = new Date(date);
-                    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-                });
+                const formattedDates = dates.map(date => new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
                 
-                // Create or update chart
                 const ctx = document.getElementById('volumeTrendChart').getContext('2d');
-                
-                if (volumeTrendChart) {
-                    volumeTrendChart.destroy();
-                }
+                if (volumeTrendChart) volumeTrendChart.destroy();
                 
                 volumeTrendChart = new Chart(ctx, {
                     type: 'line',
                     data: {
                         labels: formattedDates,
                         datasets: [{
-                            label: 'Call Volume',
-                            data: volumeData,
-                            borderColor: '#4e8cff',
-                            backgroundColor: 'rgba(78, 140, 255, 0.1)',
-                            borderWidth: 2,
-                            fill: true,
-                            tension: 0.4
+                            label: 'Call Volume', data: volumeData, borderColor: '#4e8cff',
+                            backgroundColor: 'rgba(78, 140, 255, 0.1)', borderWidth: 2, fill: true, tension: 0.4
                         }]
                     },
                     options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: {
-                            legend: {
-                                labels: {
-                                    color: '#D1D5DB'
-                                }
-                            },
-                            title: {
-                                display: true,
-                                text: 'Call Volume Over Time',
-                                color: '#F9FAFB',
-                                font: {
-                                    size: 14,
-                                    weight: 'bold'
-                                }
-                            }
-                        },
-                        scales: {
-                            x: {
-                                ticks: {
-                                    color: '#9CA3AF'
-                                },
-                                grid: {
-                                    color: '#374151'
-                                }
-                            },
-                            y: {
-                                ticks: {
-                                    color: '#9CA3AF'
-                                },
-                                grid: {
-                                    color: '#374151'
-                                },
-                                beginAtZero: true
-                            }
-                        }
+                        responsive: true, maintainAspectRatio: false,
+                        plugins: { legend: { labels: { color: '#D1D5DB' } }, title: { display: true, text: 'Call Volume Over Time', color: '#F9FAFB', font: { size: 14, weight: 'bold' } } },
+                        scales: { x: { ticks: { color: '#9CA3AF' }, grid: { color: '#374151' } }, y: { ticks: { color: '#9CA3AF' }, grid: { color: '#374151' }, beginAtZero: true } }
                     }
                 });
-                
             } catch (error) {
                 console.error('Error loading volume trends:', error);
             }
@@ -700,89 +537,33 @@
         // Load agent performance distribution
         async function loadAgentPerformance() {
             try {
-                // Get all agents with their call counts
-                const { data, error } = await supabase
-                    .from('call_sessions_egypt')
-                    .select('agent_name')
-                    .gte('start_time_egypt', new Date().toISOString().split('T')[0] + 'T00:00:00');
-                    
-                if (error) {
-                    console.error('Error fetching agent performance data:', error);
-                    return;
-                }
+                const { data, error } = await supabase.from('call_sessions_egypt').select('agent_name').gte('start_time_egypt', new Date().toISOString().split('T')[0] + 'T00:00:00');
+                if (error) { console.error('Error fetching agent performance data:', error); return; }
                 
-                // Count calls per agent
-                const agentCounts = {};
-                data.forEach(call => {
+                const agentCounts = data.reduce((acc, call) => {
                     const agent = call.agent_name || 'Unknown';
-                    agentCounts[agent] = (agentCounts[agent] || 0) + 1;
-                });
+                    acc[agent] = (acc[agent] || 0) + 1;
+                    return acc;
+                }, {});
                 
-                // Prepare data for chart
                 const labels = Object.keys(agentCounts);
                 const values = Object.values(agentCounts);
                 
-                // Create or update chart
                 const ctx = document.getElementById('agentPerformanceChart').getContext('2d');
-                
-                if (agentPerformanceChart) {
-                    agentPerformanceChart.destroy();
-                }
+                if (agentPerformanceChart) agentPerformanceChart.destroy();
                 
                 agentPerformanceChart = new Chart(ctx, {
                     type: 'bar',
                     data: {
                         labels: labels,
-                        datasets: [{
-                            label: 'Calls Today',
-                            data: values,
-                            backgroundColor: 'rgba(78, 140, 255, 0.7)',
-                            borderColor: '#4e8cff',
-                            borderWidth: 1
-                        }]
+                        datasets: [{ label: 'Calls Today', data: values, backgroundColor: 'rgba(78, 140, 255, 0.7)', borderColor: '#4e8cff', borderWidth: 1 }]
                     },
                     options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: {
-                            legend: {
-                                labels: {
-                                    color: '#D1D5DB'
-                                }
-                            },
-                            title: {
-                                display: true,
-                                text: 'Calls per Agent (Today)',
-                                color: '#F9FAFB',
-                                font: {
-                                    size: 14,
-                                    weight: 'bold'
-                                }
-                            }
-                        },
-                        scales: {
-                            x: {
-                                ticks: {
-                                    color: '#9CA3AF',
-                                    maxRotation: 45
-                                },
-                                grid: {
-                                    display: false
-                                }
-                            },
-                            y: {
-                                ticks: {
-                                    color: '#9CA3AF'
-                                },
-                                grid: {
-                                    color: '#374151'
-                                },
-                                beginAtZero: true
-                            }
-                        }
+                        responsive: true, maintainAspectRatio: false,
+                        plugins: { legend: { labels: { color: '#D1D5DB' } }, title: { display: true, text: 'Calls per Agent (Today)', color: '#F9FAFB', font: { size: 14, weight: 'bold' } } },
+                        scales: { x: { ticks: { color: '#9CA3AF', maxRotation: 45 }, grid: { display: false } }, y: { ticks: { color: '#9CA3AF' }, grid: { color: '#374151' }, beginAtZero: true } }
                     }
                 });
-                
             } catch (error) {
                 console.error('Error loading agent performance:', error);
             }
@@ -791,136 +572,65 @@
         // Load quick stats
         async function loadQuickStats() {
             try {
-                // Get today's date
                 const today = new Date().toISOString().split('T')[0];
+                const { data: todayCalls, error } = await supabase.from('call_sessions_egypt').select('*').gte('start_time_egypt', `${today}T00:00:00`).lt('start_time_egypt', `${today}T23:59:59`);
+                if (error) { console.error('Error fetching today\'s calls:', error); return; }
                 
-                // Get today's calls for calculations
-                const { data: todayCalls, error: todayError } = await supabase
-                    .from('call_sessions_egypt')
-                    .select('*')
-                    .gte('start_time_egypt', `${today}T00:00:00`)
-                    .lt('start_time_egypt', `${today}T23:59:59`);
-                    
-                if (todayError) {
-                    console.error('Error fetching today\'s calls:', todayError);
-                    return;
-                }
-                
-                // Calculate average handle time
                 const completedCalls = todayCalls.filter(call => call.completed);
-                let totalSeconds = 0;
-                
-                completedCalls.forEach(call => {
-                    if (call.duration_interval) {
-                        const parts = call.duration_interval.split(':');
-                        if (parts.length === 3) {
-                            const hours = parseInt(parts[0]) || 0;
-                            const minutes = parseInt(parts[1]) || 0;
-                            const seconds = parseInt(parts[2]) || 0;
-                            totalSeconds += (hours * 3600 + minutes * 60 + seconds);
-                        }
-                    }
-                });
+                const totalSeconds = completedCalls.reduce((sum, call) => {
+                    if (!call.duration_interval) return sum;
+                    const [h, m, s] = call.duration_interval.split(':').map(Number);
+                    return sum + (h * 3600 + m * 60 + s);
+                }, 0);
                 
                 const avgSeconds = completedCalls.length > 0 ? totalSeconds / completedCalls.length : 0;
-                const avgMinutes = Math.floor(avgSeconds / 60);
-                document.getElementById('avgHandleTime').textContent = `${avgMinutes}m`;
+                document.getElementById('avgHandleTime').textContent = `${Math.floor(avgSeconds / 60)}m`;
                 
-                // Calculate completion rate
-                const completionRate = todayCalls.length > 0 ? 
-                    Math.round((completedCalls.length / todayCalls.length) * 100) : 0;
+                const completionRate = todayCalls.length > 0 ? Math.round((completedCalls.length / todayCalls.length) * 100) : 0;
                 document.getElementById('completionRate').textContent = `${completionRate}%`;
                 
-                // Calculate good quality rate
-                const goodCalls = todayCalls.filter(call => 
-                    call.call_quality && call.call_quality.toLowerCase() === 'good').length;
-                const goodQualityRate = todayCalls.length > 0 ? 
-                    Math.round((goodCalls / todayCalls.length) * 100) : 0;
+                const goodCalls = todayCalls.filter(call => call.call_quality?.toLowerCase() === 'good').length;
+                const goodQualityRate = todayCalls.length > 0 ? Math.round((goodCalls / todayCalls.length) * 100) : 0;
                 document.getElementById('goodQualityRate').textContent = `${goodQualityRate}%`;
                 
-                // Count active agents (agents with calls today)
-                const activeAgents = new Set();
-                todayCalls.forEach(call => {
-                    if (call.agent_name) {
-                        activeAgents.add(call.agent_name);
-                    }
-                });
+                const activeAgents = new Set(todayCalls.map(call => call.agent_name).filter(Boolean));
                 document.getElementById('activeAgents').textContent = activeAgents.size;
-                
             } catch (error) {
                 console.error('Error loading quick stats:', error);
             }
         }
 
-        // Start auto-refresh
         function startAutoRefresh() {
-            // Refresh data every 30 seconds
-            autoRefreshInterval = setInterval(async () => {
-                await loadDashboardData();
-            }, 30000);
+            autoRefreshInterval = setInterval(loadDashboardData, 30000);
         }
-
-        // Stop auto-refresh
         function stopAutoRefresh() {
-            if (autoRefreshInterval) {
-                clearInterval(autoRefreshInterval);
-                autoRefreshInterval = null;
-            }
+            if (autoRefreshInterval) clearInterval(autoRefreshInterval);
         }
 
-        // Export dashboard report
         function exportDashboardReport() {
-            // Create CSV content with current dashboard data
             let csvContent = "Elevo Core Dashboard Report\n";
             csvContent += `Generated: ${new Date().toLocaleString()}\n\n`;
-            
-            // Add ticket counts
             csvContent += "Ticket Counts\n";
             csvContent += `Live Tickets,${document.getElementById('liveTicketsCount').textContent}\n`;
             csvContent += `Delayed Tickets,${document.getElementById('delayedTicketsCount').textContent}\n`;
             csvContent += `Recent Tickets,${document.getElementById('recentTicketsCount').textContent}\n`;
             csvContent += `Total Calls Today,${document.getElementById('totalCallsToday').textContent}\n\n`;
-            
-            // Add quick stats
             csvContent += "Performance Metrics\n";
             csvContent += `Average Handle Time,${document.getElementById('avgHandleTime').textContent}\n`;
             csvContent += `Completion Rate,${document.getElementById('completionRate').textContent}\n`;
             csvContent += `Good Quality Rate,${document.getElementById('goodQualityRate').textContent}\n`;
             csvContent += `Active Agents,${document.getElementById('activeAgents').textContent}\n`;
             
-            // Create and download file
-            const blob = new Blob([csvContent], { type: 'text/csv' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `elevo-dashboard-report-${new Date().toISOString().split('T')[0]}.csv`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.setAttribute('download', `elevo-dashboard-report-${new Date().toISOString().split('T')[0]}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
         }
 
-        // Clean up on page unload
-        window.addEventListener('beforeunload', () => {
-            stopAutoRefresh();
-        });
+        window.addEventListener('beforeunload', stopAutoRefresh);
     </script>
-
-<!-- dashboard-script-v2 -->
-<script type="module">
-import { enforcePageAccess } from './role-check.js';
-document.addEventListener('DOMContentLoaded', async () => {
-  document.body.classList.add('loading-access');
-  const res = await enforcePageAccess(['admin','manager']);
-  if (!res || !res.allowed) return;
-  const userNameEl = document.getElementById('userName');
-  if (userNameEl && res.userRow?.name) userNameEl.textContent = res.userRow.name;
-  document.querySelectorAll('.dashboard-card').forEach((c,i) => {
-    c.classList.add('fade-in');
-    c.style.animationDelay = (i*60)+'ms';
-  });
-  document.body.classList.replace('loading-access','ready-access');
-});
-</script>
 </body>
 </html>
