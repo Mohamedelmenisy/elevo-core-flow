@@ -2,9 +2,9 @@
 // ESM module - drop this file in the same folder حيث باقي صفحات الـ frontend
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm";
 
-// ------ (These values are taken from your project files) ------
+// ------ (تم تحديث هذه القيم من المشروع) ------
 export const SUPABASE_URL = 'https://aefiigottnlcmjzilqnh.supabase.co';
-export const SUPABASE_ANON_KEY = 'eyJhbGciOiJIJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFlZmlpZ290dG5sY21qemlscW5oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcxNzY2MDQsImV4cCI6MjA2Mjc1MjYwNH0.FypB02v3tGMnxXV9ZmZMdMC0oQpREKOJWgHMPxUzwX4';
+export const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFlZmlpZ290dG5sY21qemlscW5oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcxNzY2MDQsImV4cCI6MjA2Mjc1MjYwNH0.FypB02v3tGMnxXV9ZmZMdMC0oQpREKOJWgHMPxUzwX4';
 // -----------------------------------
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -23,23 +23,19 @@ export async function getSession() {
 }
 
 /**
- * Query the users table for a single row by userId.
- * Crucially, it selects the 'role' field needed for access control.
- * Returns null on not found / error.
+ * Query the users table for a single row by userId
+ * Returns null on not found / error
  */
 export async function getUserRow(userId) {
   if (!userId) return null;
   try {
     const { data, error } = await supabase
       .from('users')
-      .select('id, name, email, role') // Ensure 'role' is selected
+      .select('id, name, email, role')
       .eq('id', userId)
       .single();
     if (error) {
-      // It's normal for a user to not have a row yet, so only log unexpected errors.
-      if (error.code !== 'PGRST116') {
-         console.warn('getUserRow error:', error.message);
-      }
+      console.warn('getUserRow error', error);
       return null;
     }
     return data ?? null;
@@ -82,5 +78,6 @@ export async function signOut() {
 
 // Keep a debug auth-state listener for convenience during development
 supabase.auth.onAuthStateChange((event, session) => {
-  console.debug('Supabase auth event:', event, session ? `for user ${session.user.id}` : '(no session)');
+  console.debug('Supabase auth event:', event);
+  // you may handle global redirects here if you prefer
 });
