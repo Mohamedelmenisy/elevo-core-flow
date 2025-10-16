@@ -1216,6 +1216,93 @@ Waiting for Ticket
             switchToInitialView();
             await loadActiveScenarios();
         }
+        
+        // ننشط الـ real-time sync
+        setupKnowledgeBaseSync();
+    }
+
+    // =============================================
+    // REAL-TIME KNOWLEDGE BASE SYNC
+    // =============================================
+
+    function setupKnowledgeBaseSync() {
+        console.log("🔄 Setting up Knowledge Base real-time sync...");
+        
+        const subscription = supabase
+            .channel('kb-realtime-sync')
+            .on('postgres_changes', 
+                { 
+                    event: 'UPDATE', 
+                    schema: 'public', 
+                    table: 'cases' 
+                }, 
+                async (payload) => {
+                    console.log('📢 KB Update received:', payload);
+                    await handleKnowledgeBaseUpdate(payload);
+                }
+            )
+            .subscribe((status) => {
+                if (status === 'SUBSCRIBED') {
+                    console.log('✅ Connected to Knowledge Base real-time updates');
+                }
+            });
+
+        return subscription;
+    }
+
+    async function handleKnowledgeBaseUpdate(payload) {
+        const updatedCase = payload.new;
+        
+        // لو فيه سيناريو شغال حالياً وتم تحديثه
+        if (currentScenario && currentScenario.id === updatedCase.id) {
+            console.log('🔄 Current scenario updated - refreshing...');
+            
+            // نظهر إشعار للمستخدم
+            showCustomToast('📢 تم تحديث إجراءات هذا الكيس! جاري التحديث...');
+            
+            // نعطي المستخدم وقت يقرأ الإشعار
+            setTimeout(async () => {
+                try {
+                    // نجيب أحدث نسخة من السيناريو
+                    const { data: freshScenario, error } = await supabase
+                        .from('call_scenarios')
+                        .select('*')
+                        .eq('id', currentScenario.id)
+                        .single();
+                        
+                    if (error) throw error;
+                    
+                    if (freshScenario) {
+                        // نحفظ الخطوة الحالية عشان ما يضيعش تقدم المستخدم
+                        const currentStepBeforeUpdate = currentStepId;
+                        
+                        // نحدث السيناريو
+                        currentScenario = freshScenario;
+                        
+                        // لو الخطوة الحالية لسة موجودة، نرجعها
+                        if (currentStepId && currentScenario.steps.find(s => s.id === currentStepId)) {
+                            renderStep();
+                        } else {
+                            // لو الخطوة اتمسحت، نرجع لبداية السيناريو
+                            currentStepId = currentScenario.steps[0]?.id;
+                            stepHistory = [];
+                            renderStep();
+                        }
+                        
+                        showCustomToast('✅ تم تحديث المحتوى بنجاح!');
+                        
+                        // نحط تأثير بصري خفيف عشان المستخدم يحس بالتغيير
+                        document.getElementById('call-flow-view').classList.add('decision-made-animation');
+                        setTimeout(() => {
+                            document.getElementById('call-flow-view').classList.remove('decision-made-animation');
+                        }, 1000);
+                    }
+                } catch (error) {
+                    console.error('Error updating scenario:', error);
+                    showCustomToast('❌ حصل خطأ في تحديث المحتوى');
+                }
+            }, 1500);
+        }
     }
 
     function switchToInitialView(){callFlowViewDiv.style.display="none",postCallSummaryDiv.style.display="none",callTimerDiv.style.display="none",animateView(initialViewDiv),updateSystemStatus("Waiting for Ticket","status-waiting")}
@@ -1272,6 +1359,20 @@ Waiting for Ticket
     function restoreCallState(){const e=JSON.parse(sessionStorage.getItem(SESSION_STATE_KEY));return!(!e||!e.callSessionId)&&(callSessionId=e.callSessionId,currentScenario=e.currentScenario,currentStepId=e.currentStepId,stepHistory=e.stepHistory,accumulatedStepDurations=e.accumulatedStepDurations,stepStartTime=e.stepStartTime||Date.now(),callStartTimeISO=e.callStartTimeISO,stepVisitCount=e.stepVisitCount||{},!0)}
     function clearCallState(){sessionStorage.removeItem(SESSION_STATE_KEY)}
     function resetCallState(e=!1){stopAndRecordStepTimer(),clearCallState(),callSessionId=currentStepId=currentScenario=null,stepHistory=[],accumulatedStepDurations={},stepVisitCount={},stepStartTime=0,e&&switchToInitialView()}
+    
+    function setupRealtimeSubscriptions() {
+        // الاشتراك الأساسي للتحديثات من Knowledge Base
+        setupKnowledgeBaseSync();
+        
+        // نحتفظ بالاشتراك القديم عشان الحاجات التانية
+        supabase.channel('public:cases')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'cases' }, () => {
+                // ده للـ Knowledge Base نفسه - مش هتأثر على Core Flow
+                console.log('KB general update - ignoring for Core Flow');
+            })
+            .subscribe();
+    }
+
     receiveCallBtn.addEventListener("click",(async()=>{const e=document.getElementById("scenarioDropdownValue").value;if(e){setButtonLoadingState(receiveCallBtn,!0,"Start Ticket"),callStartSound.play().catch((e=>console.warn("Audio play failed. Make sure call_sound.mp3 is in the correct folder.",e))),resetCallState(),switchToCallFlowView(),updateSystemStatus("Loading Scenario...","status-loading"),stepsContainer.innerHTML='<p class="placeholder-text">Loading scenario steps...</p>',decisionButtonsContainer.innerHTML="",scenarioTitleElement.textContent="Loading...";try{const{data:t,error:n}=await supabase.from("call_scenarios").select("id, title, steps").eq("id",e).single();if(n)throw n;if(!t||!Array.isArray(t.steps)||0===t.steps.length)throw new Error("Scenario data is invalid.");currentScenario=t,currentStepId=currentScenario.steps[0].id,accumulatedStepDurations={},currentScenario.steps.forEach((e=>{e?.id&&(accumulatedStepDurations[e.id]=0)})),callStartTimeISO=(new Date).toISOString();const{data:i,error:a}=await supabase.from("call_sessions").insert({user_id:currentUser.id,scenario_id:currentScenario.id,start_time:callStartTimeISO,agent_name:currentUser.name,agent_email:currentUser.email}).select("id").single();if(a)throw a;callSessionId=i.id;const s=document.querySelector(`.scenario-item[data-value="${e}"]`);s&&s.classList.contains("compensation")&&(compensationScenarioSound.play().catch((e=>console.warn("Compensation sound failed. Make sure compensation_alert.mp3 is in the correct folder.",e))),scenarioTitleElement.classList.add("highlight-scenario-title-animation"),setTimeout((()=>scenarioTitleElement.classList.remove("highlight-scenario-title-animation")),1200)),updateSystemStatus("In Ticket","status-in-call"),renderStep()}catch(e){console.error("Error starting ticket:",e),showCustomToast("Failed to start ticket. Please try again."),resetCallState(),switchToInitialView(),await loadActiveScenarios()}finally{setButtonLoadingState(receiveCallBtn,!1,"Start Ticket")}}else showCustomToast("Please select a scenario first.")})),nextStepBtn.addEventListener("click",(()=>{const e=currentScenario.steps.find((e=>e?.id===currentStepId));if(e){if("form"===e.type){const e=document.getElementById("current-step-form").querySelectorAll("input, textarea");let t={},n=!0;if(e.forEach((e=>{e.required&&!e.value&&(n=!1),t[e.name]=e.value})),!n)return void showCustomToast("Please fill all required fields.");console.log("Form Data Collected:",t)}e.next_id?navigateToStep(e.next_id):(stopAndRecordStepTimer(),finishCall(!0,"Scenario finished via button."))}})),prevStepBtn.addEventListener("click",(()=>{stopAndRecordStepTimer(),stepHistory.length>0&&(currentStepId=stepHistory.pop(),stepVisitCount[currentStepId]&&(stepVisitCount[currentStepId]=0),renderStep())}));
     const customConfirmModal=document.getElementById("custom-confirm-modal"),modalConfirmBtn=document.getElementById("modal-confirm-btn"),modalCancelBtn=document.getElementById("modal-cancel-btn");function showConfirmModal(){customConfirmModal.classList.add("show")}function hideConfirmModal(){customConfirmModal.classList.remove("show")}endCallBtn.addEventListener("click",showConfirmModal),modalCancelBtn.addEventListener("click",hideConfirmModal),modalConfirmBtn.addEventListener("click",(()=>{hideConfirmModal(),stopAndRecordStepTimer(),finishCall(!1,"Ticket ended by agent")})),returnToInitialViewBtn.addEventListener("click",(async()=>{resetCallState(!0),await loadActiveScenarios()})),logoutButton.addEventListener("click",(async()=>{resetCallState(),localStorage.removeItem("elevoCoreUserData"),supabase&&await supabase.auth.signOut(),window.location.replace("login.html")}));
     
