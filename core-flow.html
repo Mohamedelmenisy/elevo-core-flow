@@ -1536,6 +1536,89 @@ Waiting for Ticket
     console.error('Live update initialization error', e);
   }
 })();
+    // =============== Realtime Sync: Knowledge Base → Core Flow ==================
+document.addEventListener('DOMContentLoaded', async () => {
+  try {
+    // اقرأ الـ slug من الـ URL أو من input مخفي
+    const params = new URLSearchParams(window.location.search);
+    const slug = params.get("slug") || document.getElementById("case_slug")?.value;
+
+    // لو موجود slug فعلاً نبدأ الاشتراك
+    if (slug) {
+      console.log(`[Realtime] Listening for updates on slug: ${slug}`);
+
+      // Toast متحرك زي Slack
+      function showSyncToast(message) {
+        const toast = document.createElement("div");
+        toast.style.position = "fixed";
+        toast.style.top = "-60px";
+        toast.style.left = "50%";
+        toast.style.transform = "translateX(-50%)";
+        toast.style.background = "#2563eb";
+        toast.style.color = "#fff";
+        toast.style.padding = "12px 22px";
+        toast.style.borderRadius = "10px";
+        toast.style.boxShadow = "0 6px 14px rgba(0,0,0,0.2)";
+        toast.style.fontFamily = "Poppins, sans-serif";
+        toast.style.fontSize = "15px";
+        toast.style.fontWeight = "500";
+        toast.style.zIndex = "9999";
+        toast.style.transition = "all 0.4s ease";
+        toast.innerHTML = `🔄 ${message}`;
+        document.body.appendChild(toast);
+        setTimeout(() => (toast.style.top = "20px"), 100);
+        setTimeout(() => {
+          toast.style.top = "-60px";
+          setTimeout(() => toast.remove(), 300);
+        }, 2800);
+      }
+
+      // الاشتراك في جدول cases بناءً على slug
+      const channel = supabase.channel(`realtime-cases-${slug}`);
+      channel
+        .on(
+          'postgres_changes',
+          { event: 'UPDATE', schema: 'public', table: 'cases', filter: `slug=eq.${slug}` },
+          async (payload) => {
+            console.log('[Realtime] Update detected:', payload);
+            showSyncToast('Updated from Knowledge Base — synced automatically.');
+
+            const updatedData = payload.new;
+            if (updatedData?.content_en) {
+              // حدّث أي عناصر فيها data-content تلقائيًا
+              document.querySelectorAll("[data-content]").forEach(el => {
+                el.textContent = updatedData.content_en;
+              });
+            }
+
+            // ممكن تضيف تحديث مباشر للخطوات أو الـ UI إن لزم
+            // مثال: لو الخطوات في JSON
+            if (updatedData?.steps) {
+              try {
+                const stepsContainer = document.getElementById("steps-container");
+                if (stepsContainer) {
+                  stepsContainer.innerHTML = "";
+                  JSON.parse(updatedData.steps).forEach((step, idx) => {
+                    const stepDiv = document.createElement("div");
+                    stepDiv.className = "step-item";
+                    stepDiv.textContent = `${idx + 1}. ${step}`;
+                    stepsContainer.appendChild(stepDiv);
+                  });
+                }
+              } catch (err) {
+                console.warn("[Realtime] Failed to render updated steps:", err);
+              }
+            }
+          }
+        )
+        .subscribe();
+
+      console.log('[Realtime] Subscription active ✅');
+    }
+  } catch (error) {
+    console.error('[Realtime] Error initializing:', error);
+  }
+});
 </script>
 <!-- END: Supabase Realtime + Live Update Injection -->
 </body>
