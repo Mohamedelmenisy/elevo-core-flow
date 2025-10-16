@@ -1340,5 +1340,203 @@ Waiting for Ticket
     });
 </script>
 
+
+<!-- START: Supabase Realtime + Live Update Injection -->
+<script>
+(async function(){
+  // ---------- CONFIGURE: replace with your Supabase values ----------
+  const SUPABASE_URL = 'https://aefiigottnlcmjzilqnh.supabase.co';
+  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFlZmlpZ290dG5sY21qemlscW5oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcxNzY2MDQsImV4cCI6MjA2Mjc1MjYwNH0.FypB02v3tGMnxXV9ZmZMdMC0oQpREKOJWgHMPxUzwX4';
+  // ------------------------------------------------------------------
+
+  // Load supabase-js if not available
+  async function ensureSupabase() {
+    if (window.supabase) return window.supabase;
+    if (window.createClient) {
+      // supabase v2 loaded as createClient; wrap a tiny helper
+      window.supabaseClient = window.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      return window.supabaseClient;
+    }
+    // try dynamic load
+    await new Promise((res, rej) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/supabase.min.js';
+      s.onload = res; s.onerror = rej;
+      document.head.appendChild(s);
+    });
+    if (window.createClient) {
+      window.supabaseClient = window.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      return window.supabaseClient;
+    }
+    console.warn('Supabase client not available after load attempt.');
+    return null;
+  }
+
+  function showToast(title, message, type='info', timeout=4000) {
+    try {
+      const id = 'live-update-toast';
+      let container = document.getElementById(id);
+      if (!container) {
+        container = document.createElement('div');
+        container.id = id;
+        Object.assign(container.style, {
+          position: 'fixed',
+          top: '18px',
+          right: '18px',
+          zIndex: 99999,
+          minWidth: '260px',
+          padding: '12px 16px',
+          borderRadius: '10px',
+          boxShadow: '0 8px 30px rgba(2,6,23,0.6)',
+          fontFamily: 'system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial',
+          color: '#fff',
+          background: 'linear-gradient(90deg, rgba(14,165,233,1), rgba(79,70,229,1))',
+        });
+        document.body.appendChild(container);
+      }
+      const el = document.createElement('div');
+      el.style.marginBottom = '8px';
+      el.style.padding = '8px 10px';
+      el.style.borderRadius = '8px';
+      el.style.background = 'rgba(255,255,255,0.06)';
+      el.style.fontSize = '13px';
+      el.innerHTML = '<strong style="display:block;margin-bottom:4px;">' + title + '</strong>' + '<div style="opacity:0.95;">' + message + '</div>';
+      container.appendChild(el);
+      setTimeout(()=>{
+        try { el.style.transition='opacity 0.35s, transform 0.35s'; el.style.opacity=0; el.style.transform='translateY(-6px)'; }catch(e){}
+        setTimeout(()=> el.remove(), 400);
+      }, timeout);
+    } catch(e){ console.warn('toast failure', e); }
+  }
+
+  function detectCaseCode() {
+    // Try multiple heuristics to detect current case_code
+    // 1. element with id 'caseCode' or data-case-code on root elements
+    const selectors = [
+      '#caseCode', '#currentCaseCode', '[data-case-code]', '[data-case-id]',
+      '.scenario-item.selected', '.scenario-item.active', '.scenario-selected'
+    ];
+    for (const sel of selectors) {
+      const el = document.querySelector(sel);
+      if (!el) continue;
+      // check data attributes first
+      if (el.dataset && (el.dataset.caseCode || el.dataset.case)) {
+        return el.dataset.caseCode || el.dataset.case;
+      }
+      // id or text content
+      const txt = (el.getAttribute('data-case-code') || el.getAttribute('data-case-id') || el.getAttribute('data-code') || el.textContent || '').trim();
+      if (txt) return txt.split(/\s/)[0];
+    }
+    // 2. URL param ?case= or ?scenario=
+    try {
+      const url = new URL(window.location.href);
+      for (const p of ['case','case_code','scenario','code']) {
+        if (url.searchParams.get(p)) return url.searchParams.get(p);
+      }
+    } catch(e) {}
+    // 3. hidden inputs
+    const hidden = document.querySelector('input[type=hidden][name=case_code], input#case_code');
+    if (hidden && hidden.value) return hidden.value;
+    // not found
+    return null;
+  }
+
+  function applyUpdateToUI(newRow) {
+    if (!newRow) return;
+    const title = newRow.title || newRow.case_code || 'Case updated';
+    // If the KB content is a full HTML article (content_en / content_ar)
+    const content = newRow.content_en || newRow.content_ar || newRow.content || '';
+    // If steps JSON exists (array or string)
+    let steps = newRow.steps || null;
+    if (typeof steps === 'string') {
+      try { steps = JSON.parse(steps); } catch(e){ /* ignore */ }
+    }
+
+    // 1) Update main content areas if present
+    const contentSelectors = ['.steps-area', '.step-content', '#contentArea', '.kb-container', '.kb-article', '.call-flow-steps'];
+    for (const sel of contentSelectors) {
+      const el = document.querySelector(sel);
+      if (!el) continue;
+      if (steps && Array.isArray(steps)) {
+        // render steps nicely (step text only)
+        el.innerHTML = steps.map(s => `<div class="live-step" data-step-id="${s.id||''}" style="padding:10px;border-radius:8px;margin-bottom:8px;background:rgba(255,255,255,0.02)">${s.text || s}</div>`).join('');
+      } else if (content) {
+        // plain text or html
+        // preserve basic formatting
+        el.innerHTML = content;
+      } else {
+        // fallback: stringify row
+        el.innerText = JSON.stringify(newRow, null, 2);
+      }
+    }
+
+    // 2) If currently showing a single step element (like current step box) update it
+    const stepSingle = document.querySelector('.current-step-text, .current-step, .active-step');
+    if (stepSingle) {
+      // find step id in DOM if exists
+      if (steps && Array.isArray(steps)) {
+        // attempt to preserve which step the user is on by matching id attribute on element
+        const currId = stepSingle.dataset && stepSingle.dataset.stepId;
+        if (currId) {
+          const found = steps.find(s=> s.id === currId);
+          if (found) stepSingle.innerHTML = found.text || (found.label || JSON.stringify(found));
+          else stepSingle.innerHTML = steps[0].text || steps[0];
+        } else {
+          // no id, update to first step text
+          stepSingle.innerHTML = (steps[0] && (steps[0].text || steps[0])) || stepSingle.innerHTML;
+        }
+      } else if (content) {
+        stepSingle.innerHTML = content;
+      }
+    }
+
+    // 3) Show a toast notification
+    showToast('Live Update', title + ' — updated in Knowledge Base', 'info', 4000);
+  }
+
+  // Main startup
+  try {
+    const supabaseClient = await ensureSupabase();
+    if (!supabaseClient) {
+      console.warn('Supabase client is not available. Please add your Supabase URL and anon key to the top of this script.');
+      return;
+    }
+    const caseCode = detectCaseCode();
+    if (!caseCode) {
+      console.warn('Live-update: could not auto-detect case_code on this page. The listener will not subscribe until a case_code is available.');
+      // But we still listen to a generic channel for debugging if you want (commented out)
+      return;
+    }
+    // Try subscribing to both kb_cases and call_scenarios tables (update events)
+    const tablesToWatch = ['kb_cases','call_scenarios'];
+
+    for (const tbl of tablesToWatch) {
+      supabaseClient.channel(`realtime-${tbl}-${caseCode}`)
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: tbl, filter: `case_code=eq.${caseCode}` }, (payload) => {
+          try {
+            console.log('Realtime update received', tbl, payload);
+            const newRow = payload.new || payload.record || payload;
+            applyUpdateToUI(newRow);
+          } catch(e) {
+            console.error('Error handling realtime payload', e);
+          }
+        })
+        .subscribe((status) => {
+          console.log('Subscribed to realtime for', tbl, 'case', caseCode, status);
+        });
+    }
+
+    // Optional: fetch latest once on load to ensure UI is up-to-date
+    try {
+      const { data } = await supabaseClient.from('kb_cases').select('*').eq('case_code', caseCode).limit(1).maybeSingle();
+      if (data) applyUpdateToUI(data);
+    } catch(e){ /* ignore */ }
+
+  } catch (e) {
+    console.error('Live update initialization error', e);
+  }
+})();
+</script>
+<!-- END: Supabase Realtime + Live Update Injection -->
 </body>
 </html>
