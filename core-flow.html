@@ -1012,8 +1012,7 @@ background-position: -200% 0
 </style>
 
 </head>
-<body>
-    <body data-case-code="07730690-3529-4b16-8402-7e9117668529">
+<body data-case-code="07730690-3529-4b16-8402-7e9117668529">
 <div class="app-container">
     <header class="app-header">
         <div class="logo-container">
@@ -1422,7 +1421,11 @@ Waiting for Ticket
 
   function detectCaseCode() {
     // Try multiple heuristics to detect current case_code
-    // 1. element with id 'caseCode' or data-case-code on root elements
+    // 1. data-case-code on body is the primary method
+    if (document.body.dataset && document.body.dataset.caseCode) {
+        return document.body.dataset.caseCode;
+    }
+    // 2. Fallback to other selectors
     const selectors = [
       '#caseCode', '#currentCaseCode', '[data-case-code]', '[data-case-id]',
       '.scenario-item.selected', '.scenario-item.active', '.scenario-selected'
@@ -1438,14 +1441,14 @@ Waiting for Ticket
       const txt = (el.getAttribute('data-case-code') || el.getAttribute('data-case-id') || el.getAttribute('data-code') || el.textContent || '').trim();
       if (txt) return txt.split(/\s/)[0];
     }
-    // 2. URL param ?case= or ?scenario=
+    // 3. URL param ?case= or ?scenario=
     try {
       const url = new URL(window.location.href);
       for (const p of ['case','case_code','scenario','code']) {
         if (url.searchParams.get(p)) return url.searchParams.get(p);
       }
     } catch(e) {}
-    // 3. hidden inputs
+    // 4. hidden inputs
     const hidden = document.querySelector('input[type=hidden][name=case_code], input#case_code');
     if (hidden && hidden.value) return hidden.value;
     // not found
@@ -1515,11 +1518,10 @@ Waiting for Ticket
     const caseCode = detectCaseCode();
     if (!caseCode) {
       console.warn('Live-update: could not auto-detect case_code on this page. The listener will not subscribe until a case_code is available.');
-      // But we still listen to a generic channel for debugging if you want (commented out)
       return;
     }
-    // Try subscribing to both kb_cases and call_scenarios tables (update events)
-    const tablesToWatch = ['kb_cases','call_scenarios'];
+    // Try subscribing to kb_cases, call_scenarios, and cases tables (update events)
+    const tablesToWatch = ['kb_cases', 'call_scenarios', 'cases'];
 
     for (const tbl of tablesToWatch) {
       supabaseClient.channel(`realtime-${tbl}-${caseCode}`)
@@ -1537,44 +1539,15 @@ Waiting for Ticket
         });
     }
 
-    // ✅ Start listening for realtime case updates
-    const linkedCaseId = '07730690-3529-4b16-8402-7e9117668529'; // ID الخاص بالكيس المرتبطة
-
-    supabaseClient
-      .channel('case-updates')
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'cases', filter: `id=eq.${linkedCaseId}` },
-        payload => {
-          console.log('🟢 Case updated:', payload);
-
-          const newContent = payload.new?.content_en;
-          if (newContent) {
-            const container = document.querySelector('.kb-app');
-            if (container) container.innerHTML = newContent;
-
-            const toast = document.createElement('div');
-            toast.textContent = '🔄 Case updated — content refreshed automatically';
-            toast.style.cssText = `
-              position:fixed;bottom:20px;right:20px;padding:10px 15px;
-              background:#4CAF50;color:#fff;border-radius:8px;
-              font-family:system-ui;font-size:14px;z-index:9999;
-              box-shadow:0 4px 8px rgba(0,0,0,0.15);transition:opacity .3s;
-            `;
-            document.body.appendChild(toast);
-            setTimeout(() => (toast.style.opacity = 0), 2500);
-            setTimeout(() => toast.remove(), 3000);
-          }
-        }
-      )
-      .subscribe();
-
-
     // Optional: fetch latest once on load to ensure UI is up-to-date
     try {
-      const { data } = await supabaseClient.from('kb_cases').select('*').eq('case_code', caseCode).limit(1).maybeSingle();
-      if (data) applyUpdateToUI(data);
-    } catch(e){ /* ignore */ }
+      const { data: kbData } = await supabaseClient.from('kb_cases').select('*').eq('case_code', caseCode).limit(1).maybeSingle();
+      if (kbData) applyUpdateToUI(kbData);
+
+      const { data: caseData } = await supabaseClient.from('cases').select('*').eq('case_code', caseCode).limit(1).maybeSingle();
+      if (caseData) applyUpdateToUI(caseData);
+
+    } catch(e){ console.warn('Could not fetch initial data', e); }
 
   } catch (e) {
     console.error('Live update initialization error', e);
