@@ -1,6 +1,6 @@
 // supabaseClient.js
 // ESM module - drop this file in the same folder حيث باقي صفحات الـ frontend
-import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm";
+import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
 
 // ------ (تم تحديث هذه القيم من المشروع) ------
 export const SUPABASE_URL = 'https://aefiigottnlcmjzilqnh.supabase.co';
