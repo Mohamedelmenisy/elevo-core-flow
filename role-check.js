@@ -110,14 +110,21 @@ function showProtectedModal(message = "This area is for administrators only.", r
     const closeBtn = modal.querySelector('#modal-close-btn');
     const modalContainer = modal.querySelector('div');
 
-    const hideModal = () => {
-        modal.style.opacity = '0';
-        setTimeout(() => {
-            modal.style.visibility = 'hidden';
-            // التحويل على صفحة Core Flow بعد ما ندوس Okay
+   const hideModal = () => {
+    modal.style.opacity = '0';
+    setTimeout(() => {
+        modal.style.visibility = 'hidden';
+        // لو محددناش redirectUrl نرجعه بس للـ core-flow بدون ما يعمل refresh
+        if (redirectUrl) {
             window.location.href = redirectUrl;
-        }, 300);
-    };
+        } else {
+            // نرجع المستخدم لنفس الصفحة الأصلية بدون ما يعمل تحميل تاني
+            history.replaceState(null, '', 'core-flow.html');
+            location.reload();
+        }
+    }, 300);
+};
+
 
     closeBtn.addEventListener('click', hideModal);
     modal.addEventListener('click', (e) => {
@@ -155,31 +162,17 @@ export async function protectPage(allowedRoles = []) {
     if (userNameEl) {
         userNameEl.textContent = userProfile.name || userProfile.email;
     }
+if (allowedRoles.length > 0 && !allowedRoles.includes(userProfile.role)) {
+    // نوقف أي تحميل محتوى على طول
+    document.body.innerHTML = ''; 
 
-    // Check if the current page is protected and if the user has access
-    if (allowedRoles.length > 0 && !allowedRoles.includes(userProfile.role)) {
-        // نخفي كل محتوى الصفحة
-        const mainContent = document.querySelector('.app-main');
-        if (mainContent) mainContent.style.display = 'none';
-        
-        const header = document.querySelector('.app-header');
-        if (header) header.style.display = 'none';
-        
-        const footer = document.querySelector('.app-footer');
-        if (footer) footer.style.display = 'none';
-        
-        const statusBar = document.querySelector('.status-bar');
-        if (statusBar) statusBar.style.display = 'none';
-        
-        // نعرض الرسالة
-        showProtectedModal(
-            `This area requires administrative privileges.<br>Your current role: <strong>${userProfile.role}</strong>`,
-            'core-flow.html'
-        );
-        
-        return;
-    }
-    
+    // نعرض الرسالة فورًا بدون تأخير أو تنقل
+    showProtectedModal(
+        `Access Denied.<br>Your current role: <strong>${userProfile.role}</strong>`,
+        null // نسيب الـ redirect null
+    );
+    return;
+}
     // Special case for Agent Portal: If admin, show banner
     if (window.location.pathname.includes('agent-portal.html') && userProfile.role === 'admin') {
         const banner = document.createElement('div');
