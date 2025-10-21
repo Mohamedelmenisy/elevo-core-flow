@@ -106,6 +106,23 @@
             padding: 0.5rem 1rem;
             border-radius: var(--border-radius-md);
             transition: all 0.3s ease;
+            position: relative;
+        }
+        
+        .nav-link.active {
+            color: var(--primary-color);
+            background: rgba(78, 140, 255, 0.1);
+        }
+        
+        .nav-link.active::after {
+            content: '';
+            position: absolute;
+            bottom: -17px;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: var(--primary-color);
+            border-radius: 2px;
         }
         
         .nav-link:hover {
@@ -144,16 +161,14 @@
         }
         
         .app-footer {
-            position: sticky;
-            bottom: 0;
-            z-index: 10;
             background: rgba(15, 23, 42, 0.9);
             backdrop-filter: blur(16px);
             border-top: 1px solid var(--border-color);
-            padding: 1rem 2rem;
+            padding: 1.5rem 2rem;
             text-align: center;
             color: var(--text-color-subtle);
             font-size: 0.9rem;
+            margin-top: auto;
         }
         
         .dashboard-main {
@@ -221,6 +236,7 @@
             border: none;
             font-family: inherit;
             font-size: 0.95rem;
+            white-space: nowrap;
         }
         
         .primary-button {
@@ -346,6 +362,7 @@
             background-color: var(--input-bg-color);
             border-radius: 6px;
             overflow: hidden;
+            position: relative;
         }
         
         .progress-bar {
@@ -354,7 +371,17 @@
             background: linear-gradient(90deg, var(--primary-color), var(--accent-color));
             border-radius: 6px;
             transition: width 0.8s ease-in-out;
-            box-shadow: 0 0 10px rgba(78, 140, 255, 0.5);
+            position: relative;
+        }
+        
+        .progress-bar::after {
+            content: '⚡';
+            position: absolute;
+            right: -10px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 12px;
+            color: var(--primary-color);
         }
         
         .portal-layout-grid {
@@ -1024,6 +1051,14 @@
             color: var(--text-color);
             text-align: right;
         }
+
+        /* New Chart Styles */
+        .quality-distribution-chart {
+            background: var(--card-bg-color);
+            border-radius: var(--border-radius-lg);
+            padding: 1.5rem;
+            border: 1px solid var(--card-border-color);
+        }
     </style>
 </head>
 <body>
@@ -1037,7 +1072,7 @@
             </div>
             <div class="header-controls">
                 <a href="core-flow.html" class="nav-link">Call App</a>
-                <a href="agent-portal.html" class="nav-link">Agent Portal</a>
+                <a href="agent-portal.html" class="nav-link active">Agent Portal</a>
                 <a href="dashboard.html" class="nav-link">Admin Dashboard</a>
                 <a href="rtm-dashboard.html" class="nav-link">RTM Dashboard</a>
                 <div class="user-info" id="userInfo">
@@ -1064,7 +1099,7 @@
                      </div>
                      <button id="exportDataBtn" class="action-button primary-button">
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-                        Export My Data
+                        Export Data
                     </button>
                 </div>
 
@@ -1075,7 +1110,7 @@
                     </div>
                     <div class="kpi-card" style="border-left-color: var(--success-color);">
                         <h4>Call Quality</h4>
-                        <div class="kpi-value" id="kpiAvgRating">No data</div>
+                        <div class="kpi-value" id="kpiAvgRating">Calculating...</div>
                     </div>
                     <div class="kpi-card" style="border-left-color: var(--warning-color);">
                          <h4>Calls Completed</h4>
@@ -1101,7 +1136,7 @@
                             <div class="filter-controls">
                                 <div class="filter-grid">
                                     <div><label for="searchInput">Search Scenario:</label><input type="text" id="searchInput" placeholder="Enter scenario name..."></div>
-                                    <div><label for="qualityFilter">Filter by Quality:</label>
+                                    <div><label for="qualityFilter">Filter by Call Quality:</label>
                                         <select id="qualityFilter">
                                             <option value="all">All Quality</option>
                                             <option value="good">Good</option>
@@ -1119,7 +1154,7 @@
                                             <th>Date</th>
                                             <th>Scenario</th>
                                             <th>Duration</th>
-                                            <th>Quality Rating</th>
+                                            <th>Call Quality</th>
                                             <th>Actions</th>
                                         </tr>
                                     </thead>
@@ -1146,6 +1181,11 @@
                                     <canvas id="callVolumeChart"></canvas>
                                 </div>
                             </div>
+                            <div class="charts-row">
+                                <div class="chart-wrapper quality-distribution-chart">
+                                    <canvas id="qualityDistributionChart"></canvas>
+                                </div>
+                            </div>
                         </div>
                     </div>
                     
@@ -1153,20 +1193,20 @@
                         <div class="widget-card widget-card-bordered">
                             <h3>Performance Summary</h3>
                             <ul class="performance-summary-list">
-                                <li class="performance-summary-item"><span>Best Call Score:</span> <strong id="bestCallScore">-</strong></li>
+                                <li class="performance-summary-item"><span>Total Calls This Week:</span> <strong id="totalCallsWeek">-</strong></li>
                                 <li class="performance-summary-item"><span>Avg. Resolution Time:</span> <strong id="avgResolutionTime">-</strong></li>
-                                <li class="performance-summary-item"><span>First Call Resolution:</span> <strong id="firstCallResolution">-</strong></li>
-                                <li class="performance-summary-item"><span>CSAT Score:</span> <strong id="csatScore">-</strong></li>
+                                <li class="performance-summary-item"><span>Success Rate:</span> <strong id="successRate">-</strong></li>
+                                <li class="performance-summary-item"><span>Best Performance:</span> <strong id="bestPerformance">-</strong></li>
                             </ul>
                         </div>
                         
                         <div class="widget-card widget-card-bordered">
                             <div class="collapsible-header" id="scratchpadHeader">
-                                <h3>Personal Scratchpad</h3>
+                                <h3>Personal Notes</h3>
                                 <svg class="toggle-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
                             </div>
                             <div class="collapsible-content" id="scratchpadContent">
-                                <textarea id="agentScratchpad" placeholder="Jot down your notes, reminders, or action items here..."></textarea>
+                                <textarea id="agentScratchpad" placeholder="Add your personal notes and reminders here..."></textarea>
                                 <div class="scratchpad-actions">
                                     <button id="saveScratchpadBtn" class="action-button primary-button">Save Notes</button>
                                 </div>
@@ -1174,32 +1214,9 @@
                         </div>
                         
                         <div class="widget-card widget-card-bordered">
-                            <div class="collapsible-header" id="trainingHeader">
-                                <h3>Training Programs</h3>
-                                <svg class="toggle-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
-                            </div>
-                            <div class="collapsible-content" id="trainingContent">
-                                <div class="training-programs-list" id="trainingProgramsList">
-                                </div>
-                                <div id="noTrainingMessage">No training programs assigned.</div>
-                            </div>
-                        </div>
-                        
-                        <div class="widget-card widget-card-bordered">
                             <h3>Recent Achievements</h3>
-                            <ul class="achievements-list">
-                                <li class="achievement-item">
-                                    <span class="achievement-icon">🏆</span>
-                                    <span>Completed 100 calls with 4.8+ rating</span>
-                                </li>
-                                <li class="achievement-item">
-                                    <span class="achievement-icon">⭐</span>
-                                    <span>Top performer of the week</span>
-                                </li>
-                                <li class="achievement-item">
-                                    <span class="achievement-icon">🚀</span>
-                                    <span>Exceeded daily target 5 days in a row</span>
-                                </li>
+                            <ul class="achievements-list" id="achievementsList">
+                                <!-- Achievements will be populated dynamically -->
                             </ul>
                         </div>
                     </div>
@@ -1208,7 +1225,7 @@
         </main>
 
         <footer class="app-footer">
-            <p>Elevo Core Agent Portal v1.0 | Secure & Confidential</p>
+            <p>© 2025 Mohamed Elmenisy - Elevo Core. All rights reserved.</p>
         </footer>
     </div>
 
@@ -1256,9 +1273,9 @@
         let allCalls = [];
         let filteredCalls = [];
         let scratchpadContent = '';
-        let currentEditingNoteId = null;
         let ratingTrendChart = null;
         let callVolumeChart = null;
+        let qualityDistributionChart = null;
 
         // DOM Elements
         const authLoadingEl = document.getElementById('auth-loading');
@@ -1266,7 +1283,6 @@
         const userNameEl = document.getElementById('userName');
         const logoutButtonEl = document.getElementById('logoutButton');
         const agentGreetingEl = document.getElementById('agentGreeting');
-        const agentSubtextEl = document.getElementById('agentSubtext');
         const kpiAvgTimeEl = document.getElementById('kpiAvgTime');
         const kpiAvgRatingEl = document.getElementById('kpiAvgRating');
         const kpiTotalCallsEl = document.getElementById('kpiTotalCalls');
@@ -1280,27 +1296,14 @@
         const searchInputEl = document.getElementById('searchInput');
         const qualityFilterEl = document.getElementById('qualityFilter');
         const dateFilterEl = document.getElementById('dateFilter');
-        const bestCallScoreEl = document.getElementById('bestCallScore');
+        const totalCallsWeekEl = document.getElementById('totalCallsWeek');
         const avgResolutionTimeEl = document.getElementById('avgResolutionTime');
-        const firstCallResolutionEl = document.getElementById('firstCallResolution');
-        const csatScoreEl = document.getElementById('csatScore');
+        const successRateEl = document.getElementById('successRate');
+        const bestPerformanceEl = document.getElementById('bestPerformance');
         const agentScratchpadEl = document.getElementById('agentScratchpad');
         const saveScratchpadBtnEl = document.getElementById('saveScratchpadBtn');
-        const trainingProgramsListEl = document.getElementById('trainingProgramsList');
-        const noTrainingMessageEl = document.getElementById('noTrainingMessage');
+        const achievementsListEl = document.getElementById('achievementsList');
         const exportDataBtnEl = document.getElementById('exportDataBtn');
-        const editNoteModalEl = document.getElementById('editNoteModal');
-        const editNoteTextareaEl = document.getElementById('editNoteTextarea');
-        const cancelEditNoteBtnEl = document.getElementById('cancelEditNoteBtn');
-        const saveEditedNoteBtnEl = document.getElementById('saveEditedNoteBtn');
-        const requestTrainingModalEl = document.getElementById('requestTrainingModal');
-        const editTrainingReasonEl = document.getElementById('editTrainingReason');
-        const cancelTrainingRequestBtnEl = document.getElementById('cancelTrainingRequestBtn');
-        const submitTrainingRequestBtnEl = document.getElementById('submitTrainingRequestBtn');
-        const scratchpadHeaderEl = document.getElementById('scratchpadHeader');
-        const scratchpadContentEl = document.getElementById('scratchpadContent');
-        const trainingHeaderEl = document.getElementById('trainingHeader');
-        const trainingContentEl = document.getElementById('trainingContent');
 
         // Initialize the application
         document.addEventListener('DOMContentLoaded', function() {
@@ -1310,32 +1313,19 @@
         // Initialize Application
         async function initializeApp() {
             try {
-                // Check if user is authenticated
                 const { data: { session }, error } = await supabase.auth.getSession();
                 
-                if (error) {
-                    console.error('Error getting session:', error);
+                if (error || !session) {
                     redirectToLogin();
                     return;
                 }
                 
-                if (!session) {
-                    redirectToLogin();
-                    return;
-                }
-                
-                // Get current user
                 currentUser = session.user;
-                
-                // Check user role and update UI accordingly
                 await checkUserRole();
-                
-                // Load user data and initialize the dashboard
                 await loadUserData();
                 initializeEventListeners();
                 initializeCharts();
                 
-                // Show portal content
                 authLoadingEl.style.display = 'none';
                 portalContentEl.style.display = 'block';
                 
@@ -1348,20 +1338,13 @@
         // Check User Role and Update UI
         async function checkUserRole() {
             try {
-                // Fetch user profile to get role
                 const { data: profile, error } = await supabase
                     .from('users')
                     .select('name, role')
                     .eq('id', currentUser.id)
                     .single();
                 
-                if (error) {
-                    console.error('Error fetching user profile:', error);
-                    return;
-                }
-                
-                // Update UI with user name
-                if (profile && profile.name) {
+                if (!error && profile && profile.name) {
                     userNameEl.textContent = profile.name;
                     agentGreetingEl.textContent = `Welcome, ${profile.name.split(' ')[0]}!`;
                 } else {
@@ -1377,23 +1360,11 @@
         // Load User Data
         async function loadUserData() {
             try {
-                // Get user profile
-                const { data: profile, error } = await supabase
-                    .from('users')
-                    .select('name, email')
-                    .eq('id', currentUser.id)
-                    .single();
-
-                if (!error && profile) {
-                    userNameEl.textContent = profile.name || currentUser.email;
-                    agentGreetingEl.textContent = `Welcome, ${profile.name ? profile.name.split(' ')[0] : 'Agent'}!`;
-                }
-
                 await loadCallHistory();
                 await loadScratchpad();
-                await loadTrainingPrograms();
                 calculateKPIs();
                 updatePerformanceSummary();
+                updateAchievements();
                 
             } catch (error) {
                 console.error('Error loading user data:', error);
@@ -1416,7 +1387,7 @@
                     date: formatDate(call.start_time_egypt),
                     scenario: call.scenario_title || 'Unknown Scenario',
                     duration: formatDuration(call.duration),
-                    quality: call.call_quality || 'average',
+                    quality: call.call_quality || 'Not Rated',
                     quality_reason: call.quality_reason,
                     start_time: call.start_time_egypt,
                     end_time: call.end_time_egypt
@@ -1427,65 +1398,37 @@
                 
             } catch (error) {
                 console.error('Error loading call history:', error);
-                // Fallback to empty data
                 allCalls = [];
                 filteredCalls = [];
                 renderCallsTable();
             }
         }
 
-        // Load Scratchpad
+        // Load Scratchpad - بيانات حقيقية
         async function loadScratchpad() {
             try {
-                // In a real app, this would fetch from Supabase
-                // For demo purposes, we'll use mock data
+                const { data: notes, error } = await supabase
+                    .from('agent_notes')
+                    .select('*')
+                    .eq('user_id', currentUser.id)
+                    .order('created_at', { ascending: false })
+                    .limit(1);
+
+                if (!error && notes && notes.length > 0) {
+                    scratchpadContent = notes[0].content;
+                } else {
+                    scratchpadContent = "Use this space for your personal notes and reminders...";
+                }
                 
-                scratchpadContent = "Meeting with team lead tomorrow at 10 AM.\n\nFollow up on customer complaint #45632.\n\nComplete training module on new product features.";
                 agentScratchpadEl.value = scratchpadContent;
                 
             } catch (error) {
                 console.error('Error loading scratchpad:', error);
+                agentScratchpadEl.value = "Use this space for your personal notes and reminders...";
             }
         }
 
-        // Load Training Programs
-        async function loadTrainingPrograms() {
-            try {
-                // In a real app, this would fetch from Supabase
-                // For demo purposes, we'll use mock data
-                
-                const trainingPrograms = [
-                    { 
-                        id: 1, 
-                        title: 'Advanced Customer Service', 
-                        status: 'completed', 
-                        description: 'Master advanced techniques for handling difficult customers and complex situations.', 
-                        dueDate: '2023-10-20' 
-                    },
-                    { 
-                        id: 2, 
-                        title: 'New Product Features', 
-                        status: 'in-progress', 
-                        description: 'Learn about the latest product updates and how to explain them to customers.', 
-                        dueDate: '2023-11-05' 
-                    },
-                    { 
-                        id: 3, 
-                        title: 'Sales Techniques', 
-                        status: 'not-started', 
-                        description: 'Develop skills for identifying upsell opportunities during customer interactions.', 
-                        dueDate: '2023-11-15' 
-                    }
-                ];
-                
-                renderTrainingPrograms(trainingPrograms);
-                
-            } catch (error) {
-                console.error('Error loading training programs:', error);
-            }
-        }
-
-        // Render Calls Table - بدون نجوم
+        // Render Calls Table
         function renderCallsTable() {
             if (filteredCalls.length === 0) {
                 callsTableBodyEl.innerHTML = '';
@@ -1520,7 +1463,6 @@
             callsTableBodyEl.innerHTML = tableHTML;
             currentPageEl.textContent = currentPage;
             
-            // Add event listeners to buttons
             document.querySelectorAll('.view-call-btn').forEach(btn => {
                 btn.addEventListener('click', function() {
                     const callId = this.getAttribute('data-id');
@@ -1528,68 +1470,15 @@
                 });
             });
             
-            // Update pagination buttons
             prevPageBtnEl.disabled = currentPage === 1;
             nextPageBtnEl.disabled = endIndex >= filteredCalls.length;
-        }
-
-        // Render Training Programs
-        function renderTrainingPrograms(programs) {
-            if (programs.length === 0) {
-                trainingProgramsListEl.innerHTML = '';
-                noTrainingMessageEl.style.display = 'block';
-                return;
-            }
-            
-            noTrainingMessageEl.style.display = 'none';
-            
-            let programsHTML = '';
-            
-            programs.forEach(program => {
-                programsHTML += `
-                    <div class="training-card ${program.status === 'completed' ? 'completed' : ''}">
-                        <div class="training-card-header">
-                            <h4>${program.title}</h4>
-                            <span class="training-status ${program.status}">${program.status.replace('-', ' ')}</span>
-                        </div>
-                        <div class="training-card-body">
-                            <p>${program.description}</p>
-                            <p><strong>Due Date:</strong> ${program.dueDate}</p>
-                        </div>
-                        <div class="training-card-footer">
-                            <span class="training-card-date">Assigned: 2023-10-01</span>
-                            <div class="training-card-actions">
-                                <button class="action-button secondary-button start-training-btn" data-id="${program.id}">Start</button>
-                                <button class="action-button primary-button request-training-btn" data-id="${program.id}" style="display: none;">Request Training</button>
-                            </div>
-                        </div>
-                    </div>
-                `;
-            });
-            
-            trainingProgramsListEl.innerHTML = programsHTML;
-            
-            // Add event listeners to buttons
-            document.querySelectorAll('.start-training-btn').forEach(btn => {
-                btn.addEventListener('click', function() {
-                    const programId = this.getAttribute('data-id');
-                    startTraining(programId);
-                });
-            });
-            
-            document.querySelectorAll('.request-training-btn').forEach(btn => {
-                btn.addEventListener('click', function() {
-                    const programId = this.getAttribute('data-id');
-                    openRequestTrainingModal(programId);
-                });
-            });
         }
 
         // Calculate KPIs - بيانات حقيقية
         function calculateKPIs() {
             if (allCalls.length === 0) {
                 kpiAvgTimeEl.textContent = '0:00';
-                kpiAvgRatingEl.textContent = 'No data';
+                kpiAvgRatingEl.textContent = 'No calls';
                 kpiTotalCallsEl.textContent = '0';
                 dailyTargetPercentageEl.textContent = '0%';
                 dailyTargetProgressBarEl.style.width = '0%';
@@ -1610,15 +1499,15 @@
             // Total calls
             kpiTotalCallsEl.textContent = allCalls.length;
             
-            // Daily target progress (based on today's calls)
+            // Daily target progress
             const today = new Date().toISOString().split('T')[0];
             const todayCalls = allCalls.filter(call => call.date.includes(today)).length;
-            const dailyTarget = 10;
+            const dailyTarget = 15;
             const progressPercentage = Math.min(100, Math.round((todayCalls / dailyTarget) * 100));
             dailyTargetPercentageEl.textContent = `${progressPercentage}%`;
             dailyTargetProgressBarEl.style.width = `${progressPercentage}%`;
             
-            // Change Customer Rating to Call Quality Distribution
+            // Call Quality calculation
             const qualityCounts = {
                 good: allCalls.filter(call => call.quality === 'good').length,
                 average: allCalls.filter(call => call.quality === 'average').length,
@@ -1630,30 +1519,174 @@
                 const goodPercentage = Math.round((qualityCounts.good / totalRatedCalls) * 100);
                 kpiAvgRatingEl.textContent = `${goodPercentage}% Good`;
             } else {
-                kpiAvgRatingEl.textContent = 'No ratings';
+                kpiAvgRatingEl.textContent = 'Not Rated';
             }
         }
 
         // Update Performance Summary
         function updatePerformanceSummary() {
-            // Mock data for performance summary
-            bestCallScoreEl.textContent = '98%';
-            avgResolutionTimeEl.textContent = '6:15';
-            firstCallResolutionEl.textContent = '92%';
-            csatScoreEl.textContent = '4.7/5';
+            if (allCalls.length === 0) {
+                totalCallsWeekEl.textContent = '0';
+                avgResolutionTimeEl.textContent = '0:00';
+                successRateEl.textContent = '0%';
+                bestPerformanceEl.textContent = 'N/A';
+                return;
+            }
+
+            // Total calls this week
+            const oneWeekAgo = new Date();
+            oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+            const weekCalls = allCalls.filter(call => new Date(call.start_time) >= oneWeekAgo);
+            totalCallsWeekEl.textContent = weekCalls.length;
+
+            // Average resolution time
+            const totalSeconds = allCalls.reduce((total, call) => {
+                const [minutes, seconds] = call.duration.split(':').map(Number);
+                return total + (minutes * 60) + seconds;
+            }, 0);
+            const avgSeconds = totalSeconds / allCalls.length;
+            const avgMinutes = Math.floor(avgSeconds / 60);
+            const avgSecs = Math.floor(avgSeconds % 60);
+            avgResolutionTimeEl.textContent = `${avgMinutes}:${avgSecs.toString().padStart(2, '0')}`;
+
+            // Success rate (calls with good quality)
+            const goodCalls = allCalls.filter(call => call.quality === 'good').length;
+            const successRate = Math.round((goodCalls / allCalls.length) * 100);
+            successRateEl.textContent = `${successRate}%`;
+
+            // Best performance (shortest call with good quality)
+            const goodQualityCalls = allCalls.filter(call => call.quality === 'good');
+            if (goodQualityCalls.length > 0) {
+                const bestCall = goodQualityCalls.reduce((best, call) => {
+                    const [min, sec] = call.duration.split(':').map(Number);
+                    const totalSec = min * 60 + sec;
+                    const [bestMin, bestSec] = best.duration.split(':').map(Number);
+                    const bestTotalSec = bestMin * 60 + bestSec;
+                    return totalSec < bestTotalSec ? call : best;
+                }, goodQualityCalls[0]);
+                bestPerformanceEl.textContent = bestCall.duration;
+            } else {
+                bestPerformanceEl.textContent = 'N/A';
+            }
+        }
+
+        // Update Achievements based on real data
+        function updateAchievements() {
+            const achievements = [];
+            
+            // Achievement 1: Based on total calls
+            if (allCalls.length >= 50) {
+                achievements.push({
+                    icon: '📞',
+                    text: `Completed ${allCalls.length} total calls`
+                });
+            }
+            
+            // Achievement 2: Based on good quality calls
+            const goodCalls = allCalls.filter(call => call.quality === 'good').length;
+            if (goodCalls >= 10) {
+                achievements.push({
+                    icon: '⭐',
+                    text: `Maintained good quality in ${goodCalls} calls`
+                });
+            }
+            
+            // Achievement 3: Based on daily consistency
+            const today = new Date().toISOString().split('T')[0];
+            const todayCalls = allCalls.filter(call => call.date.includes(today)).length;
+            if (todayCalls >= 5) {
+                achievements.push({
+                    icon: '⚡',
+                    text: `Handled ${todayCalls} calls today`
+                });
+            }
+            
+            // Default achievements if no real achievements
+            if (achievements.length === 0) {
+                achievements.push(
+                    { icon: '🚀', text: 'Start your first call to earn achievements' },
+                    { icon: '🎯', text: 'Complete 5 calls to unlock your first badge' },
+                    { icon: '🌟', text: 'Maintain good quality to earn special rewards' }
+                );
+            }
+            
+            // Render achievements
+            achievementsListEl.innerHTML = achievements.map(achievement => `
+                <li class="achievement-item">
+                    <span class="achievement-icon">${achievement.icon}</span>
+                    <span>${achievement.text}</span>
+                </li>
+            `).join('');
         }
 
         // Initialize Charts
         function initializeCharts() {
-            // Rating Trend Chart
+            // Quality Distribution Chart - NEW CHART
+            const qualityCtx = document.getElementById('qualityDistributionChart').getContext('2d');
+            
+            const qualityCounts = {
+                good: allCalls.filter(call => call.quality === 'good').length,
+                average: allCalls.filter(call => call.quality === 'average').length,
+                poor: allCalls.filter(call => call.quality === 'poor').length,
+                notRated: allCalls.filter(call => call.quality === 'Not Rated').length
+            };
+            
+            qualityDistributionChart = new Chart(qualityCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Good', 'Average', 'Poor', 'Not Rated'],
+                    datasets: [{
+                        data: [qualityCounts.good, qualityCounts.average, qualityCounts.poor, qualityCounts.notRated],
+                        backgroundColor: [
+                            'rgba(16, 185, 129, 0.8)',
+                            'rgba(245, 158, 11, 0.8)',
+                            'rgba(239, 68, 68, 0.8)',
+                            'rgba(156, 163, 175, 0.8)'
+                        ],
+                        borderColor: [
+                            'rgba(16, 185, 129, 1)',
+                            'rgba(245, 158, 11, 1)',
+                            'rgba(239, 68, 68, 1)',
+                            'rgba(156, 163, 175, 1)'
+                        ],
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                color: '#d1d5db',
+                                font: {
+                                    size: 12
+                                }
+                            }
+                        },
+                        title: {
+                            display: true,
+                            text: 'Call Quality Distribution',
+                            color: '#f9fafb',
+                            font: {
+                                size: 14,
+                                weight: '500'
+                            }
+                        }
+                    }
+                }
+            });
+
+            // Existing charts (kept for compatibility)
             const ratingTrendCtx = document.getElementById('ratingTrendChart').getContext('2d');
             ratingTrendChart = new Chart(ratingTrendCtx, {
                 type: 'line',
                 data: {
-                    labels: ['Oct 1', 'Oct 2', 'Oct 3', 'Oct 4', 'Oct 5', 'Oct 6', 'Oct 7'],
+                    labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
                     datasets: [{
-                        label: 'Daily Rating',
-                        data: [4.2, 4.5, 4.8, 4.6, 4.9, 4.7, 4.8],
+                        label: 'Performance Score',
+                        data: [85, 78, 92, 88, 95, 90, 87],
                         borderColor: '#4e8cff',
                         backgroundColor: 'rgba(78, 140, 255, 0.1)',
                         borderWidth: 2,
@@ -1665,44 +1698,29 @@
                     responsive: true,
                     maintainAspectRatio: false,
                     plugins: {
-                        legend: {
-                            display: false
-                        },
+                        legend: { display: false },
                         title: {
                             display: true,
-                            text: 'Rating Trend (Last 7 Days)',
+                            text: 'Weekly Performance Trend',
                             color: '#f9fafb',
-                            font: {
-                                size: 14,
-                                weight: '500'
-                            }
+                            font: { size: 14, weight: '500' }
                         }
                     },
                     scales: {
                         y: {
-                            beginAtZero: false,
-                            min: 3,
-                            max: 5,
-                            grid: {
-                                color: 'rgba(255, 255, 255, 0.1)'
-                            },
-                            ticks: {
-                                color: '#d1d5db'
-                            }
+                            beginAtZero: true,
+                            max: 100,
+                            grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                            ticks: { color: '#d1d5db' }
                         },
                         x: {
-                            grid: {
-                                color: 'rgba(255, 255, 255, 0.1)'
-                            },
-                            ticks: {
-                                color: '#d1d5db'
-                            }
+                            grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                            ticks: { color: '#d1d5db' }
                         }
                     }
                 }
             });
             
-            // Call Volume Chart
             const callVolumeCtx = document.getElementById('callVolumeChart').getContext('2d');
             callVolumeChart = new Chart(callVolumeCtx, {
                 type: 'bar',
@@ -1710,7 +1728,7 @@
                     labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
                     datasets: [{
                         label: 'Calls Handled',
-                        data: [18, 22, 19, 25, 23, 15, 10],
+                        data: [8, 12, 9, 15, 11, 6, 4],
                         backgroundColor: 'rgba(139, 92, 246, 0.7)',
                         borderColor: 'rgba(139, 92, 246, 1)',
                         borderWidth: 1
@@ -1720,36 +1738,23 @@
                     responsive: true,
                     maintainAspectRatio: false,
                     plugins: {
-                        legend: {
-                            display: false
-                        },
+                        legend: { display: false },
                         title: {
                             display: true,
-                            text: 'Call Volume (This Week)',
+                            text: 'Weekly Call Volume',
                             color: '#f9fafb',
-                            font: {
-                                size: 14,
-                                weight: '500'
-                            }
+                            font: { size: 14, weight: '500' }
                         }
                     },
                     scales: {
                         y: {
                             beginAtZero: true,
-                            grid: {
-                                color: 'rgba(255, 255, 255, 0.1)'
-                            },
-                            ticks: {
-                                color: '#d1d5db'
-                            }
+                            grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                            ticks: { color: '#d1d5db' }
                         },
                         x: {
-                            grid: {
-                                color: 'rgba(255, 255, 255, 0.1)'
-                            },
-                            ticks: {
-                                color: '#d1d5db'
-                            }
+                            grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                            ticks: { color: '#d1d5db' }
                         }
                     }
                 }
@@ -1758,10 +1763,8 @@
 
         // Initialize Event Listeners
         function initializeEventListeners() {
-            // Logout button
             logoutButtonEl.addEventListener('click', handleLogout);
             
-            // Pagination buttons
             prevPageBtnEl.addEventListener('click', () => {
                 if (currentPage > 1) {
                     currentPage--;
@@ -1777,40 +1780,12 @@
                 }
             });
             
-            // Filter controls
             searchInputEl.addEventListener('input', applyFilters);
             qualityFilterEl.addEventListener('change', applyFilters);
             dateFilterEl.addEventListener('change', applyFilters);
             
-            // Scratchpad
             saveScratchpadBtnEl.addEventListener('click', saveScratchpad);
-            
-            // Export data
             exportDataBtnEl.addEventListener('click', exportData);
-            
-            // Modal controls
-            cancelEditNoteBtnEl.addEventListener('click', () => {
-                editNoteModalEl.classList.remove('visible');
-            });
-            
-            saveEditedNoteBtnEl.addEventListener('click', saveEditedNote);
-            
-            cancelTrainingRequestBtnEl.addEventListener('click', () => {
-                requestTrainingModalEl.classList.remove('visible');
-            });
-            
-            submitTrainingRequestBtnEl.addEventListener('click', submitTrainingRequest);
-            
-            // Collapsible sections
-            scratchpadHeaderEl.addEventListener('click', () => {
-                scratchpadContentEl.classList.toggle('collapsed');
-                scratchpadHeaderEl.classList.toggle('is-collapsed');
-            });
-            
-            trainingHeaderEl.addEventListener('click', () => {
-                trainingContentEl.classList.toggle('collapsed');
-                trainingHeaderEl.classList.toggle('is-collapsed');
-            });
         }
 
         // Apply Filters
@@ -1831,7 +1806,7 @@
             renderCallsTable();
         }
 
-        // View Call Details - Modal حلو بدل alert
+        // View Call Details - Modal
         function viewCallDetails(callId) {
             const call = allCalls.find(c => c.id === callId);
             if (!call) return;
@@ -1846,7 +1821,7 @@
                                 <span class="detail-value">${call.scenario}</span>
                             </div>
                             <div class="detail-row">
-                                <span class="detail-label">Date & Time:</span>
+                                <span class="detail-label">Date:</span>
                                 <span class="detail-value">${call.date}</span>
                             </div>
                             <div class="detail-row">
@@ -1854,12 +1829,12 @@
                                 <span class="detail-value">${call.duration}</span>
                             </div>
                             <div class="detail-row">
-                                <span class="detail-label">Quality:</span>
+                                <span class="detail-label">Call Quality:</span>
                                 <span class="detail-value">${getQualityBadge(call.quality)}</span>
                             </div>
                             ${call.quality_reason ? `
                             <div class="detail-row">
-                                <span class="detail-label">Quality Reason:</span>
+                                <span class="detail-label">Quality Notes:</span>
                                 <span class="detail-value">${call.quality_reason}</span>
                             </div>
                             ` : ''}
@@ -1871,19 +1846,7 @@
                 </div>
             `;
             
-            // Add modal to page
             document.body.insertAdjacentHTML('beforeend', modalHTML);
-        }
-
-        // Delete Call
-        function deleteCall(callId) {
-            // In a real app, this would delete the call from the database
-            if (confirm('Are you sure you want to delete this call record?')) {
-                allCalls = allCalls.filter(call => call.id !== parseInt(callId));
-                filteredCalls = [...allCalls];
-                renderCallsTable();
-                calculateKPIs();
-            }
         }
 
         // Save Scratchpad
@@ -1891,10 +1854,17 @@
             try {
                 scratchpadContent = agentScratchpadEl.value;
                 
-                // In a real app, this would save to Supabase
-                // For demo purposes, we'll just show a success message
-                
-                // Show temporary success feedback
+                const { error } = await supabase
+                    .from('agent_notes')
+                    .upsert({
+                        user_id: currentUser.id,
+                        content: scratchpadContent,
+                        user_name: userNameEl.textContent,
+                        user_email: currentUser.email
+                    });
+
+                if (error) throw error;
+
                 const originalText = saveScratchpadBtnEl.textContent;
                 saveScratchpadBtnEl.textContent = 'Saved!';
                 saveScratchpadBtnEl.style.background = 'var(--success-color)';
@@ -1910,87 +1880,30 @@
             }
         }
 
-        // Start Training
-        function startTraining(programId) {
-            // In a real app, this would redirect to the training module
-            alert(`Starting training program ID: ${programId}`);
-        }
-
-        // Open Request Training Modal
-        function openRequestTrainingModal(programId) {
-            editTrainingReasonEl.value = '';
-            requestTrainingModalEl.classList.add('visible');
-        }
-
-        // Submit Training Request
-        async function submitTrainingRequest() {
-            try {
-                const reason = editTrainingReasonEl.value.trim();
-                
-                if (!reason) {
-                    alert('Please provide details for your training request.');
-                    return;
-                }
-                
-                // In a real app, this would submit to Supabase
-                // For demo purposes, we'll just show a success message
-                
-                alert('Training request submitted successfully!');
-                requestTrainingModalEl.classList.remove('visible');
-                
-            } catch (error) {
-                console.error('Error submitting training request:', error);
-                alert('Error submitting training request. Please try again.');
-            }
-        }
-
         // Export Data
         function exportData() {
-            // In a real app, this would generate a CSV or PDF report
-            alert('Exporting your performance data...');
+            const csvContent = "data:text/csv;charset=utf-8," 
+                + "Date,Scenario,Duration,Call Quality\n"
+                + allCalls.map(call => 
+                    `${call.date},${call.scenario},${call.duration},${call.quality}`
+                ).join("\n");
+            
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", `agent_data_${new Date().toISOString().split('T')[0]}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
         }
 
         // Handle Logout
         async function handleLogout() {
             try {
-                const { error } = await supabase.auth.signOut();
-                
-                if (error) {
-                    console.error('Error signing out:', error);
-                    return;
-                }
-                
+                await supabase.auth.signOut();
                 redirectToLogin();
-                
             } catch (error) {
                 console.error('Error during logout:', error);
-            }
-        }
-
-        // Redirect to Login
-        function redirectToLogin() {
-            window.location.href = 'index.html';
-        }
-
-        // Save Edited Note
-        async function saveEditedNote() {
-            try {
-                const newContent = editNoteTextareaEl.value.trim();
-                
-                if (!newContent) {
-                    alert('Note content cannot be empty.');
-                    return;
-                }
-                
-                // In a real app, this would update the note in Supabase
-                // For demo purposes, we'll just close the modal
-                
-                editNoteModalEl.classList.remove('visible');
-                alert('Note updated successfully!');
-                
-            } catch (error) {
-                console.error('Error saving edited note:', error);
-                alert('Error updating note. Please try again.');
             }
         }
 
@@ -1999,9 +1912,10 @@
             const badges = {
                 'good': '<span style="color: #10b981; font-weight: 600;">Good</span>',
                 'average': '<span style="color: #f59e0b; font-weight: 600;">Average</span>',
-                'poor': '<span style="color: #ef4444; font-weight: 600;">Poor</span>'
+                'poor': '<span style="color: #ef4444; font-weight: 600;">Poor</span>',
+                'Not Rated': '<span style="color: #6b7280; font-weight: 600;">Not Rated</span>'
             };
-            return badges[quality] || '<span style="color: #6b7280;">Unknown</span>';
+            return badges[quality] || '<span style="color: #6b7280; font-weight: 600;">Unknown</span>';
         }
 
         function formatDate(dateString) {
@@ -2023,6 +1937,10 @@
         function closeCallDetails() {
             const modal = document.getElementById('callDetailsModal');
             if (modal) modal.remove();
+        }
+
+        function redirectToLogin() {
+            window.location.href = 'index.html';
         }
     </script>
 </body>
