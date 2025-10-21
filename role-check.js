@@ -1,6 +1,11 @@
 // role-check.js
 import { supabase } from './supabaseClient.js';
 
+// 🎵 تعريف الصوت في البداية
+const notificationSound = new Audio('./sounds/notify.mp3');
+notificationSound.volume = 0.4; // خفيف وأنيق
+
+// 🧍‍♂️ جلب بيانات المستخدم الحالي
 async function getCurrentUserProfile() {
   try {
     const { data: { user } } = await supabase.auth.getUser();
@@ -11,9 +16,9 @@ async function getCurrentUserProfile() {
       .select('id, role, name, email')
       .eq('id', user.id)
       .single();
-    
+
     if (error && error.code !== 'PGRST116') throw error;
-    
+
     return {
       ...user,
       ...profile,
@@ -26,6 +31,7 @@ async function getCurrentUserProfile() {
   }
 }
 
+// 🎯 المودال الاحترافي الحديث مع الصوت
 function showProtectedModal(message = "This area is for administrators only.", redirectUrl = 'core-flow.html') {
   let modal = document.getElementById('access-restricted-modal');
   if (!modal) {
@@ -163,20 +169,24 @@ function showProtectedModal(message = "This area is for administrators only.", r
     closeBtn.addEventListener('click', hideModal);
     modal.addEventListener('click', (e) => { if (e.target === modal) hideModal(); });
 
+    // 👇 إظهار الرسالة + تشغيل الصوت
     setTimeout(() => {
       modal.style.opacity = '1';
       modal.style.visibility = 'visible';
       modalContainer.style.transform = 'scale(1)';
+      notificationSound.play(); // 🎵 صوت الإشعار هنا
     }, 10);
+
   } else {
     modal.style.opacity = '1';
     modal.style.visibility = 'visible';
     const modalContainer = modal.querySelector('div');
     if (modalContainer) modalContainer.style.transform = 'scale(1)';
+    notificationSound.play();
   }
 }
 
-
+// 🔐 حماية الصفحة حسب الدور
 export async function protectPage(allowedRoles = []) {
   const userProfile = await getCurrentUserProfile();
   if (!userProfile) {
