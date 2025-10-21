@@ -1,9 +1,8 @@
-// role-check.js
 import { supabase } from './supabaseClient.js';
 
-// 🎵 تعريف الصوت في البداية
+// 🎵 إعداد الصوت
 const notificationSound = new Audio('./sounds/notify.mp3');
-notificationSound.volume = 0.4; // خفيف وأنيق
+notificationSound.volume = 0.4;
 
 // 🧍‍♂️ جلب بيانات المستخدم الحالي
 async function getCurrentUserProfile() {
@@ -19,20 +18,15 @@ async function getCurrentUserProfile() {
 
     if (error && error.code !== 'PGRST116') throw error;
 
-    return {
-      ...user,
-      ...profile,
-      role: profile?.role || 'agent'
-    };
-
+    return { ...user, ...profile, role: profile?.role || 'agent' };
   } catch (e) {
     console.error('Error getting user profile:', e.message);
     return null;
   }
 }
 
-// 🎯 المودال الاحترافي الحديث مع الصوت
-function showProtectedModal(message = "This area is for administrators only.", redirectUrl = 'core-flow.html') {
+// 🧱 المودال الحديث
+function showProtectedModal(message = "Access Restricted", redirectUrl = 'core-flow.html') {
   let modal = document.getElementById('access-restricted-modal');
   if (!modal) {
     modal = document.createElement('div');
@@ -41,7 +35,7 @@ function showProtectedModal(message = "This area is for administrators only.", r
       position: fixed;
       top: 0; left: 0;
       width: 100%; height: 100%;
-      background: radial-gradient(circle at center, rgba(10,10,10,0.95) 0%, rgba(0,0,0,1) 80%);
+      background: radial-gradient(circle at center, rgba(10,10,10,0.95) 0%, rgba(0,0,0,1) 90%);
       display: flex;
       justify-content: center;
       align-items: center;
@@ -64,8 +58,7 @@ function showProtectedModal(message = "This area is for administrators only.", r
         width: 90%;
         text-align: center;
         transform: scale(0.9);
-        transition: transform 0.3s ease, box-shadow 0.3s ease;
-        animation: modalPop 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        transition: transform 0.3s ease;
       ">
         <div style="
           width: 88px; height: 88px;
@@ -86,26 +79,13 @@ function showProtectedModal(message = "This area is for administrators only.", r
           </svg>
         </div>
 
-        <h3 style="
-          font-size: 1.7rem;
-          font-weight: 700;
-          margin-bottom: 1rem;
-          color: #f9fafb;
-          letter-spacing: 0.3px;
-          background: linear-gradient(90deg, #ffffff, #a5b4fc);
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
-        ">
+        <h3 style="font-size: 1.7rem; font-weight: 700; color: #fff; margin-bottom: 1rem;">
           Access Restricted
         </h3>
 
-        <p style="
-          margin-bottom: 2rem;
-          color: #cbd5e1;
-          line-height: 1.6;
-          font-size: 1rem;
-          opacity: 0.9;
-        ">${message}</p>
+        <p style="margin-bottom: 2rem; color: #d1d5db; line-height: 1.6; font-size: 1rem;">
+          ${message}
+        </p>
 
         <button id="modal-close-btn" style="
           background: linear-gradient(135deg, #3b82f6, #60a5fa);
@@ -126,22 +106,6 @@ function showProtectedModal(message = "This area is for administrators only.", r
           0%, 100% { box-shadow: 0 0 25px rgba(78,140,255,0.25); transform: scale(1); }
           50% { box-shadow: 0 0 45px rgba(78,140,255,0.4); transform: scale(1.05); }
         }
-        @keyframes modalPop {
-          from { opacity: 0; transform: scale(0.85); }
-          to { opacity: 1; transform: scale(1); }
-        }
-        @keyframes buttonPress {
-          0% { transform: scale(1); box-shadow: 0 0 25px rgba(78,140,255,0.25); }
-          40% { transform: scale(0.93); box-shadow: 0 0 10px rgba(78,140,255,0.5); }
-          100% { transform: scale(1); box-shadow: 0 0 25px rgba(78,140,255,0.25); }
-        }
-        #modal-close-btn:hover {
-          transform: scale(1.04);
-          box-shadow: 0 0 35px rgba(96,165,250,0.4);
-        }
-        #modal-close-btn:active {
-          animation: buttonPress 0.25s ease;
-        }
       </style>
     `;
 
@@ -151,42 +115,27 @@ function showProtectedModal(message = "This area is for administrators only.", r
     const modalContainer = modal.querySelector('div');
 
     const hideModal = () => {
-      closeBtn.style.animation = 'buttonPress 0.25s ease';
+      modal.style.opacity = '0';
       setTimeout(() => {
-        modal.style.opacity = '0';
-        setTimeout(() => {
-          modal.style.visibility = 'hidden';
-          if (redirectUrl) {
-            window.location.href = redirectUrl;
-          } else {
-            history.replaceState(null, '', 'core-flow.html');
-            location.reload();
-          }
-        }, 250);
-      }, 100);
+        modal.style.visibility = 'hidden';
+        history.replaceState(null, '', redirectUrl);
+        location.reload();
+      }, 300);
     };
 
     closeBtn.addEventListener('click', hideModal);
-    modal.addEventListener('click', (e) => { if (e.target === modal) hideModal(); });
+    modal.addEventListener('click', e => { if (e.target === modal) hideModal(); });
 
-    // 👇 إظهار الرسالة + تشغيل الصوت
     setTimeout(() => {
       modal.style.opacity = '1';
       modal.style.visibility = 'visible';
       modalContainer.style.transform = 'scale(1)';
-      notificationSound.play(); // 🎵 صوت الإشعار هنا
+      notificationSound.play(); // ✅ تشغيل الصوت
     }, 10);
-
-  } else {
-    modal.style.opacity = '1';
-    modal.style.visibility = 'visible';
-    const modalContainer = modal.querySelector('div');
-    if (modalContainer) modalContainer.style.transform = 'scale(1)';
-    notificationSound.play();
   }
 }
 
-// 🔐 حماية الصفحة حسب الدور
+// 🧩 حماية الصفحة حسب الصلاحية
 export async function protectPage(allowedRoles = []) {
   const userProfile = await getCurrentUserProfile();
   if (!userProfile) {
@@ -197,11 +146,16 @@ export async function protectPage(allowedRoles = []) {
   const userNameEl = document.getElementById('userName');
   if (userNameEl) userNameEl.textContent = userProfile.name || userProfile.email;
 
+  // ✋ لو الدور غير مسموح
   if (allowedRoles.length > 0 && !allowedRoles.includes(userProfile.role)) {
-    document.body.innerHTML = ''; // نوقف تحميل الصفحة
+    // بدل ما نمسح الصفحة، نخفيها بس
+    document.querySelectorAll('body > *:not(script)').forEach(el => {
+      el.style.display = 'none';
+    });
+
     showProtectedModal(
-      `Access Denied.<br>Your current role: <strong>${userProfile.role}</strong>`,
-      null
+      `This area requires admin privileges.<br>Your current role: <strong>${userProfile.role}</strong>`,
+      'core-flow.html'
     );
     return;
   }
