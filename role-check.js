@@ -28,7 +28,7 @@ async function getCurrentUserProfile() {
   }
 }
 
-function showProtectedModal(message = "This area is for administrators only.") {
+function showProtectedModal(message = "This area is for administrators only.", redirectUrl = 'core-flow.html') {
   let modal = document.getElementById('access-restricted-modal');
   if (!modal) {
     modal = document.createElement('div');
@@ -114,6 +114,8 @@ function showProtectedModal(message = "This area is for administrators only.") {
         modal.style.opacity = '0';
         setTimeout(() => {
             modal.style.visibility = 'hidden';
+            // التحويل على صفحة Core Flow بعد ما ندوس Okay
+            window.location.href = redirectUrl;
         }, 300);
     };
 
@@ -154,16 +156,26 @@ export async function protectPage(allowedRoles = []) {
         userNameEl.textContent = userProfile.name || userProfile.email;
     }
 
-    // الكود الجديد: كل الرواقات تظهر للكل في الهيدر
-    // لا نخفي أي روابط - كل المستخدمين يشوفوا كل الصفحات في الهيدر
-
     // Check if the current page is protected and if the user has access
     if (allowedRoles.length > 0 && !allowedRoles.includes(userProfile.role)) {
-        showProtectedModal(`This area requires administrative privileges.<br>Your current role: <strong>${userProfile.role}</strong>`);
-        
-        // نخفي المحتوى الرئيسي للصفحة
+        // نخفي كل محتوى الصفحة
         const mainContent = document.querySelector('.app-main');
         if (mainContent) mainContent.style.display = 'none';
+        
+        const header = document.querySelector('.app-header');
+        if (header) header.style.display = 'none';
+        
+        const footer = document.querySelector('.app-footer');
+        if (footer) footer.style.display = 'none';
+        
+        const statusBar = document.querySelector('.status-bar');
+        if (statusBar) statusBar.style.display = 'none';
+        
+        // نعرض الرسالة
+        showProtectedModal(
+            `This area requires administrative privileges.<br>Your current role: <strong>${userProfile.role}</strong>`,
+            'core-flow.html'
+        );
         
         return;
     }
