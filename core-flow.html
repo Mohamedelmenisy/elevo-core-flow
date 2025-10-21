@@ -1169,26 +1169,149 @@ Waiting for Ticket
 
 <script type="module">
     import { supabase } from './supabaseClient.js';
-    import { protectPage } from './role-check.js';
+import { protectPage } from './role-check.js';
 
-    document.addEventListener('DOMContentLoaded', async () => {
-        // Protect page for all authenticated users and set up header
-        await protectPage([]);
-
-        // The rest of the page initialization logic that was previously in initializeApp
-        const authLoadingDiv = document.getElementById("auth-loading");
-        
-        // This check is now implicitly handled by protectPage, but we keep it for safety
-        const { data: { user } } = await supabase.auth.getUser();
-        
-        if (user) {
-            initializeAppLogic(user);
-            authLoadingDiv.style.display = "none";
-        } else {
-            // This case should be handled by protectPage redirecting to login
-            authLoadingDiv.innerHTML = '<p style="color:var(--danger-color); text-align:center; font-size: 1.2rem;">Authentication failed. Redirecting...</p>';
-        }
+// كود جديد: منع التحويل للصفحات المحمية
+function setupProtectedLinks() {
+    const protectedPages = ['dashboard.html', 'rtm-dashboard.html'];
+    
+    document.querySelectorAll('.nav-link').forEach(link => {
+        link.addEventListener('click', function(e) {
+            const href = this.getAttribute('href');
+            
+            // تحقق إذا كانت الصفحة محمية
+            const isProtected = protectedPages.some(page => href.includes(page));
+            
+            if (isProtected) {
+                e.preventDefault(); // منع التحويل
+                
+                // الحصول على بيانات المستخدم من localStorage أو session
+                const userData = JSON.parse(localStorage.getItem('sb-aefiigottnlcmjzilqnh-auth-token') || sessionStorage.getItem('userProfile') || '{}');
+                const userRole = userData.user?.user_metadata?.role || 'agent';
+                
+                // إذا كان المستخدم ليس admin، عرض الرسالة
+                if (userRole !== 'admin') {
+                    showAccessDeniedModal();
+                } else {
+                    // إذا كان admin، اسمح بالتحويل
+                    window.location.href = href;
+                }
+            }
+        });
     });
+}
+
+// دالة عرض الرسالة
+function showAccessDeniedModal() {
+    const modalHTML = `
+        <div id="access-denied-modal" style="
+            position: fixed; 
+            top: 0; left: 0; 
+            width: 100%; height: 100%; 
+            background-color: rgba(0, 0, 0, 0.8);
+            display: flex; 
+            justify-content: center; 
+            align-items: center;
+            z-index: 10000;
+            backdrop-filter: blur(10px);
+        ">
+            <div style="
+                background: linear-gradient(135deg, #1e293b, #334155);
+                padding: 3rem;
+                border-radius: 20px;
+                border: 1px solid rgba(255,255,255,0.1);
+                box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+                text-align: center;
+                max-width: 400px;
+                width: 90%;
+            ">
+                <div style="
+                    width: 80px; height: 80px; 
+                    margin: 0 auto 1.5rem; 
+                    background: rgba(239, 68, 68, 0.1); 
+                    border-radius: 50%; 
+                    display: flex; 
+                    align-items: center; 
+                    justify-content: center; 
+                    border: 2px solid rgba(239, 68, 68, 0.3);
+                ">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="12" y1="8" x2="12" y2="12"></line>
+                        <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                    </svg>
+                </div>
+                
+                <h3 style="
+                    font-size: 1.5rem; 
+                    margin-bottom: 1rem; 
+                    color: #f9fafb; 
+                    font-weight: 700;
+                ">Access Restricted</h3>
+                
+                <p style="
+                    margin-bottom: 2rem; 
+                    color: #d1d5db; 
+                    line-height: 1.6;
+                    font-size: 1rem;
+                ">This area requires <strong>administrator privileges</strong>.<br>Your current role: <strong style="color: #ef4444;">Agent</strong></p>
+                
+                <button onclick="closeAccessModal()" style="
+                    background: linear-gradient(135deg, #4e8cff, #3b82f6);
+                    color: white;
+                    border: none;
+                    padding: 0.75rem 2rem;
+                    border-radius: 10px;
+                    font-weight: 600;
+                    cursor: pointer;
+                    transition: all 0.3s ease;
+                    font-size: 1rem;
+                ">Okay</button>
+            </div>
+        </div>
+    `;
+    
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
+}
+
+// دالة إغلاق الرسالة
+function closeAccessModal() {
+    const modal = document.getElementById('access-denied-modal');
+    if (modal) {
+        modal.remove();
+    }
+}
+   document.addEventListener('DOMContentLoaded', async () => {
+    // Protect page for all authenticated users and set up header
+    await protectPage([]);
+    
+    // إعداد الحماية للرواقات - كود جديد
+    setupProtectedLinks();
+
+    // The rest of the page initialization logic...
+    const authLoadingDiv = document.getElementById("auth-loading");
+    
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (user) {
+        initializeAppLogic(user);
+        authLoadingDiv.style.display = "none";
+        
+        // حفظ بيانات المستخدم للاستخدام لاحقاً - كود جديد
+        const { data: profile } = await supabase.from('users').select('role').eq('id', user.id).single();
+        if (profile) {
+            sessionStorage.setItem('userProfile', JSON.stringify({
+                user: {
+                    user_metadata: {
+                        role: profile.role
+                    }
+                }
+            }));
+        }
+    } else {
+        authLoadingDiv.innerHTML = '<p style="color:var(--danger-color); text-align:center; font-size: 1.2rem;">Authentication failed. Redirecting...</p>';
+    }
+});
 
     const initialViewDiv=document.getElementById("initial-view"),callFlowViewDiv=document.getElementById("call-flow-view"),postCallSummaryDiv=document.getElementById("postCallSummary"),receiveCallBtn=document.getElementById("receive-call-btn"),scenarioTitleElement=document.getElementById("scenario-title-text"),stepTypeIconElement=document.getElementById("step-type-icon"),stepsContainer=document.getElementById("steps-container"),decisionButtonsContainer=document.getElementById("decision-buttons-container"),prevStepBtn=document.getElementById("prev-step-btn"),nextStepBtn=document.getElementById("next-step-btn"),endCallBtn=document.getElementById("end-call-btn"),logoutButton=document.getElementById("logoutButton"),systemStatusDiv=document.getElementById("systemStatus"),callTimerDiv=document.getElementById("callTimer"),callSummaryContentDiv=document.getElementById("callSummaryContent"),returnToInitialViewBtn=document.getElementById("returnToInitialViewBtn"),callStartSound=document.getElementById("callStartSound"),compensationScenarioSound=document.getElementById("compensationScenarioSound"),searchScenarioInput=document.getElementById("searchScenarioInput"),scenarioPreviewTooltip=document.getElementById("scenario-preview-tooltip");
     
