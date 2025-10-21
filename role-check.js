@@ -1,7 +1,7 @@
 import { supabase } from './supabaseClient.js';
 
 // تعريف الصوت
-const notificationSound = new Audio('./sounds/notify.mp3');
+const notificationSound = new Audio('./sounds/compensation_alert.mp3');
 notificationSound.volume = 0.4;
 
 async function getCurrentUserProfile() {
