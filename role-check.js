@@ -111,12 +111,12 @@ function showProtectedModal(message = "This area is for administrators only.", r
     const modalContainer = modal.querySelector('div');
 
     const hideModal = () => {
+        // We start the fade-out animation for a smooth visual effect.
         modal.style.opacity = '0';
-        setTimeout(() => {
-            modal.style.visibility = 'hidden';
-            // التحويل على صفحة Core Flow بعد ما ندوس Okay
-            window.location.href = redirectUrl;
-        }, 300);
+        
+        // The redirect is the most important action. We initiate it immediately
+        // without waiting for the animation to finish, ensuring it always works.
+        window.location.href = redirectUrl;
     };
 
     closeBtn.addEventListener('click', hideModal);
