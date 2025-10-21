@@ -11,11 +11,21 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
     <style>
         :root {
+            --primary-color: #4e8cff;
+            --text-color: #f9fafb;
+            --text-color-light: #d1d5db;
+            --text-color-subtle: #9ca3af;
             --glass-bg: rgba(255, 255, 255, 0.08);
             --glass-border: rgba(255, 255, 255, 0.12);
             --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
             --card-radius: 20px;
             --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        body {
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            color: var(--text-color);
+            font-family: 'Poppins', sans-serif;
         }
 
         .dashboard-main {
@@ -134,6 +144,8 @@
             display: none;
             animation: fadeIn 0.4s ease-in;
         }
+        
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
         .tab-content.active {
             display: block;
@@ -386,6 +398,30 @@
             align-items: center;
         }
 
+        .nav-link {
+            color: var(--text-color-light);
+            text-decoration: none;
+            padding: 0.6rem 1rem;
+            border-radius: 10px;
+            transition: all 0.3s ease;
+        }
+        .nav-link:hover {
+             color: var(--primary-color);
+        }
+
+        .user-name-display {
+             color: var(--text-color-light);
+        }
+
+        .logout-btn {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: var(--text-color-light);
+            padding: 0.6rem 1rem;
+            border-radius: 10px;
+            cursor: pointer;
+        }
+
         .auto-refresh-toggle {
             display: flex;
             align-items: center;
@@ -453,12 +489,15 @@
         }
 
         .loading-container {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background-color: #0f172a;
+            z-index: 10001;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            height: 70vh;
-            gap: 1.5rem;
         }
 
         .spinner {
@@ -500,118 +539,90 @@
     </style>
 </head>
 <body>
-    <div class="app-container">
-        <header class="app-header">
-            <div class="logo-container">
-                <svg class="company-logo" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="color: var(--primary-color); width: 28px; height: 28px;">
-                    <path d="M12 22V12M9 19l3-3 3 3M12 2a4 4 0 0 0-4 4v0a4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-                <span class="app-title" style="font-size: 1.4rem;">Elevo Core - RTM Dashboard</span>
-            </div>
-            <div class="header-controls">
-                <a href="core-flow.html" class="nav-link">Call App</a>
-                <a href="agent-portal.html" class="nav-link">Agent Portal</a>
-                <a href="dashboard.html" class="nav-link">Admin Dashboard</a>
-                <div class="user-info" id="userInfo">
-                    <span id="userName" class="user-name-display"></span>
-                    <button id="logoutButton" class="logout-btn">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
-                        Logout
-                    </button>
+    <div id="auth-loader" class="loading-container">
+        <div class="spinner"></div>
+        <p style="color: #d1d5db; margin-top: 1.5rem; font-size: 1.1rem; font-family: 'Poppins', sans-serif;">Verifying Access...</p>
+    </div>
+
+    <div id="app-content" style="display: none;">
+        <div class="app-container">
+            <header class="app-header">
+                <div class="logo-container">
+                    <svg class="company-logo" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="color: var(--primary-color); width: 28px; height: 28px;">
+                        <path d="M12 22V12M9 19l3-3 3 3M12 2a4 4 0 0 0-4 4v0a4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    <span class="app-title" style="font-size: 1.4rem;">Elevo Core - RTM Dashboard</span>
                 </div>
-            </div>
-        </header>
-
-        <main class="app-main dashboard-main">
-            <div id="auth-loading" class="loading-container" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 70vh;">
-                <div class="spinner"></div>
-                <p>Loading Real-Time Monitoring Data...</p>
-            </div>
-
-            <div id="rtmContent" style="display: none;">
-                <div class="dashboard-header">
-                    <div>
-                        <h1>Real-Time Monitoring</h1>
-                        <p class="text-color-light">Live tracking of agents activities and performance</p>
-                    </div>
-                    <div class="header-controls">
-                        <div class="auto-refresh-toggle">
-                            <input type="checkbox" id="autoRefreshToggle" checked>
-                            <label for="autoRefreshToggle">Auto Refresh (10s)</label>
-                        </div>
-                        <button id="refreshRTMDataBtn" class="action-button primary-button">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"></path><path d="M1 20v-6h6"></path><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
-                            Refresh Now
+                <div class="header-controls">
+                    <a href="core-flow.html" class="nav-link">Call App</a>
+                    <a href="agent-portal.html" class="nav-link">Agent Portal</a>
+                    <a href="dashboard.html" class="nav-link">Admin Dashboard</a>
+                    <div class="user-info" id="userInfo">
+                        <span id="userName" class="user-name-display"></span>
+                        <button id="logoutButton" class="logout-btn">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+                            Logout
                         </button>
                     </div>
                 </div>
+            </header>
 
-                <div class="metrics-grid">
-                    <div class="metric-card">
-                        <div class="metric-value" id="rtmLiveTickets">0</div>
-                        <div class="metric-label">Live Tickets</div>
-                    </div>
-                    <div class="metric-card">
-                        <div class="metric-value" id="rtmDelayedTickets">0</div>
-                        <div class="metric-label">Delayed Tickets</div>
-                    </div>
-                    <div class="metric-card">
-                        <div class="metric-value" id="rtmRecentTickets">0</div>
-                        <div class="metric-label">Recent Tickets</div>
-                    </div>
-                    <div class="metric-card">
-                        <div class="metric-value" id="rtmActiveAgents">0</div>
-                        <div class="metric-label">Active Agents</div>
-                    </div>
-                </div>
-
-                <div class="rtm-grid">
-                    <div class="activity-log">
-                        <div class="tabs">
-                            <div class="tab active" data-tab="live">Live Activity</div>
-                            <div class="tab" data-tab="delayed">Delayed</div>
-                            <div class="tab" data-tab="recent">Recent</div>
+            <main class="app-main dashboard-main">
+                <div id="rtmContent">
+                    <div class="dashboard-header">
+                        <div>
+                            <h1>Real-Time Monitoring</h1>
+                            <p class="text-color-light">Live tracking of agents activities and performance</p>
                         </div>
-                        
-                        <div class="tab-content active" id="liveTab">
-                            <div id="liveTicketsList"></div>
-                        </div>
-                        
-                        <div class="tab-content" id="delayedTab">
-                            <div id="delayedTicketsList"></div>
-                        </div>
-                        
-                        <div class="tab-content" id="recentTab">
-                            <div id="recentTicketsList"></div>
-                        </div>
-                        
-                        <div class="last-updated">
-                            Last updated: <span id="lastUpdatedTime">--:--:--</span>
-                        </div>
-                    </div>
-                    
-                    <div>
-                        <div class="chart-card">
-                            <h3>Ticket Volume (Last Hour)</h3>
-                            <div class="chart-container">
-                                <canvas id="ticketVolumeChart"></canvas>
+                        <div class="header-controls">
+                            <div class="auto-refresh-toggle">
+                                <input type="checkbox" id="autoRefreshToggle" checked>
+                                <label for="autoRefreshToggle">Auto Refresh (10s)</label>
                             </div>
+                            <button id="refreshRTMDataBtn" class="action-button primary-button">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"></path><path d="M1 20v-6h6"></path><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+                                Refresh Now
+                            </button>
                         </div>
-                        
-                        <div class="chart-card">
-                            <h3>Agent Activity</h3>
-                            <div class="chart-container">
-                                <canvas id="agentActivityChart"></canvas>
+                    </div>
+
+                    <div class="metrics-grid">
+                        <div class="metric-card"><div class="metric-value" id="rtmLiveTickets">0</div><div class="metric-label">Live Tickets</div></div>
+                        <div class="metric-card"><div class="metric-value" id="rtmDelayedTickets">0</div><div class="metric-label">Delayed Tickets</div></div>
+                        <div class="metric-card"><div class="metric-value" id="rtmRecentTickets">0</div><div class="metric-label">Recent Tickets</div></div>
+                        <div class="metric-card"><div class="metric-value" id="rtmActiveAgents">0</div><div class="metric-label">Active Agents</div></div>
+                    </div>
+
+                    <div class="rtm-grid">
+                        <div class="activity-log">
+                            <div class="tabs">
+                                <div class="tab active" data-tab="live">Live Activity</div>
+                                <div class="tab" data-tab="delayed">Delayed</div>
+                                <div class="tab" data-tab="recent">Recent</div>
+                            </div>
+                            <div class="tab-content active" id="liveTab"><div id="liveTicketsList"></div></div>
+                            <div class="tab-content" id="delayedTab"><div id="delayedTicketsList"></div></div>
+                            <div class="tab-content" id="recentTab"><div id="recentTicketsList"></div></div>
+                            <div class="last-updated">Last updated: <span id="lastUpdatedTime">--:--:--</span></div>
+                        </div>
+                        <div>
+                            <div class="chart-card">
+                                <h3>Ticket Volume (Last Hour)</h3>
+                                <div class="chart-container"><canvas id="ticketVolumeChart"></canvas></div>
+                            </div>
+                            <div class="chart-card">
+                                <h3>Agent Activity</h3>
+                                <div class="chart-container"><canvas id="agentActivityChart"></canvas></div>
                             </div>
                         </div>
                     </div>
                 </div>
-            </div>
-        </main>
-        
-        <footer class="app-footer">
-            <p>© <span id="currentYear"></span> Mohamed Elmenisy - Elevo Core. All rights reserved.</p>
-        </footer>
+            </main>
+            
+            <footer class="app-footer">
+                <p>© <span id="currentYear"></span> Mohamed Elmenisy - Elevo Core. All rights reserved.</p>
+            </footer>
+        </div>
     </div>
 
     <script type="module">
@@ -624,14 +635,19 @@
         let isAutoRefreshEnabled = true;
 
         document.addEventListener('DOMContentLoaded', async function() {
-            await protectPage(['admin']);
-            
+            const userProfile = await protectPage(['admin', 'rtm'], 'app-content');
+            if (!userProfile) return;
+
             document.getElementById('currentYear').textContent = new Date().getFullYear();
             
+            await initializeRTM();
+        });
+
+        async function initializeRTM() {
             await loadRTMData();
             setupEventListeners();
             startAutoRefresh();
-        });
+        }
 
         function setupEventListeners() {
             document.getElementById('logoutButton').addEventListener('click', async () => {
@@ -658,9 +674,6 @@
 
         async function loadRTMData() {
             try {
-                document.getElementById('auth-loading').style.display = 'flex';
-                document.getElementById('rtmContent').style.display = 'none';
-                
                 await Promise.all([
                     loadTicketMetrics(),
                     loadLiveTickets(),
@@ -669,15 +682,9 @@
                     loadTicketVolumeChart(),
                     loadAgentActivityChart()
                 ]);
-                
                 document.getElementById('lastUpdatedTime').textContent = new Date().toLocaleTimeString('en-US', { hour12: false });
-                
-                document.getElementById('auth-loading').style.display = 'none';
-                document.getElementById('rtmContent').style.display = 'block';
-                
             } catch (error) {
                 console.error('Error loading RTM data:', error);
-                document.getElementById('auth-loading').innerHTML = '<p>Error loading data. Please try again.</p>';
             }
         }
 
