@@ -1,7 +1,7 @@
 import { supabase } from './supabaseClient.js';
 
 // 🎵 إعداد الصوت
-const notificationSound = new Audio('/elevo-core-flow/sounds/compensation_alert.mp3');
+const notificationSound = new Audio('/elevo-core-flow/sounds/call_sound.mp3');
 notificationSound.volume = 0.5;
 
 // 🧍‍♂️ جلب بيانات المستخدم الحالي
