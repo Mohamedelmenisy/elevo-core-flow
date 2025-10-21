@@ -28,71 +28,61 @@ async function getCurrentUserProfile() {
   }
 }
 
-function showProtectedModal(message = "This area is for administrators only.", redirectUrl = 'core-flow.html') {
-  let modal = document.getElementById('access-restricted-modal');
-  if (!modal) {
-    modal = document.createElement('div');
-    modal.id = 'access-restricted-modal';
-    modal.style.cssText = `
-        position: fixed; 
-        top: 0; left: 0; 
-        width: 100%; height: 100%; 
-        background-color: rgba(0, 0, 0, 0.8);
-        display: flex; 
-        justify-content: center; 
+function showAccessDeniedInCurrentPage(message = "This area is for administrators only.") {
+  // نخفي كل محتوى الصفحة الحالية
+  const mainContent = document.querySelector('.app-main');
+  if (mainContent) mainContent.style.display = 'none';
+  
+  const statusBar = document.querySelector('.status-bar');
+  if (statusBar) statusBar.style.display = 'none';
+  
+  const footer = document.querySelector('.app-footer');
+  if (footer) footer.style.display = 'none';
+
+  // نعرض رسالة جميلة في وسط الصفحة
+  const accessDeniedHTML = `
+    <div style="
+        display: flex;
+        flex-direction: column;
         align-items: center;
-        z-index: 10000;
-        opacity: 0;
-        visibility: hidden;
-        transition: opacity 0.3s ease;
-        backdrop-filter: blur(10px);
-    `;
-    
-    modal.innerHTML = `
-      <div style="
-          background: linear-gradient(135deg, #1e293b, #334155);
-          padding: 3rem;
-          border-radius: 20px;
-          border: 1px solid rgba(255,255,255,0.1);
-          box-shadow: 0 20px 40px rgba(0,0,0,0.4);
-          text-align: center;
-          max-width: 400px;
-          width: 90%;
-          transform: scale(0.9);
-          transition: transform 0.3s ease;
-      ">
+        justify-content: center;
+        height: 70vh;
+        text-align: center;
+        padding: 2rem;
+    ">
         <div style="
-            width: 80px; height: 80px; 
-            margin: 0 auto 1.5rem; 
+            width: 100px; height: 100px; 
+            margin-bottom: 2rem; 
             background: rgba(239, 68, 68, 0.1); 
             border-radius: 50%; 
             display: flex; 
             align-items: center; 
             justify-content: center; 
-            border: 2px solid rgba(239, 68, 68, 0.3);
+            border: 3px solid rgba(239, 68, 68, 0.3);
         ">
-            <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2">
+            <svg xmlns="http://www.w3.org/2000/svg" width="50" height="50" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2">
                 <circle cx="12" cy="12" r="10"></circle>
                 <line x1="12" y1="8" x2="12" y2="12"></line>
                 <line x1="12" y1="16" x2="12.01" y2="16"></line>
             </svg>
         </div>
         
-        <h3 style="
-            font-size: 1.5rem; 
+        <h1 style="
+            font-size: 2rem; 
             margin-bottom: 1rem; 
             color: #f9fafb; 
             font-weight: 700;
-        ">Access Restricted</h3>
+        ">Access Restricted</h1>
         
         <p style="
-            margin-bottom: 2rem; 
+            margin-bottom: 2.5rem; 
             color: #d1d5db; 
             line-height: 1.6;
-            font-size: 1rem;
+            font-size: 1.1rem;
+            max-width: 500px;
         ">${message}</p>
         
-        <button id="modal-close-btn" style="
+        <button onclick="window.location.href='core-flow.html'" style="
             background: linear-gradient(135deg, #4e8cff, #3b82f6);
             color: white;
             border: none;
@@ -102,43 +92,19 @@ function showProtectedModal(message = "This area is for administrators only.", r
             cursor: pointer;
             transition: all 0.3s ease;
             font-size: 1rem;
-        ">Okay</button>
-      </div>
-    `;
-    document.body.appendChild(modal);
-    
-    const closeBtn = modal.querySelector('#modal-close-btn');
-    const modalContainer = modal.querySelector('div');
+        ">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 0.5rem;">
+                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                <polyline points="9 22 9 12 15 12 15 22"></polyline>
+            </svg>
+            Back to Core Flow
+        </button>
+    </div>
+  `;
 
-    const hideModal = () => {
-        modal.style.opacity = '0';
-        setTimeout(() => {
-            modal.style.visibility = 'hidden';
-            // التحويل على صفحة Core Flow بعد ما ندوس Okay
-            window.location.href = redirectUrl;
-        }, 300);
-    };
-
-    closeBtn.addEventListener('click', hideModal);
-    modal.addEventListener('click', (e) => {
-        if (e.target === modal) {
-            hideModal();
-        }
-    });
-
-    // Show modal with animation
-    setTimeout(() => {
-        modal.style.opacity = '1';
-        modal.style.visibility = 'visible';
-        modalContainer.style.transform = 'scale(1)';
-    }, 10);
-  } else {
-    // If modal exists, just show it
-    modal.style.opacity = '1';
-    modal.style.visibility = 'visible';
-    const modalContainer = modal.querySelector('div');
-    if (modalContainer) modalContainer.style.transform = 'scale(1)';
-  }
+  // نضيف الرسالة للصفحة
+  const container = document.querySelector('.app-container') || document.body;
+  container.insertAdjacentHTML('beforeend', accessDeniedHTML);
 }
 
 export async function protectPage(allowedRoles = []) {
@@ -158,25 +124,12 @@ export async function protectPage(allowedRoles = []) {
 
     // Check if the current page is protected and if the user has access
     if (allowedRoles.length > 0 && !allowedRoles.includes(userProfile.role)) {
-        // نخفي كل محتوى الصفحة
-        const mainContent = document.querySelector('.app-main');
-        if (mainContent) mainContent.style.display = 'none';
-        
-        const header = document.querySelector('.app-header');
-        if (header) header.style.display = 'none';
-        
-        const footer = document.querySelector('.app-footer');
-        if (footer) footer.style.display = 'none';
-        
-        const statusBar = document.querySelector('.status-bar');
-        if (statusBar) statusBar.style.display = 'none';
-        
-        // نعرض الرسالة
-        showProtectedModal(
-            `This area requires administrative privileges.<br>Your current role: <strong>${userProfile.role}</strong>`,
-            'core-flow.html'
+        // نمنع الوصول ونعرض الرسالة في الصفحة الحالية
+        showAccessDeniedInCurrentPage(
+            `This area requires administrative privileges.<br><br>
+            Your current role: <strong style="color: #ef4444;">${userProfile.role}</strong><br><br>
+            Please contact your administrator if you need access to this section.`
         );
-        
         return;
     }
     
