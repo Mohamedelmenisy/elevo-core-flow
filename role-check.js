@@ -1,10 +1,6 @@
 // role-check.js
 import { supabase } from './supabaseClient.js';
 
-/**
- * Fetches the complete user profile, including name and role.
- * @returns {Promise<object|null>} User profile object or null.
- */
 async function getCurrentUserProfile() {
   try {
     const { data: { user } } = await supabase.auth.getUser();
@@ -12,19 +8,18 @@ async function getCurrentUserProfile() {
 
     const { data: profile, error } = await supabase
       .from('users')
-      .select('id, role, name, email') // We need name and role
+      .select('id, role, name, email')
       .eq('id', user.id)
       .single();
     
-    if (error && error.code !== 'PGRST116') { // Ignore 'not found' error for flexibility
+    if (error && error.code !== 'PGRST116') {
         throw error;
     }
     
-    // Return a combined object with auth data and profile data
     return {
         ...user,
         ...profile,
-        role: profile?.role || 'agent' // Default to 'agent' if role is not set
+        role: profile?.role || 'agent'
     };
 
   } catch (e) {
@@ -33,50 +28,92 @@ async function getCurrentUserProfile() {
   }
 }
 
-/**
- * Shows a modern, non-intrusive modal for restricted access.
- */
 function showProtectedModal(message = "This area is for administrators only.") {
   let modal = document.getElementById('access-restricted-modal');
   if (!modal) {
     modal = document.createElement('div');
     modal.id = 'access-restricted-modal';
-    // Using styles consistent with the existing modal system
     modal.style.cssText = `
-        position: fixed; inset: 0; z-index: 10000;
-        background-color: rgba(0, 0, 0, .7);
-        display: flex; justify-content: center; align-items: center;
-        opacity: 0; visibility: hidden; transition: opacity .3s ease, visibility .3s ease;
-        backdrop-filter: blur(5px);
+        position: fixed; 
+        top: 0; left: 0; 
+        width: 100%; height: 100%; 
+        background-color: rgba(0, 0, 0, 0.8);
+        display: flex; 
+        justify-content: center; 
+        align-items: center;
+        z-index: 10000;
+        opacity: 0;
+        visibility: hidden;
+        transition: opacity 0.3s ease;
+        backdrop-filter: blur(10px);
     `;
     
-    // Modernized modal content using existing CSS variables for a consistent look
     modal.innerHTML = `
-      <div class="modal-container" style="text-align: center; transform: scale(.9); transition: transform .3s ease; border-color: #F44336;">
-        <div style="width: 72px; height: 72px; margin: 0 auto 1.5rem; background: rgba(244, 67, 54, 0.1); border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 1px solid rgba(244, 67, 54, 0.2);">
-            <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#F44336" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-                <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+      <div style="
+          background: linear-gradient(135deg, #1e293b, #334155);
+          padding: 3rem;
+          border-radius: 20px;
+          border: 1px solid rgba(255,255,255,0.1);
+          box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+          text-align: center;
+          max-width: 400px;
+          width: 90%;
+          transform: scale(0.9);
+          transition: transform 0.3s ease;
+      ">
+        <div style="
+            width: 80px; height: 80px; 
+            margin: 0 auto 1.5rem; 
+            background: rgba(239, 68, 68, 0.1); 
+            border-radius: 50%; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            border: 2px solid rgba(239, 68, 68, 0.3);
+        ">
+            <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="8" x2="12" y2="12"></line>
+                <line x1="12" y1="16" x2="12.01" y2="16"></line>
             </svg>
         </div>
-        <h3 class="modal-title" style="font-size: 1.75rem; margin-bottom: 1rem; color: #f0f0f0;">Access Denied</h3>
-        <p class="modal-body" style="margin-bottom: 2.5rem; font-size: 1.1rem;">${message}</p>
-        <div class="modal-actions">
-            <button id="modal-close-btn" class="nav-button danger-button">Okay</button>
-        </div>
+        
+        <h3 style="
+            font-size: 1.5rem; 
+            margin-bottom: 1rem; 
+            color: #f9fafb; 
+            font-weight: 700;
+        ">Access Restricted</h3>
+        
+        <p style="
+            margin-bottom: 2rem; 
+            color: #d1d5db; 
+            line-height: 1.6;
+            font-size: 1rem;
+        ">${message}</p>
+        
+        <button id="modal-close-btn" style="
+            background: linear-gradient(135deg, #4e8cff, #3b82f6);
+            color: white;
+            border: none;
+            padding: 0.75rem 2rem;
+            border-radius: 10px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 1rem;
+        ">Okay</button>
       </div>
     `;
     document.body.appendChild(modal);
     
     const closeBtn = modal.querySelector('#modal-close-btn');
-    const modalContainer = modal.querySelector('.modal-container');
+    const modalContainer = modal.querySelector('div');
 
     const hideModal = () => {
-        if (modalContainer) modalContainer.style.transform = 'scale(0.9)';
         modal.style.opacity = '0';
         setTimeout(() => {
             modal.style.visibility = 'hidden';
-            // IMPORTANT: No longer redirects the user away from the page.
         }, 300);
     };
 
@@ -86,22 +123,22 @@ function showProtectedModal(message = "This area is for administrators only.") {
             hideModal();
         }
     });
-  }
 
-  // Show modal logic
-  modal.style.visibility = 'visible';
-  setTimeout(() => {
-      modal.style.opacity = '1';
-      const modalContainer = modal.querySelector('.modal-container');
-      if (modalContainer) modalContainer.style.transform = 'scale(1)';
-  }, 10);
+    // Show modal with animation
+    setTimeout(() => {
+        modal.style.opacity = '1';
+        modal.style.visibility = 'visible';
+        modalContainer.style.transform = 'scale(1)';
+    }, 10);
+  } else {
+    // If modal exists, just show it
+    modal.style.opacity = '1';
+    modal.style.visibility = 'visible';
+    const modalContainer = modal.querySelector('div');
+    if (modalContainer) modalContainer.style.transform = 'scale(1)';
+  }
 }
 
-
-/**
- * Main function to protect a page and set up the header.
- * @param {string[]} allowedRoles - Array of roles allowed to access the page (e.g., ['admin']).
- */
 export async function protectPage(allowedRoles = []) {
     const userProfile = await getCurrentUserProfile();
 
@@ -114,40 +151,39 @@ export async function protectPage(allowedRoles = []) {
     // Set user's name in the header
     const userNameEl = document.getElementById('userName');
     if (userNameEl) {
-        userNameEl.textContent = userProfile.name || userProfile.email; // Prioritize name
-    }
-    
-    // First, handle role-based link visibility
-    const adminDashboardLink = document.querySelector('a[href*="dashboard.html"]');
-    const rtmDashboardLink = document.querySelector('a[href*="rtm-dashboard.html"]');
-    
-    if (userProfile.role === 'admin') {
-        if (adminDashboardLink) adminDashboardLink.style.display = 'inline-flex';
-        if (rtmDashboardLink) rtmDashboardLink.style.display = 'inline-flex';
-    } else {
-        if (adminDashboardLink) adminDashboardLink.style.display = 'none';
-        if (rtmDashboardLink) rtmDashboardLink.style.display = 'none';
+        userNameEl.textContent = userProfile.name || userProfile.email;
     }
 
-    // Now, check if the current page is protected and if the user has access
+    // الكود الجديد: كل الرواقات تظهر للكل في الهيدر
+    // لا نخفي أي روابط - كل المستخدمين يشوفوا كل الصفحات في الهيدر
+
+    // Check if the current page is protected and if the user has access
     if (allowedRoles.length > 0 && !allowedRoles.includes(userProfile.role)) {
-        // User is not allowed, show modal and hide content
-        showProtectedModal(`This content requires administrative privileges.`);
+        showProtectedModal(`This area requires administrative privileges.<br>Your current role: <strong>${userProfile.role}</strong>`);
+        
+        // نخفي المحتوى الرئيسي للصفحة
         const mainContent = document.querySelector('.app-main');
-        if (mainContent) mainContent.style.visibility = 'hidden';
-        return; // Stop further execution for this page
+        if (mainContent) mainContent.style.display = 'none';
+        
+        return;
     }
     
     // Special case for Agent Portal: If admin, show banner
     if (window.location.pathname.includes('agent-portal.html') && userProfile.role === 'admin') {
         const banner = document.createElement('div');
         banner.textContent = "👋 Admin View: This dashboard is intended for agents.";
-        banner.style.cssText = `background: linear-gradient(90deg, #1e3a8a, #2563eb); color: white; text-align: center; padding: 12px; font-weight: 500; border-bottom: 1px solid #1e40af;`;
+        banner.style.cssText = `
+            background: linear-gradient(90deg, #1e3a8a, #2563eb); 
+            color: white; 
+            text-align: center; 
+            padding: 12px; 
+            font-weight: 500; 
+            border-bottom: 1px solid #1e40af;
+            font-size: 0.9rem;
+        `;
         const header = document.querySelector('.app-header');
         if (header) {
             header.parentNode.insertBefore(banner, header.nextSibling);
-        } else {
-            document.body.prepend(banner);
         }
     }
 }
