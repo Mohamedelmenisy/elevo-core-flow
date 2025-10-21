@@ -123,10 +123,8 @@ export async function protectPage(allowedRoles = []) {
   }
 }
 
-// ✅ إصلاح مشكلة منع الصوت أول مرة
-document.addEventListener('click', () => {
-  notificationSound.play().then(() => {
-    notificationSound.pause();
-    notificationSound.currentTime = 0;
-  }).catch(() => {});
-}, { once: true });
+const btn = document.getElementById('modal-close-btn');
+btn.addEventListener('click', () => {
+  notificationSound.play().catch(()=>{});
+  // بعد التشغيل ممكن تعمل أي حركة تانية هنا
+});
