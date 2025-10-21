@@ -109,7 +109,7 @@ function showProtectedModal(message = "This area is for administrators only.", r
           border-radius: 12px;
           font-weight: 600;
           cursor: pointer;
-          transition: all 0.3s ease;
+          transition: all 0.25s ease;
           font-size: 1rem;
           box-shadow: 0 0 25px rgba(78,140,255,0.25);
         ">Okay</button>
@@ -124,6 +124,18 @@ function showProtectedModal(message = "This area is for administrators only.", r
           from { opacity: 0; transform: scale(0.85); }
           to { opacity: 1; transform: scale(1); }
         }
+        @keyframes buttonPress {
+          0% { transform: scale(1); box-shadow: 0 0 25px rgba(78,140,255,0.25); }
+          40% { transform: scale(0.93); box-shadow: 0 0 10px rgba(78,140,255,0.5); }
+          100% { transform: scale(1); box-shadow: 0 0 25px rgba(78,140,255,0.25); }
+        }
+        #modal-close-btn:hover {
+          transform: scale(1.04);
+          box-shadow: 0 0 35px rgba(96,165,250,0.4);
+        }
+        #modal-close-btn:active {
+          animation: buttonPress 0.25s ease;
+        }
       </style>
     `;
 
@@ -133,16 +145,19 @@ function showProtectedModal(message = "This area is for administrators only.", r
     const modalContainer = modal.querySelector('div');
 
     const hideModal = () => {
-      modal.style.opacity = '0';
+      closeBtn.style.animation = 'buttonPress 0.25s ease';
       setTimeout(() => {
-        modal.style.visibility = 'hidden';
-        if (redirectUrl) {
-          window.location.href = redirectUrl;
-        } else {
-          history.replaceState(null, '', 'core-flow.html');
-          location.reload();
-        }
-      }, 300);
+        modal.style.opacity = '0';
+        setTimeout(() => {
+          modal.style.visibility = 'hidden';
+          if (redirectUrl) {
+            window.location.href = redirectUrl;
+          } else {
+            history.replaceState(null, '', 'core-flow.html');
+            location.reload();
+          }
+        }, 250);
+      }, 100);
     };
 
     closeBtn.addEventListener('click', hideModal);
@@ -160,6 +175,7 @@ function showProtectedModal(message = "This area is for administrators only.", r
     if (modalContainer) modalContainer.style.transform = 'scale(1)';
   }
 }
+
 
 export async function protectPage(allowedRoles = []) {
   const userProfile = await getCurrentUserProfile();
