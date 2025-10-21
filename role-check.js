@@ -56,7 +56,7 @@ function showProtectedModal(message = "This area is for administrators only.") {
         <h2 style="margin:0 0 0.75rem 0; font-size: 1.5rem;">Access Restricted</h2>
         <p style="margin-bottom: 2rem; color: #cbd5e1; line-height: 1.6;">${message}</p>
         <button class="modal-close-btn" style="background: #3b82f6; color: white; border: none; 
-        border-radius: 8px; padding: 0.7rem 1.4rem; cursor: pointer; font-weight: 600; transition: background 0.2s ease;">Back to My Dashboard</button>
+        border-radius: 8px; padding: 0.7rem 1.4rem; cursor: pointer; font-weight: 600; transition: background 0.2s ease;">Okay</button>
       </div>
     `;
     document.body.appendChild(modal);
@@ -94,9 +94,6 @@ export async function protectPage(allowedRoles = []) {
         return;
     }
 
-    const userInfoEl = document.getElementById('userInfo');
-    if(userInfoEl) userInfoEl.style.display = 'flex';
-    
     // Set user's name in the header
     const userNameEl = document.getElementById('userName');
     if (userNameEl) {
@@ -124,8 +121,8 @@ export async function protectPage(allowedRoles = []) {
     if (userRole === 'admin') {
         const adminDashboardLink = document.querySelector('a[href*="dashboard.html"]');
         const rtmDashboardLink = document.querySelector('a[href*="rtm-dashboard.html"]');
-        if (adminDashboardLink) adminDashboardLink.style.display = 'inline-block';
-        if (rtmDashboardLink) rtmDashboardLink.style.display = 'inline-block';
+        if (adminDashboardLink) adminDashboardLink.style.display = 'inline-flex';
+        if (rtmDashboardLink) rtmDashboardLink.style.display = 'inline-flex';
     }
     
     // Special case for Agent Portal: If admin, show banner
