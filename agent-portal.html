@@ -994,6 +994,36 @@
         .text-color-light {
             color: var(--text-color-light);
         }
+
+        /* New Styles for Call Details Modal */
+        .call-details {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            margin: 1.5rem 0;
+        }
+
+        .detail-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem 0;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .detail-row:last-child {
+            border-bottom: none;
+        }
+
+        .detail-label {
+            font-weight: 600;
+            color: var(--text-color-light);
+        }
+
+        .detail-value {
+            color: var(--text-color);
+            text-align: right;
+        }
     </style>
 </head>
 <body>
@@ -1006,16 +1036,17 @@
                 <span class="app-title">Elevo Core - Agent Portal</span>
             </div>
             <div class="header-controls">
-                 <a href="core-flow.html" class="nav-link">Go to Call App</a>
-                 <a href="dashboard.html" class="nav-link" style="display: none;">Admin Dashboard</a>
-                 <a href="rtm-dashboard.html" class="nav-link" style="display: none;">RTM Dashboard</a>
-                 <div class="user-info" id="userInfo">
+                <a href="core-flow.html" class="nav-link">Call App</a>
+                <a href="agent-portal.html" class="nav-link">Agent Portal</a>
+                <a href="dashboard.html" class="nav-link">Admin Dashboard</a>
+                <a href="rtm-dashboard.html" class="nav-link">RTM Dashboard</a>
+                <div class="user-info" id="userInfo">
                     <span id="userName" class="user-name-display"></span>
                     <button id="logoutButton" class="logout-btn">
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
                         Logout
                     </button>
-                 </div>
+                </div>
             </div>
         </header>
 
@@ -1043,8 +1074,8 @@
                         <div class="kpi-value" id="kpiAvgTime">--:--</div>
                     </div>
                     <div class="kpi-card" style="border-left-color: var(--success-color);">
-                        <h4>Customer Rating</h4>
-                        <div class="kpi-value" id="kpiAvgRating">⭐ -.--</div>
+                        <h4>Call Quality</h4>
+                        <div class="kpi-value" id="kpiAvgRating">No data</div>
                     </div>
                     <div class="kpi-card" style="border-left-color: var(--warning-color);">
                          <h4>Calls Completed</h4>
@@ -1070,7 +1101,14 @@
                             <div class="filter-controls">
                                 <div class="filter-grid">
                                     <div><label for="searchInput">Search Scenario:</label><input type="text" id="searchInput" placeholder="Enter scenario name..."></div>
-                                    <div><label for="qualityFilter">Filter by Quality:</label><select id="qualityFilter"><option value="all">All Ratings</option><option value="5">5 Stars</option><option value="4">4 Stars</option><option value="3">3 Stars</option><option value="2">2 Stars</option><option value="1">1 Star</option></select></div>
+                                    <div><label for="qualityFilter">Filter by Quality:</label>
+                                        <select id="qualityFilter">
+                                            <option value="all">All Quality</option>
+                                            <option value="good">Good</option>
+                                            <option value="average">Average</option>
+                                            <option value="poor">Poor</option>
+                                        </select>
+                                    </div>
                                     <div><label for="dateFilter">Filter by Date:</label><input type="date" id="dateFilter"></div>
                                 </div>
                             </div>
@@ -1312,8 +1350,8 @@
             try {
                 // Fetch user profile to get role
                 const { data: profile, error } = await supabase
-                    .from('profiles')
-                    .select('full_name, role')
+                    .from('users')
+                    .select('name, role')
                     .eq('id', currentUser.id)
                     .single();
                 
@@ -1323,24 +1361,12 @@
                 }
                 
                 // Update UI with user name
-                if (profile && profile.full_name) {
-                    userNameEl.textContent = profile.full_name;
-                    agentGreetingEl.textContent = `Welcome, ${profile.full_name.split(' ')[0]}!`;
+                if (profile && profile.name) {
+                    userNameEl.textContent = profile.name;
+                    agentGreetingEl.textContent = `Welcome, ${profile.name.split(' ')[0]}!`;
                 } else {
                     userNameEl.textContent = currentUser.email;
                     agentGreetingEl.textContent = 'Welcome!';
-                }
-                
-                // Show/hide admin links based on role
-                const adminDashboardLink = document.querySelector('a[href="dashboard.html"]');
-                const rtmDashboardLink = document.querySelector('a[href="rtm-dashboard.html"]');
-                
-                if (profile && (profile.role === 'admin' || profile.role === 'rtm')) {
-                    if (adminDashboardLink) adminDashboardLink.style.display = 'inline-block';
-                }
-                
-                if (profile && profile.role === 'rtm') {
-                    if (rtmDashboardLink) rtmDashboardLink.style.display = 'inline-block';
                 }
                 
             } catch (error) {
@@ -1351,19 +1377,22 @@
         // Load User Data
         async function loadUserData() {
             try {
-                // Load user's call history
+                // Get user profile
+                const { data: profile, error } = await supabase
+                    .from('users')
+                    .select('name, email')
+                    .eq('id', currentUser.id)
+                    .single();
+
+                if (!error && profile) {
+                    userNameEl.textContent = profile.name || currentUser.email;
+                    agentGreetingEl.textContent = `Welcome, ${profile.name ? profile.name.split(' ')[0] : 'Agent'}!`;
+                }
+
                 await loadCallHistory();
-                
-                // Load user's scratchpad
                 await loadScratchpad();
-                
-                // Load training programs
                 await loadTrainingPrograms();
-                
-                // Calculate and display KPIs
                 calculateKPIs();
-                
-                // Update performance summary
                 updatePerformanceSummary();
                 
             } catch (error) {
@@ -1371,33 +1400,37 @@
             }
         }
 
-        // Load Call History
+        // Load Call History - بيانات حقيقية من الداتابيز
         async function loadCallHistory() {
             try {
-                // In a real app, this would fetch from Supabase
-                // For demo purposes, we'll use mock data
-                
-                // Mock call data
-                allCalls = [
-                    { id: 1, date: '2023-10-15', scenario: 'Billing Inquiry', duration: '4:32', quality: 5 },
-                    { id: 2, date: '2023-10-14', scenario: 'Technical Support', duration: '7:21', quality: 4 },
-                    { id: 3, date: '2023-10-13', scenario: 'Account Setup', duration: '5:45', quality: 5 },
-                    { id: 4, date: '2023-10-12', scenario: 'Product Information', duration: '3:18', quality: 3 },
-                    { id: 5, date: '2023-10-11', scenario: 'Complaint Handling', duration: '8:05', quality: 4 },
-                    { id: 6, date: '2023-10-10', scenario: 'Billing Inquiry', duration: '4:50', quality: 5 },
-                    { id: 7, date: '2023-10-09', scenario: 'Technical Support', duration: '6:33', quality: 2 },
-                    { id: 8, date: '2023-10-08', scenario: 'Account Setup', duration: '5:12', quality: 5 },
-                    { id: 9, date: '2023-10-07', scenario: 'Product Information', duration: '3:45', quality: 4 },
-                    { id: 10, date: '2023-10-06', scenario: 'Complaint Handling', duration: '7:58', quality: 3 },
-                    { id: 11, date: '2023-10-05', scenario: 'Billing Inquiry', duration: '4:20', quality: 5 },
-                    { id: 12, date: '2023-10-04', scenario: 'Technical Support', duration: '6:47', quality: 4 }
-                ];
-                
+                const { data: calls, error } = await supabase
+                    .from('call_sessions_egypt')
+                    .select('*')
+                    .eq('agent_email', currentUser.email)
+                    .order('start_time_egypt', { ascending: false });
+
+                if (error) throw error;
+
+                allCalls = calls.map(call => ({
+                    id: call.id,
+                    date: formatDate(call.start_time_egypt),
+                    scenario: call.scenario_title || 'Unknown Scenario',
+                    duration: formatDuration(call.duration),
+                    quality: call.call_quality || 'average',
+                    quality_reason: call.quality_reason,
+                    start_time: call.start_time_egypt,
+                    end_time: call.end_time_egypt
+                }));
+
                 filteredCalls = [...allCalls];
                 renderCallsTable();
                 
             } catch (error) {
                 console.error('Error loading call history:', error);
+                // Fallback to empty data
+                allCalls = [];
+                filteredCalls = [];
+                renderCallsTable();
             }
         }
 
@@ -1452,7 +1485,7 @@
             }
         }
 
-        // Render Calls Table
+        // Render Calls Table - بدون نجوم
         function renderCallsTable() {
             if (filteredCalls.length === 0) {
                 callsTableBodyEl.innerHTML = '';
@@ -1469,17 +1502,16 @@
             let tableHTML = '';
             
             callsToShow.forEach(call => {
-                const stars = '⭐'.repeat(call.quality) + '☆'.repeat(5 - call.quality);
+                const qualityBadge = getQualityBadge(call.quality);
                 
                 tableHTML += `
                     <tr>
                         <td>${call.date}</td>
                         <td>${call.scenario}</td>
                         <td>${call.duration}</td>
-                        <td>${stars}</td>
+                        <td>${qualityBadge}</td>
                         <td>
                             <button class="action-button secondary-button view-call-btn" data-id="${call.id}">View Details</button>
-                            <button class="action-button danger-button delete-btn" data-id="${call.id}" style="display: none;">Delete</button>
                         </td>
                     </tr>
                 `;
@@ -1493,13 +1525,6 @@
                 btn.addEventListener('click', function() {
                     const callId = this.getAttribute('data-id');
                     viewCallDetails(callId);
-                });
-            });
-            
-            document.querySelectorAll('.delete-btn').forEach(btn => {
-                btn.addEventListener('click', function() {
-                    const callId = this.getAttribute('data-id');
-                    deleteCall(callId);
                 });
             });
             
@@ -1560,11 +1585,18 @@
             });
         }
 
-        // Calculate KPIs
+        // Calculate KPIs - بيانات حقيقية
         function calculateKPIs() {
-            if (allCalls.length === 0) return;
+            if (allCalls.length === 0) {
+                kpiAvgTimeEl.textContent = '0:00';
+                kpiAvgRatingEl.textContent = 'No data';
+                kpiTotalCallsEl.textContent = '0';
+                dailyTargetPercentageEl.textContent = '0%';
+                dailyTargetProgressBarEl.style.width = '0%';
+                return;
+            }
             
-            // Calculate average handling time
+            // Average handling time
             const totalSeconds = allCalls.reduce((total, call) => {
                 const [minutes, seconds] = call.duration.split(':').map(Number);
                 return total + (minutes * 60) + seconds;
@@ -1575,20 +1607,31 @@
             const avgSecs = Math.floor(avgSeconds % 60);
             kpiAvgTimeEl.textContent = `${avgMinutes}:${avgSecs.toString().padStart(2, '0')}`;
             
-            // Calculate average rating
-            const totalRating = allCalls.reduce((total, call) => total + call.quality, 0);
-            const avgRating = (totalRating / allCalls.length).toFixed(1);
-            kpiAvgRatingEl.textContent = `⭐ ${avgRating}`;
-            
             // Total calls
             kpiTotalCallsEl.textContent = allCalls.length;
             
-            // Daily target progress (mock data)
-            const dailyTarget = 15;
-            const todayCalls = 12;
+            // Daily target progress (based on today's calls)
+            const today = new Date().toISOString().split('T')[0];
+            const todayCalls = allCalls.filter(call => call.date.includes(today)).length;
+            const dailyTarget = 10;
             const progressPercentage = Math.min(100, Math.round((todayCalls / dailyTarget) * 100));
             dailyTargetPercentageEl.textContent = `${progressPercentage}%`;
             dailyTargetProgressBarEl.style.width = `${progressPercentage}%`;
+            
+            // Change Customer Rating to Call Quality Distribution
+            const qualityCounts = {
+                good: allCalls.filter(call => call.quality === 'good').length,
+                average: allCalls.filter(call => call.quality === 'average').length,
+                poor: allCalls.filter(call => call.quality === 'poor').length
+            };
+            
+            const totalRatedCalls = qualityCounts.good + qualityCounts.average + qualityCounts.poor;
+            if (totalRatedCalls > 0) {
+                const goodPercentage = Math.round((qualityCounts.good / totalRatedCalls) * 100);
+                kpiAvgRatingEl.textContent = `${goodPercentage}% Good`;
+            } else {
+                kpiAvgRatingEl.textContent = 'No ratings';
+            }
         }
 
         // Update Performance Summary
@@ -1778,7 +1821,7 @@
             
             filteredCalls = allCalls.filter(call => {
                 const matchesSearch = call.scenario.toLowerCase().includes(searchTerm);
-                const matchesQuality = qualityFilter === 'all' || call.quality === parseInt(qualityFilter);
+                const matchesQuality = qualityFilter === 'all' || call.quality === qualityFilter;
                 const matchesDate = !dateFilter || call.date === dateFilter;
                 
                 return matchesSearch && matchesQuality && matchesDate;
@@ -1788,10 +1831,48 @@
             renderCallsTable();
         }
 
-        // View Call Details
+        // View Call Details - Modal حلو بدل alert
         function viewCallDetails(callId) {
-            // In a real app, this would show a modal with call details
-            alert(`Viewing details for call ID: ${callId}`);
+            const call = allCalls.find(c => c.id === callId);
+            if (!call) return;
+
+            const modalHTML = `
+                <div class="modal visible" id="callDetailsModal">
+                    <div class="modal-content">
+                        <h3>Call Details</h3>
+                        <div class="call-details">
+                            <div class="detail-row">
+                                <span class="detail-label">Scenario:</span>
+                                <span class="detail-value">${call.scenario}</span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="detail-label">Date & Time:</span>
+                                <span class="detail-value">${call.date}</span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="detail-label">Duration:</span>
+                                <span class="detail-value">${call.duration}</span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="detail-label">Quality:</span>
+                                <span class="detail-value">${getQualityBadge(call.quality)}</span>
+                            </div>
+                            ${call.quality_reason ? `
+                            <div class="detail-row">
+                                <span class="detail-label">Quality Reason:</span>
+                                <span class="detail-value">${call.quality_reason}</span>
+                            </div>
+                            ` : ''}
+                        </div>
+                        <div class="modal-actions">
+                            <button class="action-button primary-button" onclick="closeCallDetails()">Close</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // Add modal to page
+            document.body.insertAdjacentHTML('beforeend', modalHTML);
         }
 
         // Delete Call
@@ -1911,6 +1992,37 @@
                 console.error('Error saving edited note:', error);
                 alert('Error updating note. Please try again.');
             }
+        }
+
+        // Helper Functions
+        function getQualityBadge(quality) {
+            const badges = {
+                'good': '<span style="color: #10b981; font-weight: 600;">Good</span>',
+                'average': '<span style="color: #f59e0b; font-weight: 600;">Average</span>',
+                'poor': '<span style="color: #ef4444; font-weight: 600;">Poor</span>'
+            };
+            return badges[quality] || '<span style="color: #6b7280;">Unknown</span>';
+        }
+
+        function formatDate(dateString) {
+            if (!dateString) return 'N/A';
+            return new Date(dateString).toLocaleDateString('en-US', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric'
+            });
+        }
+
+        function formatDuration(seconds) {
+            if (!seconds) return '0:00';
+            const minutes = Math.floor(seconds / 60);
+            const secs = seconds % 60;
+            return `${minutes}:${secs.toString().padStart(2, '0')}`;
+        }
+
+        function closeCallDetails() {
+            const modal = document.getElementById('callDetailsModal');
+            if (modal) modal.remove();
         }
     </script>
 </body>
