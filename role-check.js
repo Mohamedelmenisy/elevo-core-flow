@@ -28,7 +28,7 @@ async function getCurrentUserProfile() {
   }
 }
 
-function showProtectedModal(message = "This area is for administrators only.", redirectUrl = 'core-flow.html') {
+export function showProtectedModal(message = "This area is for administrators only.", redirectUrl = 'core-flow.html') {
   let modal = document.getElementById('access-restricted-modal');
   if (!modal) {
     modal = document.createElement('div');
@@ -111,12 +111,15 @@ function showProtectedModal(message = "This area is for administrators only.", r
     const modalContainer = modal.querySelector('div');
 
     const hideModal = () => {
-        // We start the fade-out animation for a smooth visual effect.
         modal.style.opacity = '0';
-        
-        // The redirect is the most important action. We initiate it immediately
-        // without waiting for the animation to finish, ensuring it always works.
-        window.location.href = redirectUrl;
+        setTimeout(() => {
+            modal.style.visibility = 'hidden';
+            // If the redirect URL is the current page, it might just close the modal
+            // without a full reload, which is fine.
+            if (window.location.pathname.endsWith(redirectUrl) === false) {
+                 window.location.href = redirectUrl;
+            }
+        }, 300);
     };
 
     closeBtn.addEventListener('click', hideModal);
@@ -158,26 +161,9 @@ export async function protectPage(allowedRoles = []) {
 
     // Check if the current page is protected and if the user has access
     if (allowedRoles.length > 0 && !allowedRoles.includes(userProfile.role)) {
-        // نخفي كل محتوى الصفحة
-        const mainContent = document.querySelector('.app-main');
-        if (mainContent) mainContent.style.display = 'none';
-        
-        const header = document.querySelector('.app-header');
-        if (header) header.style.display = 'none';
-        
-        const footer = document.querySelector('.app-footer');
-        if (footer) footer.style.display = 'none';
-        
-        const statusBar = document.querySelector('.status-bar');
-        if (statusBar) statusBar.style.display = 'none';
-        
-        // نعرض الرسالة
-        showProtectedModal(
-            `This area requires administrative privileges.<br>Your current role: <strong>${userProfile.role}</strong>`,
-            'core-flow.html'
-        );
-        
-        return;
+        // **FIX:** Immediately redirect to a safe page with an error flag
+        window.location.href = `core-flow.html?auth_error=restricted&role=${userProfile.role}`;
+        return; // Stop further execution on this page
     }
     
     // Special case for Agent Portal: If admin, show banner
