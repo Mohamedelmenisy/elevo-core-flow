@@ -455,6 +455,12 @@
             box-shadow: 0 0 0 2px rgba(var(--primary-color-rgb), 0.2);
         }
         
+        /* Fix dropdown colors */
+        .filter-grid select option {
+            background: #1a2332;
+            color: var(--text-color);
+        }
+        
         .table-responsive {
             overflow-x: auto;
             border-radius: var(--border-radius-lg);
@@ -1212,6 +1218,18 @@
                                 </div>
                             </div>
                         </div>
+
+                        <div class="widget-card widget-card-bordered">
+                            <div class="collapsible-header" id="trainingHeader">
+                                <h3>Training Programs</h3>
+                                <svg class="toggle-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
+                            </div>
+                            <div class="collapsible-content" id="trainingContent">
+                                <div class="training-programs-list" id="trainingProgramsList">
+                                </div>
+                                <div id="noTrainingMessage">No training programs assigned.</div>
+                            </div>
+                        </div>
                         
                         <div class="widget-card widget-card-bordered">
                             <h3>Recent Achievements</h3>
@@ -1302,6 +1320,8 @@
         const bestPerformanceEl = document.getElementById('bestPerformance');
         const agentScratchpadEl = document.getElementById('agentScratchpad');
         const saveScratchpadBtnEl = document.getElementById('saveScratchpadBtn');
+        const trainingProgramsListEl = document.getElementById('trainingProgramsList');
+        const noTrainingMessageEl = document.getElementById('noTrainingMessage');
         const achievementsListEl = document.getElementById('achievementsList');
         const exportDataBtnEl = document.getElementById('exportDataBtn');
 
@@ -1362,6 +1382,7 @@
             try {
                 await loadCallHistory();
                 await loadScratchpad();
+                await loadTrainingPrograms();
                 calculateKPIs();
                 updatePerformanceSummary();
                 updateAchievements();
@@ -1382,16 +1403,33 @@
 
                 if (error) throw error;
 
-                allCalls = calls.map(call => ({
-                    id: call.id,
-                    date: formatDate(call.start_time_egypt),
-                    scenario: call.scenario_title || 'Unknown Scenario',
-                    duration: formatDuration(call.duration),
-                    quality: call.call_quality || 'Not Rated',
-                    quality_reason: call.quality_reason,
-                    start_time: call.start_time_egypt,
-                    end_time: call.end_time_egypt
-                }));
+                allCalls = calls.map(call => {
+                    // Calculate quality based on your system logic
+                    let quality = 'average'; // default
+                    
+                    if (call.completed === true) {
+                        quality = 'good';
+                    } else if (call.quality_reason) {
+                        quality = 'poor';
+                    }
+                    
+                    // If there's actual call_quality data, use it
+                    if (call.call_quality && ['good', 'average', 'poor'].includes(call.call_quality)) {
+                        quality = call.call_quality;
+                    }
+
+                    return {
+                        id: call.id,
+                        date: formatDate(call.start_time_egypt),
+                        scenario: call.scenario_title || 'Unknown Scenario',
+                        duration: formatDuration(call.duration),
+                        quality: quality,
+                        quality_reason: call.quality_reason,
+                        start_time: call.start_time_egypt,
+                        end_time: call.end_time_egypt,
+                        completed: call.completed
+                    };
+                });
 
                 filteredCalls = [...allCalls];
                 renderCallsTable();
@@ -1426,6 +1464,68 @@
                 console.error('Error loading scratchpad:', error);
                 agentScratchpadEl.value = "Use this space for your personal notes and reminders...";
             }
+        }
+
+        // Load Training Programs - بيانات حقيقية
+        async function loadTrainingPrograms() {
+            try {
+                const { data: programs, error } = await supabase
+                    .from('training_programs')
+                    .select('*')
+                    .eq('assigned_to', currentUser.id)
+                    .order('created_at', { ascending: false });
+
+                if (error || !programs || programs.length === 0) {
+                    // If no training programs, show message
+                    noTrainingMessageEl.style.display = 'block';
+                    trainingProgramsListEl.innerHTML = '';
+                    return;
+                }
+
+                noTrainingMessageEl.style.display = 'none';
+                renderTrainingPrograms(programs);
+                
+            } catch (error) {
+                console.error('Error loading training programs:', error);
+                noTrainingMessageEl.style.display = 'block';
+                trainingProgramsListEl.innerHTML = '';
+            }
+        }
+
+        // Render Training Programs
+        function renderTrainingPrograms(programs) {
+            let programsHTML = '';
+            
+            programs.forEach(program => {
+                programsHTML += `
+                    <div class="training-card ${program.status === 'completed' ? 'completed' : ''}">
+                        <div class="training-card-header">
+                            <h4>${program.title || 'Training Program'}</h4>
+                            <span class="training-status ${program.status || 'not-started'}">${(program.status || 'not started').replace('-', ' ')}</span>
+                        </div>
+                        <div class="training-card-body">
+                            <p>${program.description || 'No description available.'}</p>
+                            ${program.due_date ? `<p><strong>Due Date:</strong> ${formatDate(program.due_date)}</p>` : ''}
+                        </div>
+                        <div class="training-card-footer">
+                            <span class="training-card-date">Assigned: ${program.created_at ? formatDate(program.created_at) : 'N/A'}</span>
+                            <div class="training-card-actions">
+                                <button class="action-button secondary-button start-training-btn" data-id="${program.id}">Start</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            trainingProgramsListEl.innerHTML = programsHTML;
+            
+            // Add event listeners to buttons
+            document.querySelectorAll('.start-training-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const programId = this.getAttribute('data-id');
+                    startTraining(programId);
+                });
+            });
         }
 
         // Render Calls Table
@@ -1580,6 +1680,11 @@
                     icon: '📞',
                     text: `Completed ${allCalls.length} total calls`
                 });
+            } else if (allCalls.length >= 10) {
+                achievements.push({
+                    icon: '📞',
+                    text: `Completed ${allCalls.length} calls so far`
+                });
             }
             
             // Achievement 2: Based on good quality calls
@@ -1588,6 +1693,11 @@
                 achievements.push({
                     icon: '⭐',
                     text: `Maintained good quality in ${goodCalls} calls`
+                });
+            } else if (goodCalls >= 5) {
+                achievements.push({
+                    icon: '⭐',
+                    text: `Started with ${goodCalls} good quality calls`
                 });
             }
             
@@ -1627,27 +1737,24 @@
             const qualityCounts = {
                 good: allCalls.filter(call => call.quality === 'good').length,
                 average: allCalls.filter(call => call.quality === 'average').length,
-                poor: allCalls.filter(call => call.quality === 'poor').length,
-                notRated: allCalls.filter(call => call.quality === 'Not Rated').length
+                poor: allCalls.filter(call => call.quality === 'poor').length
             };
             
             qualityDistributionChart = new Chart(qualityCtx, {
                 type: 'doughnut',
                 data: {
-                    labels: ['Good', 'Average', 'Poor', 'Not Rated'],
+                    labels: ['Good', 'Average', 'Poor'],
                     datasets: [{
-                        data: [qualityCounts.good, qualityCounts.average, qualityCounts.poor, qualityCounts.notRated],
+                        data: [qualityCounts.good, qualityCounts.average, qualityCounts.poor],
                         backgroundColor: [
                             'rgba(16, 185, 129, 0.8)',
                             'rgba(245, 158, 11, 0.8)',
-                            'rgba(239, 68, 68, 0.8)',
-                            'rgba(156, 163, 175, 0.8)'
+                            'rgba(239, 68, 68, 0.8)'
                         ],
                         borderColor: [
                             'rgba(16, 185, 129, 1)',
                             'rgba(245, 158, 11, 1)',
-                            'rgba(239, 68, 68, 1)',
-                            'rgba(156, 163, 175, 1)'
+                            'rgba(239, 68, 68, 1)'
                         ],
                         borderWidth: 2
                     }]
@@ -1678,7 +1785,7 @@
                 }
             });
 
-            // Existing charts (kept for compatibility)
+            // Existing charts
             const ratingTrendCtx = document.getElementById('ratingTrendChart').getContext('2d');
             ratingTrendChart = new Chart(ratingTrendCtx, {
                 type: 'line',
@@ -1786,6 +1893,26 @@
             
             saveScratchpadBtnEl.addEventListener('click', saveScratchpad);
             exportDataBtnEl.addEventListener('click', exportData);
+
+            // Collapsible sections
+            const scratchpadHeaderEl = document.getElementById('scratchpadHeader');
+            const scratchpadContentEl = document.getElementById('scratchpadContent');
+            const trainingHeaderEl = document.getElementById('trainingHeader');
+            const trainingContentEl = document.getElementById('trainingContent');
+
+            if (scratchpadHeaderEl) {
+                scratchpadHeaderEl.addEventListener('click', () => {
+                    scratchpadContentEl.classList.toggle('collapsed');
+                    scratchpadHeaderEl.classList.toggle('is-collapsed');
+                });
+            }
+            
+            if (trainingHeaderEl) {
+                trainingHeaderEl.addEventListener('click', () => {
+                    trainingContentEl.classList.toggle('collapsed');
+                    trainingHeaderEl.classList.toggle('is-collapsed');
+                });
+            }
         }
 
         // Apply Filters
@@ -1838,6 +1965,10 @@
                                 <span class="detail-value">${call.quality_reason}</span>
                             </div>
                             ` : ''}
+                            <div class="detail-row">
+                                <span class="detail-label">Completed:</span>
+                                <span class="detail-value">${call.completed ? 'Yes' : 'No'}</span>
+                            </div>
                         </div>
                         <div class="modal-actions">
                             <button class="action-button primary-button" onclick="closeCallDetails()">Close</button>
@@ -1880,12 +2011,17 @@
             }
         }
 
+        // Start Training
+        function startTraining(programId) {
+            alert(`Starting training program ID: ${programId}`);
+        }
+
         // Export Data
         function exportData() {
             const csvContent = "data:text/csv;charset=utf-8," 
-                + "Date,Scenario,Duration,Call Quality\n"
+                + "Date,Scenario,Duration,Call Quality,Completed\n"
                 + allCalls.map(call => 
-                    `${call.date},${call.scenario},${call.duration},${call.quality}`
+                    `${call.date},${call.scenario},${call.duration},${call.quality},${call.completed}`
                 ).join("\n");
             
             const encodedUri = encodeURI(csvContent);
@@ -1912,10 +2048,9 @@
             const badges = {
                 'good': '<span style="color: #10b981; font-weight: 600;">Good</span>',
                 'average': '<span style="color: #f59e0b; font-weight: 600;">Average</span>',
-                'poor': '<span style="color: #ef4444; font-weight: 600;">Poor</span>',
-                'Not Rated': '<span style="color: #6b7280; font-weight: 600;">Not Rated</span>'
+                'poor': '<span style="color: #ef4444; font-weight: 600;">Poor</span>'
             };
-            return badges[quality] || '<span style="color: #6b7280; font-weight: 600;">Unknown</span>';
+            return badges[quality] || '<span style="color: #6b7280; font-weight: 600;">Not Rated</span>';
         }
 
         function formatDate(dateString) {
