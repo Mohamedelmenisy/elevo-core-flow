@@ -1,6 +1,10 @@
 // role-check.js
 import { supabase } from './supabaseClient.js';
 
+/**
+ * Fetches the complete user profile, including name and role.
+ * @returns {Promise<object|null>} User profile object or null.
+ */
 async function getCurrentUserProfile() {
   try {
     const { data: { user } } = await supabase.auth.getUser();
@@ -28,7 +32,10 @@ async function getCurrentUserProfile() {
   }
 }
 
-function showProtectedModal(message = "This area is for administrators only.", redirectUrl = 'core-flow.html') {
+/**
+ * Shows a modern, non-intrusive modal for restricted access.
+ */
+function showProtectedModal(message = "This area is for administrators only.") {
   let modal = document.getElementById('access-restricted-modal');
   if (!modal) {
     modal = document.createElement('div');
@@ -114,8 +121,6 @@ function showProtectedModal(message = "This area is for administrators only.", r
         modal.style.opacity = '0';
         setTimeout(() => {
             modal.style.visibility = 'hidden';
-            // التحويل على صفحة Core Flow بعد ما ندوس Okay
-            window.location.href = redirectUrl;
         }, 300);
     };
 
@@ -141,6 +146,10 @@ function showProtectedModal(message = "This area is for administrators only.", r
   }
 }
 
+/**
+ * Main function to protect a page and set up the header.
+ * @param {string[]} allowedRoles - Array of roles allowed to access the page (e.g., ['admin']).
+ */
 export async function protectPage(allowedRoles = []) {
     const userProfile = await getCurrentUserProfile();
 
@@ -156,27 +165,35 @@ export async function protectPage(allowedRoles = []) {
         userNameEl.textContent = userProfile.name || userProfile.email;
     }
 
+    // Handle role-based link visibility in header
+    const adminDashboardLink = document.querySelector('a[href*="dashboard.html"]');
+    const rtmDashboardLink = document.querySelector('a[href*="rtm-dashboard.html"]');
+    const agentPortalLink = document.querySelector('a[href*="agent-portal.html"]');
+    
+    // Show/hide links based on role
+    if (userProfile.role === 'admin') {
+        if (adminDashboardLink) adminDashboardLink.style.display = 'inline-flex';
+        if (rtmDashboardLink) rtmDashboardLink.style.display = 'inline-flex';
+        if (agentPortalLink) agentPortalLink.style.display = 'inline-flex';
+    } else {
+        if (adminDashboardLink) adminDashboardLink.style.display = 'none';
+        if (rtmDashboardLink) rtmDashboardLink.style.display = 'none';
+        if (agentPortalLink) agentPortalLink.style.display = 'inline-flex';
+    }
+
+    // حفظ بيانات المستخدم للاستخدام في core-flow.html
+    sessionStorage.setItem('userProfile', JSON.stringify({
+        user: {
+            user_metadata: {
+                role: userProfile.role
+            }
+        }
+    }));
+
     // Check if the current page is protected and if the user has access
     if (allowedRoles.length > 0 && !allowedRoles.includes(userProfile.role)) {
-        // نخفي كل محتوى الصفحة
-        const mainContent = document.querySelector('.app-main');
-        if (mainContent) mainContent.style.display = 'none';
-        
-        const header = document.querySelector('.app-header');
-        if (header) header.style.display = 'none';
-        
-        const footer = document.querySelector('.app-footer');
-        if (footer) footer.style.display = 'none';
-        
-        const statusBar = document.querySelector('.status-bar');
-        if (statusBar) statusBar.style.display = 'none';
-        
-        // نعرض الرسالة
-        showProtectedModal(
-            `This area requires administrative privileges.<br>Your current role: <strong>${userProfile.role}</strong>`,
-            'core-flow.html'
-        );
-        
+        // لو المستخدم مش مسموح له، نحوله على Core Flow مباشرة
+        window.location.href = 'core-flow.html';
         return;
     }
     
@@ -199,3 +216,6 @@ export async function protectPage(allowedRoles = []) {
         }
     }
 }
+
+// Export for use in other files if needed
+export { getCurrentUserProfile };
