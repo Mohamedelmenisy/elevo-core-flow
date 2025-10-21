@@ -35,7 +35,7 @@ function showProtectedModal(message = "This area is for administrators only.", r
       position: fixed;
       top: 0; left: 0;
       width: 100%; height: 100%;
-      background: radial-gradient(circle at 20% 20%, rgba(78,140,255,0.2), rgba(15,23,42,0.95));
+      background: radial-gradient(circle at center, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.98) 70%, rgba(0,0,0,1) 100%);
       display: flex;
       justify-content: center;
       align-items: center;
@@ -43,28 +43,27 @@ function showProtectedModal(message = "This area is for administrators only.", r
       opacity: 0;
       visibility: hidden;
       transition: opacity 0.4s ease;
-      backdrop-filter: blur(18px);
+      backdrop-filter: blur(8px);
       overflow: hidden;
     `;
 
     modal.innerHTML = `
       <div style="
-        background: linear-gradient(135deg, rgba(31,41,55,0.9), rgba(17,24,39,0.95));
+        background: linear-gradient(145deg, rgba(24, 24, 27, 0.95), rgba(15, 23, 42, 0.95));
         padding: 3rem;
-        border-radius: 22px;
-        border: 1px solid rgba(255,255,255,0.15);
-        box-shadow: 0 25px 60px rgba(0,0,0,0.6);
+        border-radius: 24px;
+        border: 1px solid rgba(255,255,255,0.12);
+        box-shadow: 0 0 40px rgba(0, 0, 0, 0.8), 0 0 120px rgba(78,140,255,0.1);
         text-align: center;
         max-width: 420px;
         width: 90%;
         transform: scale(0.9);
         transition: transform 0.3s ease;
-        position: relative;
       ">
         <div style="
-          width: 85px; height: 85px;
-          margin: 0 auto 1.5rem;
-          background: rgba(239,68,68,0.15);
+          width: 90px; height: 90px;
+          margin: 0 auto 1.8rem;
+          background: radial-gradient(circle, rgba(239,68,68,0.2), rgba(239,68,68,0.05));
           border-radius: 50%;
           display: flex;
           align-items: center;
@@ -72,14 +71,21 @@ function showProtectedModal(message = "This area is for administrators only.", r
           border: 2px solid rgba(239,68,68,0.4);
           box-shadow: 0 0 25px rgba(239,68,68,0.2);
         ">
-          <svg xmlns="http://www.w3.org/2000/svg" width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2">
+          <svg xmlns="http://www.w3.org/2000/svg" width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2">
             <circle cx="12" cy="12" r="10"></circle>
             <line x1="12" y1="8" x2="12" y2="12"></line>
             <line x1="12" y1="16" x2="12.01" y2="16"></line>
           </svg>
         </div>
 
-        <h3 style="font-size: 1.6rem; margin-bottom: 1rem; color: #f9fafb; font-weight: 700;">
+        <h3 style="
+          font-size: 1.7rem;
+          margin-bottom: 1rem;
+          color: #f9fafb;
+          font-weight: 700;
+          letter-spacing: 0.5px;
+          text-shadow: 0 0 10px rgba(255,255,255,0.15);
+        ">
           Access Restricted
         </h3>
 
@@ -88,25 +94,26 @@ function showProtectedModal(message = "This area is for administrators only.", r
           color: #d1d5db;
           line-height: 1.6;
           font-size: 1rem;
+          opacity: 0.9;
         ">${message}</p>
 
         <button id="modal-close-btn" style="
           background: linear-gradient(135deg, #4e8cff, #2563eb);
           color: white;
           border: none;
-          padding: 0.8rem 2.2rem;
+          padding: 0.9rem 2.4rem;
           border-radius: 12px;
           font-weight: 600;
           cursor: pointer;
           transition: all 0.3s ease;
           font-size: 1rem;
-          box-shadow: 0 0 15px rgba(78,140,255,0.3);
+          box-shadow: 0 0 25px rgba(78,140,255,0.4);
         ">Okay</button>
       </div>
     `;
 
     document.body.appendChild(modal);
-    
+
     const closeBtn = modal.querySelector('#modal-close-btn');
     const modalContainer = modal.querySelector('div');
 
@@ -126,7 +133,6 @@ function showProtectedModal(message = "This area is for administrators only.", r
     closeBtn.addEventListener('click', hideModal);
     modal.addEventListener('click', (e) => { if (e.target === modal) hideModal(); });
 
-    // إظهار الرسالة بانيميشن
     setTimeout(() => {
       modal.style.opacity = '1';
       modal.style.visibility = 'visible';
