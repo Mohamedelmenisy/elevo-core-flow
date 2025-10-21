@@ -114,8 +114,6 @@ export function showProtectedModal(message = "This area is for administrators on
         modal.style.opacity = '0';
         setTimeout(() => {
             modal.style.visibility = 'hidden';
-            // If the redirect URL is the current page, it might just close the modal
-            // without a full reload, which is fine.
             if (window.location.pathname.endsWith(redirectUrl) === false) {
                  window.location.href = redirectUrl;
             }
@@ -129,14 +127,12 @@ export function showProtectedModal(message = "This area is for administrators on
         }
     });
 
-    // Show modal with animation
     setTimeout(() => {
         modal.style.opacity = '1';
         modal.style.visibility = 'visible';
         modalContainer.style.transform = 'scale(1)';
     }, 10);
   } else {
-    // If modal exists, just show it
     modal.style.opacity = '1';
     modal.style.visibility = 'visible';
     const modalContainer = modal.querySelector('div');
@@ -144,29 +140,27 @@ export function showProtectedModal(message = "This area is for administrators on
   }
 }
 
-export async function protectPage(allowedRoles = []) {
+export async function protectPage(allowedRoles = [], contentContainerId = null) {
+    const loader = document.getElementById('auth-loader');
+    const content = contentContainerId ? document.getElementById(contentContainerId) : null;
+
     const userProfile = await getCurrentUserProfile();
 
-    // If no user, redirect to login
     if (!userProfile) {
         window.location.href = './login.html';
-        return;
+        return null;
     }
 
-    // Set user's name in the header
+    if (allowedRoles.length > 0 && !allowedRoles.some(role => userProfile.role === role)) {
+        window.location.href = `core-flow.html?auth_error=restricted&role=${userProfile.role || 'agent'}`;
+        return null;
+    }
+
     const userNameEl = document.getElementById('userName');
     if (userNameEl) {
         userNameEl.textContent = userProfile.name || userProfile.email;
     }
 
-    // Check if the current page is protected and if the user has access
-    if (allowedRoles.length > 0 && !allowedRoles.includes(userProfile.role)) {
-        // **FIX:** Immediately redirect to a safe page with an error flag
-        window.location.href = `core-flow.html?auth_error=restricted&role=${userProfile.role}`;
-        return; // Stop further execution on this page
-    }
-    
-    // Special case for Agent Portal: If admin, show banner
     if (window.location.pathname.includes('agent-portal.html') && userProfile.role === 'admin') {
         const banner = document.createElement('div');
         banner.textContent = "👋 Admin View: This dashboard is intended for agents.";
@@ -184,4 +178,9 @@ export async function protectPage(allowedRoles = []) {
             header.parentNode.insertBefore(banner, header.nextSibling);
         }
     }
+    
+    if (loader) loader.style.display = 'none';
+    if (content) content.style.display = 'block';
+
+    return userProfile;
 }
