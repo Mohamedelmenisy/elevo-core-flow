@@ -73,15 +73,16 @@ function showProtectedModal(message = "This area is for administrators only.", r
   }
 }
 
-// 🔐 Role protection for any page (Updated Function)
+// 🔐 Role protection for any page (Final Version)
 export async function protectPage(allowedRoles = [], contentId = 'app-content') {
   const userProfile = await getCurrentUserProfile();
   const authLoader = document.getElementById('auth-loader');
-  
+  const appContent = document.getElementById(contentId);
+
   // Case 1: No user is logged in, redirect to login
   if (!userProfile) {
     window.location.href = './login.html';
-    return null; // Return null and stop execution
+    return null;
   }
 
   // Update the user name display if it exists
@@ -90,25 +91,22 @@ export async function protectPage(allowedRoles = [], contentId = 'app-content') 
 
   // Case 2: User does not have the required role
   if (allowedRoles.length > 0 && !allowedRoles.includes(userProfile.role)) {
-    if (authLoader) authLoader.style.display = 'none'; // Hide loader before showing modal
-    document.body.innerHTML = ''; // Clear the body to prevent script errors
+    if (authLoader) authLoader.style.display = 'none'; // Hide loader
+    if (appContent) appContent.style.display = 'none'; // Hide main content
+    
+    // We REMOVED the line that wipes the body (document.body.innerHTML = '')
+    
     showProtectedModal(
       `Access Denied<br>Your current role: <strong>${userProfile.role}</strong>`,
-      'core-flow.html' // Redirect to a safe page like core-flow
+      'core-flow.html'
     );
-    return null; // Return null to signal failure
+    return null; // Return null to signal failure and stop further script execution
   }
 
-  // Case 3: Success! User has the required role (THIS IS THE FIX)
-  const appContent = document.getElementById(contentId);
+  // Case 3: Success! User has the required role
   if (authLoader) authLoader.style.display = 'none';
   if (appContent) {
-    // The parent container is a flexbox, so we should use display: flex
-    if (appContent.classList.contains('app-container')) {
-        appContent.style.display = 'flex';
-    } else {
-        appContent.style.display = 'block';
-    }
+      appContent.style.display = 'block';
   }
   
   return userProfile; // Return the user profile on success
