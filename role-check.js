@@ -73,24 +73,45 @@ function showProtectedModal(message = "This area is for administrators only.", r
   }
 }
 
-// 🔐 Role protection for any page
-export async function protectPage(allowedRoles = []) {
+// 🔐 Role protection for any page (Updated Function)
+export async function protectPage(allowedRoles = [], contentId = 'app-content') {
   const userProfile = await getCurrentUserProfile();
+  const authLoader = document.getElementById('auth-loader');
+  
+  // Case 1: No user is logged in, redirect to login
   if (!userProfile) {
     window.location.href = './login.html';
-    return;
+    return null; // Return null and stop execution
   }
 
+  // Update the user name display if it exists
   const userNameEl = document.getElementById('userName');
   if (userNameEl) userNameEl.textContent = userProfile.name || userProfile.email;
 
+  // Case 2: User does not have the required role
   if (allowedRoles.length > 0 && !allowedRoles.includes(userProfile.role)) {
-    document.body.innerHTML = ''; // stop loading page content
+    if (authLoader) authLoader.style.display = 'none'; // Hide loader before showing modal
+    document.body.innerHTML = ''; // Clear the body to prevent script errors
     showProtectedModal(
       `Access Denied<br>Your current role: <strong>${userProfile.role}</strong>`,
-      null
+      'core-flow.html' // Redirect to a safe page like core-flow
     );
+    return null; // Return null to signal failure
   }
+
+  // Case 3: Success! User has the required role (THIS IS THE FIX)
+  const appContent = document.getElementById(contentId);
+  if (authLoader) authLoader.style.display = 'none';
+  if (appContent) {
+    // The parent container is a flexbox, so we should use display: flex
+    if (appContent.classList.contains('app-container')) {
+        appContent.style.display = 'flex';
+    } else {
+        appContent.style.display = 'block';
+    }
+  }
+  
+  return userProfile; // Return the user profile on success
 }
 
 // 🌌 Premium Styles injected dynamically
