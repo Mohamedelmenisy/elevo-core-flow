@@ -817,6 +817,7 @@
         let autoRefreshInterval = null;
         let recentTicketsPage = 1;
         const RECENT_TICKETS_PAGE_SIZE = 10;
+        let isUserAuthorized = false; // <<<-----  [الإضافة الأولى] علم الصلاحية
 
         document.addEventListener('DOMContentLoaded', async function() {
             document.getElementById('currentYear').textContent = new Date().getFullYear();
@@ -825,13 +826,14 @@
             if (!userProfile) {
                 return; 
             }
-
+            
+            isUserAuthorized = true; // <<<----- [الإضافة الثانية] تم التحقق بنجاح
             currentUser = userProfile;
             document.getElementById('userInfo').style.display = 'flex';
             
             await initializeDashboard();
         });
-        
+
         async function initializeDashboard() {
             await loadDashboardData();
             setupEventListeners();
@@ -867,9 +869,13 @@
         }
 
         async function loadDashboardData() {
+            // <<<----- [الإضافة الثالثة] التحقق قبل تحميل أي بيانات
+            if (!isUserAuthorized) return; 
+
             try {
                 document.getElementById('dashboardContent').style.opacity = '0.5';
-
+                // ... (باقي الكود كما هو بدون تغيير)
+                // ...
                 const today = new Date().toISOString().split('T')[0];
                 const startOfToday = new Date(today + 'T00:00:00Z').toISOString();
                 const endOfToday = new Date(today + 'T23:59:59Z').toISOString();
@@ -915,6 +921,7 @@
             }
         }
 
+        // ... (كل الدوال الأخرى من updateDashboardMetrics حتى showToast تبقى كما هي بدون تغيير) ...
         function updateDashboardMetrics(data) {
             document.getElementById('liveTicketsCount').textContent = data.liveTickets;
             document.getElementById('delayedTicketsCount').textContent = data.delayedTickets;
@@ -1050,6 +1057,7 @@
         }
 
         async function loadRecentTickets(page = 1) {
+            if (!isUserAuthorized) return;
             try {
                 const startIndex = (page - 1) * RECENT_TICKETS_PAGE_SIZE;
                 const { data: tickets, error, count } = await supabaseClient.from('tickets').select('*', { count: 'exact' }).order('created_at', { ascending: false }).range(startIndex, startIndex + RECENT_TICKETS_PAGE_SIZE - 1);
@@ -1144,7 +1152,7 @@
 
         function startAutoRefresh() {
             if (autoRefreshInterval) clearInterval(autoRefreshInterval);
-            autoRefreshInterval = setInterval(async () => { if (document.visibilityState === 'visible') await loadDashboardData(); }, 30000);
+            autoRefreshInterval = setInterval(async () => { if (document.visibilityState === 'visible' && isUserAuthorized) await loadDashboardData(); }, 30000);
         }
 
         function debounce(func, wait) {
@@ -1156,7 +1164,8 @@
             };
         }
 
-        document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') loadDashboardData(); });
+        // <<<----- [الإضافة الرابعة] تعديل هذا السطر
+        document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && isUserAuthorized) loadDashboardData(); });
         window.addEventListener('beforeunload', () => { if (autoRefreshInterval) clearInterval(autoRefreshInterval); });
     </script>
 </body>
