@@ -1,0 +1,825 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Approval Dashboard - Ticket Maker Flow</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234e8cff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M12 22V12M9 19l3-3 3 3M12 2a4 4 0 0 0-4 4v0a4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4z'/></svg>">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        :root {
+            --primary-color: #4e8cff;
+            --accent-color: #60a5fa;
+            --success-color: #10b981;
+            --danger-color: #ef4444;
+            --warning-color: #f59e0b;
+            --card-bg-color: rgba(31, 41, 55, 0.8);
+            --border-color: rgba(55, 65, 81, 0.5);
+            --input-bg-color: rgba(17, 24, 39, 0.7);
+            --text-color: #f9fafb;
+            --text-color-light: #d1d5db;
+            --border-radius: 12px;
+            --glass-bg: rgba(15, 23, 42, 0.7);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.36);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            color: var(--text-color);
+            font-family: 'Poppins', sans-serif;
+            line-height: 1.6;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        .app-container { 
+            min-height: 100vh; 
+            display: flex; 
+            flex-direction: column;
+            width: 100%;
+            max-width: 100%;
+        }
+
+        .app-header { 
+            background: var(--glass-bg); 
+            backdrop-filter: blur(16px); 
+            border-bottom: 1px solid var(--glass-border); 
+            padding: 1rem 2rem; 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            position: sticky; 
+            top: 0; 
+            z-index: 1000;
+            width: 100%;
+        }
+
+        .logo-container { 
+            display: flex; 
+            align-items: center; 
+            gap: 0.75rem; 
+        }
+
+        .app-title { 
+            font-size: 1.3rem; 
+            font-weight: 600; 
+            background: linear-gradient(135deg, var(--primary-color), var(--accent-color)); 
+            -webkit-background-clip: text; 
+            -webkit-text-fill-color: transparent; 
+        }
+
+        .header-controls { 
+            display: flex; 
+            align-items: center; 
+            gap: 1.5rem; 
+        }
+
+        .nav-link { 
+            color: var(--text-color-light); 
+            text-decoration: none; 
+            padding: 0.6rem 1rem; 
+            border-radius: 10px; 
+            transition: all 0.3s ease; 
+            font-size: 0.9rem;
+        }
+
+        .nav-link:hover, 
+        .nav-link.active { 
+            color: var(--primary-color); 
+            background: rgba(78, 140, 255, 0.1); 
+        }
+
+        .user-info { 
+            display: flex; 
+            align-items: center; 
+            gap: 1rem; 
+        }
+
+        .logout-btn { 
+            background: rgba(239, 68, 68, 0.1); 
+            border: 1px solid rgba(239, 68, 68, 0.3); 
+            color: var(--text-color-light); 
+            padding: 0.6rem 1rem; 
+            border-radius: 10px; 
+            cursor: pointer; 
+            display: flex; 
+            align-items: center; 
+            gap: 0.5rem; 
+            font-size: 0.9rem;
+            transition: all 0.3s ease;
+        }
+
+        .logout-btn:hover {
+            background: rgba(239, 68, 68, 0.2);
+            transform: translateY(-1px);
+        }
+
+        .dashboard-main { 
+            flex: 1; 
+            padding: 2rem;
+            width: 100%;
+            max-width: 100%;
+        }
+
+        .dashboard-main > * {
+            width: 100%;
+        }
+
+        .dashboard-card { 
+            background: var(--card-bg-color); 
+            border: 1px solid var(--glass-border); 
+            border-radius: var(--border-radius); 
+            padding: 1.8rem; 
+            backdrop-filter: blur(16px); 
+            box-shadow: var(--glass-shadow);
+            width: 100%;
+        }
+
+        .action-button { 
+            padding: 0.6rem 1.2rem; 
+            border-radius: 10px; 
+            font-weight: 600; 
+            cursor: pointer; 
+            transition: all 0.3s ease; 
+            border: none; 
+            display: inline-flex; 
+            align-items: center; 
+            gap: 0.5rem; 
+            font-size: 0.85rem;
+        }
+
+        .primary-button { 
+            background: linear-gradient(135deg, var(--primary-color), var(--accent-color)); 
+            color: white; 
+        }
+
+        .primary-button:hover { 
+            transform: translateY(-2px); 
+            box-shadow: 0 6px 20px rgba(78, 140, 255, 0.4); 
+        }
+
+        .success-button { 
+            background: var(--success-color); 
+            color: white; 
+        }
+
+        .success-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4);
+        }
+
+        .danger-button { 
+            background: var(--danger-color); 
+            color: white; 
+        }
+
+        .danger-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(239, 68, 68, 0.4);
+        }
+
+        .kpi-grid { 
+            display: grid; 
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); 
+            gap: 1.2rem; 
+            margin-bottom: 2rem;
+            width: 100%;
+        }
+
+        .kpi-value { 
+            font-size: 1.8rem; 
+            font-weight: 700; 
+            margin-bottom: 0.3rem;
+        }
+
+        .kpi-label { 
+            font-size: 0.85rem; 
+            color: var(--text-color-light); 
+        }
+
+        .tabs-container { 
+            display: flex; 
+            gap: 0.5rem; 
+            margin-bottom: 1.5rem;
+            flex-wrap: wrap;
+        }
+
+        .tab-button { 
+            background: var(--input-bg-color); 
+            border: 1px solid var(--border-color); 
+            color: var(--text-color-light);
+            padding: 0.7rem 1.2rem;
+        }
+
+        .tab-button.active { 
+            background: var(--primary-color); 
+            color: white; 
+            border-color: var(--primary-color); 
+        }
+
+        .tab-button:hover:not(.active) {
+            background: rgba(78, 140, 255, 0.1);
+            border-color: var(--primary-color);
+        }
+
+        .data-table { 
+            width: 100%; 
+            border-collapse: collapse;
+            min-width: 800px;
+        }
+
+        .data-table th { 
+            background: rgba(30, 41, 59, 0.8); 
+            color: var(--text-color-light); 
+            font-weight: 600; 
+            padding: 1rem; 
+            text-align: left;
+            font-size: 0.85rem;
+            white-space: nowrap;
+        }
+
+        .data-table td { 
+            padding: 1rem; 
+            border-bottom: 1px solid var(--glass-border);
+            font-size: 0.9rem;
+        }
+
+        .data-table tr:hover { 
+            background: rgba(78, 140, 255, 0.08); 
+        }
+
+        .badge { 
+            display: inline-block; 
+            padding: 0.3rem 0.7rem; 
+            border-radius: 20px; 
+            font-size: 0.75rem; 
+            font-weight: 600; 
+            text-transform: capitalize; 
+        }
+
+        .badge.pending_approval { 
+            background-color: rgba(245, 158, 11, 0.2); 
+            color: var(--warning-color); 
+        }
+
+        .badge.approved { 
+            background-color: rgba(16, 185, 129, 0.2); 
+            color: var(--success-color); 
+        }
+
+        .badge.rejected { 
+            background-color: rgba(239, 68, 68, 0.2); 
+            color: var(--danger-color); 
+        }
+
+        .modal-overlay { 
+            position: fixed; 
+            inset: 0; 
+            background: rgba(0,0,0,0.7); 
+            backdrop-filter: blur(10px); 
+            display: none; 
+            align-items: center; 
+            justify-content: center; 
+            z-index: 2000; 
+            padding: 1rem;
+        }
+
+        .modal-overlay.show { 
+            display: flex; 
+        }
+
+        .modal-content { 
+            background: #1f2937; 
+            padding: 1.5rem; 
+            border-radius: var(--border-radius); 
+            width: 100%;
+            max-width: 900px; 
+            max-height: 90vh; 
+            display: flex; 
+            flex-direction: column;
+            border: 1px solid var(--glass-border);
+        }
+
+        .modal-header { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            border-bottom: 1px solid var(--border-color); 
+            padding-bottom: 1rem; 
+            margin-bottom: 1rem; 
+        }
+
+        .modal-body { 
+            overflow-y: auto;
+            flex: 1;
+        }
+
+        .modal-footer { 
+            border-top: 1px solid var(--border-color); 
+            padding-top: 1.5rem; 
+            margin-top: 1.5rem; 
+        }
+
+        .table-container {
+            width: 100%;
+            overflow-x: auto;
+            border-radius: var(--border-radius);
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .app-header {
+                padding: 1rem;
+                flex-direction: column;
+                gap: 1rem;
+            }
+
+            .header-controls {
+                flex-wrap: wrap;
+                justify-content: center;
+            }
+
+            .dashboard-main {
+                padding: 1rem;
+            }
+
+            .kpi-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .tabs-container {
+                justify-content: center;
+            }
+
+            .modal-content {
+                margin: 1rem;
+                padding: 1rem;
+            }
+
+            .data-table {
+                font-size: 0.8rem;
+            }
+
+            .data-table th,
+            .data-table td {
+                padding: 0.7rem 0.5rem;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .nav-link {
+                padding: 0.5rem 0.7rem;
+                font-size: 0.8rem;
+            }
+
+            .action-button {
+                padding: 0.5rem 1rem;
+                font-size: 0.8rem;
+            }
+
+            .kpi-value {
+                font-size: 1.5rem;
+            }
+        }
+
+        /* Scrollbar Styling */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: rgba(30, 41, 59, 0.5);
+            border-radius: 3px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--primary-color);
+            border-radius: 3px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--accent-color);
+        }
+    </style>
+</head>
+<body>
+    <div id="auth-loader" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: #0f172a; z-index: 10001; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 1rem;">
+        <div style="width: 40px; height: 40px; border: 3px solid rgba(78, 140, 255, 0.3); border-top: 3px solid var(--primary-color); border-radius: 50%; animation: spin 1s linear infinite;"></div>
+        <p style="color: #d1d5db; font-size: 1rem;">Verifying Access...</p>
+    </div>
+    
+    <div id="app-content" style="display: none;" class="app-container">
+        <header class="app-header">
+            <div class="logo-container">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 22V12M9 19l3-3 3 3M12 2a4 4 0 0 0-4 4v0a4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4z"/>
+                </svg>
+                <span class="app-title">Ticket Maker - Approvals</span>
+            </div>
+            <div class="header-controls">
+                <a href="core-flow.html" class="nav-link"><i class="fas fa-phone"></i> Call App</a>
+                <a href="dashboard.html" class="nav-link"><i class="fas fa-tachometer-alt"></i> Dashboard</a>
+                <a href="approvals.html" class="nav-link active"><i class="fas fa-check-double"></i> Approvals</a>
+                <div class="user-info">
+                    <span id="userName" style="font-size: 0.9rem;"></span>
+                    <button id="logoutButton" class="logout-btn">
+                        <i class="fas fa-sign-out-alt"></i> Logout
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <main class="dashboard-main">
+            <div style="margin-bottom: 2rem;">
+                <h1 style="font-size: 1.8rem; margin-bottom: 0.5rem; background: linear-gradient(135deg, var(--primary-color), var(--accent-color)); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
+                    <i class="fas fa-ticket-alt"></i> Ticket Approval Dashboard
+                </h1>
+                <p style="color: var(--text-color-light); font-size: 1rem;">Review, approve, or reject new and updated tickets.</p>
+            </div>
+
+            <div class="kpi-grid">
+                <div class="dashboard-card">
+                    <div class="kpi-label"><i class="fas fa-clock"></i> Pending Review</div>
+                    <div class="kpi-value" id="kpi-pending">0</div>
+                </div>
+                <div class="dashboard-card">
+                    <div class="kpi-label"><i class="fas fa-check-circle"></i> Approved Today</div>
+                    <div class="kpi-value" id="kpi-approved">0</div>
+                </div>
+                <div class="dashboard-card">
+                    <div class="kpi-label"><i class="fas fa-times-circle"></i> Rejected Today</div>
+                    <div class="kpi-value" id="kpi-rejected">0</div>
+                </div>
+            </div>
+
+            <div class="dashboard-card">
+                <div class="tabs-container">
+                    <button id="tab-pending" class="action-button tab-button active" data-status="pending_approval">
+                        <i class="fas fa-clock"></i> Pending
+                    </button>
+                    <button id="tab-approved" class="action-button tab-button" data-status="approved">
+                        <i class="fas fa-check"></i> Approved
+                    </button>
+                    <button id="tab-rejected" class="action-button tab-button" data-status="rejected">
+                        <i class="fas fa-times"></i> Rejected
+                    </button>
+                </div>
+                
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Submitted At</th>
+                                <th>Submitter</th>
+                                <th>Ticket Title</th>
+                                <th>Priority</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tickets-table-body">
+                            <tr>
+                                <td colspan="6" style="text-align: center; padding: 2rem; color: var(--text-color-light);">
+                                    <i class="fas fa-spinner fa-spin"></i> Loading tickets...
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Review Modal -->
+    <div id="review-modal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modal-title" style="font-size: 1.3rem;">
+                    <i class="fas fa-ticket-alt"></i> Review Ticket
+                </h2>
+                <button id="close-modal-btn" style="background:none; border:none; font-size: 1.5rem; color: var(--text-color-light); cursor: pointer; padding: 0.2rem; border-radius: 50%; transition: background 0.3s ease;">
+                    &times;
+                </button>
+            </div>
+            <div id="modal-body" class="modal-body">
+                <!-- Ticket details will be loaded here -->
+            </div>
+            <div class="modal-footer">
+                <textarea id="reviewer-notes" 
+                    placeholder="Add rejection reason here (required if rejecting)..." 
+                    style="width: 100%; min-height: 80px; padding: 0.8rem; background: var(--input-bg-color); border: 1px solid var(--border-color); color: var(--text-color); border-radius: 8px; margin-bottom: 1rem; font-family: inherit; resize: vertical;">
+                </textarea>
+                <div style="display: flex; justify-content: flex-end; gap: 1rem; flex-wrap: wrap;">
+                    <button id="reject-btn" class="action-button danger-button">
+                        <i class="fas fa-times"></i> Reject
+                    </button>
+                    <button id="approve-btn" class="action-button success-button">
+                        <i class="fas fa-check"></i> Approve
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { protectPage } from './role-check.js';
+
+        const SUPABASE_URL = 'https://aefiigottnlcmjzilqnh.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFlZmlpZ290dG5sY21qemlscW5oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcxNzY2MDQsImV4cCI6MjA2Mjc1MjYwNH0.FypB02v3tGMnxXV9ZmZMdMC0oQpREKOJWgHMPxUzwX4';
+        const { createClient } = supabase;
+        const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        let currentUser = null;
+        let currentFilter = 'pending_approval';
+
+        document.addEventListener('DOMContentLoaded', async function() {
+            // Protect page for admins and managers
+            const userProfile = await protectPage(['admin', 'manager'], 'app-content');
+            if (!userProfile) return;
+
+            currentUser = userProfile;
+            document.getElementById('userName').textContent = userProfile.name || userProfile.email;
+            initializePage();
+        });
+
+        function initializePage() {
+            // Logout functionality
+            document.getElementById('logoutButton').addEventListener('click', async () => {
+                await supabaseClient.auth.signOut();
+                window.location.href = 'login.html';
+            });
+
+            // Tab switching
+            document.querySelectorAll('.tab-button').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    document.querySelectorAll('.tab-button').forEach(b => b.classList.remove('active'));
+                    e.currentTarget.classList.add('active');
+                    currentFilter = e.currentTarget.dataset.status;
+                    loadTickets();
+                });
+            });
+            
+            // Modal close
+            document.getElementById('close-modal-btn').addEventListener('click', () => {
+                document.getElementById('review-modal').classList.remove('show');
+            });
+
+            // Close modal on overlay click
+            document.getElementById('review-modal').addEventListener('click', (e) => {
+                if (e.target === document.getElementById('review-modal')) {
+                    document.getElementById('review-modal').classList.remove('show');
+                }
+            });
+
+            loadTickets();
+            updateKpis();
+        }
+
+        async function loadTickets() {
+            const tableBody = document.getElementById('tickets-table-body');
+            tableBody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 2rem;"><i class="fas fa-spinner fa-spin"></i> Loading...</td></tr>';
+            
+            try {
+                const { data, error } = await supabaseClient
+                    .from('tickets') // Change to your actual table name
+                    .select(`
+                        id, created_at, title, priority, status, description,
+                        submitter:submitted_by ( name )
+                    `)
+                    .eq('status', currentFilter)
+                    .order('created_at', { ascending: false });
+
+                if (error) throw error;
+
+                if (data.length === 0) {
+                    tableBody.innerHTML = `
+                        <tr>
+                            <td colspan="6" style="text-align: center; padding: 3rem; color: var(--text-color-light);">
+                                <i class="fas fa-inbox" style="font-size: 2rem; margin-bottom: 1rem; opacity: 0.5;"></i>
+                                <div>No tickets found with status: ${currentFilter.replace('_', ' ')}</div>
+                            </td>
+                        </tr>
+                    `;
+                    return;
+                }
+
+                tableBody.innerHTML = data.map(ticket => `
+                    <tr>
+                        <td>${new Date(ticket.created_at).toLocaleDateString('en-EG', { 
+                            year: 'numeric', 
+                            month: 'short', 
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                        })}</td>
+                        <td>${ticket.submitter?.name || 'Unknown'}</td>
+                        <td style="font-weight: 500;">${ticket.title}</td>
+                        <td>
+                            <span style="
+                                padding: 0.3rem 0.7rem;
+                                border-radius: 12px;
+                                font-size: 0.75rem;
+                                font-weight: 600;
+                                background: ${getPriorityColor(ticket.priority)};
+                                color: white;
+                            ">
+                                ${(ticket.priority || 'medium').toUpperCase()}
+                            </span>
+                        </td>
+                        <td><span class="badge ${ticket.status}">${ticket.status.replace('_', ' ')}</span></td>
+                        <td>
+                            <button class="action-button primary-button review-btn" data-id="${ticket.id}">
+                                <i class="fas fa-search"></i> Review
+                            </button>
+                        </td>
+                    </tr>
+                `).join('');
+
+                // Add event listeners to review buttons
+                document.querySelectorAll('.review-btn').forEach(btn => {
+                    btn.addEventListener('click', (e) => openReviewModal(e.currentTarget.dataset.id));
+                });
+
+            } catch (err) {
+                console.error('Error loading tickets:', err);
+                tableBody.innerHTML = `
+                    <tr>
+                        <td colspan="6" style="text-align: center; padding: 2rem; color: var(--danger-color);">
+                            <i class="fas fa-exclamation-triangle"></i> Error loading data: ${err.message}
+                        </td>
+                    </tr>
+                `;
+            }
+        }
+
+        function getPriorityColor(priority) {
+            const colors = {
+                'high': '#ef4444',
+                'medium': '#f59e0b',
+                'low': '#10b981'
+            };
+            return colors[priority] || colors.medium;
+        }
+
+        async function openReviewModal(ticketId) {
+            const modal = document.getElementById('review-modal');
+            const modalBody = document.getElementById('modal-body');
+            const modalTitle = document.getElementById('modal-title');
+            
+            modalBody.innerHTML = `
+                <div style="text-align: center; padding: 2rem; color: var(--text-color-light);">
+                    <i class="fas fa-spinner fa-spin" style="font-size: 1.5rem;"></i>
+                    <div style="margin-top: 1rem;">Loading ticket details...</div>
+                </div>
+            `;
+            modal.classList.add('show');
+
+            try {
+                const { data: ticket, error } = await supabaseClient
+                    .from('tickets') // Change to your actual table name
+                    .select('*')
+                    .eq('id', ticketId)
+                    .single();
+
+                if (error) throw error;
+
+                modalTitle.innerHTML = `<i class="fas fa-ticket-alt"></i> Review: ${ticket.title}`;
+                
+                modalBody.innerHTML = `
+                    <div style="margin-bottom: 1.5rem;">
+                        <h3 style="color: var(--text-color); margin-bottom: 0.5rem;">${ticket.title}</h3>
+                        <p style="color: var(--text-color-light); line-height: 1.6;">${ticket.description || 'No description provided.'}</p>
+                    </div>
+                    
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+                        <div>
+                            <strong style="color: var(--text-color-light); font-size: 0.9rem;">Priority</strong>
+                            <div style="color: ${getPriorityColor(ticket.priority)}; font-weight: 600;">${(ticket.priority || 'medium').toUpperCase()}</div>
+                        </div>
+                        <div>
+                            <strong style="color: var(--text-color-light); font-size: 0.9rem;">Created</strong>
+                            <div>${new Date(ticket.created_at).toLocaleDateString('en-EG')}</div>
+                        </div>
+                        <div>
+                            <strong style="color: var(--text-color-light); font-size: 0.9rem;">Type</strong>
+                            <div>${ticket.type || 'General'}</div>
+                        </div>
+                    </div>
+                    
+                    ${ticket.content ? `
+                    <div style="background: var(--input-bg-color); padding: 1rem; border-radius: 8px; margin-top: 1rem;">
+                        <strong style="color: var(--text-color-light); font-size: 0.9rem;">Content:</strong>
+                        <div style="margin-top: 0.5rem; color: var(--text-color); line-height: 1.6;">${ticket.content}</div>
+                    </div>
+                    ` : ''}
+                `;
+                
+                // Setup action buttons
+                const approveBtn = document.getElementById('approve-btn');
+                const rejectBtn = document.getElementById('reject-btn');
+                
+                approveBtn.onclick = () => handleDecision(ticketId, 'approved');
+                rejectBtn.onclick = () => handleDecision(ticketId, 'rejected');
+
+            } catch (error) {
+                modalBody.innerHTML = `
+                    <div style="text-align: center; padding: 2rem; color: var(--danger-color);">
+                        <i class="fas fa-exclamation-triangle" style="font-size: 2rem; margin-bottom: 1rem;"></i>
+                        <h3>Error Loading Ticket</h3>
+                        <p>${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+
+        async function handleDecision(ticketId, decision) {
+            const notes = document.getElementById('reviewer-notes').value.trim();
+
+            if (decision === 'rejected' && !notes) {
+                alert('Please provide a reason for rejection.');
+                document.getElementById('reviewer-notes').focus();
+                return;
+            }
+
+            const updateData = {
+                status: decision,
+                reviewed_by: currentUser.id,
+                reviewer_notes: notes,
+                reviewed_at: new Date().toISOString()
+            };
+
+            try {
+                const { error } = await supabaseClient
+                    .from('tickets') // Change to your actual table name
+                    .update(updateData)
+                    .eq('id', ticketId);
+                
+                if (error) throw error;
+
+                alert(`Ticket has been ${decision} successfully.`);
+                document.getElementById('review-modal').classList.remove('show');
+                document.getElementById('reviewer-notes').value = ''; // Clear notes
+                loadTickets();
+                updateKpis();
+
+            } catch (error) {
+                alert(`Error: ${error.message}`);
+            }
+        }
+
+        async function updateKpis() {
+            try {
+                const today = new Date().toISOString().split('T')[0];
+                const startOfToday = `${today}T00:00:00.000Z`;
+                const endOfToday = `${today}T23:59:59.999Z`;
+
+                const { count: pendingCount } = await supabaseClient
+                    .from('tickets')
+                    .select('id', { count: 'exact', head: true })
+                    .eq('status', 'pending_approval');
+
+                const { count: approvedCount } = await supabaseClient
+                    .from('tickets')
+                    .select('id', { count: 'exact', head: true })
+                    .eq('status', 'approved')
+                    .gte('created_at', startOfToday)
+                    .lte('created_at', endOfToday);
+
+                const { count: rejectedCount } = await supabaseClient
+                    .from('tickets')
+                    .select('id', { count: 'exact', head: true })
+                    .eq('status', 'rejected')
+                    .gte('created_at', startOfToday)
+                    .lte('created_at', endOfToday);
+
+                document.getElementById('kpi-pending').textContent = pendingCount || 0;
+                document.getElementById('kpi-approved').textContent = approvedCount || 0;
+                document.getElementById('kpi-rejected').textContent = rejectedCount || 0;
+
+            } catch (error) {
+                console.error('Error updating KPIs:', error);
+            }
+        }
+
+        // Add CSS animation for spinner
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes spin {
+                0% { transform: rotate(0deg); }
+                100% { transform: rotate(360deg); }
+            }
+        `;
+        document.head.appendChild(style);
+    </script>
+</body>
+</html>
