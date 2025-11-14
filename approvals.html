@@ -809,6 +809,49 @@
         let currentUser = null;
         let scenariosStore = {}; // Use an object to store by status
 
+        // =================================================================
+        // FINAL SCRIPT for Scenario Approvals (with Multi-Step Logic)
+        // =================================================================
+
+        /**
+         * === THE NEW, SMARTER APPROVAL FUNCTION for Scenarios ===
+         */
+        async function handleScenarioApprove(scenarioId) {
+            const approveBtn = document.getElementById('approveBtn');
+            approveBtn.disabled = true;
+            approveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Submitting...';
+            
+            try {
+                // Step 1: Record this manager's approval in 'scenario_approvals'.
+                const { error: insertError } = await supabase
+                    .from('scenario_approvals')
+                    .insert({
+                        scenario_id: scenarioId,
+                        approver_id: currentUser.id,
+                        status: 'approved',
+                        notes: document.getElementById('reviewerNotes').value.trim() || 'Approved.'
+                    });
+
+                if (insertError && insertError.code !== '23505') throw insertError;
+
+                // Step 2: Call a "brain" function for scenarios (we need to create this).
+                // Let's create `check_and_finalize_scenario_approval`
+                const { error: rpcError } = await supabase.rpc('check_and_finalize_scenario_approval', { p_scenario_id: scenarioId });
+
+                if (rpcError) throw rpcError;
+
+                showNotification("Your approval has been recorded.", "success");
+                document.getElementById('reviewModal').classList.remove('show');
+                await loadApprovalsData();
+
+            } catch (error) {
+                showNotification(`Error: ${error.message}`, "error");
+            } finally {
+                approveBtn.disabled = false;
+                approveBtn.innerHTML = '<i class="fas fa-check"></i> Approve';
+            }
+        }
+
         async function initializePage() {
             try {
                 const userProfile = await protectPage(['admin', 'manager'], 'app-content', 'auth-loader');
@@ -1002,19 +1045,11 @@
                 }
             });
 
-            document.getElementById('approveBtn').addEventListener('click', async (e) => {
+            // UPDATED Event Listener for the Approve Button
+            document.getElementById('approveBtn').addEventListener('click', (e) => {
                 const scenarioId = e.currentTarget.dataset.scenarioId;
-                const notes = document.getElementById('reviewerNotes').value.trim();
-                if (!scenarioId || !confirm('Approve this scenario?')) return;
-                
-                try {
-                    await updateScenarioStatus(scenarioId, 'approved', notes || 'Approved.');
-                    showNotification('Scenario Approved!', 'success');
-                    closeReviewModal();
-                    await loadApprovalsData();
-                } catch(error) {
-                    showNotification('Failed to approve scenario.', 'error');
-                }
+                if (!scenarioId || !confirm('Are you sure you want to submit your approval for this scenario?')) return;
+                handleScenarioApprove(scenarioId);
             });
 
             document.getElementById('rejectBtn').addEventListener('click', async (e) => {
