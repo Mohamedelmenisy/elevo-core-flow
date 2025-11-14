@@ -328,6 +328,17 @@
         .action-btn:hover {
             transform: translateY(-2px);
         }
+        
+        /* This is a generic review button style now */
+        .review-btn {
+             border-color: var(--primary-color);
+             color: var(--primary-color);
+        }
+        .review-btn:hover {
+            background-color: var(--primary-color);
+            color: #fff;
+            box-shadow: 0 4px 15px rgba(78, 140, 255, 0.3);
+        }
 
         .btn-approve {
             border-color: var(--success-color);
@@ -512,6 +523,93 @@
             margin-top: auto;
             background: rgba(15, 23, 42, 0.5);
         }
+
+        /* === NEW: Styles for the Review Modal === */
+        .modal-overlay {
+            position: fixed; inset: 0; z-index: 10001;
+            background: rgba(15, 23, 42, 0.8); backdrop-filter: blur(10px);
+            display: none; 
+            align-items: center; 
+            justify-content: center;
+            animation: fadeIn 0.3s ease-out;
+        }
+        .modal-overlay.show { display: flex; }
+        
+        .modal-container {
+            background: #1e293b; 
+            border: 1px solid var(--glass-border);
+            border-radius: var(--card-radius); 
+            padding: 2rem;
+            width: 90%; 
+            max-width: 600px; 
+            max-height: 90vh;
+            display: flex; 
+            flex-direction: column;
+            box-shadow: var(--glass-shadow);
+            transform: scale(0.95);
+            animation: zoomIn 0.3s ease-out forwards;
+        }
+
+        @keyframes zoomIn {
+           from { transform: scale(0.95); opacity: 0; }
+           to { transform: scale(1); opacity: 1; }
+        }
+
+        .modal-header { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            margin-bottom: 1.5rem; 
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--glass-border);
+        }
+        .modal-header h2 { font-size: 1.5rem; margin: 0; color: var(--text-color); }
+        .modal-header .close-btn { 
+            background: none; 
+            border: none; 
+            font-size: 1.75rem; 
+            color: var(--text-color-subtle); 
+            cursor: pointer;
+            transition: var(--transition-smooth);
+        }
+        .modal-header .close-btn:hover {
+            color: var(--danger-color);
+            transform: rotate(90deg);
+        }
+        .modal-body { 
+            flex-grow: 1; 
+            overflow-y: auto; 
+            background: #0f172a; 
+            padding: 1.5rem; 
+            border-radius: 12px; 
+            margin: 0 -0.5rem;
+            padding-right: 1rem;
+        }
+        .modal-body::-webkit-scrollbar { width: 6px; }
+        .modal-body::-webkit-scrollbar-track { background: rgba(255, 255, 255, 0.05); border-radius: 10px; }
+        .modal-body::-webkit-scrollbar-thumb { background: linear-gradient(180deg, var(--primary-color) 0%, #3a7cff 100%); border-radius: 10px; }
+
+        .modal-footer { 
+            margin-top: 1.5rem; 
+            padding-top: 1.5rem;
+            border-top: 1px solid var(--glass-border);
+        }
+        .step-item { 
+            background: rgba(255, 255, 255, 0.05); 
+            padding: 1rem 1.25rem; 
+            border-radius: 12px; 
+            margin-bottom: 0.75rem;
+            border-left: 4px solid var(--primary-color);
+            font-size: 1rem;
+            line-height: 1.5;
+        }
+        .step-item strong {
+            color: var(--accent-color);
+            margin-right: 0.5rem;
+        }
+        .hidden {
+            display: none !important;
+        }
     </style>
 </head>
 <body>
@@ -633,20 +731,38 @@
             </footer>
         </div>
     </div>
+    
+    <!-- === NEW: The Review Modal itself === -->
+    <div id="reviewModal" class="modal-overlay">
+        <div class="modal-container">
+            <div class="modal-header">
+                <h2 id="reviewModalTitle">Reviewing Scenario</h2>
+                <button id="closeModalBtn" class="close-btn">&times;</button>
+            </div>
+            <div id="reviewModalBody" class="modal-body">
+                <!-- Scenario steps will be rendered here -->
+            </div>
+            <div id="decisionFooter" class="modal-footer">
+                <div style="display: flex; justify-content: flex-end; gap: 1rem;">
+                     <button id="rejectModalBtn" class="action-btn btn-reject"><i class="fas fa-times"></i> Reject</button>
+                     <button id="approveModalBtn" class="action-btn btn-approve"><i class="fas fa-check"></i> Approve</button>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <script type="module">
         // =================================================================
-        // FINAL SCRIPT for SCENARIO Approval Dashboard (Fetches User Name)
+        // FINAL SCRIPT with Review Modal functionality
         // =================================================================
 
         import { supabase } from './supabaseClient.js';
         import { protectPage } from './role-check.js';
 
         let currentUser = null;
-        let scenariosStore = [];
-        let currentStatusFilter = 'pending_approval';
+        let scenariosStore = {}; // Use an object to store by status
 
-        // --- Main Functions ---
+        // --- Main Functions (Largely Unchanged) ---
 
         async function initializePage() {
             try {
@@ -654,7 +770,6 @@
                 if (!userProfile) return;
                 currentUser = userProfile;
                 document.getElementById('userName').textContent = currentUser.name || currentUser.email;
-
                 document.getElementById('currentYear').textContent = new Date().getFullYear();
                 
                 initializeEventListeners();
@@ -672,8 +787,7 @@
 
             try {
                 await loadScenarioStats();
-                const activeTab = document.querySelector('.tab.active').dataset.tab;
-                // Fetch and render all tabs' data for a smoother UX
+                // Fetch and render data for all tabs
                 await renderScenarios('pending_approval');
                 await renderScenarios('approved');
                 await renderScenarios('rejected');
@@ -701,21 +815,14 @@
         }
 
         async function renderScenarios(status) {
-            const listElementId = `${status}TicketsList`; // The IDs in the HTML are still using "TicketsList"
+            const listElementId = `${status}TicketsList`;
             const listElement = document.getElementById(listElementId);
-            if (!listElement) {
-                console.error(`Element with ID ${listElementId} not found.`);
-                return;
-            }
+            if (!listElement) return;
             listElement.innerHTML = `<div class="no-data"><i class="fas fa-spinner fa-spin"></i> Loading...</div>`;
 
-            // === THE KEY CHANGE IS HERE: Fetching the user's name ===
             const { data, error } = await supabase
                 .from('call_scenarios')
-                .select(`
-                    *,
-                    user:created_by ( name, email )
-                `)
+                .select(`*, user:created_by ( name, email )`)
                 .eq('status', status)
                 .order('created_at', { ascending: false });
 
@@ -735,12 +842,13 @@
             listElement.innerHTML = scenariosStore[status].map(scenario => createScenarioHTML(scenario)).join('');
         }
 
+        // MODIFIED: This function now creates a "Review" button for all items.
         function createScenarioHTML(scenario) {
-            // === AND THE SECOND CHANGE IS HERE: Displaying the fetched name ===
             const submitterName = scenario.user?.name || scenario.user?.email || 'Unknown';
+            const actionButton = `<button class="action-btn review-btn"><i class="fas fa-search-plus"></i> Review</button>`;
 
             return `
-            <div class="ticket-item" data-ticket-id="${scenario.id}">
+            <div class="ticket-item" data-scenario-id="${scenario.id}">
                 <div class="ticket-info">
                     <h4 class="ticket-title">${(scenario.title || 'Untitled Scenario')}</h4>
                     <div class="ticket-meta">
@@ -749,15 +857,52 @@
                         <span><i class="fas fa-tag"></i> Scenario</span>
                     </div>
                 </div>
-                ${scenario.status === 'pending_approval' ? `
                 <div class="ticket-actions">
-                    <button class="action-btn btn-approve"><i class="fas fa-check"></i> Approve</button>
-                    <button class="action-btn btn-reject"><i class="fas fa-times"></i> Reject</button>
-                </div>` : ''}
+                    ${actionButton}
+                </div>
             </div>`;
         }
 
-        async function updateScenarioStatus(scenarioId, newStatus, notes = '') {
+        // NEW: This function opens and populates the review modal.
+        function openReviewModal(scenarioId) {
+            // Flatten the scenarios from all statuses to find the correct one
+            const allScenarios = Object.values(scenariosStore).flat();
+            const scenario = allScenarios.find(s => s.id == scenarioId);
+            if (!scenario) {
+                console.error("Scenario not found in local store.");
+                showNotification('Could not find scenario details.', 'error');
+                return;
+            }
+
+            document.getElementById('reviewModalTitle').textContent = `Reviewing: "${scenario.title || 'Untitled'}"`;
+            const body = document.getElementById('reviewModalBody');
+            
+            if (scenario.steps && Array.isArray(scenario.steps) && scenario.steps.length > 0) {
+                body.innerHTML = scenario.steps.map((step, index) => 
+                    `<div class="step-item"><strong>Step ${index + 1}:</strong> ${step.text}</div>`
+                ).join('');
+            } else {
+                body.innerHTML = '<div class="step-item">No steps found for this scenario.</div>';
+            }
+
+            const footer = document.getElementById('decisionFooter');
+            if (scenario.status === 'pending_approval') {
+                footer.classList.remove('hidden');
+                document.getElementById('approveModalBtn').dataset.scenarioId = scenarioId;
+                document.getElementById('rejectModalBtn').dataset.scenarioId = scenarioId;
+            } else {
+                footer.classList.add('hidden');
+            }
+            
+            document.getElementById('reviewModal').classList.add('show');
+        }
+        
+        // NEW: Function to close the modal.
+        function closeReviewModal() {
+            document.getElementById('reviewModal').classList.remove('show');
+        }
+
+        async function updateScenarioStatus(scenarioId, newStatus) {
             const { error } = await supabase
                 .from('call_scenarios')
                 .update({ status: newStatus, is_active: (newStatus === 'approved') })
@@ -778,40 +923,63 @@
                     document.querySelector('.tab-content.active')?.classList.remove('active');
                     const clickedTab = e.currentTarget;
                     clickedTab.classList.add('active');
-                    const tabContentId = `${clickedTab.dataset.tab}Tab`; // e.g., pending_approvalTab
-                    const contentElement = document.getElementById(tabContentId);
-                    if(contentElement) {
-                       contentElement.classList.add('active');
-                    } else {
-                        console.error(`Tab content with ID ${tabContentId} not found.`);
-                    }
-                    // Data is already loaded, so switching is instant. We just show/hide the content.
+                    const tabContentId = `${clickedTab.dataset.tab}Tab`;
+                    document.getElementById(tabContentId)?.classList.add('active');
                 });
             });
 
-            document.getElementById('app-content').addEventListener('click', async (event) => {
-                const button = event.target.closest('.action-btn');
-                if (!button) return;
-                const scenarioId = button.closest('.ticket-item')?.dataset.ticketId;
-                if (!scenarioId) return;
+            // MODIFIED: Main event listener now only listens for the "Review" button.
+            document.getElementById('app-content').addEventListener('click', (event) => {
+                const button = event.target.closest('.review-btn');
+                if (button) {
+                    const scenarioId = button.closest('.ticket-item')?.dataset.scenarioId;
+                    if (scenarioId) {
+                        openReviewModal(scenarioId);
+                    }
+                }
+            });
 
-                if (button.classList.contains('btn-approve')) {
-                    if (!confirm('Approve this scenario?')) return;
+            // NEW: Event listeners for the modal itself.
+            document.getElementById('closeModalBtn').addEventListener('click', closeReviewModal);
+            document.getElementById('reviewModal').addEventListener('click', (event) => {
+                // Close modal if user clicks on the overlay background
+                if (event.target.id === 'reviewModal') {
+                    closeReviewModal();
+                }
+            });
+
+            document.getElementById('approveModalBtn').addEventListener('click', async (e) => {
+                const scenarioId = e.currentTarget.dataset.scenarioId;
+                if (!scenarioId || !confirm('Approve this scenario?')) return;
+                
+                try {
                     await updateScenarioStatus(scenarioId, 'approved');
                     showNotification('Scenario Approved!', 'success');
+                    closeReviewModal();
                     await loadApprovalsData();
+                } catch(error) {
+                    showNotification('Failed to approve scenario.', 'error');
                 }
-                if (button.classList.contains('btn-reject')) {
-                    const reason = prompt('Please provide a reason for rejection:');
-                    if (reason) { // Only proceeds if user enters a reason and clicks OK
+            });
+
+            document.getElementById('rejectModalBtn').addEventListener('click', async (e) => {
+                const scenarioId = e.currentTarget.dataset.scenarioId;
+                if (!scenarioId) return;
+
+                const reason = prompt('Please provide a reason for rejection (optional):');
+                // The action proceeds even if the reason is empty, but not if the user cancels the prompt.
+                if (reason !== null) { 
+                    try {
                         await updateScenarioStatus(scenarioId, 'rejected');
                         showNotification('Scenario Rejected.', 'info');
+                        closeReviewModal();
                         await loadApprovalsData();
+                    } catch(error) {
+                        showNotification('Failed to reject scenario.', 'error');
                     }
                 }
             });
             
-             // Bulk actions from previous versions re-integrated
             document.getElementById('approveAllBtn').addEventListener('click', approveAllPending);
             document.getElementById('rejectAllBtn').addEventListener('click', rejectAllPending);
         }
@@ -844,7 +1012,6 @@
                 showNotification('An error occurred during the bulk update.', 'error');
             }
         }
-
 
         function showNotification(message, type = 'info') {
             const notification = document.createElement('div');
