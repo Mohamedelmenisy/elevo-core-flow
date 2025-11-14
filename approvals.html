@@ -329,7 +329,6 @@
             transform: translateY(-2px);
         }
         
-        /* This is a generic review button style now */
         .review-btn {
              border-color: var(--primary-color);
              color: var(--primary-color);
@@ -524,7 +523,6 @@
             background: rgba(15, 23, 42, 0.5);
         }
 
-        /* === NEW: Styles for the Review Modal === */
         .modal-overlay {
             position: fixed; inset: 0; z-index: 10001;
             background: rgba(15, 23, 42, 0.8); backdrop-filter: blur(10px);
@@ -610,6 +608,54 @@
         .hidden {
             display: none !important;
         }
+
+        /* === NEW & UPDATED STYLES === */
+        .modal-footer textarea {
+            width: 100%;
+            min-height: 80px;
+            background: #0f172a;
+            border: 1px solid var(--glass-border);
+            color: var(--text-color);
+            padding: 0.75rem;
+            border-radius: 10px;
+            resize: vertical;
+            font-family: var(--font-family);
+            font-size: 0.9rem;
+            margin-bottom: 1rem;
+        }
+
+        .ticket-meta .notes-preview, .notes-preview {
+            display: block;
+            margin-top: 0.75rem;
+            font-style: italic;
+            color: var(--warning-color);
+            font-size: 0.85rem;
+            padding: 0.5rem 0.75rem;
+            background: rgba(245, 158, 11, 0.05);
+            border-left: 3px solid var(--warning-color);
+            border-radius: 4px;
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            border-radius: 50px;
+            font-weight: 600;
+            font-size: 0.8rem;
+        }
+        .status-badge.approved {
+            background-color: rgba(16, 185, 129, 0.1);
+            color: var(--success-color);
+            border: 1px solid rgba(16, 185, 129, 0.2);
+        }
+        .status-badge.rejected {
+            background-color: rgba(239, 68, 68, 0.1);
+            color: var(--danger-color);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+        }
+
     </style>
 </head>
 <body>
@@ -732,7 +778,6 @@
         </div>
     </div>
     
-    <!-- === NEW: The Review Modal itself === -->
     <div id="reviewModal" class="modal-overlay">
         <div class="modal-container">
             <div class="modal-header">
@@ -743,26 +788,26 @@
                 <!-- Scenario steps will be rendered here -->
             </div>
             <div id="decisionFooter" class="modal-footer">
+                 <div style="margin-bottom: 1rem;">
+                    <label for="reviewerNotes" style="font-weight: 500; color: var(--text-color-light); margin-bottom: 0.5rem; display: block;">
+                        Review Notes <span style="color: var(--danger-color);">(Required if rejecting)</span>
+                    </label>
+                    <textarea id="reviewerNotes" placeholder="Provide feedback for the creator..."></textarea>
+                </div>
                 <div style="display: flex; justify-content: flex-end; gap: 1rem;">
-                     <button id="rejectModalBtn" class="action-btn btn-reject"><i class="fas fa-times"></i> Reject</button>
-                     <button id="approveModalBtn" class="action-btn btn-approve"><i class="fas fa-check"></i> Approve</button>
+                     <button id="rejectBtn" class="action-btn btn-reject"><i class="fas fa-times"></i> Reject with Notes</button>
+                     <button id="approveBtn" class="action-btn btn-approve"><i class="fas fa-check"></i> Approve</button>
                 </div>
             </div>
         </div>
     </div>
 
     <script type="module">
-        // =================================================================
-        // FINAL SCRIPT with Review Modal functionality
-        // =================================================================
-
         import { supabase } from './supabaseClient.js';
         import { protectPage } from './role-check.js';
 
         let currentUser = null;
         let scenariosStore = {}; // Use an object to store by status
-
-        // --- Main Functions (Largely Unchanged) ---
 
         async function initializePage() {
             try {
@@ -787,7 +832,6 @@
 
             try {
                 await loadScenarioStats();
-                // Fetch and render data for all tabs
                 await renderScenarios('pending_approval');
                 await renderScenarios('approved');
                 await renderScenarios('rejected');
@@ -832,7 +876,7 @@
                 return;
             }
             
-            scenariosStore[status] = data || []; // Store by status
+            scenariosStore[status] = data || [];
 
             if (scenariosStore[status].length === 0) {
                 listElement.innerHTML = `<div class="no-data"><i class="fas fa-inbox"></i>No ${status.replace('_', ' ')} scenarios found.</div>`;
@@ -841,11 +885,19 @@
             
             listElement.innerHTML = scenariosStore[status].map(scenario => createScenarioHTML(scenario)).join('');
         }
-
-        // MODIFIED: This function now creates a "Review" button for all items.
+        
         function createScenarioHTML(scenario) {
             const submitterName = scenario.user?.name || scenario.user?.email || 'Unknown';
-            const actionButton = `<button class="action-btn review-btn"><i class="fas fa-search-plus"></i> Review</button>`;
+            const notesPreview = scenario.reviewer_notes ? `<span class="notes-preview"><i class="fas fa-comment-alt"></i> ${scenario.reviewer_notes}</span>` : '';
+            let actionContent = '';
+
+            if (scenario.status === 'pending_approval') {
+                actionContent = `<button class="action-btn review-btn"><i class="fas fa-search-plus"></i> Review</button>`;
+            } else if (scenario.status === 'approved') {
+                actionContent = `<span class="status-badge approved"><i class="fas fa-check-circle"></i> Approved</span>`;
+            } else if (scenario.status === 'rejected') {
+                actionContent = `<span class="status-badge rejected"><i class="fas fa-times-circle"></i> Rejected</span>`;
+            }
 
             return `
             <div class="ticket-item" data-scenario-id="${scenario.id}">
@@ -856,16 +908,15 @@
                         <span><i class="fas fa-calendar-alt"></i> ${new Date(scenario.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
                         <span><i class="fas fa-tag"></i> Scenario</span>
                     </div>
+                    ${notesPreview}
                 </div>
                 <div class="ticket-actions">
-                    ${actionButton}
+                    ${actionContent}
                 </div>
             </div>`;
         }
 
-        // NEW: This function opens and populates the review modal.
         function openReviewModal(scenarioId) {
-            // Flatten the scenarios from all statuses to find the correct one
             const allScenarios = Object.values(scenariosStore).flat();
             const scenario = allScenarios.find(s => s.id == scenarioId);
             if (!scenario) {
@@ -876,6 +927,7 @@
 
             document.getElementById('reviewModalTitle').textContent = `Reviewing: "${scenario.title || 'Untitled'}"`;
             const body = document.getElementById('reviewModalBody');
+            const notesTextarea = document.getElementById('reviewerNotes');
             
             if (scenario.steps && Array.isArray(scenario.steps) && scenario.steps.length > 0) {
                 body.innerHTML = scenario.steps.map((step, index) => 
@@ -885,11 +937,13 @@
                 body.innerHTML = '<div class="step-item">No steps found for this scenario.</div>';
             }
 
+            notesTextarea.value = scenario.reviewer_notes || '';
+
             const footer = document.getElementById('decisionFooter');
             if (scenario.status === 'pending_approval') {
                 footer.classList.remove('hidden');
-                document.getElementById('approveModalBtn').dataset.scenarioId = scenarioId;
-                document.getElementById('rejectModalBtn').dataset.scenarioId = scenarioId;
+                document.getElementById('approveBtn').dataset.scenarioId = scenarioId;
+                document.getElementById('rejectBtn').dataset.scenarioId = scenarioId;
             } else {
                 footer.classList.add('hidden');
             }
@@ -897,15 +951,18 @@
             document.getElementById('reviewModal').classList.add('show');
         }
         
-        // NEW: Function to close the modal.
         function closeReviewModal() {
             document.getElementById('reviewModal').classList.remove('show');
         }
 
-        async function updateScenarioStatus(scenarioId, newStatus) {
+        async function updateScenarioStatus(scenarioId, newStatus, notes = '') {
             const { error } = await supabase
                 .from('call_scenarios')
-                .update({ status: newStatus, is_active: (newStatus === 'approved') })
+                .update({ 
+                    status: newStatus, 
+                    is_active: (newStatus === 'approved'),
+                    reviewer_notes: notes 
+                })
                 .eq('id', scenarioId);
             if (error) throw error;
         }
@@ -928,7 +985,6 @@
                 });
             });
 
-            // MODIFIED: Main event listener now only listens for the "Review" button.
             document.getElementById('app-content').addEventListener('click', (event) => {
                 const button = event.target.closest('.review-btn');
                 if (button) {
@@ -939,21 +995,20 @@
                 }
             });
 
-            // NEW: Event listeners for the modal itself.
             document.getElementById('closeModalBtn').addEventListener('click', closeReviewModal);
             document.getElementById('reviewModal').addEventListener('click', (event) => {
-                // Close modal if user clicks on the overlay background
                 if (event.target.id === 'reviewModal') {
                     closeReviewModal();
                 }
             });
 
-            document.getElementById('approveModalBtn').addEventListener('click', async (e) => {
+            document.getElementById('approveBtn').addEventListener('click', async (e) => {
                 const scenarioId = e.currentTarget.dataset.scenarioId;
+                const notes = document.getElementById('reviewerNotes').value.trim();
                 if (!scenarioId || !confirm('Approve this scenario?')) return;
                 
                 try {
-                    await updateScenarioStatus(scenarioId, 'approved');
+                    await updateScenarioStatus(scenarioId, 'approved', notes || 'Approved.');
                     showNotification('Scenario Approved!', 'success');
                     closeReviewModal();
                     await loadApprovalsData();
@@ -962,21 +1017,22 @@
                 }
             });
 
-            document.getElementById('rejectModalBtn').addEventListener('click', async (e) => {
+            document.getElementById('rejectBtn').addEventListener('click', async (e) => {
                 const scenarioId = e.currentTarget.dataset.scenarioId;
-                if (!scenarioId) return;
+                const notes = document.getElementById('reviewerNotes').value.trim();
 
-                const reason = prompt('Please provide a reason for rejection (optional):');
-                // The action proceeds even if the reason is empty, but not if the user cancels the prompt.
-                if (reason !== null) { 
-                    try {
-                        await updateScenarioStatus(scenarioId, 'rejected');
-                        showNotification('Scenario Rejected.', 'info');
-                        closeReviewModal();
-                        await loadApprovalsData();
-                    } catch(error) {
-                        showNotification('Failed to reject scenario.', 'error');
-                    }
+                if (!notes) {
+                    showNotification('Rejection notes are required.', 'warning');
+                    return;
+                }
+                
+                try {
+                    await updateScenarioStatus(scenarioId, 'rejected', notes);
+                    showNotification('Scenario Rejected with feedback.', 'info');
+                    closeReviewModal();
+                    await loadApprovalsData();
+                } catch(error) {
+                    showNotification('Rejection failed.', 'error');
                 }
             });
             
@@ -1020,7 +1076,7 @@
                 position: fixed; top: 20px; right: 20px; padding: 12px 16px;
                 border-radius: 12px; color: white; font-weight: 600; font-family: var(--font-family);
                 z-index: 10002; box-shadow: var(--glass-shadow); backdrop-filter: blur(10px);
-                background: ${type === 'success' ? 'rgba(16, 185, 129, 0.9)' : type === 'error' ? 'rgba(239, 68, 68, 0.9)' : 'rgba(78, 140, 255, 0.9)'};
+                background: ${type === 'success' ? 'rgba(16, 185, 129, 0.9)' : type === 'error' ? 'rgba(239, 68, 68, 0.9)' : type === 'warning' ? 'rgba(245, 158, 11, 0.9)' : 'rgba(78, 140, 255, 0.9)'};
                 transform: translateX(120%); transition: transform 0.4s cubic-bezier(0.25, 1, 0.5, 1);
             `;
             document.body.appendChild(notification);
