@@ -635,56 +635,48 @@
     </div>
 
     <script type="module">
+        // =================================================================
+        // Live Data & Interactive Script for Ticket Approval Dashboard
+        // =================================================================
+
         import { supabase } from './supabaseClient.js';
         import { protectPage } from './role-check.js';
-        
+
         let currentUser = null;
-        
-        document.addEventListener('DOMContentLoaded', async function() {
+
+        // --- Main Functions ---
+
+        async function initializePage() {
             try {
+                // NOTE: The original protectPage call in the request was slightly different. 
+                // Using the one from the file as it handles the auth-loader visibility.
                 const userProfile = await protectPage(['admin', 'manager'], 'app-content', 'auth-loader');
                 if (!userProfile) return;
                 currentUser = userProfile;
+                document.getElementById('userName').textContent = currentUser.name || currentUser.email;
 
                 document.getElementById('currentYear').textContent = new Date().getFullYear();
-                document.getElementById('userName').textContent = currentUser.name || currentUser.email;
                 
                 initializeEventListeners();
                 await loadApprovalsData();
             } catch (error) {
                 console.error("Initialization Error:", error);
-                document.getElementById('auth-loader').innerHTML = '<p style="color: var(--danger-color);">Failed to initialize the application.</p>';
+                showNotification('Failed to initialize the application.', 'error');
             }
-        });
-
-        function initializeEventListeners() {
-            document.getElementById('logoutButton').addEventListener('click', handleLogout);
-            document.getElementById('refreshApprovalsBtn').addEventListener('click', loadApprovalsData);
-            document.getElementById('approveAllBtn').addEventListener('click', approveAllPending);
-            document.getElementById('rejectAllBtn').addEventListener('click', rejectAllPending);
-            
-            document.querySelectorAll('.tab').forEach(tab => {
-                tab.addEventListener('click', () => {
-                    document.querySelector('.tab.active')?.classList.remove('active');
-                    document.querySelector('.tab-content.active')?.classList.remove('active');
-                    tab.classList.add('active');
-                    document.getElementById(`${tab.dataset.tab}Tab`).classList.add('active');
-                });
-            });
         }
-        
+
         async function loadApprovalsData() {
             const refreshBtn = document.getElementById('refreshApprovalsBtn');
             const icon = refreshBtn.querySelector('i');
             icon.classList.add('fa-spin');
 
             try {
-                await Promise.all([
-                    loadTicketStats(),
-                    renderTickets('pending', 'pendingTicketsList'),
-                    renderTickets('approved', 'approvedTicketsList'),
-                    renderTickets('rejected', 'rejectedTicketsList'),
-                ]);
+                await loadTicketStats();
+                // This logic ensures all tabs can be populated, not just the active one on initial load
+                await renderTickets('pending', `pendingTicketsList`);
+                await renderTickets('approved', `approvedTicketsList`);
+                await renderTickets('rejected', `rejectedTicketsList`);
+                
                 document.getElementById('lastUpdatedTime').textContent = new Date().toLocaleTimeString('en-US', { hour12: false });
             } catch (error) {
                 console.error('Error loading approvals data:', error);
@@ -693,25 +685,20 @@
                 icon.classList.remove('fa-spin');
             }
         }
-        
-        async function handleLogout() {
-            await supabase.auth.signOut();
-            window.location.href = 'login.html';
-        }
-        
+
         async function loadTicketStats() {
             const statuses = ['pending', 'approved', 'rejected'];
             const promises = statuses.map(status =>
                 supabase.from('tickets').select('id', { count: 'exact', head: true }).eq('status', status)
             );
-            promises.push(supabase.from('tickets').select('id', { count: 'exact', head: true }));
+            const [pendingRes, approvedRes, rejectedRes] = await Promise.all(promises);
 
-            const [pendingRes, approvedRes, rejectedRes, totalRes] = await Promise.all(promises);
+            const totalCount = (pendingRes.count || 0) + (approvedRes.count || 0) + (rejectedRes.count || 0);
 
             document.getElementById('pendingCount').textContent = pendingRes.count || 0;
             document.getElementById('approvedCount').textContent = approvedRes.count || 0;
             document.getElementById('rejectedCount').textContent = rejectedRes.count || 0;
-            document.getElementById('totalCount').textContent = totalRes.count || 0;
+            document.getElementById('totalCount').textContent = totalCount;
         }
 
         async function renderTickets(status, listElementId) {
@@ -734,8 +721,6 @@
             }
             
             listElement.innerHTML = data.map(ticket => createTicketHTML(ticket, status)).join('');
-            
-            attachTicketActionListeners(listElement);
         }
 
         async function updateTicketStatus(ticketId, newStatus, notes) {
@@ -744,14 +729,14 @@
                 .update({ 
                     status: newStatus,
                     reviewed_at: new Date().toISOString(),
-                    reviewed_by: currentUser.id,
+                    reviewed_by: currentUser.id, // Assumes a 'reviewed_by' column
                     reviewer_notes: notes
                 })
                 .eq('id', ticketId);
 
             if (error) throw error;
         }
-        
+
         async function approveTicket(ticketId) {
             if (!confirm('Are you sure you want to approve this ticket?')) return;
             try {
@@ -759,24 +744,124 @@
                 showNotification('Ticket approved successfully!', 'success');
                 await loadApprovalsData();
             } catch (error) {
-                console.error('Error approving ticket:', error);
+                console.error("Error approving ticket:", error);
                 showNotification('Failed to approve ticket.', 'error');
             }
         }
 
         async function rejectTicket(ticketId) {
-            const reason = prompt('Please provide a reason for rejection (optional):');
-            if (reason === null) return;
+            const reason = prompt('Please provide a reason for rejection:');
+            if (reason === null) return; // User cancelled
+            if (!reason) {
+                showNotification('Rejection reason is required.', 'warning');
+                return;
+            }
             try {
-                await updateTicketStatus(ticketId, 'rejected', reason || 'Rejected via approval system');
+                await updateTicketStatus(ticketId, 'rejected', reason);
                 showNotification('Ticket rejected successfully!', 'success');
                 await loadApprovalsData();
             } catch (error) {
-                console.error('Error rejecting ticket:', error);
+                console.error("Error rejecting ticket:", error);
                 showNotification('Failed to reject ticket.', 'error');
             }
         }
 
+        // --- Helper & HTML Functions ---
+        
+        function escapeHtml(text) {
+            return text?.toString().replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'})[m]) || '';
+        }
+
+        function formatTime(dateString) {
+            if (!dateString) return 'N/A';
+            return new Date(dateString).toLocaleString('en-US', { 
+                month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true 
+            });
+        }
+
+        function createTicketHTML(ticket, status) {
+            return `
+            <div class="ticket-item" data-ticket-id="${ticket.id}">
+                <div class="ticket-info">
+                    <h4 class="ticket-title">${escapeHtml(ticket.title || 'Untitled Ticket')}</h4>
+                    <div class="ticket-meta">
+                        <span><i class="fas fa-user"></i> ${escapeHtml(ticket.created_by || 'Unknown')}</span>
+                        <span><i class="fas fa-calendar-alt"></i> ${formatTime(ticket.created_at)}</span>
+                        <span><i class="fas fa-tag"></i> ${escapeHtml(ticket.type || 'General')}</span>
+                    </div>
+                </div>
+                ${status === 'pending' ? `
+                <div class="ticket-actions">
+                    <button class="action-btn btn-approve">
+                        <i class="fas fa-check"></i> Approve
+                    </button>
+                    <button class="action-btn btn-reject">
+                        <i class="fas fa-times"></i> Reject
+                    </button>
+                </div>` : ''}
+            </div>`;
+        }
+
+        function showNotification(message, type = 'info') {
+            const notification = document.createElement('div');
+            notification.textContent = message;
+            notification.style.cssText = `
+                position: fixed; top: 20px; right: 20px; padding: 12px 16px;
+                border-radius: 12px; color: white; font-weight: 600; font-family: var(--font-family);
+                z-index: 10002; box-shadow: var(--glass-shadow); backdrop-filter: blur(10px);
+                background: ${type === 'success' ? 'rgba(16, 185, 129, 0.9)' : type === 'error' ? 'rgba(239, 68, 68, 0.9)' : 'rgba(78, 140, 255, 0.9)'};
+                transform: translateX(120%); transition: transform 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+            `;
+            document.body.appendChild(notification);
+            setTimeout(() => { notification.style.transform = 'translateX(0)'; }, 50);
+            setTimeout(() => {
+                notification.style.transform = 'translateX(120%)';
+                setTimeout(() => notification.remove(), 400);
+            }, 4000);
+        }
+
+        // --- Event Listeners ---
+        function initializeEventListeners() {
+            document.getElementById('logoutButton').addEventListener('click', async () => {
+                await supabase.auth.signOut();
+                window.location.href = 'login.html';
+            });
+
+            document.getElementById('refreshApprovalsBtn').addEventListener('click', loadApprovalsData);
+            
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.addEventListener('click', () => {
+                    document.querySelector('.tab.active')?.classList.remove('active');
+                    document.querySelector('.tab-content.active')?.classList.remove('active');
+                    tab.classList.add('active');
+                    const tabContentId = `${tab.dataset.tab}Tab`;
+                    document.getElementById(tabContentId).classList.add('active');
+                    // No need to re-fetch data, as it's all loaded initially. This makes tab switching instant.
+                });
+            });
+
+            // Use event delegation for approve/reject buttons
+            document.getElementById('app-content').addEventListener('click', function(event) {
+                const button = event.target.closest('.action-btn');
+                if (!button) return;
+
+                const ticketId = button.closest('.ticket-item')?.dataset.ticketId;
+                if (!ticketId) return;
+
+                if (button.classList.contains('btn-approve')) {
+                    approveTicket(ticketId);
+                }
+                if (button.classList.contains('btn-reject')) {
+                    rejectTicket(ticketId);
+                }
+            });
+            
+            // NOTE: The new script did not include bulk actions. I am adding them back
+            // from the original file to maintain functionality.
+            document.getElementById('approveAllBtn').addEventListener('click', approveAllPending);
+            document.getElementById('rejectAllBtn').addEventListener('click', rejectAllPending);
+        }
+        
         async function approveAllPending() {
             if (!confirm('Are you sure you want to approve ALL pending tickets?')) return;
             await bulkUpdateStatus('approved', 'Bulk approved via approval system');
@@ -808,70 +893,9 @@
             }
         }
 
-        function attachTicketActionListeners(container) {
-            container.addEventListener('click', function(event) {
-                const button = event.target.closest('.action-btn');
-                if (!button) return;
 
-                const ticketId = button.closest('.ticket-item')?.dataset.ticketId;
-                if (!ticketId) return;
-
-                if (button.classList.contains('btn-approve')) approveTicket(ticketId);
-                if (button.classList.contains('btn-reject')) rejectTicket(ticketId);
-            });
-        }
-        
-        function createTicketHTML(ticket, status) {
-            return `
-            <div class="ticket-item" data-ticket-id="${ticket.id}">
-                <div class="ticket-info">
-                    <h4 class="ticket-title">${escapeHtml(ticket.title || 'Untitled Ticket')}</h4>
-                    <div class="ticket-meta">
-                        <span><i class="fas fa-user"></i> ${escapeHtml(ticket.created_by || 'Unknown')}</span>
-                        <span><i class="fas fa-calendar-alt"></i> ${formatTime(ticket.created_at)}</span>
-                        <span><i class="fas fa-tag"></i> ${escapeHtml(ticket.type || 'General')}</span>
-                    </div>
-                </div>
-                ${status === 'pending' ? `
-                <div class="ticket-actions">
-                    <button class="action-btn btn-approve">
-                        <i class="fas fa-check"></i> Approve
-                    </button>
-                    <button class="action-btn btn-reject">
-                        <i class="fas fa-times"></i> Reject
-                    </button>
-                </div>` : ''}
-            </div>`;
-        }
-        
-        function showNotification(message, type = 'info') {
-            const notification = document.createElement('div');
-            notification.textContent = message;
-            notification.style.cssText = `
-                position: fixed; top: 20px; right: 20px; padding: 12px 16px;
-                border-radius: 12px; color: white; font-weight: 600; font-family: var(--font-family);
-                z-index: 10002; box-shadow: var(--glass-shadow); backdrop-filter: blur(10px);
-                background: ${type === 'success' ? 'rgba(16, 185, 129, 0.9)' : type === 'error' ? 'rgba(239, 68, 68, 0.9)' : 'rgba(78, 140, 255, 0.9)'};
-                transform: translateX(120%); transition: transform 0.4s cubic-bezier(0.25, 1, 0.5, 1);
-            `;
-            document.body.appendChild(notification);
-            setTimeout(() => { notification.style.transform = 'translateX(0)'; }, 50);
-            setTimeout(() => {
-                notification.style.transform = 'translateX(120%)';
-                setTimeout(() => notification.remove(), 400);
-            }, 4000);
-        }
-        
-        function escapeHtml(text) {
-            return text?.toString().replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'})[m]) || '';
-        }
-
-        function formatTime(dateString) {
-            if (!dateString) return 'N/A';
-            return new Date(dateString).toLocaleString('en-US', { 
-                month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true 
-            });
-        }
+        // Initialize the page
+        document.addEventListener('DOMContentLoaded', initializePage);
     </script>
 </body>
 </html>
