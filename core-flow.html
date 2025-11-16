@@ -1093,6 +1093,7 @@ Waiting for Ticket
 </div>
 <audio id=callStartSound src=call_sound.mp3 preload=auto></audio>
 <audio id=compensationScenarioSound src=compensation_alert.mp3 preload=auto></audio>
+<audio id="updateNotificationSound" src="notification_sound.mp3" preload="auto"></audio>
 </div>
 <div id=call-flow-view class="card call-flow-card fade-in" style=display:none>
 <h3 id=scenario-title class="card-title scenario-title-dynamic">
@@ -1169,7 +1170,7 @@ Waiting for Ticket
 </div>
 
 <script type="module">
-    // FINAL VERSION - Cleaned and with extra logging
+    // FINAL VERSION - With Sound Notification
     import { supabase } from './supabaseClient.js';
     import { protectPage } from './role-check.js';
 
@@ -1239,6 +1240,12 @@ Waiting for Ticket
                 (payload) => {
                     console.log('✅ Real-time update received!', payload.new);
                     showCustomToast("A step in this ticket has been updated live.", true);
+
+                    // Play the notification sound
+                    const notificationSound = document.getElementById('updateNotificationSound');
+                    if (notificationSound) {
+                        notificationSound.play().catch(error => console.warn("Audio play was prevented by the browser.", error));
+                    }
                     
                     currentScenario = payload.new;
                     
@@ -1307,7 +1314,7 @@ Waiting for Ticket
     function clearCallState(){sessionStorage.removeItem(SESSION_STATE_KEY)}
     function resetCallState(e=!1){stopAndRecordStepTimer(),clearCallState(),callSessionId=currentStepId=currentScenario=null,stepHistory=[],accumulatedStepDurations={},stepVisitCount={},stepStartTime=0,e&&switchToInitialView()}
     receiveCallBtn.addEventListener("click",(async()=>{const e=document.getElementById("scenarioDropdownValue").value;if(e){setButtonLoadingState(receiveCallBtn,!0,"Start Ticket"),callStartSound.play().catch((e=>console.warn("Audio play failed.",e))),resetCallState(),switchToCallFlowView(),updateSystemStatus("Loading Scenario...","status-loading"),stepsContainer.innerHTML='<p class="placeholder-text">Loading scenario steps...</p>',decisionButtonsContainer.innerHTML="",scenarioTitleElement.textContent="Loading...";try{const{data:t,error:n}=await supabase.from("call_scenarios").select("id, title, steps").eq("id",e).single();if(n)throw n;if(!t||!Array.isArray(t.steps)||0===t.steps.length)throw new Error("Scenario data is invalid.");currentScenario=t,currentStepId=currentScenario.steps[0].id,accumulatedStepDurations={},currentScenario.steps.forEach((e=>{e?.id&&(accumulatedStepDurations[e.id]=0)})),callStartTimeISO=(new Date).toISOString();const{data:i,error:a}=await supabase.from("call_sessions").insert({user_id:currentUser.id,scenario_id:currentScenario.id,start_time:callStartTimeISO,agent_name:currentUser.name,agent_email:currentUser.email}).select("id").single();if(a)throw a;callSessionId=i.id;
-    console.log('▶️ Starting ticket, will subscribe to:', currentScenario.id); // EXTRA LOGGING
+    console.log('▶️ Starting ticket, will subscribe to:', currentScenario.id);
     subscribeToScenarioUpdates(currentScenario.id);
     const s=document.querySelector(`.scenario-item[data-value="${e}"]`);s&&s.classList.contains("compensation")&&(compensationScenarioSound.play().catch((e=>console.warn("Compensation sound failed.",e))),scenarioTitleElement.classList.add("highlight-scenario-title-animation"),setTimeout((()=>scenarioTitleElement.classList.remove("highlight-scenario-title-animation")),1200)),updateSystemStatus("In Ticket","status-in-call"),renderStep()}catch(e){console.error("Error starting ticket:",e),showCustomToast("Failed to start ticket. Please try again."),resetCallState(),switchToInitialView(),await loadActiveScenarios()}finally{setButtonLoadingState(receiveCallBtn,!1,"Start Ticket")}}else showCustomToast("Please select a scenario first.")})),nextStepBtn.addEventListener("click",(()=>{const e=currentScenario.steps.find((e=>e?.id===currentStepId));if(e){if("form"===e.type){const e=document.getElementById("current-step-form").querySelectorAll("input, textarea");let t={},n=!0;if(e.forEach((e=>{e.required&&!e.value&&(n=!1),t[e.name]=e.value})),!n)return void showCustomToast("Please fill all required fields.");console.log("Form Data Collected:",t)}e.next_id?navigateToStep(e.next_id):(stopAndRecordStepTimer(),finishCall(!0,"Scenario finished via button."))}})),prevStepBtn.addEventListener("click",(()=>{stopAndRecordStepTimer(),stepHistory.length>0&&(currentStepId=stepHistory.pop(),stepVisitCount[currentStepId]&&(stepVisitCount[currentStepId]=0),renderStep())}));
     const customConfirmModal=document.getElementById("custom-confirm-modal"),modalConfirmBtn=document.getElementById("modal-confirm-btn"),modalCancelBtn=document.getElementById("modal-cancel-btn");function showConfirmModal(){customConfirmModal.classList.add("show")}function hideConfirmModal(){customConfirmModal.classList.remove("show")}endCallBtn.addEventListener("click",showConfirmModal),modalCancelBtn.addEventListener("click",hideConfirmModal),modalConfirmBtn.addEventListener("click",(()=>{hideConfirmModal(),stopAndRecordStepTimer(),finishCall(!1,"Ticket ended by agent")})),returnToInitialViewBtn.addEventListener("click",(async()=>{resetCallState(!0),await loadActiveScenarios()})),logoutButton.addEventListener("click",(async()=>{resetCallState(),localStorage.removeItem("elevoCoreUserData"),supabase&&await supabase.auth.signOut(),window.location.replace("login.html")}));
