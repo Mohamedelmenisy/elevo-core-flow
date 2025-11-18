@@ -1148,7 +1148,7 @@ Waiting for Ticket
 <div id="custom-confirm-modal" class="modal-overlay">
     <div class="modal-container">
         <h3 class="modal-title">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap=round stroke-linejoin=round style="vertical-align: middle; margin-right: 0.5em; color: var(--warning-color);">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 0.5em; color: var(--warning-color);">
                 <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
                 <line x1="12" y1="9" x2="12" y2="13"></line>
                 <line x1="12" y1="17" x2="12.01" y2="17"></line>
@@ -1169,7 +1169,7 @@ Waiting for Ticket
 </div>
 
 <script type="module">
-    // FINAL VERSION - Using Bridge Table for Permissions
+    // FINAL VERSION - Cleaned and with extra logging
     import { supabase } from './supabaseClient.js';
     import { protectPage } from './role-check.js';
 
@@ -1185,6 +1185,7 @@ Waiting for Ticket
         }
     });
 
+    // The variables for the removed audio elements have been deleted from this line
     const initialViewDiv=document.getElementById("initial-view"),callFlowViewDiv=document.getElementById("call-flow-view"),postCallSummaryDiv=document.getElementById("postCallSummary"),receiveCallBtn=document.getElementById("receive-call-btn"),scenarioTitleElement=document.getElementById("scenario-title-text"),stepTypeIconElement=document.getElementById("step-type-icon"),stepsContainer=document.getElementById("steps-container"),decisionButtonsContainer=document.getElementById("decision-buttons-container"),prevStepBtn=document.getElementById("prev-step-btn"),nextStepBtn=document.getElementById("next-step-btn"),endCallBtn=document.getElementById("end-call-btn"),logoutButton=document.getElementById("logoutButton"),systemStatusDiv=document.getElementById("systemStatus"),callTimerDiv=document.getElementById("callTimer"),callSummaryContentDiv=document.getElementById("callSummaryContent"),returnToInitialViewBtn=document.getElementById("returnToInitialViewBtn"),searchScenarioInput=document.getElementById("searchScenarioInput"),scenarioPreviewTooltip=document.getElementById("scenario-preview-tooltip"),updateNotificationSound=document.getElementById("updateNotificationSound");
     
     document.getElementById("currentYear").textContent = new Date().getFullYear();
@@ -1200,21 +1201,17 @@ Waiting for Ticket
     function showCustomToast(e, isUpdate = false){const t=document.getElementById("custom-toast-notification"),n=document.getElementById("toast-message"), i=t.querySelector(".toast-icon");t&&n&&(clearTimeout(toastTimeout),n.textContent=e, i.textContent = isUpdate ? '🔄' : '⚠️', t.classList.remove("hide"),t.classList.add("show"),toastTimeout=setTimeout((()=>{t.classList.remove("show"),t.classList.add("hide")}),4e3))}
     
     async function initializeAppLogic(user) {
-        // We still need the user's main role for other potential logic
-        const { data: profile } = await supabase.from('users').select('name, role').eq('id', user.id).single();
-        currentUser = { 
-            id: user.id, 
-            email: user.email, 
-            name: profile?.name || user.email,
-            role: profile?.role || 'agent'
-        };
-        
-        //  <<<--- أضف هذا السطر هنا
-        console.log("DEBUG: Current User Object:", currentUser); 
+        const { data: profile } = await supabase.from('users').select('name').eq('id', user.id).single();
+        currentUser = { id: user.id, email: user.email, name: profile?.name || user.email };
         
         if (restoreCallState()) {
             switchToCallFlowView(false);
             renderStep();
+            updateSystemStatus("In Ticket (Restored)", "status-in-call");
+            if (currentScenario) {
+                console.log('Restored session, will subscribe to:', currentScenario.id);
+                subscribeToScenarioUpdates(currentScenario.id);
+            }
         } else {
             switchToInitialView();
             await loadActiveScenarios();
@@ -1244,12 +1241,14 @@ Waiting for Ticket
                     console.log('✅ Real-time update received!', payload.new);
                     showCustomToast("A step in this ticket has been updated live.", true);
                     
+                    // START: Play notification sound
                     if (updateNotificationSound) {
                         updateNotificationSound.currentTime = 0; // Rewind to start
                         updateNotificationSound.play().catch(error => {
                             console.warn("Update notification sound could not be played:", error);
                         });
                     }
+                    // END: Play notification sound
                     
                     currentScenario = payload.new;
                     
@@ -1273,36 +1272,10 @@ Waiting for Ticket
     async function loadActiveScenarios(){
         setButtonLoadingState(receiveCallBtn, true, "Start Ticket");
         const e = document.getElementById("customScenarioList"), t = document.getElementById("scenarioDropdownValue");
-        e.innerHTML = `<div class="scenario-item" style="justify-content: center;"><div class="loading-skeleton" style="width: 100%; height: 1.5rem;"></div></div>`;
+        e.innerHTML = `<div class="scenario-item" style="justify-content: center;"><div class="loading-skeleton" style="width: 100%; height: 1.5rem;"></div></div><div class="scenario-item" style="justify-content: center;"><div class="loading-skeleton" style="width: 80%; height: 1.5rem;"></div></div><div class="scenario-item" style="justify-content: center;"><div class="loading-skeleton" style="width: 90%; height: 1.5rem;"></div></div>`;
         t.value = "";
         try {
-            //  NEW PERMISSION LOGIC
-            let query = supabase.from("call_scenarios").select("id, title, steps, description").eq("status", 'approved');
-
-            //  If the user is NOT an admin or senior, apply the permission filter
-            if (currentUser.role !== 'admin' && currentUser.role !== 'senior') {
-                //  1. Get the list of subcategory IDs the current user has access to
-                const { data: permissions, error: permError } = await supabase
-                    .from('user_subcategory_access')
-                    .select('subcategory_id')
-                    .eq('user_id', currentUser.id);
-
-                if (permError) throw permError;
-
-                //  If the user has no permissions, they see no scenarios.
-                if (!permissions || permissions.length === 0) {
-                    throw new Error("User has no assigned scenario categories.");
-                }
-
-                //  Extract just the IDs into an array
-                const accessibleCategoryIds = permissions.map(p => p.subcategory_id);
-
-                //  2. Filter scenarios where the subcategory_id is in the user's permission list
-                query = query.in('subcategory_id', accessibleCategoryIds);
-            }
-            
-            const { data: n, error: i } = await query.order("created_at", { ascending: false });
-
+            const { data: n, error: i } = await supabase.from("call_scenarios").select("id, title, steps, description").eq("status", 'approved').order("created_at", { ascending: false });
             if (i) throw i;
             e.innerHTML = "";
             if (n && n.length > 0) {
@@ -1318,12 +1291,12 @@ Waiting for Ticket
                 }));
                 receiveCallBtn.disabled = true;
             } else {
-                e.innerHTML = `<div class="scenario-item" role="option" style="justify-content: center; text-align: center; color: var(--text-color-secondary);"><div><div style="font-size: 2rem; margin-bottom: 0.5rem;">📭</div><div>No scenarios assigned to you.</div></div></div>`;
+                e.innerHTML = `<div class="scenario-item" role="option" style="justify-content: center; text-align: center; color: var(--text-color-secondary);"><div><div style="font-size: 2rem; margin-bottom: 0.5rem;">📭</div><div>No scenarios available</div></div></div>`;
                 receiveCallBtn.disabled = true;
             }
         } catch (t) {
             console.error("Error loading scenarios:", t);
-            e.innerHTML = `<div class="scenario-item" role="option" style="justify-content: center; text-align: center; color: var(--text-color-secondary);"><div><div style="font-size: 2rem; margin-bottom: 0.5rem;">🚫</div><div>${t.message}</div></div></div>`;
+            e.innerHTML = `<div class="scenario-item" role="option" style="justify-content: center; text-align: center; color: var(--danger-color);"><div><div style="font-size: 2rem; margin-bottom: 0.5rem;">⚠️</div><div>Failed to load scenarios</div></div></div>`;
             receiveCallBtn.disabled = true;
         } finally {
             setButtonLoadingState(receiveCallBtn, false, "Start Ticket");
@@ -1344,57 +1317,11 @@ Waiting for Ticket
     function clearCallState(){sessionStorage.removeItem(SESSION_STATE_KEY)}
     function resetCallState(e=!1){stopAndRecordStepTimer(),clearCallState(),callSessionId=currentStepId=currentScenario=null,stepHistory=[],accumulatedStepDurations={},stepVisitCount={},stepStartTime=0,e&&switchToInitialView()}
     
-    receiveCallBtn.addEventListener("click",(async()=>{
-        const e=document.getElementById("scenarioDropdownValue").value;
-        if(e){
-            setButtonLoadingState(receiveCallBtn,!0,"Start Ticket");
-            resetCallState();
-            switchToCallFlowView();
-            updateSystemStatus("Loading Scenario...","status-loading");
-            stepsContainer.innerHTML='<p class="placeholder-text">Loading scenario steps...</p>';
-            decisionButtonsContainer.innerHTML="";
-            scenarioTitleElement.textContent="Loading...";
-            try {
-                const{data:t,error:n}=await supabase.from("call_scenarios").select("id, title, steps").eq("id",e).single();
-                if(n)throw n;
-                if(!t||!Array.isArray(t.steps)||0===t.steps.length)throw new Error("Scenario data is invalid.");
-                
-                currentScenario=t,currentStepId=currentScenario.steps[0].id;
-                accumulatedStepDurations={};
-                currentScenario.steps.forEach((step=>{step?.id&&(accumulatedStepDurations[step.id]=0)}));
-                callStartTimeISO=(new Date).toISOString();
-                
-                const { data: i, error: a } = await supabase.from("call_sessions").insert({
-                    user_id: currentUser.id,
-                    scenario_id: currentScenario.id,
-                    start_time: callStartTimeISO,
-                    agent_name: currentUser.name,
-                    agent_email: currentUser.email,
-                    agent_role: currentUser.role // We still record the main role for general reporting
-                }).select("id").single();
-                
-                if(a)throw a;
-                callSessionId=i.id;
-                subscribeToScenarioUpdates(currentScenario.id);
-
-                updateSystemStatus("In Ticket","status-in-call");
-                renderStep();
-            } catch(err) {
-                console.error("Error starting ticket:",err);
-                showCustomToast("Failed to start ticket. Please try again.");
-                resetCallState(!0);
-                await loadActiveScenarios();
-            } finally {
-                setButtonLoadingState(receiveCallBtn,!1,"Start Ticket");
-            }
-        } else {
-            showCustomToast("Please select a scenario first.");
-        }
-    }));
-    
-    nextStepBtn.addEventListener("click",(()=>{const e=currentScenario.steps.find((e=>e?.id===currentStepId));if(e){if("form"===e.type){const e=document.getElementById("current-step-form").querySelectorAll("input, textarea");let t={},n=!0;if(e.forEach((e=>{e.required&&!e.value&&(n=!1),t[e.name]=e.value})),!n)return void showCustomToast("Please fill all required fields.");console.log("Form Data Collected:",t)}e.next_id?navigateToStep(e.next_id):(stopAndRecordStepTimer(),finishCall(!0,"Scenario finished via button."))}}));
-    prevStepBtn.addEventListener("click",(()=>{stopAndRecordStepTimer(),stepHistory.length>0&&(currentStepId=stepHistory.pop(),stepVisitCount[currentStepId]&&(stepVisitCount[currentStepId]=0),renderStep())}));
-    
+    // This part has been simplified as we removed the unnecessary sounds
+    receiveCallBtn.addEventListener("click",(async()=>{const e=document.getElementById("scenarioDropdownValue").value;if(e){setButtonLoadingState(receiveCallBtn,!0,"Start Ticket"),resetCallState(),switchToCallFlowView(),updateSystemStatus("Loading Scenario...","status-loading"),stepsContainer.innerHTML='<p class="placeholder-text">Loading scenario steps...</p>',decisionButtonsContainer.innerHTML="",scenarioTitleElement.textContent="Loading...";try{const{data:t,error:n}=await supabase.from("call_scenarios").select("id, title, steps").eq("id",e).single();if(n)throw n;if(!t||!Array.isArray(t.steps)||0===t.steps.length)throw new Error("Scenario data is invalid.");currentScenario=t,currentStepId=currentScenario.steps[0].id,accumulatedStepDurations={},currentScenario.steps.forEach((e=>{e?.id&&(accumulatedStepDurations[e.id]=0)})),callStartTimeISO=(new Date).toISOString();const{data:i,error:a}=await supabase.from("call_sessions").insert({user_id:currentUser.id,scenario_id:currentScenario.id,start_time:callStartTimeISO,agent_name:currentUser.name,agent_email:currentUser.email}).select("id").single();if(a)throw a;callSessionId=i.id;
+    console.log('▶️ Starting ticket, will subscribe to:', currentScenario.id); // EXTRA LOGGING
+    subscribeToScenarioUpdates(currentScenario.id);
+    const s=document.querySelector(`.scenario-item[data-value="${e}"]`);s&&s.classList.contains("compensation")&&(scenarioTitleElement.classList.add("highlight-scenario-title-animation"),setTimeout((()=>scenarioTitleElement.classList.remove("highlight-scenario-title-animation")),1200)),updateSystemStatus("In Ticket","status-in-call"),renderStep()}catch(e){console.error("Error starting ticket:",e),showCustomToast("Failed to start ticket. Please try again."),resetCallState(),switchToInitialView(),await loadActiveScenarios()}finally{setButtonLoadingState(receiveCallBtn,!1,"Start Ticket")}}else showCustomToast("Please select a scenario first.")})),nextStepBtn.addEventListener("click",(()=>{const e=currentScenario.steps.find((e=>e?.id===currentStepId));if(e){if("form"===e.type){const e=document.getElementById("current-step-form").querySelectorAll("input, textarea");let t={},n=!0;if(e.forEach((e=>{e.required&&!e.value&&(n=!1),t[e.name]=e.value})),!n)return void showCustomToast("Please fill all required fields.");console.log("Form Data Collected:",t)}e.next_id?navigateToStep(e.next_id):(stopAndRecordStepTimer(),finishCall(!0,"Scenario finished via button."))}})),prevStepBtn.addEventListener("click",(()=>{stopAndRecordStepTimer(),stepHistory.length>0&&(currentStepId=stepHistory.pop(),stepVisitCount[currentStepId]&&(stepVisitCount[currentStepId]=0),renderStep())}));
     const customConfirmModal=document.getElementById("custom-confirm-modal"),modalConfirmBtn=document.getElementById("modal-confirm-btn"),modalCancelBtn=document.getElementById("modal-cancel-btn");function showConfirmModal(){customConfirmModal.classList.add("show")}function hideConfirmModal(){customConfirmModal.classList.remove("show")}endCallBtn.addEventListener("click",showConfirmModal),modalCancelBtn.addEventListener("click",hideConfirmModal),modalConfirmBtn.addEventListener("click",(()=>{hideConfirmModal(),stopAndRecordStepTimer(),finishCall(!1,"Ticket ended by agent")})),returnToInitialViewBtn.addEventListener("click",(async()=>{resetCallState(!0),await loadActiveScenarios()})),logoutButton.addEventListener("click",(async()=>{resetCallState(),localStorage.removeItem("elevoCoreUserData"),supabase&&await supabase.auth.signOut(),window.location.replace("login.html")}));
     
     searchScenarioInput.addEventListener("input", (e => {
