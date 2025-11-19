@@ -517,38 +517,41 @@
         }
 
         async function loadCallHistory() {
-            // Using the correct table name from your original code
+            // التصحيح: القراءة من call_sessions والفلترة بـ user_id
             const { data: calls, error } = await supabase
-                .from('call_sessions_egypt')
+                .from('call_sessions') 
                 .select('*')
-                .eq('agent_email', state.user.email)
-                .order('start_time_egypt', { ascending: false });
+                .eq('user_id', state.user.id) // الأفضل استخدام ID
+                .order('start_time', { ascending: false }); // الترتيب بـ start_time
 
             if (!error && calls) {
                 state.allCalls = processCallsData(calls);
                 state.filteredCalls = [...state.allCalls];
                 calculateStatsAndRender();
                 renderTable();
+            } else {
+                console.error("Database Error:", error); // عشان لو فيه مشكلة تظهر بوضوح
             }
         }
 
         function processCallsData(calls) {
             return calls.map(call => {
-                // Determine quality logic
+                // منطق الجودة
                 let quality = 'average';
                 if (call.completed) quality = 'good';
                 if (call.quality_reason) quality = 'poor';
-                if (call.call_quality && ['good', 'average', 'poor'].includes(call.call_quality)) {
-                    quality = call.call_quality;
+                if (call.call_quality && ['good', 'average', 'poor'].includes(call.call_quality.toLowerCase())) {
+                    quality = call.call_quality.toLowerCase();
                 }
 
+                // التصحيح: استخدام أسماء الأعمدة الموجودة في call_sessions
                 return {
                     ...call,
-                    ui_date: formatDate(call.start_time_egypt),
+                    ui_date: formatDate(call.start_time), // تعديل الاسم
                     ui_duration: formatDuration(call.duration),
                     ui_quality: quality,
-                    raw_date: call.start_time_egypt,
-                    scenario_title: call.scenario_title || 'Unknown Scenario'
+                    raw_date: call.start_time, // تعديل الاسم
+                    scenario_title: call.scenario_id || 'Unknown Scenario' // مؤقتا لحد ما المابينج يشتغل
                 };
             });
         }
@@ -590,8 +593,11 @@
             calls.forEach(c => {
                 // Duration Calc
                 if(c.duration) {
-                    const parts = c.duration.split(':').map(Number);
-                    if (parts.length === 2) {
+                    const parts = typeof c.duration === 'string' ? c.duration.split(':').map(Number) : [0, c.duration];
+                    // التعامل مع الاحتمالين: نص أو رقم
+                    if (typeof c.duration === 'number') {
+                         totalSeconds += c.duration;
+                    } else if (parts.length === 2) {
                         totalSeconds += (parts[0] * 60) + parts[1];
                     }
                 }
@@ -622,7 +628,7 @@
             // Best Call Logic (Shortest Good Call)
             const bestCall = calls.filter(c => c.ui_quality === 'good')
                 .sort((a, b) => getSeconds(a.duration) - getSeconds(b.duration))[0];
-            document.getElementById('bestPerformance').textContent = bestCall ? bestCall.duration : 'N/A';
+            document.getElementById('bestPerformance').textContent = bestCall ? bestCall.ui_duration : 'N/A';
 
             updateAchievements(totalCalls, qualityCounts.good, todayCalls);
         }
@@ -763,7 +769,7 @@
                 const date = document.getElementById('dateFilter').value;
 
                 state.filteredCalls = state.allCalls.filter(c => {
-                    const matchesSearch = c.scenario_title.toLowerCase().includes(term);
+                    const matchesSearch = String(c.scenario_title).toLowerCase().includes(term);
                     const matchesQuality = quality === 'all' || c.ui_quality === quality;
                     const matchesDate = !date || c.ui_date === formatDate(date);
                     return matchesSearch && matchesQuality && matchesDate;
@@ -841,6 +847,7 @@
         }
         
         function getSeconds(durationStr) {
+            if (typeof durationStr === 'number') return durationStr;
             if(!durationStr) return 0;
             const [m, s] = durationStr.split(':').map(Number);
             return (m * 60) + (s || 0);
