@@ -806,7 +806,6 @@
     <script type="module">
         import { protectPage } from './role-check.js';
 
-        // إعدادات الاتصال
         const SUPABASE_URL = 'https://aefiigottnlcmjzilqnh.supabase.co';
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFlZmlpZ290dG5sY21qemlscW5oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcxNzY2MDQsImV4cCI6MjA2Mjc1MjYwNH0.FypB02v3tGMnxXV9ZmZMdMC0oQpREKOJWgHMPxUzwX4';
         const { createClient } = supabase;
@@ -820,11 +819,13 @@
         let recentTicketsPage = 1;
         const RECENT_TICKETS_PAGE_SIZE = 10;
         let isUserAuthorized = false;
+        
+        // 1. متغير جديد لتخزين قاموس السيناريوهات (ID -> Title)
+        let globalScenarioMap = {};
 
         document.addEventListener('DOMContentLoaded', async function() {
             document.getElementById('currentYear').textContent = new Date().getFullYear();
             
-            // التحقق من الصلاحية
             const userProfile = await protectPage(['admin'], 'app-content');
             if (!userProfile) return;
             
@@ -836,9 +837,30 @@
         });
 
         async function initializeDashboard() {
+            // 2. تحميل أسماء السيناريوهات أولاً
+            await loadScenariosMapping();
             await loadDashboardData();
             setupEventListeners();
             startAutoRefresh();
+        }
+
+        // دالة جديدة لجلب أسماء السيناريوهات
+        async function loadScenariosMapping() {
+            try {
+                const { data, error } = await supabaseClient
+                    .from('call_scenarios')
+                    .select('id, title');
+                
+                if (error) throw error;
+                
+                if (data) {
+                    data.forEach(scenario => {
+                        globalScenarioMap[scenario.id] = scenario.title;
+                    });
+                }
+            } catch (err) {
+                console.error("Error loading scenario names:", err);
+            }
         }
 
         function setupEventListeners() {
@@ -848,6 +870,7 @@
             });
             
             document.getElementById('refreshDataBtn').addEventListener('click', async () => {
+                await loadScenariosMapping(); // تحديث الأسماء عند الريفريش
                 await loadDashboardData();
                 showToast('Dashboard data refreshed successfully', 'success');
             });
@@ -869,7 +892,6 @@
             document.getElementById('globalSearch').addEventListener('input', debounce(handleSearch, 300));
         }
 
-        // --- دالة جلب البيانات المعدلة ---
         async function loadDashboardData() {
             if (!isUserAuthorized) return; 
 
@@ -880,43 +902,20 @@
                 const startOfToday = new Date(today + 'T00:00:00Z').toISOString();
                 const endOfToday = new Date(today + 'T23:59:59Z').toISOString();
 
-                // تم تغيير اسم الجدول من tickets إلى call_sessions
-                // تم تغيير created_at إلى start_time
-                // تم تغيير status='open' إلى end_time is null
-
                 const [
                     liveTicketsRes, delayedTicketsRes, recentTicketsRes, totalCallsRes, 
                     qualityStatsRes, agentStatsRes, topAgentsRes, topScenarioRes, 
                     volumeTrendRes, performanceDistRes
                 ] = await Promise.all([
-                    // Live: المكالمات التي لم تنته بعد
                     supabaseClient.from('call_sessions').select('*', { count: 'exact', head: true }).is('end_time', null),
-                    
-                    // Delayed: بدأت قبل 5 دقائق ولم تنته بعد
                     supabaseClient.from('call_sessions').select('*', { count: 'exact', head: true }).is('end_time', null).lt('start_time', new Date(Date.now() - 5 * 60 * 1000).toISOString()),
-                    
-                    // Recent: انتهت في آخر 10 دقائق
                     supabaseClient.from('call_sessions').select('*', { count: 'exact', head: true }).not('end_time', 'is', null).gte('end_time', new Date(Date.now() - 10 * 60 * 1000).toISOString()),
-                    
-                    // Total Today: كل مكالمات اليوم
                     supabaseClient.from('call_sessions').select('*', { count: 'exact', head: true }).gte('start_time', startOfToday).lte('start_time', endOfToday),
-                    
-                    // Quality Stats: اسم العمود call_quality
                     supabaseClient.from('call_sessions').select('call_quality').gte('start_time', startOfToday).lte('start_time', endOfToday),
-                    
-                    // Agent Stats
                     supabaseClient.from('call_sessions').select('agent_name, duration').gte('start_time', startOfToday).lte('start_time', endOfToday),
-                    
-                    // Top Agents
                     supabaseClient.from('call_sessions').select('agent_name, scenario_id').gte('start_time', startOfToday).lte('start_time', endOfToday),
-                    
-                    // Top Scenario
                     supabaseClient.from('call_sessions').select('scenario_id').gte('start_time', startOfToday).lte('start_time', endOfToday),
-                    
-                    // Volume Trend (Last 7 days)
                     supabaseClient.from('call_sessions').select('start_time').gte('start_time', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()),
-                    
-                    // Performance Dist
                     supabaseClient.from('call_sessions').select('agent_name, duration, call_quality').gte('start_time', startOfToday).lte('start_time', endOfToday)
                 ]);
 
@@ -928,7 +927,8 @@
                     qualityStats: qualityStatsRes.data?.map(d => ({ quality: d.call_quality })) || [],
                     agentStats: agentStatsRes.data || [],
                     topAgents: topAgentsRes.data || [],
-                    topScenario: topScenarioRes.data?.map(d => ({ scenario_name: d.scenario_id })) || [],
+                    // هنا هنبعت الـ scenario_id زي ما هو، والتحويل للاسم هيتم جوه دالة العرض
+                    topScenario: topScenarioRes.data?.map(d => ({ scenario_name: d.scenario_id })) || [], 
                     volumeTrend: volumeTrendRes.data?.map(d => ({ created_at: d.start_time })) || [],
                     performanceDist: performanceDistRes.data || []
                 });
@@ -951,7 +951,6 @@
             document.getElementById('totalCallsToday').textContent = data.totalCalls;
 
             const avgHandleTime = calculateAvgHandleTime(data.agentStats);
-            const completionRate = calculateCompletionRate(data.qualityStats);
             const goodQualityRate = calculateGoodQualityRate(data.qualityStats);
             const activeAgents = calculateActiveAgents(data.agentStats);
 
@@ -972,11 +971,6 @@
             const totalDuration = agentStats.reduce((sum, ticket) => sum + (ticket.duration || 0), 0);
             const avgMinutes = Math.round(totalDuration / agentStats.length / 60);
             return avgMinutes || '0';
-        }
-
-        function calculateCompletionRate(qualityStats) {
-            if (!qualityStats.length) return '0';
-            return '100'; 
         }
 
         function calculateGoodQualityRate(qualityStats) {
@@ -1017,12 +1011,15 @@
             }
         }
 
+        // 3. تحديث دالة عرض السيناريو الأكثر تكراراً لاستخدام الأسماء
         function updateTopScenario(topScenario) {
             const scenarioCounts = {};
             topScenario.forEach(ticket => {
-                if (ticket.scenario_name) {
-                    scenarioCounts[ticket.scenario_name] = (scenarioCounts[ticket.scenario_name] || 0) + 1;
-                }
+                // هنا بنحول الـ ID للاسم
+                const scenarioId = ticket.scenario_name; // في الخطوة اللي فاتت مررنا ال ID هنا
+                const scenarioName = globalScenarioMap[scenarioId] || 'Unknown Scenario';
+                
+                scenarioCounts[scenarioName] = (scenarioCounts[scenarioName] || 0) + 1;
             });
 
             const sortedScenarios = Object.entries(scenarioCounts)
@@ -1083,12 +1080,10 @@
             agentPerformanceChart = new Chart(ctx, { type: 'bar', data: { labels: Object.keys(performanceRanges), datasets: [{ label: 'Number of Calls', data: Object.values(performanceRanges), backgroundColor: ['rgba(16, 185, 129, 0.8)', 'rgba(78, 140, 255, 0.8)', 'rgba(245, 158, 11, 0.8)', 'rgba(239, 68, 68, 0.8)'], borderColor: ['#10b981', '#4e8cff', '#f59e0b', '#ef4444'], borderWidth: 2, borderRadius: 8 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { color: 'rgba(55, 65, 81, 0.3)', borderColor: 'rgba(55, 65, 81, 0.5)' }, ticks: { color: '#d1d5db' } }, y: { grid: { color: 'rgba(55, 65, 81, 0.3)', borderColor: 'rgba(55, 65, 81, 0.5)' }, ticks: { color: '#d1d5db', precision: 0 }, beginAtZero: true } } } });
         }
 
-        // --- دالة جلب التذاكر الأخيرة (الجدول السفلي) ---
         async function loadRecentTickets(page = 1) {
             if (!isUserAuthorized) return;
             try {
                 const startIndex = (page - 1) * RECENT_TICKETS_PAGE_SIZE;
-                // تم التعديل هنا أيضاً ليقرأ من call_sessions
                 const { data: tickets, error, count } = await supabaseClient
                     .from('call_sessions')
                     .select('*', { count: 'exact' })
@@ -1101,6 +1096,7 @@
             } catch (error) { console.error('Error loading recent tickets:', error); showToast('Failed to load recent tickets', 'error'); }
         }
 
+        // 4. تحديث جدول التذاكر لاستخدام الأسماء
         function updateRecentTicketsTable(tickets) {
             const tbody = document.getElementById('recentTicketsTbody');
             tbody.innerHTML = '';
@@ -1111,14 +1107,14 @@
             tickets.forEach(ticket => {
                 const row = document.createElement('tr');
                 const duration = `${Math.floor((ticket.duration || 0) / 60)}:${String(Math.floor((ticket.duration || 0) % 60)).padStart(2, '0')}`;
-                
-                // استخدام call_quality بدلاً من quality
                 const qVal = ticket.call_quality || 'N/A';
                 const qualityBadge = ticket.call_quality ? `<span style="background: ${getQualityColor(qVal)}20; color: ${getQualityColor(qVal)}; padding: 0.3rem 0.8rem; border-radius: 20px; font-size: 0.8rem; font-weight: 500; border: 1px solid ${getQualityColor(qVal)}40;">${qVal}</span>` : '<span style="color: var(--text-color-light);">N/A</span>';
                 
-                const scenarioDisplay = ticket.scenario_id || ticket.scenario_name || 'N/A';
+                // هنا التحويل: بنستخدم الـ Map عشان نجيب الاسم
+                const scenarioId = ticket.scenario_id;
+                const scenarioName = globalScenarioMap[scenarioId] || 'Unknown Scenario';
                 
-                row.innerHTML = `<td>${ticket.agent_name || 'Unknown'}</td><td>${ticket.agent_email || 'N/A'}</td><td>${scenarioDisplay}</td><td>${qualityBadge}</td><td>${formatDateTime(ticket.start_time)}</td><td>${duration}</td>`;
+                row.innerHTML = `<td>${ticket.agent_name || 'Unknown'}</td><td>${ticket.agent_email || 'N/A'}</td><td>${scenarioName}</td><td>${qualityBadge}</td><td>${formatDateTime(ticket.start_time)}</td><td>${duration}</td>`;
                 tbody.appendChild(row);
             });
         }
