@@ -634,6 +634,9 @@
         let agentActivityChart = null;
         let autoRefreshInterval = null;
         let isAutoRefreshEnabled = true;
+        
+        // القاموس لتحويل الـ ID لاسم
+        let globalScenarioMap = {};
 
         document.addEventListener('DOMContentLoaded', async function() {
             const userProfile = await protectPage(['admin', 'rtm'], 'app-content');
@@ -645,9 +648,26 @@
         });
 
         async function initializeRTM() {
+            await loadScenariosMapping(); // تحميل الأسماء أولاً
             await loadRTMData();
             setupEventListeners();
             startAutoRefresh();
+        }
+        
+        // دالة تحميل أسماء السيناريوهات
+        async function loadScenariosMapping() {
+            try {
+                const { data, error } = await supabase
+                    .from('call_scenarios')
+                    .select('id, title');
+                
+                if (error) throw error;
+                if (data) {
+                    data.forEach(scenario => {
+                        globalScenarioMap[scenario.id] = scenario.title;
+                    });
+                }
+            } catch (err) { console.error("Error loading scenarios:", err); }
         }
 
         function setupEventListeners() {
@@ -656,7 +676,10 @@
                 window.location.href = 'login.html';
             });
             
-            document.getElementById('refreshRTMDataBtn').addEventListener('click', loadRTMData);
+            document.getElementById('refreshRTMDataBtn').addEventListener('click', async () => {
+                await loadScenariosMapping();
+                loadRTMData();
+            });
             
             document.getElementById('autoRefreshToggle').addEventListener('change', (e) => {
                 isAutoRefreshEnabled = e.target.checked;
@@ -691,17 +714,23 @@
 
         async function loadTicketMetrics() {
             try {
-                const { count: liveCount } = await supabase.from('live_tickets').select('id', { count: 'exact', head: true });
+                // Live: اللي ملوش وقت انتهاء
+                const { count: liveCount } = await supabase.from('call_sessions').select('*', { count: 'exact', head: true }).is('end_time', null);
                 document.getElementById('rtmLiveTickets').textContent = liveCount || 0;
 
-                const { count: delayedCount } = await supabase.from('delayed_tickets').select('id', { count: 'exact', head: true });
+                // Delayed: ملوش وقت انتهاء وبدأ من 5 دقايق
+                const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+                const { count: delayedCount } = await supabase.from('call_sessions').select('*', { count: 'exact', head: true }).is('end_time', null).lt('start_time', fiveMinAgo);
                 document.getElementById('rtmDelayedTickets').textContent = delayedCount || 0;
 
-                const { count: recentCount } = await supabase.from('recent_tickets').select('id', { count: 'exact', head: true });
+                // Recent: انتهى في آخر 10 دقايق
+                const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+                const { count: recentCount } = await supabase.from('call_sessions').select('*', { count: 'exact', head: true }).not('end_time', 'is', null).gte('end_time', tenMinAgo);
                 document.getElementById('rtmRecentTickets').textContent = recentCount || 0;
 
-                const { data: agentsData, error } = await supabase.from('live_tickets').select('agent_name');
-                if (!error) {
+                // Active Agents
+                const { data: agentsData } = await supabase.from('call_sessions').select('agent_name').is('end_time', null);
+                if (agentsData) {
                     const activeAgents = new Set(agentsData.map(t => t.agent_name).filter(Boolean));
                     document.getElementById('rtmActiveAgents').textContent = activeAgents.size;
                 }
@@ -710,64 +739,64 @@
             }
         }
 
-        async function renderTickets(viewName, listElementId, status, statusClass) {
+        // دالة العرض الموحدة
+        async function renderTickets(listElementId, status, statusClass, isLive) {
             try {
-                const { data, error } = await supabase.from(viewName).select('*').order('start_time_egypt', { ascending: false });
+                let query = supabase.from('call_sessions').select('*').order('start_time', { ascending: false });
+                
+                if (isLive) {
+                    query = query.is('end_time', null); // هات اللايف بس
+                    if (status === 'Delayed') {
+                        const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+                        query = query.lt('start_time', fiveMinAgo);
+                    }
+                } else {
+                     // هات المنتهي (Recent)
+                    query = query.not('end_time', 'is', null).order('end_time', { ascending: false }).limit(10);
+                }
+
+                const { data, error } = await query;
                 const listElement = document.getElementById(listElementId);
                 
                 if (error) throw error;
                 
-                if (data.length === 0) {
-                    listElement.innerHTML = `<div class="no-data">No ${status.toLowerCase()} tickets at the moment</div>`;
+                if (!data || data.length === 0) {
+                    listElement.innerHTML = `<div class="no-data">No ${status.toLowerCase()} tickets</div>`;
                     return;
                 }
                 
-                listElement.innerHTML = data.map(ticket => `
+                listElement.innerHTML = data.map(ticket => {
+                    // تحويل الـ ID لاسم
+                    const scenarioName = globalScenarioMap[ticket.scenario_id] || 'Unknown Scenario';
+                    const timeLabel = isLive ? 'Started' : 'Completed';
+                    const timeVal = isLive ? ticket.start_time : ticket.end_time;
+                    
+                    return `
                     <div class="ticket-item">
                         <div class="ticket-info">
                             <div class="ticket-agent">${ticket.agent_name || 'Unknown Agent'}</div>
-                            <div class="ticket-scenario">${ticket.scenario_id || 'Unknown Scenario'}</div>
-                            <div class="ticket-time">Started: ${formatTime(ticket.start_time_egypt)}</div>
+                            <div class="ticket-scenario">${scenarioName}</div>
+                            <div class="ticket-time">${timeLabel}: ${formatTime(timeVal)}</div>
                         </div>
                         <div class="ticket-status">
                             <span class="status-badge ${statusClass}">${status}</span>
                         </div>
-                    </div>`).join('');
+                    </div>`;
+                }).join('');
             } catch (error) {
-                console.error(`Error loading ${status.toLowerCase()} tickets:`, error);
-                document.getElementById(listElementId).innerHTML = `<div class="no-data">Error loading ${status.toLowerCase()} tickets.</div>`;
+                console.error(`Error loading ${status} tickets:`, error);
             }
         }
 
-        async function loadLiveTickets() { await renderTickets('live_tickets', 'liveTicketsList', 'Live', 'status-live'); }
-        async function loadDelayedTickets() { await renderTickets('delayed_tickets', 'delayedTicketsList', 'Delayed', 'status-delayed'); }
-        async function loadRecentTickets() {
-             try {
-                const { data, error } = await supabase.from('recent_tickets').select('*').order('end_time_egypt', { ascending: false });
-                const listElement = document.getElementById('recentTicketsList');
-                if (error) throw error;
-                if (data.length === 0) {
-                    listElement.innerHTML = `<div class="no-data">No recent tickets</div>`;
-                    return;
-                }
-                listElement.innerHTML = data.map(ticket => `
-                    <div class="ticket-item">
-                        <div class="ticket-info">
-                            <div class="ticket-agent">${ticket.agent_name || 'Unknown Agent'}</div>
-                            <div class="ticket-scenario">${ticket.scenario_id || 'Unknown Scenario'}</div>
-                            <div class="ticket-time">Completed: ${formatTime(ticket.end_time_egypt)}</div>
-                        </div>
-                        <div class="ticket-status"><span class="status-badge status-recent">Completed</span></div>
-                    </div>`).join('');
-            } catch (error) {
-                console.error('Error loading recent tickets:', error);
-            }
-        }
+        async function loadLiveTickets() { await renderTickets('liveTicketsList', 'Live', 'status-live', true); }
+        async function loadDelayedTickets() { await renderTickets('delayedTicketsList', 'Delayed', 'status-delayed', true); }
+        async function loadRecentTickets() { await renderTickets('recentTicketsList', 'Completed', 'status-recent', false); }
         
         async function loadTicketVolumeChart() {
             try {
                 const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-                const { data, error } = await supabase.from('call_sessions_egypt').select('start_time_egypt').gte('start_time_egypt', oneHourAgo);
+                // قراءة من call_sessions
+                const { data, error } = await supabase.from('call_sessions').select('start_time').gte('start_time', oneHourAgo);
                 if (error) throw error;
 
                 const intervalMs = 5 * 60 * 1000;
@@ -779,7 +808,7 @@
                 const values = Array(12).fill(0);
 
                 data.forEach(ticket => {
-                    const ticketTime = new Date(ticket.start_time_egypt).getTime();
+                    const ticketTime = new Date(ticket.start_time).getTime();
                     const index = 11 - Math.floor((now - ticketTime) / intervalMs);
                     if (index >= 0 && index < 12) {
                         values[index]++;
@@ -791,14 +820,15 @@
                 ticketVolumeChart = new Chart(ctx, {
                     type: 'line',
                     data: { labels, datasets: [{ label: 'Tickets', data: values, borderColor: '#4e8cff', backgroundColor: 'rgba(78, 140, 255, 0.1)', borderWidth: 2, fill: true, tension: 0.4 }] },
-                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#9CA3AF' }, grid: { color: '#374151' } }, y: { ticks: { color: '#9CA3AF' }, grid: { color: '#374151' }, beginAtZero: true, suggestedMax: 10 } } }
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#9CA3AF' }, grid: { color: '#374151' } }, y: { ticks: { color: '#9CA3AF' }, grid: { color: '#374151' }, beginAtZero: true, suggestedMax: 5 } } }
                 });
             } catch (error) { console.error('Error loading ticket volume chart:', error); }
         }
 
         async function loadAgentActivityChart() {
             try {
-                const { data, error } = await supabase.from('live_tickets').select('agent_name');
+                // Active agents count
+                const { data, error } = await supabase.from('call_sessions').select('agent_name').is('end_time', null);
                 if (error) throw error;
                 
                 const agentCounts = data.reduce((acc, ticket) => {
