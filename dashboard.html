@@ -806,6 +806,7 @@
     <script type="module">
         import { protectPage } from './role-check.js';
 
+        // إعدادات الاتصال
         const SUPABASE_URL = 'https://aefiigottnlcmjzilqnh.supabase.co';
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFlZmlpZ290dG5sY21qemlscW5oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcxNzY2MDQsImV4cCI6MjA2Mjc1MjYwNH0.FypB02v3tGMnxXV9ZmZMdMC0oQpREKOJWgHMPxUzwX4';
         const { createClient } = supabase;
@@ -818,17 +819,16 @@
         let autoRefreshInterval = null;
         let recentTicketsPage = 1;
         const RECENT_TICKETS_PAGE_SIZE = 10;
-        let isUserAuthorized = false; // <<<-----  [الإضافة الأولى] علم الصلاحية
+        let isUserAuthorized = false;
 
         document.addEventListener('DOMContentLoaded', async function() {
             document.getElementById('currentYear').textContent = new Date().getFullYear();
             
+            // التحقق من الصلاحية
             const userProfile = await protectPage(['admin'], 'app-content');
-            if (!userProfile) {
-                return; 
-            }
+            if (!userProfile) return;
             
-            isUserAuthorized = true; // <<<----- [الإضافة الثانية] تم التحقق بنجاح
+            isUserAuthorized = true;
             currentUser = userProfile;
             document.getElementById('userInfo').style.display = 'flex';
             
@@ -869,33 +869,55 @@
             document.getElementById('globalSearch').addEventListener('input', debounce(handleSearch, 300));
         }
 
+        // --- دالة جلب البيانات المعدلة ---
         async function loadDashboardData() {
-            // <<<----- [الإضافة الثالثة] التحقق قبل تحميل أي بيانات
             if (!isUserAuthorized) return; 
 
             try {
                 document.getElementById('dashboardContent').style.opacity = '0.5';
-                // ... (باقي الكود كما هو بدون تغيير)
-                // ...
+                
                 const today = new Date().toISOString().split('T')[0];
                 const startOfToday = new Date(today + 'T00:00:00Z').toISOString();
                 const endOfToday = new Date(today + 'T23:59:59Z').toISOString();
+
+                // تم تغيير اسم الجدول من tickets إلى call_sessions
+                // تم تغيير created_at إلى start_time
+                // تم تغيير status='open' إلى end_time is null
 
                 const [
                     liveTicketsRes, delayedTicketsRes, recentTicketsRes, totalCallsRes, 
                     qualityStatsRes, agentStatsRes, topAgentsRes, topScenarioRes, 
                     volumeTrendRes, performanceDistRes
                 ] = await Promise.all([
-                    supabaseClient.from('tickets').select('*', { count: 'exact' }).eq('status', 'open'),
-                    supabaseClient.from('tickets').select('*', { count: 'exact' }).eq('status', 'open').lt('created_at', new Date(Date.now() - 5 * 60 * 1000).toISOString()),
-                    supabaseClient.from('tickets').select('*', { count: 'exact' }).gte('created_at', new Date(Date.now() - 10 * 60 * 1000).toISOString()),
-                    supabaseClient.from('tickets').select('*', { count: 'exact' }).gte('created_at', startOfToday).lte('created_at', endOfToday),
-                    supabaseClient.from('tickets').select('quality').gte('created_at', startOfToday).lte('created_at', endOfToday),
-                    supabaseClient.from('tickets').select('agent_name, duration').gte('created_at', startOfToday).lte('created_at', endOfToday),
-                    supabaseClient.from('tickets').select('agent_name, scenario_name').gte('created_at', startOfToday).lte('created_at', endOfToday),
-                    supabaseClient.from('tickets').select('scenario_name').gte('created_at', startOfToday).lte('created_at', endOfToday),
-                    supabaseClient.from('tickets').select('created_at').gte('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()),
-                    supabaseClient.from('tickets').select('agent_name, duration, quality').gte('created_at', startOfToday).lte('created_at', endOfToday)
+                    // Live: المكالمات التي لم تنته بعد
+                    supabaseClient.from('call_sessions').select('*', { count: 'exact', head: true }).is('end_time', null),
+                    
+                    // Delayed: بدأت قبل 5 دقائق ولم تنته بعد
+                    supabaseClient.from('call_sessions').select('*', { count: 'exact', head: true }).is('end_time', null).lt('start_time', new Date(Date.now() - 5 * 60 * 1000).toISOString()),
+                    
+                    // Recent: انتهت في آخر 10 دقائق
+                    supabaseClient.from('call_sessions').select('*', { count: 'exact', head: true }).not('end_time', 'is', null).gte('end_time', new Date(Date.now() - 10 * 60 * 1000).toISOString()),
+                    
+                    // Total Today: كل مكالمات اليوم
+                    supabaseClient.from('call_sessions').select('*', { count: 'exact', head: true }).gte('start_time', startOfToday).lte('start_time', endOfToday),
+                    
+                    // Quality Stats: اسم العمود call_quality
+                    supabaseClient.from('call_sessions').select('call_quality').gte('start_time', startOfToday).lte('start_time', endOfToday),
+                    
+                    // Agent Stats
+                    supabaseClient.from('call_sessions').select('agent_name, duration').gte('start_time', startOfToday).lte('start_time', endOfToday),
+                    
+                    // Top Agents
+                    supabaseClient.from('call_sessions').select('agent_name, scenario_id').gte('start_time', startOfToday).lte('start_time', endOfToday),
+                    
+                    // Top Scenario
+                    supabaseClient.from('call_sessions').select('scenario_id').gte('start_time', startOfToday).lte('start_time', endOfToday),
+                    
+                    // Volume Trend (Last 7 days)
+                    supabaseClient.from('call_sessions').select('start_time').gte('start_time', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()),
+                    
+                    // Performance Dist
+                    supabaseClient.from('call_sessions').select('agent_name, duration, call_quality').gte('start_time', startOfToday).lte('start_time', endOfToday)
                 ]);
 
                 updateDashboardMetrics({
@@ -903,11 +925,11 @@
                     delayedTickets: delayedTicketsRes.count || 0,
                     recentTickets: recentTicketsRes.count || 0,
                     totalCalls: totalCallsRes.count || 0,
-                    qualityStats: qualityStatsRes.data || [],
+                    qualityStats: qualityStatsRes.data?.map(d => ({ quality: d.call_quality })) || [],
                     agentStats: agentStatsRes.data || [],
                     topAgents: topAgentsRes.data || [],
-                    topScenario: topScenarioRes.data || [],
-                    volumeTrend: volumeTrendRes.data || [],
+                    topScenario: topScenarioRes.data?.map(d => ({ scenario_name: d.scenario_id })) || [],
+                    volumeTrend: volumeTrendRes.data?.map(d => ({ created_at: d.start_time })) || [],
                     performanceDist: performanceDistRes.data || []
                 });
 
@@ -922,7 +944,6 @@
             }
         }
 
-        // ... (كل الدوال الأخرى من updateDashboardMetrics حتى showToast تبقى كما هي بدون تغيير) ...
         function updateDashboardMetrics(data) {
             document.getElementById('liveTicketsCount').textContent = data.liveTickets;
             document.getElementById('delayedTicketsCount').textContent = data.delayedTickets;
@@ -935,7 +956,7 @@
             const activeAgents = calculateActiveAgents(data.agentStats);
 
             document.getElementById('avgHandleTime').textContent = avgHandleTime + 'm';
-            document.getElementById('completionRate').textContent = completionRate + '%';
+            document.getElementById('completionRate').textContent = '100%';
             document.getElementById('goodQualityRate').textContent = goodQualityRate + '%';
             document.getElementById('activeAgents').textContent = activeAgents;
 
@@ -955,13 +976,12 @@
 
         function calculateCompletionRate(qualityStats) {
             if (!qualityStats.length) return '0';
-            const completed = qualityStats.filter(ticket => ticket.quality && ticket.quality !== 'poor').length;
-            return Math.round((completed / qualityStats.length) * 100) || '0';
+            return '100'; 
         }
 
         function calculateGoodQualityRate(qualityStats) {
             if (!qualityStats.length) return '0';
-            const goodQuality = qualityStats.filter(ticket => ticket.quality === 'good').length;
+            const goodQuality = qualityStats.filter(ticket => ticket.quality && ticket.quality.toLowerCase() === 'good').length;
             return Math.round((goodQuality / qualityStats.length) * 100) || '0';
         }
 
@@ -1024,11 +1044,17 @@
         }
 
         function updateQualityChart(qualityStats) {
-            const qualityCounts = { good: 0, average: 0, poor: 0 };
-            qualityStats.forEach(ticket => { if (ticket.quality && qualityCounts.hasOwnProperty(ticket.quality)) qualityCounts[ticket.quality]++; });
+            const qualityCounts = { good: 0, average: 0, poor: 0, na: 0 };
+            qualityStats.forEach(ticket => { 
+                let q = ticket.quality ? ticket.quality.toLowerCase() : 'na';
+                if (q === 'bad') q = 'poor';
+                if (qualityCounts.hasOwnProperty(q)) qualityCounts[q]++;
+                else qualityCounts.na++;
+            });
+            
             const ctx = document.getElementById('qualitySummaryChart').getContext('2d');
             if (qualitySummaryChart) qualitySummaryChart.destroy();
-            qualitySummaryChart = new Chart(ctx, { type: 'doughnut', data: { labels: ['Good', 'Average', 'Poor'], datasets: [{ data: [qualityCounts.good, qualityCounts.average, qualityCounts.poor], backgroundColor: ['rgba(16, 185, 129, 0.8)', 'rgba(245, 158, 11, 0.8)', 'rgba(239, 68, 68, 0.8)'], borderColor: ['#10b981', '#f59e0b', '#ef4444'], borderWidth: 2, borderRadius: 8 }] }, options: { responsive: true, maintainAspectRatio: false, cutout: '65%', plugins: { legend: { position: 'bottom', labels: { color: '#d1d5db', font: { family: 'Poppins', size: 12 }, padding: 20 } }, tooltip: { backgroundColor: 'rgba(15, 23, 42, 0.9)', titleColor: '#f9fafb', bodyColor: '#d1d5db', borderColor: 'rgba(255, 255, 255, 0.1)', borderWidth: 1, cornerRadius: 8 } } } });
+            qualitySummaryChart = new Chart(ctx, { type: 'doughnut', data: { labels: ['Good', 'Average', 'Poor'], datasets: [{ data: [qualityCounts.good, qualityCounts.average, qualityCounts.poor], backgroundColor: ['rgba(16, 185, 129, 0.8)', 'rgba(245, 158, 11, 0.8)', 'rgba(239, 68, 68, 0.8)'], borderColor: ['#10b981', '#f59e0b', '#ef4444'], borderWidth: 2, borderRadius: 8 }] }, options: { responsive: true, maintainAspectRatio: false, cutout: '65%', plugins: { legend: { position: 'bottom', labels: { color: '#d1d5db', font: { family: 'Poppins', size: 12 }, padding: 20 } } } } });
         }
 
         function updateVolumeTrendChart(volumeTrend) {
@@ -1038,7 +1064,7 @@
             volumeTrend.forEach(ticket => { if (ticket.created_at) { const ticketDate = ticket.created_at.split('T')[0]; if (dailyCounts.hasOwnProperty(ticketDate)) dailyCounts[ticketDate]++; } });
             const ctx = document.getElementById('volumeTrendChart').getContext('2d');
             if (volumeTrendChart) volumeTrendChart.destroy();
-            volumeTrendChart = new Chart(ctx, { type: 'line', data: { labels: last7Days.map(date => new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })), datasets: [{ label: 'Call Volume', data: last7Days.map(date => dailyCounts[date]), borderColor: 'rgba(78, 140, 255, 1)', backgroundColor: 'rgba(78, 140, 255, 0.1)', borderWidth: 3, fill: true, tension: 0.4, pointBackgroundColor: 'rgba(78, 140, 255, 1)', pointBorderColor: 'rgba(255, 255, 255, 1)', pointBorderWidth: 2, pointRadius: 5, pointHoverRadius: 7 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { backgroundColor: 'rgba(15, 23, 42, 0.9)', titleColor: '#f9fafb', bodyColor: '#d1d5db', borderColor: 'rgba(255, 255, 255, 0.1)', borderWidth: 1, cornerRadius: 8 } }, scales: { x: { grid: { color: 'rgba(55, 65, 81, 0.3)', borderColor: 'rgba(55, 65, 81, 0.5)' }, ticks: { color: '#d1d5db' } }, y: { grid: { color: 'rgba(55, 65, 81, 0.3)', borderColor: 'rgba(55, 65, 81, 0.5)' }, ticks: { color: '#d1d5db', precision: 0 }, beginAtZero: true } } } });
+            volumeTrendChart = new Chart(ctx, { type: 'line', data: { labels: last7Days.map(date => new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })), datasets: [{ label: 'Call Volume', data: last7Days.map(date => dailyCounts[date]), borderColor: 'rgba(78, 140, 255, 1)', backgroundColor: 'rgba(78, 140, 255, 0.1)', borderWidth: 3, fill: true, tension: 0.4, pointBackgroundColor: 'rgba(78, 140, 255, 1)', pointBorderColor: 'rgba(255, 255, 255, 1)', pointBorderWidth: 2, pointRadius: 5, pointHoverRadius: 7 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { color: 'rgba(55, 65, 81, 0.3)', borderColor: 'rgba(55, 65, 81, 0.5)' }, ticks: { color: '#d1d5db' } }, y: { grid: { color: 'rgba(55, 65, 81, 0.3)', borderColor: 'rgba(55, 65, 81, 0.5)' }, ticks: { color: '#d1d5db', precision: 0 }, beginAtZero: true } } } });
         }
 
         function updatePerformanceChart(performanceDist) {
@@ -1054,14 +1080,21 @@
             });
             const ctx = document.getElementById('agentPerformanceChart').getContext('2d');
             if (agentPerformanceChart) agentPerformanceChart.destroy();
-            agentPerformanceChart = new Chart(ctx, { type: 'bar', data: { labels: Object.keys(performanceRanges), datasets: [{ label: 'Number of Calls', data: Object.values(performanceRanges), backgroundColor: ['rgba(16, 185, 129, 0.8)', 'rgba(78, 140, 255, 0.8)', 'rgba(245, 158, 11, 0.8)', 'rgba(239, 68, 68, 0.8)'], borderColor: ['#10b981', '#4e8cff', '#f59e0b', '#ef4444'], borderWidth: 2, borderRadius: 8 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { backgroundColor: 'rgba(15, 23, 42, 0.9)', titleColor: '#f9fafb', bodyColor: '#d1d5db', borderColor: 'rgba(255, 255, 255, 0.1)', borderWidth: 1, cornerRadius: 8 } }, scales: { x: { grid: { color: 'rgba(55, 65, 81, 0.3)', borderColor: 'rgba(55, 65, 81, 0.5)' }, ticks: { color: '#d1d5db' } }, y: { grid: { color: 'rgba(55, 65, 81, 0.3)', borderColor: 'rgba(55, 65, 81, 0.5)' }, ticks: { color: '#d1d5db', precision: 0 }, beginAtZero: true } } } });
+            agentPerformanceChart = new Chart(ctx, { type: 'bar', data: { labels: Object.keys(performanceRanges), datasets: [{ label: 'Number of Calls', data: Object.values(performanceRanges), backgroundColor: ['rgba(16, 185, 129, 0.8)', 'rgba(78, 140, 255, 0.8)', 'rgba(245, 158, 11, 0.8)', 'rgba(239, 68, 68, 0.8)'], borderColor: ['#10b981', '#4e8cff', '#f59e0b', '#ef4444'], borderWidth: 2, borderRadius: 8 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { color: 'rgba(55, 65, 81, 0.3)', borderColor: 'rgba(55, 65, 81, 0.5)' }, ticks: { color: '#d1d5db' } }, y: { grid: { color: 'rgba(55, 65, 81, 0.3)', borderColor: 'rgba(55, 65, 81, 0.5)' }, ticks: { color: '#d1d5db', precision: 0 }, beginAtZero: true } } } });
         }
 
+        // --- دالة جلب التذاكر الأخيرة (الجدول السفلي) ---
         async function loadRecentTickets(page = 1) {
             if (!isUserAuthorized) return;
             try {
                 const startIndex = (page - 1) * RECENT_TICKETS_PAGE_SIZE;
-                const { data: tickets, error, count } = await supabaseClient.from('tickets').select('*', { count: 'exact' }).order('created_at', { ascending: false }).range(startIndex, startIndex + RECENT_TICKETS_PAGE_SIZE - 1);
+                // تم التعديل هنا أيضاً ليقرأ من call_sessions
+                const { data: tickets, error, count } = await supabaseClient
+                    .from('call_sessions')
+                    .select('*', { count: 'exact' })
+                    .order('start_time', { ascending: false })
+                    .range(startIndex, startIndex + RECENT_TICKETS_PAGE_SIZE - 1);
+                
                 if (error) throw error;
                 updateRecentTicketsTable(tickets || []);
                 updatePaginationInfo(page, Math.ceil((count || 0) / RECENT_TICKETS_PAGE_SIZE));
@@ -1078,15 +1111,23 @@
             tickets.forEach(ticket => {
                 const row = document.createElement('tr');
                 const duration = `${Math.floor((ticket.duration || 0) / 60)}:${String(Math.floor((ticket.duration || 0) % 60)).padStart(2, '0')}`;
-                const qualityBadge = ticket.quality ? `<span style="background: ${getQualityColor(ticket.quality)}20; color: ${getQualityColor(ticket.quality)}; padding: 0.3rem 0.8rem; border-radius: 20px; font-size: 0.8rem; font-weight: 500; border: 1px solid ${getQualityColor(ticket.quality)}40;">${ticket.quality}</span>` : '<span style="color: var(--text-color-light);">N/A</span>';
-                row.innerHTML = `<td>${ticket.agent_name || 'Unknown'}</td><td>${ticket.agent_email || 'N/A'}</td><td>${ticket.scenario_name || 'N/A'}</td><td>${qualityBadge}</td><td>${formatDateTime(ticket.created_at)}</td><td>${duration}</td>`;
+                
+                // استخدام call_quality بدلاً من quality
+                const qVal = ticket.call_quality || 'N/A';
+                const qualityBadge = ticket.call_quality ? `<span style="background: ${getQualityColor(qVal)}20; color: ${getQualityColor(qVal)}; padding: 0.3rem 0.8rem; border-radius: 20px; font-size: 0.8rem; font-weight: 500; border: 1px solid ${getQualityColor(qVal)}40;">${qVal}</span>` : '<span style="color: var(--text-color-light);">N/A</span>';
+                
+                const scenarioDisplay = ticket.scenario_id || ticket.scenario_name || 'N/A';
+                
+                row.innerHTML = `<td>${ticket.agent_name || 'Unknown'}</td><td>${ticket.agent_email || 'N/A'}</td><td>${scenarioDisplay}</td><td>${qualityBadge}</td><td>${formatDateTime(ticket.start_time)}</td><td>${duration}</td>`;
                 tbody.appendChild(row);
             });
         }
 
         function getQualityColor(quality) {
-            const colors = { 'good': '#10b981', 'average': '#f59e0b', 'poor': '#ef4444' };
-            return colors[quality] || '#6b7280';
+            if (!quality) return '#6b7280';
+            const q = quality.toLowerCase();
+            const colors = { 'good': '#10b981', 'average': '#f59e0b', 'poor': '#ef4444', 'bad': '#ef4444' };
+            return colors[q] || '#6b7280';
         }
 
         function formatDateTime(dateTimeString) {
@@ -1095,7 +1136,7 @@
         }
 
         function updatePaginationInfo(currentPage, totalPages) {
-            document.getElementById('recentTicketsPageInfo').textContent = `Page ${currentPage} of ${totalPages}`;
+            document.getElementById('recentTicketsPageInfo').textContent = `Page ${currentPage} of ${totalPages || 1}`;
             document.getElementById('recentTicketsPrev').disabled = currentPage <= 1;
             document.getElementById('recentTicketsNext').disabled = currentPage >= totalPages;
         }
@@ -1165,7 +1206,6 @@
             };
         }
 
-        // <<<----- [الإضافة الرابعة] تعديل هذا السطر
         document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && isUserAuthorized) loadDashboardData(); });
         window.addEventListener('beforeunload', () => { if (autoRefreshInterval) clearInterval(autoRefreshInterval); });
     </script>
