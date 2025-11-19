@@ -155,19 +155,19 @@
         .achievement-item:last-child { border-bottom: none; }
         .achievement-icon { font-size: 1.5rem; }
         
-        /* UPDATED: Layout using Grid for better stability on zoom */
+        /* FIXED: CSS GRID FOR CHARTS (Zoom Stability) */
         .charts-container { display: flex; flex-direction: column; gap: 2rem; }
         .charts-row { 
             display: grid; 
-            grid-template-columns: repeat(3, 1fr); /* Forces 3 columns side-by-side */
+            grid-template-columns: repeat(3, 1fr); /* Keeps 3 charts in one row */
             gap: 1.5rem; 
             align-items: stretch; 
         }
         @media (max-width: 1024px) {
-            .charts-row { grid-template-columns: 1fr; } /* Stack on mobile */
+            .charts-row { grid-template-columns: 1fr; } /* Stacks only on small screens */
         }
 
-        .chart-wrapper { position: relative; min-height: 250px; background: var(--card-bg-color); border-radius: var(--border-radius-lg); padding: 1.5rem; border: 1px solid var(--card-border-color); }
+        .chart-wrapper { position: relative; min-height: 280px; background: var(--card-bg-color); border-radius: var(--border-radius-lg); padding: 1.5rem; border: 1px solid var(--card-border-color); }
         canvas { max-height: 250px; width: 100% !important; }
         .quality-distribution-chart { background: var(--card-bg-color); border-radius: var(--border-radius-lg); padding: 1.5rem; border: 1px solid var(--card-border-color); }
         
@@ -468,6 +468,7 @@
 
         async function loadAgentData() {
             try {
+                // FIX: Using 'start_time' to order calls instead of 'created_at' to fix Error 400
                 const { data: calls, error } = await supabase
                     .from('call_sessions')
                     .select('*')
@@ -485,13 +486,13 @@
                         scenarioName = call.scenario_title;
                     }
 
-                    // Determine Quality (Normalized to Good, Normal, Bad)
-                    let quality = 'normal'; // Default
+                    // Determine Quality (Strict Mapping: Good, Normal, Bad)
+                    let quality = 'normal'; // Default fallback
                     if (call.call_quality) {
-                        const q = call.call_quality.toLowerCase().trim(); // Fix: Trim and lowercase
+                        const q = call.call_quality.toLowerCase().trim();
                         if (q === 'good') quality = 'good';
-                        else if (q === 'bad' || q === 'poor') quality = 'bad'; // Map Poor/Bad to 'bad'
-                        else quality = 'normal'; // Map Average/Normal to 'normal'
+                        else if (q === 'bad' || q === 'poor') quality = 'bad'; // "Bad" or "Poor" -> Bad
+                        else quality = 'normal'; // "Average" or others -> Normal
                     }
 
                     return {
@@ -535,7 +536,7 @@
             // Total Calls
             elements.kpiTotalCalls.textContent = allCalls.length;
             
-            // Daily Target (Fix: Use Local Date instead of UTC to ensure correct day calculation)
+            // Daily Target (Fix: Compare local dates to ensure Today is calculated correctly)
             const today = new Date();
             const todayCalls = allCalls.filter(call => {
                 const callDate = new Date(call.start_time);
@@ -579,13 +580,13 @@
             const goodCalls = allCalls.filter(call => call.quality === 'good').length;
             elements.successRate.textContent = `${Math.round((goodCalls/allCalls.length)*100)}%`;
             
-            // Best Performance: Shortest GOOD call
-            const goodQualityCalls = allCalls.filter(call => call.quality === 'good' && call.durationSeconds > 0);
-            if (goodQualityCalls.length > 0) {
-                const best = goodQualityCalls.reduce((prev, curr) => prev.durationSeconds < curr.durationSeconds ? prev : curr);
+            // Fix: Best Performance now considers "Good" OR "Normal" calls (so it doesn't show N/A for normal calls)
+            const acceptedQualityCalls = allCalls.filter(call => (call.quality === 'good' || call.quality === 'normal') && call.durationSeconds > 0);
+            
+            if (acceptedQualityCalls.length > 0) {
+                const best = acceptedQualityCalls.reduce((prev, curr) => prev.durationSeconds < curr.durationSeconds ? prev : curr);
                 elements.bestPerformance.textContent = best.duration;
             } else {
-                // If no "Good" calls yet, show N/A
                 elements.bestPerformance.textContent = 'N/A';
             }
         }
