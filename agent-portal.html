@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en" class="dark">
 <head>
@@ -1285,804 +1286,250 @@
         </div>
     </div>
 
-    <script>
-        // Supabase Configuration
+    <script type="module">
+        import { protectPage } from './role-check.js';
+
         const SUPABASE_URL = 'https://aefiigottnlcmjzilqnh.supabase.co';
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFlZmlpZ290dG5sY21qemlscW5oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcxNzY2MDQsImV4cCI6MjA2Mjc1MjYwNH0.FypB02v3tGMnxXV9ZmZMdMC0oQpREKOJWgHMPxUzwX4';
-        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        const { createClient } = supabase;
+        const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-        // Global Variables
         let currentUser = null;
-        let currentPage = 1;
-        const itemsPerPage = 10;
-        let allCalls = [];
-        let filteredCalls = [];
-        let scratchpadContent = '';
-        let ratingTrendChart = null;
-        let callVolumeChart = null;
-        let qualityDistributionChart = null;
+        let performanceChart = null;
+        let qualityChart = null;
+        
+        // قاموس السيناريوهات
+        let globalScenarioMap = {};
 
-        // DOM Elements
-        const authLoadingEl = document.getElementById('auth-loading');
-        const portalContentEl = document.getElementById('portalContent');
-        const userNameEl = document.getElementById('userName');
-        const logoutButtonEl = document.getElementById('logoutButton');
-        const agentGreetingEl = document.getElementById('agentGreeting');
-        const kpiAvgTimeEl = document.getElementById('kpiAvgTime');
-        const kpiAvgRatingEl = document.getElementById('kpiAvgRating');
-        const kpiTotalCallsEl = document.getElementById('kpiTotalCalls');
-        const dailyTargetPercentageEl = document.getElementById('dailyTargetPercentage');
-        const dailyTargetProgressBarEl = document.getElementById('dailyTargetProgressBar');
-        const callsTableBodyEl = document.getElementById('callsTableBody');
-        const noDataMessageEl = document.getElementById('noDataMessage');
-        const prevPageBtnEl = document.getElementById('prevPageBtn');
-        const nextPageBtnEl = document.getElementById('nextPageBtn');
-        const currentPageEl = document.getElementById('currentPage');
-        const searchInputEl = document.getElementById('searchInput');
-        const qualityFilterEl = document.getElementById('qualityFilter');
-        const dateFilterEl = document.getElementById('dateFilter');
-        const totalCallsWeekEl = document.getElementById('totalCallsWeek');
-        const avgResolutionTimeEl = document.getElementById('avgResolutionTime');
-        const successRateEl = document.getElementById('successRate');
-        const bestPerformanceEl = document.getElementById('bestPerformance');
-        const agentScratchpadEl = document.getElementById('agentScratchpad');
-        const saveScratchpadBtnEl = document.getElementById('saveScratchpadBtn');
-        const trainingProgramsListEl = document.getElementById('trainingProgramsList');
-        const noTrainingMessageEl = document.getElementById('noTrainingMessage');
-        const achievementsListEl = document.getElementById('achievementsList');
-        const exportDataBtnEl = document.getElementById('exportDataBtn');
+        document.addEventListener('DOMContentLoaded', async function() {
+            document.getElementById('currentYear').textContent = new Date().getFullYear();
+            
+            // التحقق من الصلاحية (أي حد معاه صلاحية agent أو admin يدخل)
+            const userProfile = await protectPage([], 'app-content');
+            if (!userProfile) return;
 
-        // Initialize the application
-        document.addEventListener('DOMContentLoaded', function() {
-            initializeApp();
+            currentUser = userProfile;
+            updateUserInfo(userProfile);
+            
+            await initializeAgentPortal();
         });
 
-        // Initialize Application
-        async function initializeApp() {
-            try {
-                const { data: { session }, error } = await supabase.auth.getSession();
-                
-                if (error || !session) {
-                    redirectToLogin();
-                    return;
-                }
-                
-                currentUser = session.user;
-                await checkUserRole();
-                await loadUserData();
-                initializeEventListeners();
-                initializeCharts();
-                
-                authLoadingEl.style.display = 'none';
-                portalContentEl.style.display = 'block';
-                
-            } catch (error) {
-                console.error('Error initializing app:', error);
-                redirectToLogin();
-            }
+        function updateUserInfo(user) {
+            document.getElementById('userName').textContent = user.name || user.email;
+            document.getElementById('welcomeAgentName').textContent = user.name || 'Agent';
+            document.getElementById('agentEmailDisplay').textContent = user.email;
+            document.getElementById('currentDate').textContent = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
         }
 
-        // Check User Role and Update UI
-        async function checkUserRole() {
-            try {
-                const { data: profile, error } = await supabase
-                    .from('users')
-                    .select('name, role')
-                    .eq('id', currentUser.id)
-                    .single();
-                
-                if (!error && profile && profile.name) {
-                    userNameEl.textContent = profile.name;
-                    agentGreetingEl.textContent = `Welcome, ${profile.name.split(' ')[0]}!`;
-                } else {
-                    userNameEl.textContent = currentUser.email;
-                    agentGreetingEl.textContent = 'Welcome!';
-                }
-                
-            } catch (error) {
-                console.error('Error checking user role:', error);
-            }
+        async function initializeAgentPortal() {
+            setupEventListeners();
+            await loadScenariosMapping(); // تحميل أسماء السيناريوهات
+            await loadAgentData();
         }
 
-        // Load User Data
-        async function loadUserData() {
-            try {
-                await loadCallHistory();
-                await loadScratchpad();
-                await loadTrainingPrograms();
-                calculateKPIs();
-                updatePerformanceSummary();
-                updateAchievements();
-                
-            } catch (error) {
-                console.error('Error loading user data:', error);
-            }
+        function setupEventListeners() {
+            document.getElementById('logoutButton').addEventListener('click', async () => {
+                await supabaseClient.auth.signOut();
+                window.location.href = 'login.html';
+            });
+
+            document.getElementById('refreshPortalBtn').addEventListener('click', async () => {
+                await loadAgentData();
+                const btn = document.getElementById('refreshPortalBtn');
+                const originalText = btn.innerHTML;
+                btn.innerHTML = 'Refreshing...';
+                setTimeout(() => btn.innerHTML = originalText, 1000);
+            });
         }
 
-        // Load Call History - بيانات حقيقية من الداتابيز
-        async function loadCallHistory() {
+        // دالة جلب أسماء السيناريوهات
+        async function loadScenariosMapping() {
             try {
-                const { data: calls, error } = await supabase
-                    .from('call_sessions_egypt')
-                    .select('*')
-                    .eq('agent_email', currentUser.email)
-                    .order('start_time_egypt', { ascending: false });
-
+                const { data, error } = await supabaseClient
+                    .from('call_scenarios')
+                    .select('id, title');
+                
                 if (error) throw error;
-
-                allCalls = calls.map(call => {
-                    // Calculate quality based on your system logic
-                    let quality = 'average'; // default
-                    
-                    if (call.completed === true) {
-                        quality = 'good';
-                    } else if (call.quality_reason) {
-                        quality = 'poor';
-                    }
-                    
-                    // If there's actual call_quality data, use it
-                    if (call.call_quality && ['good', 'average', 'poor'].includes(call.call_quality)) {
-                        quality = call.call_quality;
-                    }
-
-                    return {
-                        id: call.id,
-                        date: formatDate(call.start_time_egypt),
-                        scenario: call.scenario_title || 'Unknown Scenario',
-                        duration: formatDuration(call.duration),
-                        quality: quality,
-                        quality_reason: call.quality_reason,
-                        start_time: call.start_time_egypt,
-                        end_time: call.end_time_egypt,
-                        completed: call.completed
-                    };
-                });
-
-                filteredCalls = [...allCalls];
-                renderCallsTable();
-                
-            } catch (error) {
-                console.error('Error loading call history:', error);
-                allCalls = [];
-                filteredCalls = [];
-                renderCallsTable();
-            }
+                if (data) {
+                    data.forEach(scenario => {
+                        globalScenarioMap[scenario.id] = scenario.title;
+                    });
+                }
+            } catch (err) { console.error("Error loading scenarios:", err); }
         }
 
-        // Load Scratchpad - بيانات حقيقية
-        async function loadScratchpad() {
+        async function loadAgentData() {
+            if (!currentUser) return;
+
+            const today = new Date().toISOString().split('T')[0];
+            const startOfToday = new Date(today + 'T00:00:00Z').toISOString();
+            
             try {
-                const { data: notes, error } = await supabase
-                    .from('agent_notes')
+                // 1. جلب إحصائيات اليوم للايجنت ده بس
+                const { data: todaySessions, error: todayError } = await supabaseClient
+                    .from('call_sessions')
+                    .select('*')
+                    .eq('user_id', currentUser.id) // فلتر باليوزر
+                    .gte('start_time', startOfToday);
+
+                if (todayError) throw todayError;
+
+                // 2. جلب آخر 20 تذكرة للهيستوري
+                const { data: historySessions, error: historyError } = await supabaseClient
+                    .from('call_sessions')
                     .select('*')
                     .eq('user_id', currentUser.id)
-                    .order('created_at', { ascending: false })
-                    .limit(1);
+                    .order('start_time', { ascending: false })
+                    .limit(20);
 
-                if (!error && notes && notes.length > 0) {
-                    scratchpadContent = notes[0].content;
-                } else {
-                    scratchpadContent = "Use this space for your personal notes and reminders...";
-                }
-                
-                agentScratchpadEl.value = scratchpadContent;
-                
+                if (historyError) throw historyError;
+
+                updateMetrics(todaySessions || []);
+                updateHistoryTable(historySessions || []);
+                updateCharts(historySessions || []); // بنرسم الشارت بناء على الهيستوري القريب
+
             } catch (error) {
-                console.error('Error loading scratchpad:', error);
-                agentScratchpadEl.value = "Use this space for your personal notes and reminders...";
+                console.error('Error loading agent data:', error);
             }
         }
 
-        // Load Training Programs - بيانات حقيقية
-        async function loadTrainingPrograms() {
-            try {
-                const { data: programs, error } = await supabase
-                    .from('training_programs')
-                    .select('*')
-                    .eq('assigned_to', currentUser.id)
-                    .order('created_at', { ascending: false });
-
-                if (error || !programs || programs.length === 0) {
-                    // If no training programs, show message
-                    noTrainingMessageEl.style.display = 'block';
-                    trainingProgramsListEl.innerHTML = '';
-                    return;
-                }
-
-                noTrainingMessageEl.style.display = 'none';
-                renderTrainingPrograms(programs);
-                
-            } catch (error) {
-                console.error('Error loading training programs:', error);
-                noTrainingMessageEl.style.display = 'block';
-                trainingProgramsListEl.innerHTML = '';
-            }
-        }
-
-        // Render Training Programs
-        function renderTrainingPrograms(programs) {
-            let programsHTML = '';
+        function updateMetrics(sessions) {
+            // 1. Tickets Today
+            const count = sessions.length;
+            document.getElementById('todayTicketsCount').textContent = count;
             
-            programs.forEach(program => {
-                programsHTML += `
-                    <div class="training-card ${program.status === 'completed' ? 'completed' : ''}">
-                        <div class="training-card-header">
-                            <h4>${program.title || 'Training Program'}</h4>
-                            <span class="training-status ${program.status || 'not-started'}">${(program.status || 'not started').replace('-', ' ')}</span>
-                        </div>
-                        <div class="training-card-body">
-                            <p>${program.description || 'No description available.'}</p>
-                            ${program.due_date ? `<p><strong>Due Date:</strong> ${formatDate(program.due_date)}</p>` : ''}
-                        </div>
-                        <div class="training-card-footer">
-                            <span class="training-card-date">Assigned: ${program.created_at ? formatDate(program.created_at) : 'N/A'}</span>
-                            <div class="training-card-actions">
-                                <button class="action-button secondary-button start-training-btn" data-id="${program.id}">Start</button>
-                            </div>
-                        </div>
-                    </div>
+            // 2. Avg Handle Time
+            let totalDuration = 0;
+            let completedCount = 0;
+            sessions.forEach(s => {
+                if (s.duration) {
+                    totalDuration += s.duration;
+                    completedCount++;
+                }
+            });
+            const avgTime = completedCount > 0 ? Math.round(totalDuration / completedCount / 60) : 0;
+            document.getElementById('avgHandleTime').textContent = avgTime + 'm';
+
+            // 3. Quality Score (نسبة الـ Good)
+            const goodCalls = sessions.filter(s => s.call_quality && s.call_quality.toLowerCase() === 'good').length;
+            const qualityScore = count > 0 ? Math.round((goodCalls / count) * 100) : 0;
+            document.getElementById('qualityScore').textContent = qualityScore + '%';
+
+            // 4. Login Time (ثابت مؤقتاً أو ممكن نحسبه من أول تيكت)
+            // هنفترض انه بدأ من وقت اول تيكت لو مفيش لوجن سيستم منفصل
+            if (sessions.length > 0) {
+                // مجرد عرض صوري، الحقيقي بيحتاج جدول attendance
+                // document.getElementById('loginTime').textContent = ...
+            }
+        }
+
+        function updateHistoryTable(sessions) {
+            const tbody = document.getElementById('ticketHistoryBody');
+            if (!tbody) return;
+            
+            tbody.innerHTML = '';
+            
+            if (sessions.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding: 2rem; color: var(--text-color-secondary);">No history available yet.</td></tr>`;
+                return;
+            }
+
+            sessions.forEach(session => {
+                const row = document.createElement('tr');
+                
+                // تحويل الـ ID لاسم
+                const scenarioName = globalScenarioMap[session.scenario_id] || 'Unknown Scenario';
+                
+                // المدة
+                const duration = session.duration 
+                    ? `${Math.floor(session.duration / 60)}m ${session.duration % 60}s` 
+                    : 'In Progress';
+                
+                // الجودة
+                const qVal = session.call_quality || 'N/A';
+                let qClass = 'quality-badge ';
+                if (qVal.toLowerCase() === 'good') qClass += 'quality-good';
+                else if (qVal.toLowerCase() === 'average') qClass += 'quality-average';
+                else qClass += 'quality-poor';
+
+                // التاريخ
+                const date = new Date(session.start_time).toLocaleDateString();
+                const time = new Date(session.start_time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+
+                row.innerHTML = `
+                    <td>#${session.id.toString().slice(0, 8)}...</td>
+                    <td>${scenarioName}</td>
+                    <td>${date} <span style="font-size:0.8em; color:var(--text-color-secondary)">${time}</span></td>
+                    <td>${duration}</td>
+                    <td><span class="${qClass}">${qVal}</span></td>
                 `;
-            });
-            
-            trainingProgramsListEl.innerHTML = programsHTML;
-            
-            // Add event listeners to buttons
-            document.querySelectorAll('.start-training-btn').forEach(btn => {
-                btn.addEventListener('click', function() {
-                    const programId = this.getAttribute('data-id');
-                    startTraining(programId);
-                });
+                tbody.appendChild(row);
             });
         }
 
-        // Render Calls Table
-        function renderCallsTable() {
-            if (filteredCalls.length === 0) {
-                callsTableBodyEl.innerHTML = '';
-                noDataMessageEl.style.display = 'block';
-                return;
-            }
-            
-            noDataMessageEl.style.display = 'none';
-            
-            const startIndex = (currentPage - 1) * itemsPerPage;
-            const endIndex = startIndex + itemsPerPage;
-            const callsToShow = filteredCalls.slice(startIndex, endIndex);
-            
-            let tableHTML = '';
-            
-            callsToShow.forEach(call => {
-                const qualityBadge = getQualityBadge(call.quality);
-                
-                tableHTML += `
-                    <tr>
-                        <td>${call.date}</td>
-                        <td>${call.scenario}</td>
-                        <td>${call.duration}</td>
-                        <td>${qualityBadge}</td>
-                        <td>
-                            <button class="action-button secondary-button view-call-btn" data-id="${call.id}">View Details</button>
-                        </td>
-                    </tr>
-                `;
-            });
-            
-            callsTableBodyEl.innerHTML = tableHTML;
-            currentPageEl.textContent = currentPage;
-            
-            document.querySelectorAll('.view-call-btn').forEach(btn => {
-                btn.addEventListener('click', function() {
-                    const callId = this.getAttribute('data-id');
-                    viewCallDetails(callId);
-                });
-            });
-            
-            prevPageBtnEl.disabled = currentPage === 1;
-            nextPageBtnEl.disabled = endIndex >= filteredCalls.length;
-        }
-
-        // Calculate KPIs - بيانات حقيقية
-        function calculateKPIs() {
-            if (allCalls.length === 0) {
-                kpiAvgTimeEl.textContent = '0:00';
-                kpiAvgRatingEl.textContent = 'No calls';
-                kpiTotalCallsEl.textContent = '0';
-                dailyTargetPercentageEl.textContent = '0%';
-                dailyTargetProgressBarEl.style.width = '0%';
-                return;
-            }
-            
-            // Average handling time
-            const totalSeconds = allCalls.reduce((total, call) => {
-                const [minutes, seconds] = call.duration.split(':').map(Number);
-                return total + (minutes * 60) + seconds;
-            }, 0);
-            
-            const avgSeconds = totalSeconds / allCalls.length;
-            const avgMinutes = Math.floor(avgSeconds / 60);
-            const avgSecs = Math.floor(avgSeconds % 60);
-            kpiAvgTimeEl.textContent = `${avgMinutes}:${avgSecs.toString().padStart(2, '0')}`;
-            
-            // Total calls
-            kpiTotalCallsEl.textContent = allCalls.length;
-            
-            // Daily target progress
-            const today = new Date().toISOString().split('T')[0];
-            const todayCalls = allCalls.filter(call => call.date.includes(today)).length;
-            const dailyTarget = 15;
-            const progressPercentage = Math.min(100, Math.round((todayCalls / dailyTarget) * 100));
-            dailyTargetPercentageEl.textContent = `${progressPercentage}%`;
-            dailyTargetProgressBarEl.style.width = `${progressPercentage}%`;
-            
-            // Call Quality calculation
-            const qualityCounts = {
-                good: allCalls.filter(call => call.quality === 'good').length,
-                average: allCalls.filter(call => call.quality === 'average').length,
-                poor: allCalls.filter(call => call.quality === 'poor').length
-            };
-            
-            const totalRatedCalls = qualityCounts.good + qualityCounts.average + qualityCounts.poor;
-            if (totalRatedCalls > 0) {
-                const goodPercentage = Math.round((qualityCounts.good / totalRatedCalls) * 100);
-                kpiAvgRatingEl.textContent = `${goodPercentage}% Good`;
-            } else {
-                kpiAvgRatingEl.textContent = 'Not Rated';
-            }
-        }
-
-        // Update Performance Summary
-        function updatePerformanceSummary() {
-            if (allCalls.length === 0) {
-                totalCallsWeekEl.textContent = '0';
-                avgResolutionTimeEl.textContent = '0:00';
-                successRateEl.textContent = '0%';
-                bestPerformanceEl.textContent = 'N/A';
-                return;
-            }
-
-            // Total calls this week
-            const oneWeekAgo = new Date();
-            oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-            const weekCalls = allCalls.filter(call => new Date(call.start_time) >= oneWeekAgo);
-            totalCallsWeekEl.textContent = weekCalls.length;
-
-            // Average resolution time
-            const totalSeconds = allCalls.reduce((total, call) => {
-                const [minutes, seconds] = call.duration.split(':').map(Number);
-                return total + (minutes * 60) + seconds;
-            }, 0);
-            const avgSeconds = totalSeconds / allCalls.length;
-            const avgMinutes = Math.floor(avgSeconds / 60);
-            const avgSecs = Math.floor(avgSeconds % 60);
-            avgResolutionTimeEl.textContent = `${avgMinutes}:${avgSecs.toString().padStart(2, '0')}`;
-
-            // Success rate (calls with good quality)
-            const goodCalls = allCalls.filter(call => call.quality === 'good').length;
-            const successRate = Math.round((goodCalls / allCalls.length) * 100);
-            successRateEl.textContent = `${successRate}%`;
-
-            // Best performance (shortest call with good quality)
-            const goodQualityCalls = allCalls.filter(call => call.quality === 'good');
-            if (goodQualityCalls.length > 0) {
-                const bestCall = goodQualityCalls.reduce((best, call) => {
-                    const [min, sec] = call.duration.split(':').map(Number);
-                    const totalSec = min * 60 + sec;
-                    const [bestMin, bestSec] = best.duration.split(':').map(Number);
-                    const bestTotalSec = bestMin * 60 + bestSec;
-                    return totalSec < bestTotalSec ? call : best;
-                }, goodQualityCalls[0]);
-                bestPerformanceEl.textContent = bestCall.duration;
-            } else {
-                bestPerformanceEl.textContent = 'N/A';
-            }
-        }
-
-        // Update Achievements based on real data
-        function updateAchievements() {
-            const achievements = [];
-            
-            // Achievement 1: Based on total calls
-            if (allCalls.length >= 50) {
-                achievements.push({
-                    icon: '📞',
-                    text: `Completed ${allCalls.length} total calls`
-                });
-            } else if (allCalls.length >= 10) {
-                achievements.push({
-                    icon: '📞',
-                    text: `Completed ${allCalls.length} calls so far`
-                });
-            }
-            
-            // Achievement 2: Based on good quality calls
-            const goodCalls = allCalls.filter(call => call.quality === 'good').length;
-            if (goodCalls >= 10) {
-                achievements.push({
-                    icon: '⭐',
-                    text: `Maintained good quality in ${goodCalls} calls`
-                });
-            } else if (goodCalls >= 5) {
-                achievements.push({
-                    icon: '⭐',
-                    text: `Started with ${goodCalls} good quality calls`
-                });
-            }
-            
-            // Achievement 3: Based on daily consistency
-            const today = new Date().toISOString().split('T')[0];
-            const todayCalls = allCalls.filter(call => call.date.includes(today)).length;
-            if (todayCalls >= 5) {
-                achievements.push({
-                    icon: '⚡',
-                    text: `Handled ${todayCalls} calls today`
-                });
-            }
-            
-            // Default achievements if no real achievements
-            if (achievements.length === 0) {
-                achievements.push(
-                    { icon: '🚀', text: 'Start your first call to earn achievements' },
-                    { icon: '🎯', text: 'Complete 5 calls to unlock your first badge' },
-                    { icon: '🌟', text: 'Maintain good quality to earn special rewards' }
-                );
-            }
-            
-            // Render achievements
-            achievementsListEl.innerHTML = achievements.map(achievement => `
-                <li class="achievement-item">
-                    <span class="achievement-icon">${achievement.icon}</span>
-                    <span>${achievement.text}</span>
-                </li>
-            `).join('');
-        }
-
-        // Initialize Charts
-        function initializeCharts() {
-            // Quality Distribution Chart - NEW CHART
-            const qualityCtx = document.getElementById('qualityDistributionChart').getContext('2d');
-            
-            const qualityCounts = {
-                good: allCalls.filter(call => call.quality === 'good').length,
-                average: allCalls.filter(call => call.quality === 'average').length,
-                poor: allCalls.filter(call => call.quality === 'poor').length
-            };
-            
-            qualityDistributionChart = new Chart(qualityCtx, {
-                type: 'doughnut',
-                data: {
-                    labels: ['Good', 'Average', 'Poor'],
-                    datasets: [{
-                        data: [qualityCounts.good, qualityCounts.average, qualityCounts.poor],
-                        backgroundColor: [
-                            'rgba(16, 185, 129, 0.8)',
-                            'rgba(245, 158, 11, 0.8)',
-                            'rgba(239, 68, 68, 0.8)'
-                        ],
-                        borderColor: [
-                            'rgba(16, 185, 129, 1)',
-                            'rgba(245, 158, 11, 1)',
-                            'rgba(239, 68, 68, 1)'
-                        ],
-                        borderWidth: 2
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            position: 'bottom',
-                            labels: {
-                                color: '#d1d5db',
-                                font: {
-                                    size: 12
-                                }
-                            }
-                        },
-                        title: {
-                            display: true,
-                            text: 'Call Quality Distribution',
-                            color: '#f9fafb',
-                            font: {
-                                size: 14,
-                                weight: '500'
-                            }
-                        }
-                    }
-                }
+        function updateCharts(sessions) {
+            // 1. Quality Chart
+            const qualityCounts = { Good: 0, Average: 0, Poor: 0 };
+            sessions.forEach(s => {
+                let q = s.call_quality ? s.call_quality.charAt(0).toUpperCase() + s.call_quality.slice(1).toLowerCase() : 'N/A';
+                if (q === 'Bad') q = 'Poor';
+                if (qualityCounts.hasOwnProperty(q)) qualityCounts[q]++;
             });
 
-            // Existing charts
-            const ratingTrendCtx = document.getElementById('ratingTrendChart').getContext('2d');
-            ratingTrendChart = new Chart(ratingTrendCtx, {
-                type: 'line',
-                data: {
-                    labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
-                    datasets: [{
-                        label: 'Performance Score',
-                        data: [85, 78, 92, 88, 95, 90, 87],
-                        borderColor: '#4e8cff',
-                        backgroundColor: 'rgba(78, 140, 255, 0.1)',
-                        borderWidth: 2,
-                        tension: 0.4,
-                        fill: true
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: { display: false },
-                        title: {
-                            display: true,
-                            text: 'Weekly Performance Trend',
-                            color: '#f9fafb',
-                            font: { size: 14, weight: '500' }
-                        }
+            const qCtx = document.getElementById('qualityChart');
+            if (qCtx) {
+                if (qualityChart) qualityChart.destroy();
+                qualityChart = new Chart(qCtx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Good', 'Average', 'Poor'],
+                        datasets: [{
+                            data: [qualityCounts.Good, qualityCounts.Average, qualityCounts.Poor],
+                            backgroundColor: ['#10b981', '#f59e0b', '#ef4444'],
+                            borderWidth: 0
+                        }]
                     },
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            max: 100,
-                            grid: { color: 'rgba(255, 255, 255, 0.1)' },
-                            ticks: { color: '#d1d5db' }
-                        },
-                        x: {
-                            grid: { color: 'rgba(255, 255, 255, 0.1)' },
-                            ticks: { color: '#d1d5db' }
-                        }
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { position: 'right', labels: { color: '#d1d5db' } } }
                     }
-                }
+                });
+            }
+
+            // 2. Performance Chart (Daily Volume - Last 7 Days from sessions list)
+            // تجميع بسيط حسب الأيام الموجودة في الهيستوري
+            const daysMap = {};
+            sessions.forEach(s => {
+                const day = new Date(s.start_time).toLocaleDateString('en-US', { weekday: 'short' });
+                daysMap[day] = (daysMap[day] || 0) + 1;
             });
             
-            const callVolumeCtx = document.getElementById('callVolumeChart').getContext('2d');
-            callVolumeChart = new Chart(callVolumeCtx, {
-                type: 'bar',
-                data: {
-                    labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
-                    datasets: [{
-                        label: 'Calls Handled',
-                        data: [8, 12, 9, 15, 11, 6, 4],
-                        backgroundColor: 'rgba(139, 92, 246, 0.7)',
-                        borderColor: 'rgba(139, 92, 246, 1)',
-                        borderWidth: 1
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: { display: false },
-                        title: {
-                            display: true,
-                            text: 'Weekly Call Volume',
-                            color: '#f9fafb',
-                            font: { size: 14, weight: '500' }
-                        }
+            const pCtx = document.getElementById('performanceChart');
+            if (pCtx) {
+                if (performanceChart) performanceChart.destroy();
+                performanceChart = new Chart(pCtx, {
+                    type: 'bar',
+                    data: {
+                        labels: Object.keys(daysMap),
+                        datasets: [{
+                            label: 'Tickets',
+                            data: Object.values(daysMap),
+                            backgroundColor: '#4e8cff',
+                            borderRadius: 6
+                        }]
                     },
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            grid: { color: 'rgba(255, 255, 255, 0.1)' },
-                            ticks: { color: '#d1d5db' }
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#9ca3af' } },
+                            x: { grid: { display: false }, ticks: { color: '#9ca3af' } }
                         },
-                        x: {
-                            grid: { color: 'rgba(255, 255, 255, 0.1)' },
-                            ticks: { color: '#d1d5db' }
-                        }
+                        plugins: { legend: { display: false } }
                     }
-                }
-            });
-        }
-
-        // Initialize Event Listeners
-        function initializeEventListeners() {
-            logoutButtonEl.addEventListener('click', handleLogout);
-            
-            prevPageBtnEl.addEventListener('click', () => {
-                if (currentPage > 1) {
-                    currentPage--;
-                    renderCallsTable();
-                }
-            });
-            
-            nextPageBtnEl.addEventListener('click', () => {
-                const maxPage = Math.ceil(filteredCalls.length / itemsPerPage);
-                if (currentPage < maxPage) {
-                    currentPage++;
-                    renderCallsTable();
-                }
-            });
-            
-            searchInputEl.addEventListener('input', applyFilters);
-            qualityFilterEl.addEventListener('change', applyFilters);
-            dateFilterEl.addEventListener('change', applyFilters);
-            
-            saveScratchpadBtnEl.addEventListener('click', saveScratchpad);
-            exportDataBtnEl.addEventListener('click', exportData);
-
-            // Collapsible sections
-            const scratchpadHeaderEl = document.getElementById('scratchpadHeader');
-            const scratchpadContentEl = document.getElementById('scratchpadContent');
-            const trainingHeaderEl = document.getElementById('trainingHeader');
-            const trainingContentEl = document.getElementById('trainingContent');
-
-            if (scratchpadHeaderEl) {
-                scratchpadHeaderEl.addEventListener('click', () => {
-                    scratchpadContentEl.classList.toggle('collapsed');
-                    scratchpadHeaderEl.classList.toggle('is-collapsed');
                 });
             }
-            
-            if (trainingHeaderEl) {
-                trainingHeaderEl.addEventListener('click', () => {
-                    trainingContentEl.classList.toggle('collapsed');
-                    trainingHeaderEl.classList.toggle('is-collapsed');
-                });
-            }
-        }
-
-        // Apply Filters
-        function applyFilters() {
-            const searchTerm = searchInputEl.value.toLowerCase();
-            const qualityFilter = qualityFilterEl.value;
-            const dateFilter = dateFilterEl.value;
-            
-            filteredCalls = allCalls.filter(call => {
-                const matchesSearch = call.scenario.toLowerCase().includes(searchTerm);
-                const matchesQuality = qualityFilter === 'all' || call.quality === qualityFilter;
-                const matchesDate = !dateFilter || call.date === dateFilter;
-                
-                return matchesSearch && matchesQuality && matchesDate;
-            });
-            
-            currentPage = 1;
-            renderCallsTable();
-        }
-
-        // View Call Details - Modal
-        function viewCallDetails(callId) {
-            const call = allCalls.find(c => c.id === callId);
-            if (!call) return;
-
-            const modalHTML = `
-                <div class="modal visible" id="callDetailsModal">
-                    <div class="modal-content">
-                        <h3>Call Details</h3>
-                        <div class="call-details">
-                            <div class="detail-row">
-                                <span class="detail-label">Scenario:</span>
-                                <span class="detail-value">${call.scenario}</span>
-                            </div>
-                            <div class="detail-row">
-                                <span class="detail-label">Date:</span>
-                                <span class="detail-value">${call.date}</span>
-                            </div>
-                            <div class="detail-row">
-                                <span class="detail-label">Duration:</span>
-                                <span class="detail-value">${call.duration}</span>
-                            </div>
-                            <div class="detail-row">
-                                <span class="detail-label">Call Quality:</span>
-                                <span class="detail-value">${getQualityBadge(call.quality)}</span>
-                            </div>
-                            ${call.quality_reason ? `
-                            <div class="detail-row">
-                                <span class="detail-label">Quality Notes:</span>
-                                <span class="detail-value">${call.quality_reason}</span>
-                            </div>
-                            ` : ''}
-                            <div class="detail-row">
-                                <span class="detail-label">Completed:</span>
-                                <span class="detail-value">${call.completed ? 'Yes' : 'No'}</span>
-                            </div>
-                        </div>
-                        <div class="modal-actions">
-                            <button class="action-button primary-button" onclick="closeCallDetails()">Close</button>
-                        </div>
-                    </div>
-                </div>
-            `;
-            
-            document.body.insertAdjacentHTML('beforeend', modalHTML);
-        }
-
-        // Save Scratchpad
-        async function saveScratchpad() {
-            try {
-                scratchpadContent = agentScratchpadEl.value;
-                
-                const { error } = await supabase
-                    .from('agent_notes')
-                    .upsert({
-                        user_id: currentUser.id,
-                        content: scratchpadContent,
-                        user_name: userNameEl.textContent,
-                        user_email: currentUser.email
-                    });
-
-                if (error) throw error;
-
-                const originalText = saveScratchpadBtnEl.textContent;
-                saveScratchpadBtnEl.textContent = 'Saved!';
-                saveScratchpadBtnEl.style.background = 'var(--success-color)';
-                
-                setTimeout(() => {
-                    saveScratchpadBtnEl.textContent = originalText;
-                    saveScratchpadBtnEl.style.background = '';
-                }, 2000);
-                
-            } catch (error) {
-                console.error('Error saving scratchpad:', error);
-                alert('Error saving notes. Please try again.');
-            }
-        }
-
-        // Start Training
-        function startTraining(programId) {
-            alert(`Starting training program ID: ${programId}`);
-        }
-
-        // Export Data
-        function exportData() {
-            const csvContent = "data:text/csv;charset=utf-8," 
-                + "Date,Scenario,Duration,Call Quality,Completed\n"
-                + allCalls.map(call => 
-                    `${call.date},${call.scenario},${call.duration},${call.quality},${call.completed}`
-                ).join("\n");
-            
-            const encodedUri = encodeURI(csvContent);
-            const link = document.createElement("a");
-            link.setAttribute("href", encodedUri);
-            link.setAttribute("download", `agent_data_${new Date().toISOString().split('T')[0]}.csv`);
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-        }
-
-        // Handle Logout
-        async function handleLogout() {
-            try {
-                await supabase.auth.signOut();
-                redirectToLogin();
-            } catch (error) {
-                console.error('Error during logout:', error);
-            }
-        }
-
-        // Helper Functions
-        function getQualityBadge(quality) {
-            const badges = {
-                'good': '<span style="color: #10b981; font-weight: 600;">Good</span>',
-                'average': '<span style="color: #f59e0b; font-weight: 600;">Average</span>',
-                'poor': '<span style="color: #ef4444; font-weight: 600;">Poor</span>'
-            };
-            return badges[quality] || '<span style="color: #6b7280; font-weight: 600;">Not Rated</span>';
-        }
-
-        function formatDate(dateString) {
-            if (!dateString) return 'N/A';
-            return new Date(dateString).toLocaleDateString('en-US', {
-                year: 'numeric',
-                month: 'short',
-                day: 'numeric'
-            });
-        }
-
-        function formatDuration(seconds) {
-            if (!seconds) return '0:00';
-            const minutes = Math.floor(seconds / 60);
-            const secs = seconds % 60;
-            return `${minutes}:${secs.toString().padStart(2, '0')}`;
-        }
-
-        function closeCallDetails() {
-            const modal = document.getElementById('callDetailsModal');
-            if (modal) modal.remove();
-        }
-
-        function redirectToLogin() {
-            window.location.href = 'index.html';
         }
     </script>
 </body>
