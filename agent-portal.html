@@ -155,10 +155,20 @@
         .achievement-item:last-child { border-bottom: none; }
         .achievement-icon { font-size: 1.5rem; }
         
+        /* UPDATED: Layout using Grid for better stability on zoom */
         .charts-container { display: flex; flex-direction: column; gap: 2rem; }
-        .charts-row { display: flex; flex-wrap: wrap; gap: 1.5rem; align-items: stretch; }
-        .chart-wrapper { flex: 1 1 250px; position: relative; min-height: 250px; background: var(--card-bg-color); border-radius: var(--border-radius-lg); padding: 1.5rem; border: 1px solid var(--card-border-color); }
-        canvas { max-height: 250px; }
+        .charts-row { 
+            display: grid; 
+            grid-template-columns: repeat(3, 1fr); /* Forces 3 columns side-by-side */
+            gap: 1.5rem; 
+            align-items: stretch; 
+        }
+        @media (max-width: 1024px) {
+            .charts-row { grid-template-columns: 1fr; } /* Stack on mobile */
+        }
+
+        .chart-wrapper { position: relative; min-height: 250px; background: var(--card-bg-color); border-radius: var(--border-radius-lg); padding: 1.5rem; border: 1px solid var(--card-border-color); }
+        canvas { max-height: 250px; width: 100% !important; }
         .quality-distribution-chart { background: var(--card-bg-color); border-radius: var(--border-radius-lg); padding: 1.5rem; border: 1px solid var(--card-border-color); }
         
         .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(10, 10, 20, 0.8); backdrop-filter: blur(12px); display: none; align-items: center; justify-content: center; z-index: 1000; opacity: 0; visibility: hidden; transition: opacity 0.4s ease, visibility 0s 0.4s; }
@@ -246,7 +256,7 @@
                 <div class="portal-layout-grid">
                     <div class="main-content-column">
                         
-                        <!-- Charts Row -->
+                        <!-- Charts Row: Modified with Grid -->
                         <div class="charts-container">
                             <div class="charts-row">
                                 <div class="chart-wrapper">
@@ -271,8 +281,8 @@
                                         <select id="qualityFilter">
                                             <option value="all">All Quality</option>
                                             <option value="good">Good</option>
-                                            <option value="average">Average</option>
-                                            <option value="poor">Poor</option>
+                                            <option value="normal">Normal</option>
+                                            <option value="bad">Bad</option>
                                         </select>
                                     </div>
                                     <div><label for="dateFilter">Filter by Date:</label><input type="date" id="dateFilter"></div>
@@ -354,7 +364,7 @@
     </div>
 
     <script>
-        // Supabase Configuration (As provided in the new code)
+        // Supabase Configuration
         const SUPABASE_URL = 'https://aefiigottnlcmjzilqnh.supabase.co';
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFlZmlpZ290dG5sY21qemlscW5oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcxNzY2MDQsImV4cCI6MjA2Mjc1MjYwNH0.FypB02v3tGMnxXV9ZmZMdMC0oQpREKOJWgHMPxUzwX4';
         const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -365,7 +375,7 @@
         const itemsPerPage = 10;
         let allCalls = [];
         let filteredCalls = [];
-        let globalScenarioMap = {}; // To store scenario ID -> Title mapping
+        let globalScenarioMap = {}; 
         let ratingTrendChart = null;
         let callVolumeChart = null;
         let qualityDistributionChart = null;
@@ -419,9 +429,8 @@
                 currentUser = session.user;
                 await checkUserRole();
                 
-                // Load data in parallel/sequence
                 await loadScenariosMapping();
-                await loadAgentData(); // This replaces the old loadCallHistory
+                await loadAgentData(); 
                 await loadScratchpad();
                 await loadTrainingPrograms();
                 
@@ -442,7 +451,6 @@
             }
         }
 
-        // 1. Load Scenarios Mapping (From Developer's suggestion)
         async function loadScenariosMapping() {
             try {
                 const { data, error } = await supabase
@@ -458,10 +466,8 @@
             } catch (err) { console.error("Error loading scenarios:", err); }
         }
 
-        // 2. Load Agent Data (Refactored to use 'call_sessions' instead of 'call_sessions_egypt')
         async function loadAgentData() {
             try {
-                // Fetch data from the main call_sessions table as per dev suggestion
                 const { data: calls, error } = await supabase
                     .from('call_sessions')
                     .select('*')
@@ -479,26 +485,26 @@
                         scenarioName = call.scenario_title;
                     }
 
-                    // Determine Quality
-                    let quality = 'average';
+                    // Determine Quality (Normalized to Good, Normal, Bad)
+                    let quality = 'normal'; // Default
                     if (call.call_quality) {
-                        const q = call.call_quality.toLowerCase();
+                        const q = call.call_quality.toLowerCase().trim(); // Fix: Trim and lowercase
                         if (q === 'good') quality = 'good';
-                        else if (q === 'bad' || q === 'poor') quality = 'poor';
-                        else quality = 'average';
+                        else if (q === 'bad' || q === 'poor') quality = 'bad'; // Map Poor/Bad to 'bad'
+                        else quality = 'normal'; // Map Average/Normal to 'normal'
                     }
 
                     return {
                         id: call.id,
                         date: formatDate(call.start_time),
                         scenario: scenarioName,
-                        duration: formatDuration(call.duration), // duration is usually in seconds
+                        duration: formatDuration(call.duration), 
                         durationSeconds: call.duration,
-                        quality: quality,
+                        quality: quality, // good, normal, bad
                         quality_reason: call.quality_reason || '',
                         start_time: call.start_time,
                         end_time: call.end_time,
-                        completed: true // Assuming recorded sessions are completed
+                        completed: true 
                     };
                 });
 
@@ -513,7 +519,6 @@
             }
         }
 
-        // Calculate KPIs (Integrated logic)
         function calculateKPIs() {
             if (allCalls.length === 0) {
                 resetKPIs();
@@ -530,10 +535,16 @@
             // Total Calls
             elements.kpiTotalCalls.textContent = allCalls.length;
             
-            // Daily Target
-            const today = new Date().toISOString().split('T')[0];
-            const todayCalls = allCalls.filter(call => call.start_time.startsWith(today)).length;
-            const dailyTarget = 20; // Can be dynamic
+            // Daily Target (Fix: Use Local Date instead of UTC to ensure correct day calculation)
+            const today = new Date();
+            const todayCalls = allCalls.filter(call => {
+                const callDate = new Date(call.start_time);
+                return callDate.getDate() === today.getDate() &&
+                       callDate.getMonth() === today.getMonth() &&
+                       callDate.getFullYear() === today.getFullYear();
+            }).length;
+            
+            const dailyTarget = 20; 
             const progressPercentage = Math.min(100, Math.round((todayCalls / dailyTarget) * 100));
             elements.dailyTargetPercentage.textContent = `${progressPercentage}%`;
             elements.dailyTargetProgressBar.style.width = `${progressPercentage}%`;
@@ -552,7 +563,6 @@
             elements.dailyTargetProgressBar.style.width = '0%';
         }
 
-        // Update Performance Summary (Sidebar)
         function updatePerformanceSummary() {
             if (allCalls.length === 0) return;
 
@@ -562,7 +572,6 @@
             
             elements.totalCallsWeek.textContent = weekCalls.length;
             
-            // Recalculate avg for sidebar
             const totalSeconds = allCalls.reduce((t, c) => t + (c.durationSeconds || 0), 0);
             const avgSec = Math.floor(totalSeconds / allCalls.length);
             elements.avgResolutionTime.textContent = `${Math.floor(avgSec/60)}:${(avgSec%60).toString().padStart(2,'0')}`;
@@ -570,32 +579,32 @@
             const goodCalls = allCalls.filter(call => call.quality === 'good').length;
             elements.successRate.textContent = `${Math.round((goodCalls/allCalls.length)*100)}%`;
             
-            // Find shortest good call
+            // Best Performance: Shortest GOOD call
             const goodQualityCalls = allCalls.filter(call => call.quality === 'good' && call.durationSeconds > 0);
             if (goodQualityCalls.length > 0) {
                 const best = goodQualityCalls.reduce((prev, curr) => prev.durationSeconds < curr.durationSeconds ? prev : curr);
                 elements.bestPerformance.textContent = best.duration;
             } else {
+                // If no "Good" calls yet, show N/A
                 elements.bestPerformance.textContent = 'N/A';
             }
         }
 
-        // Initialize Charts with Real Data
         function initializeCharts() {
-            // 1. Quality Distribution
+            // 1. Quality Distribution (Good, Normal, Bad)
             const qualityCounts = {
                 good: allCalls.filter(c => c.quality === 'good').length,
-                average: allCalls.filter(c => c.quality === 'average').length,
-                poor: allCalls.filter(c => c.quality === 'poor').length
+                normal: allCalls.filter(c => c.quality === 'normal').length,
+                bad: allCalls.filter(c => c.quality === 'bad').length
             };
 
             const qualityCtx = document.getElementById('qualityDistributionChart').getContext('2d');
             qualityDistributionChart = new Chart(qualityCtx, {
                 type: 'doughnut',
                 data: {
-                    labels: ['Good', 'Average', 'Poor'],
+                    labels: ['Good', 'Normal', 'Bad'],
                     datasets: [{
-                        data: [qualityCounts.good, qualityCounts.average, qualityCounts.poor],
+                        data: [qualityCounts.good, qualityCounts.normal, qualityCounts.bad],
                         backgroundColor: ['rgba(16, 185, 129, 0.8)', 'rgba(245, 158, 11, 0.8)', 'rgba(239, 68, 68, 0.8)'],
                         borderColor: ['rgba(16, 185, 129, 1)', 'rgba(245, 158, 11, 1)', 'rgba(239, 68, 68, 1)'],
                         borderWidth: 1
@@ -618,7 +627,7 @@
                 const d = new Date(today);
                 d.setDate(d.getDate() - i);
                 const dayName = d.toLocaleDateString('en-US', { weekday: 'short' });
-                last7Days[dayName] = 0; // Init
+                last7Days[dayName] = 0; 
             }
             
             allCalls.forEach(call => {
@@ -647,8 +656,7 @@
                 }
             });
 
-            // 3. Rating Trend (Simulated based on daily quality average or dummy if sparse data)
-            // For now, let's use volume history as a proxy for activity trend line
+            // 3. Activity Trend
             const ratingTrendCtx = document.getElementById('ratingTrendChart').getContext('2d');
             ratingTrendChart = new Chart(ratingTrendCtx, {
                 type: 'line',
@@ -715,7 +723,6 @@
             elements.nextPageBtn.disabled = endIndex >= filteredCalls.length;
         }
 
-        // Sidebar: Load Notes
         async function loadScratchpad() {
             try {
                 const { data: notes, error } = await supabase
@@ -731,7 +738,6 @@
             } catch (error) { console.error('Error loading scratchpad:', error); }
         }
 
-        // Sidebar: Save Notes
         async function saveScratchpad() {
             try {
                 const content = elements.agentScratchpad.value;
@@ -755,7 +761,6 @@
             } catch (error) { alert('Error saving notes.'); }
         }
 
-        // Sidebar: Load Training
         async function loadTrainingPrograms() {
             try {
                 const { data: programs, error } = await supabase
@@ -788,7 +793,6 @@
             } catch (e) { elements.noTrainingMessage.style.display = 'block'; }
         }
 
-        // Sidebar: Achievements (Dynamic)
         function updateAchievements() {
             const achievements = [];
             if (allCalls.length >= 1) achievements.push({ icon: '🚀', text: 'First Call Completed' });
@@ -803,7 +807,6 @@
             ).join('');
         }
 
-        // UI Event Listeners
         function initializeEventListeners() {
             elements.logoutButton.addEventListener('click', async () => {
                 await supabase.auth.signOut();
@@ -820,7 +823,6 @@
             elements.saveScratchpadBtn.addEventListener('click', saveScratchpad);
             elements.exportDataBtn.addEventListener('click', exportData);
 
-            // Collapsibles
             document.getElementById('scratchpadHeader').addEventListener('click', function() {
                 document.getElementById('scratchpadContent').classList.toggle('collapsed');
                 this.classList.toggle('is-collapsed');
@@ -834,7 +836,7 @@
         function applyFilters() {
             const term = elements.searchInput.value.toLowerCase();
             const qFilter = elements.qualityFilter.value;
-            const dFilter = elements.dateFilter.value; // YYYY-MM-DD
+            const dFilter = elements.dateFilter.value; 
             
             filteredCalls = allCalls.filter(call => {
                 const matchSearch = call.scenario.toLowerCase().includes(term);
@@ -885,11 +887,22 @@
             } catch (e) {}
         }
 
-        // Utilities
+        // Utilities: Correct Badge Names and Colors
         function getQualityBadge(q) {
-            const color = q === 'good' ? '#10b981' : q === 'average' ? '#f59e0b' : '#ef4444';
-            return `<span style="color: ${color}; font-weight: 600;">${q.charAt(0).toUpperCase() + q.slice(1)}</span>`;
+            let label = 'Normal';
+            let color = '#f59e0b'; // Orange/Yellow
+
+            if (q === 'good') {
+                label = 'Good';
+                color = '#10b981'; // Green
+            } else if (q === 'bad') {
+                label = 'Bad';
+                color = '#ef4444'; // Red
+            }
+
+            return `<span style="color: ${color}; font-weight: 600;">${label}</span>`;
         }
+        
         function formatDate(d) { return new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }); }
         function formatDuration(s) {
             if (!s) return '0:00';
