@@ -505,21 +505,68 @@
 
         // ================= DATA LOADING =================
         
+        // 1. دالة جلب البيانات (موجهة للجدول الأصلي مباشرة)
         async function loadCallHistory() {
-            // Fix 2: Reverted to 'call_sessions_egypt' to fix 400 Bad Request error
+            console.log("🔄 Starting to fetch data...");
+            
+            // هام جداً: هنا بنقرأ من call_sessions مش call_sessions_egypt
             const { data, error } = await supabase
-                .from('call_sessions_egypt') 
-                .select('*')
-                .eq('agent_email', State.user.email) // Using email for this table
-                .order('start_time_egypt', { ascending: false });
+                .from('call_sessions') 
+                .select('*') 
+                .eq('user_id', State.user.id)
+                .order('created_at', { ascending: false });
 
-            if (!error && data) {
+            if (error) {
+                console.error("❌ Error fetching history:", error);
+                return;
+            }
+
+            if (data) {
+                console.log("✅ Data fetched successfully:", data.length, "records");
+                
+                // كود فحص (Debugging) عشان نشوف أول تيكت فيها داتا ولا لأ
+                const firstWithData = data.find(r => r.form_data && Object.keys(r.form_data).length > 0);
+                if (firstWithData) {
+                    console.log("🔍 Found ticket with Form Data:", firstWithData.form_data);
+                } else {
+                    console.warn("⚠️ No tickets found with form_data in the response!");
+                }
+
                 State.allCalls = data.map(processCallData);
                 State.filteredCalls = [...State.allCalls];
-                updateDashboard(); 
-            } else if (error) {
-                console.error("Error fetching history:", error);
+                updateDashboard();
             }
+        }
+
+        // 2. دالة معالجة البيانات
+        function processCallData(call) {
+            let quality = 'average'; 
+            if (call.completed === true) quality = 'good';
+            else if (call.quality_reason) quality = 'poor';
+            if (call.call_quality && ['good', 'average', 'poor'].includes(call.call_quality.toLowerCase())) {
+                quality = call.call_quality.toLowerCase();
+            }
+
+            // التأكد من البيانات
+            const formDataSafe = call.form_data || {};
+
+            // تنسيق التاريخ
+            const dateObj = new Date(call.start_time);
+            const dateStr = dateObj.toLocaleDateString('en-GB', {
+                day: '2-digit', month: 'short', year: 'numeric', 
+                hour: '2-digit', minute: '2-digit'
+            });
+
+            return {
+                id: call.id,
+                date: dateStr,
+                rawDate: call.start_time,
+                scenario: 'Device Issue Flow', 
+                duration: formatDuration(call.duration),
+                quality: quality,
+                quality_reason: call.quality_reason,
+                formData: formDataSafe // <--- هذا هو المهم
+            };
         }
 
         async function loadTrainingPrograms() {
@@ -534,27 +581,6 @@
             } else {
                 State.trainingPrograms = [];
             }
-        }
-
-        function processCallData(call) {
-            let quality = 'average'; 
-            if (call.completed === true) quality = 'good';
-            else if (call.quality_reason) quality = 'poor';
-            
-            if (call.call_quality) quality = call.call_quality.toLowerCase();
-
-            const formDataSafe = call.form_data || {};
-
-            return {
-                id: call.id,
-                date: formatDate(call.start_time_egypt), // Use correct column
-                rawDate: call.start_time_egypt,
-                scenario: call.scenario_title || 'Device Issue Flow', 
-                duration: formatDuration(call.duration),
-                quality: quality,
-                quality_reason: call.quality_reason,
-                formData: formDataSafe 
-            };
         }
 
         async function loadScratchpad() {
