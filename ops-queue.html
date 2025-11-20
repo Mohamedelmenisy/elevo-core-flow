@@ -1,593 +1,520 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en" class="dark" dir="ltr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Operations Queue - Elevo Core</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234e8cff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M12 22V12M9 19l3-3 3 3M12 2a4 4 0 0 0-4 4v0a4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4z'/></svg>">
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     
+    <!-- Libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
     <style>
         :root {
-            --background-color: #1c1c28;
-            --card-background-color: #2b2b3d;
-            --text-color: #f0f0f0;
-            --text-color-secondary: #a0a0b0;
+            --sidebar-card-bg-color: #1a2332;
+            --card-bg-color: rgba(255, 255, 255, 0.05);
+            --card-border-color: rgba(255, 255, 255, 0.08);
             --primary-color: #4e8cff;
-            --primary-color-dark: #3d7eff;
-            --secondary-color: #3a3a50;
-            --border-color: #444444;
-            --success-color: #4CAF50;
-            --danger-color: #F44336;
-            --warning-color: #FFC107;
+            --primary-color-rgb: 78, 140, 255;
+            --success-color: #10b981;
+            --warning-color: #f59e0b;
+            --danger-color: #ef4444;
+            --accent-color: #8b5cf6;
+            --text-color: #f9fafb;
+            --text-color-light: #d1d5db;
+            --text-color-subtle: #9ca3af;
+            --border-color: rgba(255, 255, 255, 0.1);
+            --input-bg-color: rgba(255, 255, 255, 0.07);
+            --border-radius-md: 8px;
+            --border-radius-lg: 12px;
         }
 
-        body {
-            background-color: var(--background-color);
-            color: var(--text-color);
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        html, body {
+            height: 100%;
             font-family: 'Poppins', sans-serif;
-            margin: 0;
-            padding: 0;
+            background-color: #0f172a;
+            color: var(--text-color);
         }
 
-        /* --- Header Styles (Updated to match Core Flow) --- */
+        /* Layout & Scrollbar */
+        ::-webkit-scrollbar { display: none; }
+        .app-container { min-height: 100vh; display: flex; flex-direction: column; background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); }
+        .app-main { flex-grow: 1; }
+
+        /* Header */
         .app-header {
-            background: linear-gradient(135deg, var(--card-background-color), #242436);
-            padding: 1rem 2rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom: 1px solid var(--border-color);
-            position: sticky; top: 0; z-index: 100;
-            backdrop-filter: blur(10px);
+            position: sticky; top: 0; z-index: 50;
+            background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(16px);
+            border-bottom: 1px solid var(--border-color); padding: 1rem 2rem;
+            display: flex; justify-content: space-between; align-items: center;
         }
+        .logo-container { display: flex; align-items: center; gap: 0.75rem; }
+        .company-logo { color: var(--primary-color); width: 32px; height: 32px; filter: drop-shadow(0 0 8px rgba(78, 140, 255, 0.4)); }
+        .app-title { font-size: 1.5rem; font-weight: 600; background: linear-gradient(90deg, #4e8cff, #8b5cf6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .header-controls { display: flex; align-items: center; gap: 1.5rem; }
+        .nav-link { color: var(--text-color-light); text-decoration: none; font-weight: 500; padding: 0.5rem 1rem; border-radius: var(--border-radius-md); transition: all 0.3s ease; position: relative; }
+        .nav-link.active { color: var(--primary-color); background: rgba(78, 140, 255, 0.1); }
+        .nav-link.active::after { content: ''; position: absolute; bottom: -17px; left: 0; right: 0; height: 3px; background: var(--primary-color); border-radius: 2px; }
+        .nav-link:hover { color: var(--text-color); background: rgba(255, 255, 255, 0.05); }
+        .user-info { display: flex; align-items: center; gap: 1rem; }
+        .logout-btn { display: flex; align-items: center; gap: 0.5rem; background: rgba(239, 68, 68, 0.1); color: var(--danger-color); border: 1px solid rgba(239, 68, 68, 0.2); border-radius: var(--border-radius-md); padding: 0.5rem 1rem; font-weight: 500; cursor: pointer; transition: all 0.3s ease; }
+        .logout-btn:hover { background: rgba(239, 68, 68, 0.2); transform: translateY(-1px); }
 
-        .logo-container {
-            display: flex; align-items: center; gap: 10px; 
-            color: var(--primary-color); font-weight: 700; font-size: 1.3rem;
-        }
+        /* Dashboard Content */
+        .dashboard-main { width: 100%; max-width: 1400px; margin: 0 auto; padding: 2rem; text-align: left; }
+        .dashboard-header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1.5rem; margin-bottom: 2rem; }
+        .dashboard-header h1 { font-size: 2.25rem; font-weight: 700; background: linear-gradient(90deg, #f9fafb, #d1d5db); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 0.5rem; }
 
-        .header-controls {
-            display: flex;
-            align-items: center;
-            gap: 1.5rem;
-        }
-
-        .main-nav {
-            display: flex;
-            gap: 0.5rem;
-        }
-
-        .nav-link {
-            color: var(--text-color-secondary);
-            text-decoration: none;
-            transition: all .3s ease;
-            font-weight: 500;
-            padding: .5rem 1rem;
-            border-radius: 8px;
-            border: 1px solid transparent;
-            font-size: 0.9rem;
-        }
-
-        .nav-link:hover {
-            color: var(--primary-color);
-            background: rgba(78, 140, 255, .1);
-        }
-
-        .nav-link.active {
-            color: #ffffff;
-            background: rgba(78, 140, 255, .15);
-            border: 1px solid var(--primary-color);
-            font-weight: 600;
-            box-shadow: 0 0 8px rgba(78, 140, 255, 0.3);
-        }
-
-        .user-info {
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-            padding-left: 1.5rem;
-            border-left: 1px solid var(--border-color);
-        }
-
-        .logout-btn {
-            background: linear-gradient(135deg, var(--primary-color), var(--primary-color-dark));
-            color: #fff;
-            border: none;
-            border-radius: 8px;
-            padding: 0.5rem 1rem;
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5em;
-            cursor: pointer;
-            transition: all .3s ease;
-            font-size: 0.85rem;
-            font-weight: 600;
-        }
-
-        .logout-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(78, 140, 255, 0.3);
-        }
-
-        /* --- Main Content Styles --- */
-        .ops-main {
-            padding: 2rem;
-            max-width: 1400px;
-            margin: 0 auto;
-        }
-
-        .page-title {
-            margin-bottom: 2rem;
-            font-size: 1.8rem;
-            background: linear-gradient(90deg, #fff, var(--text-color-secondary));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
-
-        /* Tabs System */
-        .queue-tabs {
+        /* Tabs System (Queue Specific) */
+        .queue-tabs-container {
             display: flex;
             gap: 1rem;
             margin-bottom: 1.5rem;
             border-bottom: 1px solid var(--border-color);
-            padding-bottom: 1px;
         }
 
         .queue-tab {
-            padding: 0.8rem 1.5rem;
+            padding: 0.75rem 1.5rem;
             cursor: pointer;
-            font-weight: 600;
-            color: var(--text-color-secondary);
+            font-weight: 500;
+            color: var(--text-color-light);
             border-bottom: 3px solid transparent;
             transition: all 0.3s ease;
-            border-radius: 8px 8px 0 0;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
         }
 
         .queue-tab:hover {
-            background: rgba(78, 140, 255, 0.05);
             color: var(--text-color);
+            background: rgba(255, 255, 255, 0.03);
         }
 
         .queue-tab.active {
             color: var(--primary-color);
             border-bottom-color: var(--primary-color);
-            background: rgba(78, 140, 255, 0.1);
         }
 
-        /* Table Design */
-        .table-container {
-            background: var(--card-background-color);
-            border-radius: 16px;
-            border: 1px solid var(--border-color);
-            overflow: hidden;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.2);
-        }
-
-        .ops-table {
-            width: 100%;
-            border-collapse: collapse;
-            text-align: left;
-        }
-
-        .ops-table th {
-            background: rgba(0,0,0,0.2);
-            padding: 1.2rem;
-            color: var(--text-color-secondary);
-            font-weight: 600;
-            font-size: 0.9rem;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-
-        .ops-table td {
-            padding: 1.2rem;
-            border-bottom: 1px solid var(--border-color);
-            color: var(--text-color);
-            vertical-align: middle;
-        }
-
-        .ops-table tr:last-child td { border-bottom: none; }
-        .ops-table tr:hover { background: rgba(255,255,255,0.02); }
+        /* Tables & Cards */
+        .card { background: var(--card-bg-color); border: 1px solid var(--card-border-color); border-radius: 16px; backdrop-filter: blur(16px); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2); padding: 1.5rem; overflow: hidden; }
+        .table-responsive { overflow-x: auto; width: 100%; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 1.25rem 1rem; text-align: left; border-bottom: 1px solid var(--border-color); vertical-align: middle; }
+        th { background: rgba(255, 255, 255, 0.03); font-weight: 600; color: var(--text-color-light); text-transform: uppercase; font-size: 0.85rem; letter-spacing: 0.5px; }
+        tr:last-child td { border-bottom: none; }
+        tr:hover { background: rgba(255, 255, 255, 0.03); }
+        
+        /* Buttons */
+        .action-button { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem; border-radius: var(--border-radius-md); font-weight: 500; cursor: pointer; transition: all 0.3s ease; border: none; font-family: inherit; font-size: 0.9rem; white-space: nowrap; }
+        .primary-button { background: linear-gradient(135deg, var(--primary-color), #3b82f6); color: white; box-shadow: 0 4px 12px rgba(78, 140, 255, 0.3); }
+        .primary-button:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(78, 140, 255, 0.4); }
+        .secondary-button { background: rgba(255, 255, 255, 0.07); color: var(--text-color); border: 1px solid var(--border-color); }
+        .secondary-button:hover { background: rgba(255, 255, 255, 0.1); transform: translateY(-1px); }
 
         /* Status Badges */
-        .status-badge {
-            padding: 5px 12px;
-            border-radius: 50px;
-            font-size: 0.8rem;
-            font-weight: 600;
-            display: inline-block;
-        }
-        .badge-new { background: rgba(78, 140, 255, 0.15); color: #8bb4ff; border: 1px solid rgba(78, 140, 255, 0.3); }
-        .badge-waiting { background: rgba(255, 193, 7, 0.15); color: #ffc107; border: 1px solid rgba(255, 193, 7, 0.3); }
-        .badge-progress { background: rgba(156, 39, 176, 0.15); color: #e0aaff; border: 1px solid rgba(156, 39, 176, 0.3); }
-        .badge-solved { background: rgba(76, 175, 80, 0.15); color: #4caf50; border: 1px solid rgba(76, 175, 80, 0.3); }
+        .status-badge { padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.8rem; font-weight: 600; display: inline-block; }
+        .status-new { background: rgba(139, 92, 246, 0.15); color: #c4b5fd; border: 1px solid rgba(139, 92, 246, 0.3); }
+        .status-waiting { background: rgba(245, 158, 11, 0.15); color: #fcd34d; border: 1px solid rgba(245, 158, 11, 0.3); }
+        .status-progress { background: rgba(78, 140, 255, 0.15); color: #93c5fd; border: 1px solid rgba(78, 140, 255, 0.3); }
+        .status-solved { background: rgba(16, 185, 129, 0.15); color: #6ee7b7; border: 1px solid rgba(16, 185, 129, 0.3); }
 
-        /* Action Button */
-        .btn-action {
-            background: linear-gradient(135deg, var(--primary-color), var(--primary-color-dark));
-            color: white;
-            border: none;
-            padding: 0.6rem 1.2rem;
-            border-radius: 8px;
-            cursor: pointer;
-            font-weight: 500;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            transition: transform 0.2s;
-            font-size: 0.9rem;
-            box-shadow: 0 4px 10px rgba(78, 140, 255, 0.2);
-        }
-
-        .btn-action:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 15px rgba(78, 140, 255, 0.3);
-        }
-
-        /* Modal Design */
-        .modal-overlay {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(10, 10, 15, 0.85);
-            backdrop-filter: blur(8px);
-            display: none; justify-content: center; align-items: center;
-            z-index: 1000; opacity: 0; transition: opacity 0.3s ease;
-        }
-        .modal-overlay.open { display: flex; opacity: 1; }
-
-        .modal-content {
-            background: var(--card-background-color);
-            padding: 2rem;
-            border-radius: 20px;
-            width: 90%;
-            max-width: 650px;
-            border: 1px solid var(--border-color);
-            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
-            transform: scale(0.95); transition: transform 0.3s ease;
-        }
-        .modal-overlay.open .modal-content { transform: scale(1); }
-
-        .ticket-info-grid {
-            display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;
-            background: rgba(0,0,0,0.2); padding: 1.5rem; border-radius: 12px;
-            margin-bottom: 1.5rem; border: 1px solid var(--border-color);
-        }
-
-        .info-item label { display: block; font-size: 0.8rem; color: var(--text-color-secondary); margin-bottom: 0.3rem; }
-        .info-item div { font-weight: 600; font-size: 1rem; color: var(--text-color); }
-
-        .form-group { margin-bottom: 1.5rem; }
-        .form-group label { display: block; margin-bottom: 0.5rem; font-weight: 500; color: var(--text-color-secondary); }
-        .form-control {
-            width: 100%; padding: 0.8rem; background: var(--background-color);
-            border: 1px solid var(--border-color); border-radius: 10px;
-            color: var(--text-color); font-family: inherit; box-sizing: border-box;
-        }
+        /* Modal */
+        .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(10, 10, 20, 0.8); backdrop-filter: blur(12px); display: none; align-items: center; justify-content: center; z-index: 1000; opacity: 0; transition: opacity 0.3s ease; }
+        .modal.visible { display: flex; opacity: 1; }
+        .modal-content { background: #1a2332; padding: 2.5rem; border-radius: 20px; width: 90%; max-width: 600px; border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4); display: flex; flex-direction: column; gap: 1.5rem; max-height: 90vh; overflow-y: auto; }
+        
+        /* Form Elements in Modal */
+        .form-group { display: flex; flex-direction: column; gap: 0.5rem; }
+        .form-group label { font-size: 0.9rem; color: var(--text-color-light); }
+        .form-control { width: 100%; padding: 0.75rem; background-color: var(--input-bg-color); border: 1px solid var(--border-color); border-radius: var(--border-radius-md); color: var(--text-color); font-family: inherit; resize: vertical; }
         .form-control:focus { outline: none; border-color: var(--primary-color); }
+        select.form-control { cursor: pointer; }
+        option { background: #1a2332; }
 
-        /* History Log Section */
-        .history-section {
-            margin-top: 2rem;
-            border-top: 1px solid var(--border-color);
-            padding-top: 1.5rem;
-        }
-        .history-list {
-            max-height: 200px; overflow-y: auto;
-            background: rgba(0,0,0,0.2); border-radius: 10px; padding: 1rem;
-        }
-        .history-item {
-            margin-bottom: 1rem; padding-bottom: 1rem; border-bottom: 1px solid rgba(255,255,255,0.05);
-        }
-        .history-item:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
-        .history-header { display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--text-color-secondary); margin-bottom: 0.3rem; }
-        .history-note { font-size: 0.95rem; line-height: 1.5; }
+        /* Info Grid */
+        .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; background: rgba(0,0,0,0.2); padding: 1rem; border-radius: 8px; border: 1px solid var(--border-color); }
+        .info-item label { display: block; font-size: 0.75rem; color: var(--text-color-subtle); text-transform: uppercase; margin-bottom: 0.25rem; }
+        .info-item div { font-weight: 600; color: var(--text-color); }
 
-        /* Responsive */
-        @media (max-width: 992px) {
-            .main-nav { display: none; } /* Simple hide for now, or add toggle if needed */
-            .header-controls { gap: 1rem; }
-            .user-info { padding-left: 0; border-left: none; }
-            .table-container { overflow-x: auto; }
-            .ticket-info-grid { grid-template-columns: 1fr; }
+        /* History Log */
+        .history-container { margin-top: 1rem; border-top: 1px solid var(--border-color); padding-top: 1rem; }
+        .history-item { padding: 0.75rem; margin-bottom: 0.75rem; background: rgba(255,255,255,0.03); border-radius: 8px; border-left: 3px solid var(--primary-color); }
+        .history-meta { display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--text-color-subtle); margin-bottom: 0.25rem; }
+        .history-text { font-size: 0.9rem; color: var(--text-color-light); }
+
+        /* Footer */
+        .app-footer { background: rgba(15, 23, 42, 0.9); border-top: 1px solid var(--border-color); padding: 1.5rem; text-align: center; color: var(--text-color-subtle); margin-top: auto; }
+        
+        /* Utilities */
+        .loading-container { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 60vh; }
+        .spinner { width: 40px; height: 40px; border: 3px solid rgba(255, 255, 255, 0.1); border-left: 3px solid var(--primary-color); border-radius: 50%; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        @media (max-width: 768px) {
+            .header-controls a { display: none; } /* Simplified mobile nav */
+            .info-grid { grid-template-columns: 1fr; }
         }
     </style>
 </head>
 <body>
-
-    <!-- Header (Updated with Full Navigation) -->
-    <header class="app-header">
-        <div class="logo-container">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
-            Elevo Ops Queue
-        </div>
-        
-        <div class="header-controls" id="header-controls">
-            <nav class="main-nav" id="main-nav">
-                <a href="./dashboard.html" class="nav-link">Admin Dashboard</a>
-                <a href="./rtm-dashboard.html" class="nav-link">RTM Dashboard</a>
-                <a href="./agent-portal.html" class="nav-link">Agent Portal</a>
-                <a href="./core-flow.html" class="nav-link">Core Flow Assistant</a>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <div class="logo-container">
+                <svg class="company-logo" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 22V12M9 19l3-3 3 3M12 2a4 4 0 0 0-4 4v0a4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                <span class="app-title">Elevo Ops Queue</span>
+            </div>
+            <div class="header-controls">
+                <a href="dashboard.html" class="nav-link">Admin Dashboard</a>
+                <a href="rtm-dashboard.html" class="nav-link">RTM Dashboard</a>
+                <a href="agent-portal.html" class="nav-link">Agent Portal</a>
                 <a href="ops-queue.html" class="nav-link active">Ops Queue</a>
-            </nav>
-            <div class="user-info">
-                <span id="userName" style="color:#d1d5db;font-weight:500;min-height:1.2em;display:inline-block"></span>
-                <button id="logoutButton" class="logout-btn">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
-                    Logout
-                </button>
-            </div>
-        </div>
-    </header>
 
-    <!-- Main Content -->
-    <main class="ops-main">
-        <h1 class="page-title">Ticket Operations Queue</h1>
-
-        <!-- Tabs -->
-        <div class="queue-tabs">
-            <div class="queue-tab active" onclick="switchTab('follow_up')">
-                <span>🔁 Follow-up Team</span>
+                <div class="user-info">
+                    <span id="userName" style="font-weight: 500; color: var(--text-color-light);">Loading...</span>
+                    <button id="logoutButton" class="logout-btn">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+                        Logout
+                    </button>
+                </div>
             </div>
-            <div class="queue-tab" onclick="switchTab('level_2')">
-                <span>🛠️ Level 2 Support</span>
-            </div>
-        </div>
+        </header>
 
-        <!-- Tickets Table -->
-        <div class="table-container">
-            <table class="ops-table">
-                <thead>
-                    <tr>
-                        <th>Created At</th>
-                        <th>Chef ID</th>
-                        <th>Store Name</th>
-                        <th>Original Issue</th>
-                        <th>Sub Status</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody id="ticketsList">
-                    <tr><td colspan="6" style="text-align:center; padding: 3rem; color: var(--text-color-secondary);">Loading tickets...</td></tr>
-                </tbody>
-            </table>
-        </div>
-    </main>
+        <!-- Main Content -->
+        <main class="app-main dashboard-main">
+            <div id="auth-loading" class="loading-container">
+                <div class="spinner"></div>
+                <p style="margin-top: 1rem; color: var(--text-color-light);">Authenticating...</p>
+            </div>
+
+            <div id="opsContent" style="display: none;">
+                <div class="dashboard-header">
+                    <div>
+                        <h1>Operations Queue</h1>
+                        <p class="text-color-light">Manage escalations and follow-up requests.</p>
+                    </div>
+                    <button onclick="loadTickets()" class="action-button secondary-button">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"></path><path d="M1 20v-6h6"></path><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+                        Refresh
+                    </button>
+                </div>
+
+                <!-- Tabs -->
+                <div class="queue-tabs-container">
+                    <div class="queue-tab active" onclick="switchTab('follow_up', this)">
+                        <span>🔁 Follow-up Team</span>
+                    </div>
+                    <div class="queue-tab" onclick="switchTab('level_2', this)">
+                        <span>🛠️ Level 2 Support</span>
+                    </div>
+                </div>
+
+                <!-- Table Card -->
+                <div class="card">
+                    <div class="table-responsive">
+                        <table id="opsTable">
+                            <thead>
+                                <tr>
+                                    <th>Date & Time</th>
+                                    <th>Store / Chef ID</th>
+                                    <th>Issue Type</th>
+                                    <th>Action Required</th>
+                                    <th>Status</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="ticketsList">
+                                <!-- Rows injected by JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                    <div id="emptyMessage" style="display:none; text-align:center; padding: 3rem; color: var(--text-color-subtle);">
+                        No pending tickets in this queue. Good job! 🎉
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <footer class="app-footer">
+            <p>© 2025 Mohamed Elmenisy - Elevo Core. All rights reserved.</p>
+        </footer>
+    </div>
 
     <!-- Action Modal -->
-    <div id="actionModal" class="modal-overlay">
+    <div id="actionModal" class="modal">
         <div class="modal-content">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem;">
-                <h2 style="margin:0; font-size:1.4rem;">Update Ticket Status</h2>
-                <button onclick="closeModal()" style="background:none; border:none; color:var(--text-color-secondary); cursor:pointer; font-size:1.5rem;">&times;</button>
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <h2 style="font-size:1.5rem; font-weight:600; margin:0;">Update Ticket Status</h2>
+                <button onclick="closeModal()" style="background:none; border:none; color:var(--text-color-light); cursor:pointer;">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
             </div>
 
-            <div class="ticket-info-grid">
+            <!-- Ticket Info Preview -->
+            <div class="info-grid">
                 <div class="info-item">
                     <label>Store Name</label>
                     <div id="modalStoreName">-</div>
                 </div>
                 <div class="info-item">
-                    <label>Current Escalation</label>
+                    <label>Escalation Reason</label>
                     <div id="modalIssue" style="color:var(--primary-color);">-</div>
                 </div>
                 <div class="info-item">
                     <label>Chef ID</label>
                     <div id="modalChefId">-</div>
                 </div>
-                 <div class="info-item">
-                    <label>City</label>
-                    <div id="modalCity">-</div>
+                <div class="info-item">
+                    <label>Current Status</label>
+                    <div id="modalCurrentStatus">-</div>
                 </div>
             </div>
 
+            <!-- Action Form -->
             <div class="form-group">
-                <label>New Status</label>
+                <label for="newStatusSelect">New Status</label>
                 <select id="newStatusSelect" class="form-control">
-                    <option value="Waiting">⏳ Waiting (انتظار)</option>
-                    <option value="In Progress">⚙️ In Progress (جاري العمل)</option>
-                    <option value="Solved">✅ Solved (تم الحل)</option>
-                    <option value="Returned">↩️ Return to Level 1 (إعادة)</option>
+                    <option value="Waiting">⏳ Waiting</option>
+                    <option value="In Progress">⚙️ In Progress</option>
+                    <option value="Solved">✅ Solved</option>
+                    <option value="Returned">↩️ Return to Level 1</option>
                 </select>
             </div>
 
             <div class="form-group">
-                <label>Action Notes / Feedback</label>
-                <textarea id="actionNotes" class="form-control" rows="3" placeholder="Enter details of the action taken... (e.g., Contacted store, Updated settings)"></textarea>
+                <label for="actionNotes">Action Notes</label>
+                <textarea id="actionNotes" class="form-control" rows="3" placeholder="Describe the action taken..."></textarea>
             </div>
 
-            <div style="text-align:right; margin-bottom: 1.5rem;">
-                <button onclick="submitAction()" class="btn-action" style="display:inline-flex; width:auto;">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-                    Save Update
-                </button>
-            </div>
-
-            <!-- History Log -->
-            <div class="history-section">
-                <h4 style="margin-top:0; margin-bottom:1rem; color:var(--text-color-secondary);">📜 Action History</h4>
-                <div id="historyLogContainer" class="history-list">
-                    <!-- History items will be loaded here -->
+            <!-- Action History Log -->
+            <div class="history-container">
+                <h4 style="font-size:0.9rem; color:var(--text-color-light); margin-bottom:0.5rem;">📜 Action History</h4>
+                <div id="historyLogContainer" style="max-height: 150px; overflow-y: auto;">
+                    <!-- History items injected here -->
                 </div>
+            </div>
+
+            <div style="display:flex; justify-content:flex-end; gap:1rem;">
+                <button onclick="closeModal()" class="action-button secondary-button">Cancel</button>
+                <button onclick="submitAction()" id="saveBtn" class="action-button primary-button">Save Update</button>
             </div>
         </div>
     </div>
 
-    <script type="module">
-        import { supabase } from './supabaseClient.js';
-        import { protectPage } from './role-check.js';
+    <script>
+        // ================= CONFIGURATION =================
+        const Config = {
+            supabaseUrl: 'https://aefiigottnlcmjzilqnh.supabase.co',
+            supabaseKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFlZmlpZ290dG5sY21qemlscW5oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcxNzY2MDQsImV4cCI6MjA2Mjc1MjYwNH0.FypB02v3tGMnxXV9ZmZMdMC0oQpREKOJWgHMPxUzwX4'
+        };
 
-        let currentTeam = 'follow_up'; 
-        let activeTicketId = null;
-        let currentUser = null;
+        const supabase = window.supabase.createClient(Config.supabaseUrl, Config.supabaseKey);
 
-        document.addEventListener('DOMContentLoaded', async () => {
-            const user = await protectPage(['admin', 'manager', 'agent']); 
-            if(user) {
-                currentUser = user;
-                // تحديث اسم المستخدم في الهيدر
-                document.getElementById('userName').textContent = user.name || user.email;
-            }
+        const State = {
+            user: null,
+            currentTeam: 'follow_up',
+            activeTicketId: null
+        };
+
+        // ================= INITIALIZATION =================
+        document.addEventListener('DOMContentLoaded', initApp);
+
+        async function initApp() {
+            // 1. Auth Check
+            const { data: { session }, error } = await supabase.auth.getSession();
+            if (error || !session) return window.location.href = 'index.html';
+
+            State.user = session.user;
+            document.getElementById('userName').textContent = State.user.user_metadata?.full_name || State.user.email;
+            
+            // 2. Show Content
+            document.getElementById('auth-loading').style.display = 'none';
+            document.getElementById('opsContent').style.display = 'block';
+
+            // 3. Load Data
             loadTickets();
 
-            // تفعيل زر الخروج
+            // 4. Setup Logout
             document.getElementById('logoutButton').addEventListener('click', async () => {
                 await supabase.auth.signOut();
-                window.location.href = 'login.html';
+                window.location.href = 'index.html';
             });
-        });
-
-        // Expose functions to window for HTML onClick
-        window.switchTab = (team) => {
-            currentTeam = team;
-            document.querySelectorAll('.queue-tab').forEach(t => t.classList.remove('active'));
-            event.currentTarget.classList.add('active');
-            loadTickets();
         }
 
+        // ================= DATA LOADING =================
+        async function loadTickets() {
+            const tbody = document.getElementById('ticketsList');
+            const emptyMsg = document.getElementById('emptyMessage');
+            
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:2rem; color:var(--text-color-subtle);">Loading queue...</td></tr>';
+            emptyMsg.style.display = 'none';
+
+            try {
+                const { data, error } = await supabase
+                    .from('call_sessions')
+                    .select('*')
+                    .eq('escalation_status', State.currentTeam)
+                    .neq('sub_status', 'Solved') // Optional: Hide solved tickets immediately, or keep them
+                    .order('created_at', { ascending: false });
+
+                if (error) throw error;
+
+                if (!data || data.length === 0) {
+                    tbody.innerHTML = '';
+                    emptyMsg.style.display = 'block';
+                    return;
+                }
+
+                tbody.innerHTML = data.map(ticket => {
+                    const fd = ticket.form_data || {};
+                    const dateObj = new Date(ticket.created_at);
+                    const dateStr = dateObj.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+                    
+                    // Badge logic
+                    let badgeClass = 'status-new';
+                    let subStatus = ticket.sub_status || 'New';
+                    if (subStatus === 'Waiting') badgeClass = 'status-waiting';
+                    else if (subStatus === 'In Progress') badgeClass = 'status-progress';
+                    else if (subStatus === 'Solved') badgeClass = 'status-solved';
+
+                    return `
+                        <tr>
+                            <td>${dateStr}</td>
+                            <td>
+                                <div style="font-weight:600; color:white;">${fd.store_name || 'Unknown Store'}</div>
+                                <div style="font-size:0.8rem; color:var(--text-color-subtle);">${fd.chef_id || 'No ID'}</div>
+                            </td>
+                            <td>${fd.escalation_action || 'General Inquiry'}</td>
+                            <td style="color:var(--warning-color);">${ticket.escalation_status === 'follow_up' ? 'Follow Up' : 'Tech Support'}</td>
+                            <td><span class="status-badge ${badgeClass}">${subStatus}</span></td>
+                            <td>
+                                <button class="action-button primary-button" onclick="openActionModal('${ticket.id}')">
+                                    Action
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
+
+            } catch (err) {
+                console.error("Error loading tickets:", err);
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--danger-color);">Error loading data. Try refreshing.</td></tr>';
+            }
+        }
+
+        async function loadHistory(ticketId) {
+            const container = document.getElementById('historyLogContainer');
+            container.innerHTML = '<div style="text-align:center; padding:1rem; color:var(--text-color-subtle);">Loading history...</div>';
+
+            // Assuming you have a table 'ticket_history', if not, we simulate or create it
+            // If table doesn't exist, this part might fail silently or you need to create it in Supabase
+            const { data: logs, error } = await supabase
+                .from('ticket_history')
+                .select('*')
+                .eq('ticket_id', ticketId)
+                .order('created_at', { ascending: false });
+
+            if (error || !logs || logs.length === 0) {
+                container.innerHTML = '<div style="text-align:center; padding:0.5rem; color:var(--text-color-subtle); font-style:italic;">No previous actions recorded.</div>';
+                return;
+            }
+
+            container.innerHTML = logs.map(log => `
+                <div class="history-item">
+                    <div class="history-meta">
+                        <span>${log.agent_name || 'Agent'}</span>
+                        <span>${new Date(log.created_at).toLocaleString()}</span>
+                    </div>
+                    <div class="history-text">
+                        <span style="color:var(--primary-color); font-weight:500;">[${log.new_status}]</span> ${log.notes}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // ================= UI ACTIONS =================
+        window.switchTab = (team, tabElement) => {
+            State.currentTeam = team;
+            
+            // Update Tab UI
+            document.querySelectorAll('.queue-tab').forEach(t => t.classList.remove('active'));
+            tabElement.classList.add('active');
+
+            loadTickets();
+        };
+
         window.openActionModal = async (id) => {
-            activeTicketId = id;
+            State.activeTicketId = id;
             const modal = document.getElementById('actionModal');
             
-            // جلب بيانات التيكت
+            // Fetch fresh details for the modal
             const { data: ticket } = await supabase
                 .from('call_sessions')
-                .select('form_data, sub_status, escalation_action') 
+                .select('*')
                 .eq('id', id)
                 .single();
 
             if(ticket) {
                 const fd = ticket.form_data || {};
                 document.getElementById('modalStoreName').innerText = fd.store_name || '-';
-                document.getElementById('modalIssue').innerText = fd.escalation_action || ticket.escalation_action || '-'; 
+                document.getElementById('modalIssue').innerText = fd.escalation_action || '-';
                 document.getElementById('modalChefId').innerText = fd.chef_id || '-';
-                document.getElementById('modalCity').innerText = fd.city || '-';
+                document.getElementById('modalCurrentStatus').innerText = ticket.sub_status || 'New';
                 document.getElementById('newStatusSelect').value = ticket.sub_status || 'Waiting';
+                
+                loadHistory(id);
+                modal.classList.add('visible');
             }
-
-            loadHistoryLog(id);
-            modal.classList.add('open');
-        }
+        };
 
         window.closeModal = () => {
-            document.getElementById('actionModal').classList.remove('open');
+            document.getElementById('actionModal').classList.remove('visible');
             document.getElementById('actionNotes').value = '';
-        }
-
-        // --- Core Functions ---
-
-        async function loadTickets() {
-            const list = document.getElementById('ticketsList');
-            list.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:2rem; color:var(--text-color-secondary);">Loading queue data...</td></tr>';
-
-            const { data, error } = await supabase
-                .from('call_sessions')
-                .select('*')
-                .eq('escalation_status', currentTeam)
-                .neq('ticket_status', 'closed_completely') 
-                .order('created_at', { ascending: false });
-
-            if (error) {
-                console.error(error);
-                list.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--danger-color);">Error loading data.</td></tr>';
-                return;
-            }
-
-            if (!data || data.length === 0) {
-                list.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:3rem; color:var(--text-color-secondary);">🎉 The queue is empty! No pending tickets.</td></tr>';
-                return;
-            }
-
-            list.innerHTML = data.map(t => {
-                const fd = t.form_data || {};
-                const date = new Date(t.created_at).toLocaleString('en-US', { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'});
-                
-                let statusClass = 'badge-new';
-                if (t.sub_status === 'Solved') statusClass = 'badge-solved';
-                else if (t.sub_status === 'Waiting') statusClass = 'badge-waiting';
-                else if (t.sub_status === 'In Progress') statusClass = 'badge-progress';
-
-                return `
-                    <tr>
-                        <td>${date}</td>
-                        <td>${fd.chef_id || '-'}</td>
-                        <td style="font-weight:500; color:var(--primary-color);">${fd.store_name || 'Unknown'}</td>
-                        <td>${fd.escalation_action || '-'}</td>
-                        <td><span class="status-badge ${statusClass}">${t.sub_status || 'New'}</span></td>
-                        <td>
-                            <button class="btn-action" onclick="openActionModal('${t.id}')">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                                Action
-                            </button>
-                        </td>
-                    </tr>
-                `;
-            }).join('');
-        }
-
-        async function loadHistoryLog(ticketId) {
-            const container = document.getElementById('historyLogContainer');
-            container.innerHTML = '<div style="text-align:center; color:var(--text-color-secondary);">Loading history...</div>';
-            
-            const { data: logs } = await supabase
-                .from('ticket_history')
-                .select('*')
-                .eq('ticket_id', ticketId)
-                .order('created_at', { ascending: false });
-
-            if(logs && logs.length > 0) {
-                container.innerHTML = logs.map(log => `
-                    <div class="history-item">
-                        <div class="history-header">
-                            <span><strong>${log.agent_name || 'Agent'}</strong> changed status to <span style="color:var(--primary-color)">${log.new_status}</span></span>
-                            <span>${new Date(log.created_at).toLocaleString()}</span>
-                        </div>
-                        <div class="history-note">${log.notes}</div>
-                    </div>
-                `).join('');
-            } else {
-                container.innerHTML = '<div style="text-align:center; padding:1rem; color:var(--text-color-secondary); font-style:italic;">No actions recorded yet. Be the first!</div>';
-            }
-        }
+        };
 
         window.submitAction = async () => {
+            const btn = document.getElementById('saveBtn');
             const newStatus = document.getElementById('newStatusSelect').value;
             const notes = document.getElementById('actionNotes').value;
 
-            if(!notes.trim()) return alert("Please write a note describing your action.");
+            if(!notes.trim()) return alert("Please enter action notes.");
 
-            const btn = document.querySelector('#actionModal .btn-action');
-            const originalText = btn.innerHTML;
-            btn.innerHTML = 'Saving...';
+            btn.textContent = 'Saving...';
             btn.disabled = true;
 
             try {
-                // 1. تسجيل في الهستوري
+                // 1. Insert History Log
                 await supabase.from('ticket_history').insert({
-                    ticket_id: activeTicketId,
-                    user_id: currentUser.id,
-                    agent_name: currentUser.name || currentUser.email,
+                    ticket_id: State.activeTicketId,
+                    user_id: State.user.id,
+                    agent_name: State.user.user_metadata?.full_name || State.user.email,
                     action_type: 'status_change',
                     new_status: newStatus,
                     notes: notes
                 });
 
-                // 2. تحديث التيكت الأصلية
+                // 2. Update Ticket Status
                 await supabase.from('call_sessions').update({
                     sub_status: newStatus,
-                    // لو الحل "تم الحل"، ممكن نغير escalation_status لـ closed لو حابب تخفيها من الطابور لاحقاً
-                }).eq('id', activeTicketId);
+                    // If solved, maybe update completed flag or escalation_status?
+                }).eq('id', State.activeTicketId);
 
                 closeModal();
-                loadTickets(); // تحديث الجدول
-            } catch (e) {
-                console.error(e);
-                alert("Error saving update");
+                loadTickets(); // Refresh table
+
+            } catch (err) {
+                console.error(err);
+                alert("Failed to save action. Check console.");
             } finally {
-                btn.innerHTML = originalText;
+                btn.textContent = 'Save Update';
                 btn.disabled = false;
             }
-        }
+        };
     </script>
 </body>
 </html>
