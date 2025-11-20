@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analytics & Performance - Elevo Core</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234e8cff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M3 3v18h18'/><path d='M18 17V9'/><path d='M13 17V5'/><path d='M8 17v-3'/></svg>">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Supabase & Chart.js Library -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        :root {
+            --background-color: #1c1c28;
+            --card-background-color: #2b2b3d;
+            --text-color: #f0f0f0;
+            --text-color-secondary: #a0a0b0;
+            --primary-color: #4e8cff;
+            --border-color: #444444;
+            --success-color: #4CAF50;
+            --warning-color: #FFC107;
+            --danger-color: #F44336;
+        }
+
+        body { background-color: var(--background-color); color: var(--text-color); font-family: 'Poppins', sans-serif; margin: 0; }
+
+        /* Header (Updated Links) */
+        .app-header {
+            background: linear-gradient(135deg, var(--card-background-color), #242436);
+            padding: 1rem 2rem; display: flex; justify-content: space-between; align-items: center;
+            border-bottom: 1px solid var(--border-color); position: sticky; top: 0; z-index: 100;
+            backdrop-filter: blur(10px);
+        }
+        .logo-container { display: flex; align-items: center; gap: 10px; color: var(--primary-color); font-weight: 700; font-size: 1.3rem; }
+        
+        .nav-link { color: var(--text-color-secondary); text-decoration: none; margin-left: 15px; font-size: 0.9rem; transition: 0.3s; }
+        .nav-link:hover, .nav-link.active { color: var(--primary-color); font-weight: 600; }
+
+        .user-info { display: flex; align-items: center; gap: 1rem; padding-left: 1.5rem; border-left: 1px solid var(--border-color); }
+        .logout-btn { background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); padding: 0.4rem 1rem; border-radius: 6px; cursor: pointer; font-size: 0.85rem; transition:0.3s; }
+        .logout-btn:hover { background: rgba(239, 68, 68, 0.25); }
+
+        /* Layout */
+        .dash-container { padding: 2rem; max-width: 1400px; margin: 0 auto; }
+        
+        .dash-header {
+            display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;
+        }
+        
+        .live-badge {
+            background: rgba(76, 175, 80, 0.1); color: #4caf50; padding: 4px 12px; border-radius: 20px; 
+            font-size: 0.8rem; display: flex; align-items: center; gap: 6px; border: 1px solid rgba(76, 175, 80, 0.2);
+        }
+        .live-dot { width: 8px; height: 8px; background: #4caf50; border-radius: 50%; animation: pulse 2s infinite; }
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } }
+
+        .date-filter select {
+            padding: 0.6rem 1.2rem; background: #2b2b3d; border: 1px solid var(--border-color);
+            color: white; border-radius: 8px; cursor: pointer; font-family: inherit;
+        }
+
+        /* KPI Cards */
+        .kpi-grid {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;
+        }
+        .kpi-card {
+            background: var(--card-background-color); padding: 1.5rem; border-radius: 16px;
+            border: 1px solid var(--border-color); box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+            transition: transform 0.2s; position: relative; overflow: hidden;
+        }
+        .kpi-card:hover { transform: translateY(-5px); }
+        .kpi-title { font-size: 0.9rem; color: var(--text-color-secondary); margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.5px; }
+        .kpi-value { font-size: 2.5rem; font-weight: 700; color: white; }
+        .kpi-sub { font-size: 0.85rem; margin-top: 5px; opacity: 0.8; }
+
+        /* Charts */
+        .charts-grid {
+            display: grid; grid-template-columns: 2fr 1fr; gap: 1.5rem; margin-bottom: 2rem;
+        }
+        .chart-card {
+            background: var(--card-background-color); padding: 1.5rem; border-radius: 16px;
+            border: 1px solid var(--border-color); min-height: 350px;
+        }
+        .chart-header { margin-bottom: 1.5rem; font-size: 1.1rem; font-weight: 600; color: var(--text-color); display:flex; justify-content:space-between; }
+
+        /* Table */
+        .table-card {
+            background: var(--card-background-color); border-radius: 16px; border: 1px solid var(--border-color);
+            overflow: hidden; padding: 0;
+        }
+        .dash-table { width: 100%; border-collapse: collapse; text-align: left; }
+        .dash-table th { background: rgba(0,0,0,0.2); padding: 1.2rem; color: var(--text-color-secondary); font-weight: 600; text-transform: uppercase; font-size: 0.85rem; }
+        .dash-table td { padding: 1rem 1.2rem; border-bottom: 1px solid var(--border-color); color: var(--text-color); font-weight: 500; }
+        .dash-table tr:last-child td { border-bottom: none; }
+        .dash-table tr:hover { background: rgba(255,255,255,0.02); }
+
+        /* Responsive */
+        @media (max-width: 992px) {
+            .charts-grid { grid-template-columns: 1fr; }
+            .header-controls { display: none; } /* For simple mobile view */
+        }
+    </style>
+</head>
+<body>
+
+    <header class="app-header">
+        <div class="logo-container">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+            Performance Analytics
+        </div>
+        
+        <div class="header-controls" style="display:flex; align-items:center; gap:1.5rem;">
+            <nav>
+                <a href="core-flow.html" class="nav-link">App</a>
+                <a href="agent-portal.html" class="nav-link">Agent Portal</a>
+                <a href="ops-queue.html" class="nav-link">Ops Queue</a>
+                <a href="analytics.html" class="nav-link active">Analytics</a>
+            </nav>
+            <div class="user-info">
+                <span id="userName" style="color:#ccc; font-size:0.9rem;">Manager</span>
+                <button id="logoutBtn" class="logout-btn">Logout</button>
+            </div>
+        </div>
+    </header>
+
+    <main class="dash-container">
+        <div class="dash-header">
+            <div>
+                <div style="display:flex; align-items:center; gap:15px;">
+                    <h1 style="margin:0; font-size:1.8rem;">Team Performance</h1>
+                    <div class="live-badge"><div class="live-dot"></div> Live Updates</div>
+                </div>
+                <p style="color:var(--text-color-secondary); margin:5px 0 0;">Real-time statistics for Partner Care team.</p>
+            </div>
+            <div class="date-filter">
+                <select id="timeFilter" onchange="loadDashboardData()">
+                    <option value="today">Today</option>
+                    <option value="week">This Week</option>
+                    <option value="month">This Month</option>
+                    <option value="all">All Time</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- 1. KPI Cards -->
+        <div class="kpi-grid">
+            <div class="kpi-card" style="border-left: 4px solid var(--primary-color);">
+                <div class="kpi-title">Total Tickets</div>
+                <div class="kpi-value" id="kpiTotal">0</div>
+                <div class="kpi-sub" style="color:#ccc;">Total handled requests</div>
+            </div>
+            <div class="kpi-card" style="border-left: 4px solid var(--success-color);">
+                <div class="kpi-title">Solved (Level 1)</div>
+                <div class="kpi-value" id="kpiSolved" style="color:var(--success-color);">0</div>
+                <div class="kpi-sub" style="color:#ccc;">Closed immediately</div>
+            </div>
+            <div class="kpi-card" style="border-left: 4px solid var(--warning-color);">
+                <div class="kpi-title">Escalated (Follow-up)</div>
+                <div class="kpi-value" id="kpiFollowUp" style="color:var(--warning-color);">0</div>
+                <div class="kpi-sub" style="color:#ccc;">Sent to Ops Queue</div>
+            </div>
+            <div class="kpi-card" style="border-left: 4px solid var(--danger-color);">
+                <div class="kpi-title">Escalated (Level 2)</div>
+                <div class="kpi-value" id="kpiLevel2" style="color:var(--danger-color);">0</div>
+                <div class="kpi-sub" style="color:#ccc;">Technical Issues</div>
+            </div>
+        </div>
+
+        <!-- 2. Charts -->
+        <div class="charts-grid">
+            <div class="chart-card">
+                <div class="chart-header">
+                    <span>Agent Productivity (Top 5)</span>
+                    <span style="font-size:0.8rem; color:#aaa; font-weight:400;">Based on total volume</span>
+                </div>
+                <canvas id="agentBarChart"></canvas>
+            </div>
+            <div class="chart-card">
+                <div class="chart-header">Resolution vs Escalation</div>
+                <div style="height: 250px; display:flex; justify-content:center; align-items:center;">
+                    <canvas id="outcomePieChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3. Detailed Agent Table -->
+        <div class="table-card">
+            <div style="padding:1.5rem; border-bottom:1px solid var(--border-color);">
+                <h3 style="margin:0;">Detailed Agent Report</h3>
+            </div>
+            <div style="overflow-x:auto;">
+                <table class="dash-table">
+                    <thead>
+                        <tr>
+                            <th>Agent Name</th>
+                            <th>Total</th>
+                            <th>Solved</th>
+                            <th>Follow-up</th>
+                            <th>Level 2</th>
+                            <th>Escalation Rate</th>
+                        </tr>
+                    </thead>
+                    <tbody id="agentTableBody">
+                        <tr><td colspan="6" style="text-align:center; padding:2rem;">Loading data...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </main>
+
+    <script type="module">
+        import { supabase } from './supabaseClient.js';
+        import { protectPage } from './role-check.js';
+
+        let agentChart = null;
+        let pieChart = null;
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            // الحماية: أدمن أو مدير فقط
+            const user = await protectPage(['admin', 'manager']);
+            if(user) {
+                document.getElementById('userName').textContent = user.name || 'Manager';
+            }
+            
+            loadDashboardData();
+            setupRealtime(); // تفعيل التحديث اللحظي
+
+            document.getElementById('logoutBtn').addEventListener('click', async () => {
+                await supabase.auth.signOut();
+                window.location.href = 'login.html';
+            });
+        });
+
+        // 1. Realtime Subscription
+        function setupRealtime() {
+            supabase
+                .channel('analytics-db-changes')
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'call_sessions' }, (payload) => {
+                    console.log('New data detected! Updating charts...');
+                    loadDashboardData(); // تحديث البيانات فوراً عند أي تغيير
+                })
+                .subscribe();
+        }
+
+        // 2. Load Data Logic
+        window.loadDashboardData = async () => {
+            const timeFilter = document.getElementById('timeFilter').value;
+            
+            // تحديد التاريخ
+            let startDate = new Date();
+            if (timeFilter === 'today') startDate.setHours(0,0,0,0);
+            else if (timeFilter === 'week') startDate.setDate(startDate.getDate() - 7);
+            else if (timeFilter === 'month') startDate.setMonth(startDate.getMonth() - 1);
+            else startDate = new Date('2024-01-01');
+
+            // جلب البيانات
+            const { data: tickets, error } = await supabase
+                .from('call_sessions')
+                .select('id, agent_name, escalation_status, created_at')
+                .gte('created_at', startDate.toISOString());
+
+            if (error) {
+                console.error(error);
+                return;
+            }
+
+            processMetrics(tickets);
+        }
+
+        // 3. Process Data & Update UI
+        function processMetrics(tickets) {
+            // A. KPIs
+            const total = tickets.length;
+            const followUp = tickets.filter(t => t.escalation_status === 'follow_up').length;
+            const level2 = tickets.filter(t => t.escalation_status === 'level_2').length;
+            // Solved = أي حاجة مش فولو أب ولا ليفل 2
+            const solved = total - (followUp + level2);
+
+            document.getElementById('kpiTotal').innerText = total;
+            document.getElementById('kpiSolved').innerText = solved;
+            document.getElementById('kpiFollowUp').innerText = followUp;
+            document.getElementById('kpiLevel2').innerText = level2;
+
+            // B. Agent Stats
+            const agentStats = {};
+            tickets.forEach(t => {
+                const name = t.agent_name || 'Unknown';
+                if (!agentStats[name]) agentStats[name] = { total: 0, solved: 0, followUp: 0, level2: 0 };
+                
+                agentStats[name].total++;
+                if (t.escalation_status === 'follow_up') agentStats[name].followUp++;
+                else if (t.escalation_status === 'level_2') agentStats[name].level2++;
+                else agentStats[name].solved++;
+            });
+
+            // ترتيب الموظفين بالأكثر عملاً
+            const sortedAgents = Object.entries(agentStats)
+                .map(([name, stats]) => ({ name, ...stats }))
+                .sort((a, b) => b.total - a.total);
+
+            updateCharts(solved, followUp, level2, sortedAgents.slice(0, 5));
+            renderAgentTable(sortedAgents);
+        }
+
+        // 4. Render Charts
+        function updateCharts(solved, followUp, level2, topAgents) {
+            // Pie Chart
+            const pieCtx = document.getElementById('outcomePieChart').getContext('2d');
+            if (pieChart) pieChart.destroy();
+            
+            pieChart = new Chart(pieCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Solved', 'To Follow-up', 'To Level 2'],
+                    datasets: [{
+                        data: [solved, followUp, level2],
+                        backgroundColor: ['#4CAF50', '#FFC107', '#F44336'],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: { legend: { position: 'right', labels: { color: '#ccc', font: {family:'Poppins'} } } }
+                }
+            });
+
+            // Bar Chart
+            const barCtx = document.getElementById('agentBarChart').getContext('2d');
+            if (agentChart) agentChart.destroy();
+
+            agentChart = new Chart(barCtx, {
+                type: 'bar',
+                data: {
+                    labels: topAgents.map(a => a.name),
+                    datasets: [
+                        { label: 'Solved', data: topAgents.map(a => a.solved), backgroundColor: '#4CAF50', borderRadius: 4 },
+                        { label: 'Escalated', data: topAgents.map(a => a.followUp + a.level2), backgroundColor: '#F44336', borderRadius: 4 }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { stacked: true, ticks: { color: '#ccc' } },
+                        y: { stacked: true, ticks: { color: '#ccc' }, grid: { color: '#333' } }
+                    },
+                    plugins: { legend: { labels: { color: '#ccc' } } }
+                }
+            });
+        }
+
+        // 5. Render Table
+        function renderAgentTable(agents) {
+            const tbody = document.getElementById('agentTableBody');
+            if (agents.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:2rem; color:#777;">No data found.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = agents.map(a => {
+                const escalationCount = a.followUp + a.level2;
+                const rate = a.total > 0 ? Math.round((escalationCount / a.total) * 100) : 0;
+                const rateColor = rate > 50 ? '#F44336' : (rate > 20 ? '#FFC107' : '#4CAF50');
+
+                return `
+                    <tr>
+                        <td style="color:white; font-weight:600;">${a.name}</td>
+                        <td>${a.total}</td>
+                        <td style="color:#4CAF50;">${a.solved}</td>
+                        <td style="color:#FFC107;">${a.followUp}</td>
+                        <td style="color:#F44336;">${a.level2}</td>
+                        <td style="color:${rateColor}; font-weight:bold;">${rate}%</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+    </script>
+</body>
+</html>
