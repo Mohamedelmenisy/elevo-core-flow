@@ -1109,46 +1109,81 @@
             loadModalHistory(id);
         };
 
+        // ================= UPDATED LOGIC: PREVENT SENDING & CLOSE MODAL =================
         window.addAgentNote = async (id) => {
             const noteInput = document.getElementById('agentExtraNote');
             const note = noteInput.value;
-            if(!note.trim()) return showToast("Please write a note.", 'error'); // Toast
+            
+            // Check empty
+            if(!note.trim()) return showToast("Please write a note.", 'error'); 
             
             const btn = event.target.closest('button') || event.target;
-            btn.textContent = 'Sending...'; 
+            const originalText = btn.textContent;
+            btn.textContent = 'Checking...'; 
             btn.disabled = true;
             
             try {
-                const { data: ticket } = await supabase.from('call_sessions').select('sub_status').eq('id', id).single();
-                const isSolved = ticket && ticket.sub_status === 'Solved';
+                // 1. Fetch current ticket status
+                const { data: ticket, error: fetchError } = await supabase
+                    .from('call_sessions')
+                    .select('sub_status')
+                    .eq('id', id)
+                    .single();
 
-                await supabase.from('ticket_history').insert({
+                if (fetchError) throw fetchError;
+
+                // 2. CHECK IF SOLVED
+                if (ticket && ticket.sub_status === 'Solved') {
+                    // Show Error Toast
+                    showToast("Action Blocked: Cannot add notes to a Solved ticket.", "error");
+                    
+                    // Close the modal automatically
+                    const modal = document.getElementById('callDetailsModal');
+                    modal.classList.remove('visible');
+
+                    // Reset Button state (in case they open it again quickly)
+                    btn.textContent = originalText; 
+                    btn.disabled = false;
+                    
+                    // STOP HERE. Do not insert into history.
+                    return; 
+                }
+
+                // --- Proceed only if NOT Solved ---
+
+                btn.textContent = 'Sending...';
+
+                // 3. Insert into History
+                const { error: insertError } = await supabase.from('ticket_history').insert({
                     ticket_id: id,
                     user_id: State.user.id,
                     agent_name: State.user.user_metadata?.full_name || 'Agent',
                     action_type: 'agent_note',
-                    new_status: isSolved ? 'Note on Solved Ticket' : 'Updated',
+                    new_status: 'Updated', 
                     notes: note
                 });
 
-                if (!isSolved) {
-                    await supabase.from('call_sessions').update({
-                        sub_status: 'Updated'
-                    }).eq('id', id);
-                } else {
-                    showToast("Note sent (Ticket remains Solved).", 'success'); // Toast
-                }
+                if (insertError) throw insertError;
 
-                if(!isSolved) showToast("Note sent successfully!", 'success'); // Toast
+                // 4. Update Ticket Status (Queue)
+                await supabase.from('call_sessions').update({
+                    sub_status: 'Updated'
+                }).eq('id', id);
+
+                // Success Toast
+                showToast("Note sent successfully!", 'success'); 
                 noteInput.value = '';
                 loadModalHistory(id);
 
             } catch (err) {
                 console.error(err);
-                showToast("Error sending note.", 'error'); // Toast
+                showToast("Error processing request.", 'error');
             } finally {
-                btn.textContent = 'Send'; 
-                btn.disabled = false;
+                // Ensure button is reset if we didn't return early
+                if(btn.textContent !== originalText) {
+                    btn.textContent = 'Send'; 
+                    btn.disabled = false;
+                }
             }
         }
 
