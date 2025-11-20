@@ -194,7 +194,7 @@
         .spinner { width: 48px; height: 48px; border: 4px solid rgba(255, 255, 255, 0.1); border-left: 4px solid var(--primary-color); border-radius: 50%; animation: spin 1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
-        /* --- تصميم تفاصيل الفورم داخل المودال --- */
+        /* --- Form Details Styles --- */
         .form-details-container {
             background: rgba(255, 255, 255, 0.03);
             border-radius: 12px;
@@ -215,68 +215,81 @@
 
         .details-grid {
             display: grid;
-            grid-template-columns: repeat(2, 1fr); /* عمودين */
+            grid-template-columns: repeat(2, 1fr);
             gap: 1rem 2rem;
         }
 
-        .detail-item {
-            display: flex;
-            flex-direction: column;
-            gap: 0.3rem;
-        }
+        .detail-item { display: flex; flex-direction: column; gap: 0.3rem; }
+        .detail-item.full-width { grid-column: span 2; }
+        .detail-label { font-size: 0.85rem; color: var(--text-color-subtle); text-transform: uppercase; letter-spacing: 0.5px; }
+        .detail-value { font-size: 1rem; color: var(--text-color); font-weight: 500; word-break: break-word; }
 
-        .detail-item.full-width {
-            grid-column: span 2; /* يأخذ العرض بالكامل */
-        }
-
-        .detail-label {
-            font-size: 0.85rem;
-            color: var(--text-color-subtle);
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-
-        .detail-value {
-            font-size: 1rem;
-            color: var(--text-color);
-            font-weight: 500;
-            word-break: break-word;
-        }
-
-        .action-badge {
-            display: inline-block;
-            padding: 0.25rem 0.75rem;
-            border-radius: 6px;
-            font-size: 0.9rem;
-            font-weight: 600;
-        }
-
-        /* ألوان للإجراءات */
+        .action-badge { display: inline-block; padding: 0.25rem 0.75rem; border-radius: 6px; font-size: 0.9rem; font-weight: 600; }
         .action-solved { background: rgba(16, 185, 129, 0.2); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); }
         .action-escalate { background: rgba(245, 158, 11, 0.2); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.3); }
         .action-level2 { background: rgba(239, 68, 68, 0.2); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); }
 
         /* History Scrollbar */
-        #modalHistoryLog::-webkit-scrollbar {
-            width: 6px;
-            display: block;
-        }
-        #modalHistoryLog::-webkit-scrollbar-track {
-            background: rgba(0,0,0,0.1);
-        }
-        #modalHistoryLog::-webkit-scrollbar-thumb {
-            background: rgba(255,255,255,0.1);
-            border-radius: 3px;
-        }
+        #modalHistoryLog::-webkit-scrollbar { width: 6px; display: block; }
+        #modalHistoryLog::-webkit-scrollbar-track { background: rgba(0,0,0,0.1); }
+        #modalHistoryLog::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
 
-        /* تحسين شكل الموبايل */
         @media (max-width: 600px) {
             .details-grid { grid-template-columns: 1fr; }
             .detail-item.full-width { grid-column: span 1; }
         }
+
+        /* --- TOAST NOTIFICATION STYLES (NEW) --- */
+        .toast-container {
+            position: fixed;
+            top: 24px;
+            right: 24px;
+            z-index: 10000;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            pointer-events: none;
+        }
+
+        .toast-message {
+            background: rgba(30, 41, 59, 0.95);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-left: 4px solid var(--primary-color);
+            color: white;
+            padding: 16px 20px;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            min-width: 300px;
+            transform: translateX(100%);
+            opacity: 0;
+            transition: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+            pointer-events: auto;
+            backdrop-filter: blur(10px);
+        }
+
+        .toast-message.show {
+            transform: translateX(0);
+            opacity: 1;
+        }
+
+        .toast-message.success { border-left-color: var(--success-color); }
+        .toast-message.error { border-left-color: var(--danger-color); }
+        .toast-message.info { border-left-color: var(--primary-color); }
+
+        .toast-icon {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
     </style>
 </head>
 <body>
+    <!-- Toast Container -->
+    <div id="toastContainer" class="toast-container"></div>
+
     <div class="app-container">
         <!-- Header -->
         <header class="app-header">
@@ -371,11 +384,12 @@
                                 <div class="filter-grid">
                                     <div><input type="text" id="searchInput" placeholder="Search scenario..."></div>
                                     <div>
+                                        <!-- Updated Filter Options -->
                                         <select id="qualityFilter">
                                             <option value="all">All Quality</option>
                                             <option value="good">Good</option>
-                                            <option value="average">Average</option>
-                                            <option value="poor">Poor</option>
+                                            <option value="normal">Normal</option>
+                                            <option value="bad">Bad</option>
                                         </select>
                                     </div>
                                     <div><input type="date" id="dateFilter"></div>
@@ -478,13 +492,45 @@
     </div>
 
     <script>
+        // ================= TOAST NOTIFICATION FUNCTION =================
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            toast.className = `toast-message ${type}`;
+            
+            // Icons based on type
+            let icon = '';
+            if (type === 'success') icon = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+            else if (type === 'error') icon = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>';
+            else icon = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4e8cff" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>';
+
+            toast.innerHTML = `
+                <div class="toast-icon">${icon}</div>
+                <span>${message}</span>
+            `;
+
+            container.appendChild(toast);
+
+            // Trigger animation
+            requestAnimationFrame(() => {
+                toast.classList.add('show');
+            });
+
+            // Remove after 3 seconds
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => {
+                    toast.remove();
+                }, 400); // wait for transition
+            }, 3000);
+        }
+
         // ================= CONFIGURATION & STATE =================
         const Config = {
             supabaseUrl: 'https://aefiigottnlcmjzilqnh.supabase.co',
             supabaseKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFlZmlpZ290dG5sY21qemlscW5oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcxNzY2MDQsImV4cCI6MjA2Mjc1MjYwNH0.FypB02v3tGMnxXV9ZmZMdMC0oQpREKOJWgHMPxUzwX4'
         };
 
-        // 1. تعريف التارجت اليومي
         const DAILY_TARGET = 40; 
 
         const supabase = window.supabase.createClient(Config.supabaseUrl, Config.supabaseKey);
@@ -514,17 +560,14 @@
                 State.user = session.user;
                 updateUserDisplay();
                 
-                // Initialize Charts FIRST
                 initializeCharts();
 
-                // Load Data
                 await Promise.all([
                     loadCallHistory(),
                     loadScratchpad(),
                     loadTrainingPrograms()
                 ]);
 
-                // Setup Events
                 setupEventListeners();
 
                 document.getElementById('auth-loading').style.display = 'none';
@@ -557,14 +600,19 @@
             }
         }
 
-        // 2. تحديث منطق عرض الجدول (إضافة الجرس وعرض الحالة)
         function processCallData(call) {
-            let quality = 'average'; 
-            if (call.completed === true) quality = 'good';
-            else if (call.quality_reason) quality = 'poor';
+            // MAPPING LOGIC: Good, Normal, Bad
+            let quality = 'normal'; 
             
-            if (call.call_quality && ['good', 'average', 'poor'].includes(call.call_quality.toLowerCase())) {
-                quality = call.call_quality.toLowerCase();
+            if (call.call_quality) {
+                const dbQuality = call.call_quality.toLowerCase();
+                if (dbQuality === 'good') quality = 'good';
+                else if (dbQuality === 'average') quality = 'normal'; // Map Average to Normal
+                else if (dbQuality === 'poor') quality = 'bad';       // Map Poor to Bad
+            } else {
+                // Fallback logic if call_quality is null
+                if (call.completed === true) quality = 'good';
+                else if (call.quality_reason) quality = 'bad';
             }
 
             const formDataSafe = call.form_data || {};
@@ -574,9 +622,8 @@
                 hour: '2-digit', minute: '2-digit'
             });
 
-            // التحقق من وجود رد (لو الحالة مش New ومش Updated ومش Updated by Agent يبقى الفولو أب رد)
             const hasReply = call.sub_status && call.sub_status !== 'New' && call.sub_status !== 'Updated' && call.sub_status !== 'Updated by Agent';
-            const replyBadge = hasReply ? '🔔' : ''; // علامة جرس
+            const replyBadge = hasReply ? '🔔' : ''; 
 
             return {
                 id: call.id,
@@ -584,10 +631,10 @@
                 rawDate: call.start_time,
                 scenario: 'Device Issue Flow', 
                 duration: formatDuration(call.duration),
-                quality: quality,
+                quality: quality, // Now holds: 'good', 'normal', or 'bad'
                 quality_reason: call.quality_reason,
                 formData: formDataSafe,
-                subStatus: call.sub_status || 'New', // هنحتاجها في العرض
+                subStatus: call.sub_status || 'New',
                 replyBadge: replyBadge
             };
         }
@@ -693,7 +740,7 @@
                         <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.8rem; color:var(--text-color-subtle);">
                             <span>Due: ${formatDate(prog.due_date)}</span>
                             ${prog.status !== 'completed' ? 
-                                `<button class="action-button secondary-button" style="padding:0.3rem 0.8rem; font-size:0.8rem;" onclick="alert('Starting training...')">Start</button>` : 
+                                `<button class="action-button secondary-button" style="padding:0.3rem 0.8rem; font-size:0.8rem;" onclick="showToast('Starting training...', 'info')">Start</button>` : 
                                 '<span style="color:var(--success-color);">Completed</span>'
                             }
                         </div>
@@ -702,7 +749,6 @@
             `).join('');
         }
 
-        // 3. تحديث دالة رسم الجدول لإظهار الجرس والحالة
         function renderTable() {
             const tbody = document.getElementById('callsTableBody');
             tbody.innerHTML = '';
@@ -724,7 +770,6 @@
                     <td>${call.duration}</td>
                     <td>${getQualityBadge(call.quality)}</td>
                     <td>
-                        <!-- هنا عرضنا الجرس والحالة -->
                         <span style="font-size:0.8rem; color:var(--text-color-light); margin-right:8px;">${call.replyBadge} ${call.subStatus}</span>
                         <button class="action-button secondary-button" onclick="openModal('${call.id}')">View Details</button>
                     </td>
@@ -804,10 +849,18 @@
                 options: { responsive: true, maintainAspectRatio: false, plugins: { legend: {display: false}, title: { display: true, text: 'Avg Duration per Day', color: '#f9fafb' } }, scales: { y: { grid: { color: 'rgba(255,255,255,0.1)' }, ticks: { color: '#d1d5db' } }, x: { grid: { display: false }, ticks: { color: '#d1d5db' } } } }
             });
 
+            // MODIFIED CHART LABELS (Good, Normal, Bad)
             const ctx3 = document.getElementById('qualityDistributionChart').getContext('2d');
             State.charts.quality = new Chart(ctx3, {
                 type: 'doughnut',
-                data: { labels: ['Good', 'Average', 'Poor'], datasets: [{ data: [0,0,0], backgroundColor: ['#10b981', '#f59e0b', '#ef4444'], borderWidth: 0 }] },
+                data: { 
+                    labels: ['Good', 'Normal', 'Bad'], 
+                    datasets: [{ 
+                        data: [0,0,0], 
+                        backgroundColor: ['#10b981', '#f59e0b', '#ef4444'], 
+                        borderWidth: 0 
+                    }] 
+                },
                 options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#d1d5db' } }, title: { display: true, text: 'Quality Distribution', color: '#f9fafb' } } }
             });
         }
@@ -839,10 +892,11 @@
             State.charts.volume.data.datasets[0].data = dailyDuration;
             State.charts.volume.update();
 
+            // Update Counts for Good, Normal, Bad
             const qCounts = [
                 State.allCalls.filter(c => c.quality === 'good').length,
-                State.allCalls.filter(c => c.quality === 'average').length,
-                State.allCalls.filter(c => c.quality === 'poor').length
+                State.allCalls.filter(c => c.quality === 'normal').length,
+                State.allCalls.filter(c => c.quality === 'bad').length
             ];
             State.charts.quality.data.datasets[0].data = qCounts;
             State.charts.quality.update();
@@ -862,6 +916,7 @@
 
                 State.filteredCalls = State.allCalls.filter(call => {
                     const matchSearch = call.scenario.toLowerCase().includes(term);
+                    // Matching mapped quality (good, normal, bad)
                     const matchQuality = qFilter === 'all' || call.quality === qFilter;
                     const matchDate = !dFilter || call.rawDate.startsWith(dFilter);
                     return matchSearch && matchQuality && matchDate;
@@ -908,9 +963,10 @@
                 if(!error) {
                     btn.textContent = 'Saved!';
                     btn.style.background = 'var(--success-color)';
+                    showToast('Notes saved successfully', 'success'); // Toast
                     setTimeout(() => { btn.textContent = 'Save Notes'; btn.style.background = ''; }, 2000);
                 } else {
-                    alert('Failed to save note');
+                    showToast('Failed to save note', 'error'); // Toast
                     btn.textContent = 'Save Notes';
                 }
             });
@@ -945,7 +1001,8 @@
         }
 
         function getQualityBadge(q) {
-            const colors = { good: '#10b981', average: '#f59e0b', poor: '#ef4444' };
+            // Colors for Good, Normal, Bad
+            const colors = { good: '#10b981', normal: '#f59e0b', bad: '#ef4444' };
             const color = colors[q] || '#9ca3af';
             return `<span style="color:${color}; font-weight:600; text-transform:capitalize;">${q}</span>`;
         }
@@ -1022,7 +1079,6 @@
                 </div>
             `;
 
-            // Assemble Modal
             modal.innerHTML = `
                 <div class="modal-content" style="max-width: 650px;">
                     <div style="display:flex; justify-content:space-between; margin-bottom:1rem; align-items:center;">
@@ -1053,55 +1109,49 @@
             loadModalHistory(id);
         };
 
-        // 1. تحديث منطق إرسال النوت (عشان منحولش السولفد لـ Updated)
         window.addAgentNote = async (id) => {
             const noteInput = document.getElementById('agentExtraNote');
             const note = noteInput.value;
-            if(!note.trim()) return alert("Please write a note.");
+            if(!note.trim()) return showToast("Please write a note.", 'error'); // Toast
             
-            // استخدام closest لضمان تحديد الزر بشكل صحيح
             const btn = event.target.closest('button') || event.target;
             btn.textContent = 'Sending...'; 
             btn.disabled = true;
             
             try {
-                // نعرف حالة التيكت الحالية الأول
                 const { data: ticket } = await supabase.from('call_sessions').select('sub_status').eq('id', id).single();
                 const isSolved = ticket && ticket.sub_status === 'Solved';
 
-                // 1. تسجيل في الهستوري
                 await supabase.from('ticket_history').insert({
                     ticket_id: id,
                     user_id: State.user.id,
                     agent_name: State.user.user_metadata?.full_name || 'Agent',
                     action_type: 'agent_note',
-                    new_status: isSolved ? 'Note on Solved Ticket' : 'Updated', // تغيير المسمى
+                    new_status: isSolved ? 'Note on Solved Ticket' : 'Updated',
                     notes: note
                 });
 
-                // 2. لو التيكت مش Solved، نحدث حالتها عشان تظهر في الكيو
                 if (!isSolved) {
                     await supabase.from('call_sessions').update({
-                        sub_status: 'Updated' // الاسم الجديد المختصر
+                        sub_status: 'Updated'
                     }).eq('id', id);
                 } else {
-                    alert("Note sent to history (Ticket remains Solved).");
+                    showToast("Note sent (Ticket remains Solved).", 'success'); // Toast
                 }
 
-                if(!isSolved) alert("Note sent successfully!");
+                if(!isSolved) showToast("Note sent successfully!", 'success'); // Toast
                 noteInput.value = '';
                 loadModalHistory(id);
 
             } catch (err) {
                 console.error(err);
-                alert("Error sending note.");
+                showToast("Error sending note.", 'error'); // Toast
             } finally {
                 btn.textContent = 'Send'; 
                 btn.disabled = false;
             }
         }
 
-        // دالة تحميل الهستوري (عشان نشوف ردود الفولو أب)
         async function loadModalHistory(ticketId) {
             const container = document.getElementById('modalHistoryLog');
             container.innerHTML = '<div style="text-align:center; color:#aaa;">Refreshing...</div>';
@@ -1114,9 +1164,8 @@
             
             if(logs && logs.length){
                 container.innerHTML = logs.map(l => {
-                    // تمييز الألوان: لو الايجنت هو اللي كاتب يبقى لون، لو الفولو أب يبقى لون تاني
                     const isAgent = l.action_type === 'agent_note';
-                    const nameColor = isAgent ? '#4e8cff' : '#f59e0b'; // أزرق للايجنت، برتقالي للفولو أب
+                    const nameColor = isAgent ? '#4e8cff' : '#f59e0b';
                     
                     return `
                     <div style="padding:10px; border-bottom:1px solid #333; background: ${isAgent ? 'rgba(78,140,255,0.05)' : 'transparent'};">
