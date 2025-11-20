@@ -766,7 +766,8 @@ font-size: 1.1rem;
 }
 
 .form-field input,
-.form-field textarea {
+.form-field textarea,
+.form-field select {
 width: 100%;
 padding: 1rem 1.25rem;
 background: var(--input-background-color);
@@ -779,7 +780,8 @@ transition: all .3s ease;
 }
 
 .form-field input:focus,
-.form-field textarea:focus {
+.form-field textarea:focus,
+.form-field select:focus {
 outline: 0;
 border-color: var(--primary-color);
 box-shadow: 0 0 0 3px rgba(var(--primary-color-rgb), .2);
@@ -1271,44 +1273,225 @@ Waiting for Ticket
     function switchToCallFlowView(e=!0){initialViewDiv.style.display="none",postCallSummaryDiv.style.display="none",e?animateView(callFlowViewDiv):callFlowViewDiv.style.display="block",updateSystemStatus("In Ticket","status-in-call")}
     function switchToSummaryView(){initialViewDiv.style.display="none",callFlowViewDiv.style.display="none",callTimerDiv.style.display="none",animateView(postCallSummaryDiv),updateSystemStatus("Review Ticket Summary","status-summary"); if(realtimeSubscription) {console.log("Unsubscribing from channel."); supabase.removeChannel(realtimeSubscription); realtimeSubscription = null;}}
     
-    async function loadActiveScenarios(){
+    // UPDATED: loadActiveScenarios with Department Filtering
+    async function loadActiveScenarios() {
         setButtonLoadingState(receiveCallBtn, true, "Start Ticket");
-        const e = document.getElementById("customScenarioList"), t = document.getElementById("scenarioDropdownValue");
-        e.innerHTML = `<div class="scenario-item" style="justify-content: center;"><div class="loading-skeleton" style="width: 100%; height: 1.5rem;"></div></div><div class="scenario-item" style="justify-content: center;"><div class="loading-skeleton" style="width: 80%; height: 1.5rem;"></div></div><div class="scenario-item" style="justify-content: center;"><div class="loading-skeleton" style="width: 90%; height: 1.5rem;"></div></div>`;
-        t.value = "";
+        const listContainer = document.getElementById("customScenarioList");
+        const hiddenInput = document.getElementById("scenarioDropdownValue");
+        
+        // عرض Skeleton Loading لحين جلب البيانات
+        listContainer.innerHTML = `<div class="scenario-item" style="justify-content: center;"><div class="loading-skeleton" style="width: 100%; height: 1.5rem;"></div></div>`;
+        hiddenInput.value = "";
+
         try {
-            const { data: n, error: i } = await supabase.from("call_scenarios").select("id, title, steps, description").eq("status", 'approved').order("created_at", { ascending: false });
-            if (i) throw i;
-            e.innerHTML = "";
-            if (n && n.length > 0) {
-                n.forEach((n => {
-                    const i = document.createElement("div");
-                    i.className = "scenario-item", i.dataset.value = n.id, i.setAttribute("role", "option"), i.setAttribute("tabindex", "0"), i.setAttribute("aria-label", n.title), i.dataset.stepCount = n.steps?.length || 0, i.dataset.description = n.description || "No description available", i.dataset.avgTime = "2-3 min";
-                    let a = "📝";
-                    const s = n.title.toLowerCase();
-                    s.includes("compensation") ? a = "⭐" : s.includes("inquiry") ? a = "❓" : s.includes("complaint") ? a = "😠" : s.includes("technical") ? a = "🔧" : s.includes("billing") && (a = "💰");
-                    i.innerHTML = `<span class="icon">${a}</span><div style="flex: 1;"><div style="font-weight: 600; margin-bottom: 0.25rem;">${n.title}</div><div style="font-size: 0.9rem; color: var(--text-color-secondary);">${n.steps?.length || 0} steps • ${i.dataset.avgTime}</div></div>`;
-                    const o = () => { const a = e.querySelector(".selected"); a && a.classList.remove("selected"), i.classList.add("selected"), t.value = n.id, receiveCallBtn.disabled = !1 };
-                    i.addEventListener("click", o), i.addEventListener("keydown", (e => { "Enter" !== e.key && " " !== e.key || (e.preventDefault(), o()) })), i.addEventListener("mousemove", (e => { scenarioPreviewTooltip.style.display = "block", scenarioPreviewTooltip.innerHTML = `<strong>${n.title}</strong><div style="margin-top: 0.5rem;">${i.dataset.description}</div><div style="margin-top: 0.5rem; font-size: 0.8rem;"><span>Steps: ${i.dataset.stepCount}</span> • <span>Avg. Time: ${i.dataset.avgTime}</span></div>`, scenarioPreviewTooltip.style.left = `${e.pageX + 15}px`, scenarioPreviewTooltip.style.top = `${e.pageY + 15}px` })), i.addEventListener("mouseleave", (() => { scenarioPreviewTooltip.style.display = "none" })), e.appendChild(i)
+            // 1. معرفة قسم المستخدم الحالي
+            // نفترض أننا خزنا بيانات المستخدم في currentUser عند تسجيل الدخول
+            // لكن للأمان سنجلب القسم المحدث من الداتابيز مباشرة
+            const { data: userData, error: userError } = await supabase
+                .from('users')
+                .select('department')
+                .eq('id', currentUser.id)
+                .single();
+
+            if (userError) throw userError;
+            
+            const userDept = userData.department || 'General'; 
+            console.log("User Department:", userDept); // للتأكد في الكونسول
+
+            // 2. جلب السيناريوهات بناءً على القسم
+            // القاعدة: هات السيناريوهات اللي قسمها يطابق قسم المستخدم، أو السيناريوهات العامة (General)
+            // ملاحظة: تأكد أنك قمت بتحديث عمود department في جدول call_scenarios لبعض الصفوف لتجربة الفلتر
+            let query = supabase
+                .from("call_scenarios")
+                .select("id, title, steps, description, department")
+                .eq("status", 'approved')
+                .order("created_at", { ascending: false });
+
+            // إذا لم يكن المستخدم "Admin" أو "Manager"، نطبق الفلتر
+            // (يمكنك تعديل الشرط حسب الرولز عندك)
+            if (userDept !== 'Admin' && userDept !== 'General') {
+                // هذا السطر يعني: هات السيناريو لو القسم بتاعه = قسم المستخدم أو = General
+                query = query.or(`department.eq.${userDept},department.eq.General`);
+            }
+
+            const { data: scenarios, error: scenariosError } = await query;
+
+            if (scenariosError) throw scenariosError;
+
+            listContainer.innerHTML = "";
+            if (scenarios && scenarios.length > 0) {
+                scenarios.forEach((scenario => {
+                    const item = document.createElement("div");
+                    item.className = "scenario-item";
+                    item.dataset.value = scenario.id;
+                    item.setAttribute("role", "option");
+                    item.setAttribute("tabindex", "0");
+                    
+                    // أيقونة تعبيرية حسب العنوان (كما كان في الكود السابق)
+                    let icon = "📝";
+                    const titleLower = scenario.title.toLowerCase();
+                    if (titleLower.includes("device")) icon = "📱";
+                    else if (titleLower.includes("complaint")) icon = "😠";
+                    else if (titleLower.includes("billing")) icon = "💰";
+
+                    // إضافة وسم القسم (Badge) بجانب العنوان
+                    const deptBadge = `<span style="font-size: 0.7em; background: rgba(78,140,255,0.2); color: #4e8cff; padding: 2px 6px; border-radius: 4px; margin-left: 8px;">${scenario.department || 'General'}</span>`;
+
+                    item.innerHTML = `
+                        <span class="icon">${icon}</span>
+                        <div style="flex: 1;">
+                            <div style="font-weight: 600; margin-bottom: 0.25rem;">${scenario.title} ${deptBadge}</div>
+                            <div style="font-size: 0.9rem; color: var(--text-color-secondary);">
+                                ${scenario.steps?.length || 0} steps
+                            </div>
+                        </div>
+                    `;
+
+                    // عند الضغط
+                    const selectScenario = () => {
+                        const prevSelected = listContainer.querySelector(".selected");
+                        if (prevSelected) prevSelected.classList.remove("selected");
+                        item.classList.add("selected");
+                        hiddenInput.value = scenario.id;
+                        receiveCallBtn.disabled = false;
+                    };
+
+                    item.addEventListener("click", selectScenario);
+                    listContainer.appendChild(item);
                 }));
-                receiveCallBtn.disabled = true;
+                receiveCallBtn.disabled = true; // يبدأ معطل حتى يتم الاختيار
             } else {
-                e.innerHTML = `<div class="scenario-item" role="option" style="justify-content: center; text-align: center; color: var(--text-color-secondary);"><div><div style="font-size: 2rem; margin-bottom: 0.5rem;">📭</div><div>No scenarios available</div></div></div>`;
+                listContainer.innerHTML = `<div class="scenario-item" style="justify-content: center; color: var(--text-color-secondary);">No scenarios found for ${userDept}</div>`;
                 receiveCallBtn.disabled = true;
             }
-        } catch (t) {
-            console.error("Error loading scenarios:", t);
-            e.innerHTML = `<div class="scenario-item" role="option" style="justify-content: center; text-align: center; color: var(--danger-color);"><div><div style="font-size: 2rem; margin-bottom: 0.5rem;">⚠️</div><div>Failed to load scenarios</div></div></div>`;
-            receiveCallBtn.disabled = true;
+
+        } catch (err) {
+            console.error("Error loading scenarios:", err);
+            listContainer.innerHTML = `<div class="scenario-item" style="color: var(--danger-color); justify-content: center;">Error loading data</div>`;
         } finally {
             setButtonLoadingState(receiveCallBtn, false, "Start Ticket");
-            if (document.getElementById("scenarioDropdownValue").value) {
-                receiveCallBtn.disabled = false;
-            }
         }
     }
 
-    function renderStep(){if(!currentScenario||!currentStepId)return;const e=currentScenario.steps.find((e=>e?.id===currentStepId));if(!e)return void finishCall(!1,`Error: Step ${currentStepId} not found`);let t="🗣️";"decision"===e.type&&(t="🤔"),"form"===e.type&&(t="📝"),stepTypeIconElement.textContent=t,scenarioTitleElement.textContent=currentScenario.title,stepsContainer.innerHTML="";const n=document.createElement("p");if(n.innerHTML=e.text.replace(/\n/g,"<br>"),n.style.fontSize="1.3rem",n.style.lineHeight="1.8",stepsContainer.appendChild(n),decisionButtonsContainer.innerHTML="",prevStepBtn.style.display=stepHistory.length>0?"inline-flex":"none",endCallBtn.style.display="inline-flex",nextStepBtn.style.display="none","decision"===e.type&&Array.isArray(e.options))e.options.forEach((e=>{const t=document.createElement("button");t.className="decision-button",t.textContent=e.label,t.addEventListener("click",(()=>navigateToStep(e.next_id))),decisionButtonsContainer.appendChild(t)}));else if("form"===e.type&&Array.isArray(e.fields)){const t=document.createElement("div");t.className="form-step-container",t.id="current-step-form",e.fields.forEach((e=>{const n=document.createElement("div");n.className="form-field";const i=document.createElement("label");i.setAttribute("for",`field-${e.id}`),i.textContent=e.label,n.appendChild(i);const a=document.createElement("textarea"===e.type?"textarea":"input");a.id=`field-${e.id}`,a.name=e.id,a.type=e.type||"text",e.required&&(a.required=!0),e.placeholder&&(a.placeholder=e.placeholder),a.rows="textarea"===e.type?4:void 0,n.appendChild(a),t.appendChild(n)})),stepsContainer.appendChild(t),nextStepBtn.style.display="inline-flex"}else{const t=nextStepBtn.querySelector(".btn-text");e.next_id?t&&(t.textContent="Next Step"):t&&(t.textContent="Finish Scenario"),nextStepBtn.style.display="inline-flex"}startStepTimer(),saveCallState()}
+    // UPDATED: renderStep to handle 'form' type
+    function renderStep() {
+        if (!currentScenario || !currentStepId) return;
+        
+        const step = currentScenario.steps.find(s => s.id === currentStepId);
+        if (!step) return finishCall(false, `Error: Step ${currentStepId} not found`);
+
+        // 1. تحديث الأيقونة والعنوان
+        let icon = "🗣️"; // افتراضي (Script)
+        if (step.type === "decision") icon = "🤔";
+        if (step.type === "form") icon = "📝"; // نوع جديد
+        
+        document.getElementById("step-type-icon").textContent = icon;
+        document.getElementById("scenario-title-text").textContent = currentScenario.title;
+        
+        // 2. تفريغ المحتوى القديم
+        stepsContainer.innerHTML = "";
+        decisionButtonsContainer.innerHTML = "";
+
+        // 3. عرض نص الخطوة
+        const textP = document.createElement("p");
+        textP.innerHTML = step.text.replace(/\n/g, "<br>");
+        stepsContainer.appendChild(textP);
+
+        // 4. معالجة أنواع الخطوات
+        const nextBtn = document.getElementById("next-step-btn");
+        const prevBtn = document.getElementById("prev-step-btn");
+        
+        // إظهار زر السابق إذا كان هناك تاريخ
+        prevBtn.style.display = stepHistory.length > 0 ? "inline-flex" : "none";
+        
+        if (step.type === "decision" && Array.isArray(step.options)) {
+            // --- حالة القرار (Decision) ---
+            step.options.forEach(opt => {
+                const btn = document.createElement("button");
+                btn.className = "decision-button";
+                btn.textContent = opt.label;
+                // تمييز الألوان حسب الليبل
+                if (opt.label.toLowerCase().includes("yes") || opt.label.toLowerCase().includes("solved")) btn.classList.add("positive");
+                if (opt.label.toLowerCase().includes("no") || opt.label.toLowerCase().includes("persist")) btn.classList.add("negative");
+                
+                btn.addEventListener("click", () => navigateToStep(opt.next_id));
+                decisionButtonsContainer.appendChild(btn);
+            });
+            nextBtn.style.display = "none"; // نخفي زر التالي لأن الأزرار هي اللي بتحرك
+
+        } else if (step.type === "form" && Array.isArray(step.fields)) {
+            // --- حالة الفورم (Form) - الجزء الجديد ---
+            const formContainer = document.createElement("div");
+            formContainer.className = "form-step-container";
+            formContainer.id = "dynamic-step-form"; // ID عشان نعرف نجيب الداتا منه
+
+            step.fields.forEach(field => {
+                const fieldWrapper = document.createElement("div");
+                fieldWrapper.className = "form-field";
+
+                // Label
+                const label = document.createElement("label");
+                label.setAttribute("for", field.id);
+                label.textContent = field.label + (field.required ? " *" : "");
+                fieldWrapper.appendChild(label);
+
+                // Input Type Handling
+                let inputEl;
+                if (field.type === "select") {
+                    inputEl = document.createElement("select");
+                    // الخيار الافتراضي
+                    const defaultOpt = document.createElement("option");
+                    defaultOpt.value = "";
+                    defaultOpt.textContent = "-- Select --";
+                    inputEl.appendChild(defaultOpt);
+                    
+                    if (field.options) {
+                        field.options.forEach(optVal => {
+                            const opt = document.createElement("option");
+                            opt.value = optVal;
+                            opt.textContent = optVal;
+                            inputEl.appendChild(opt);
+                        });
+                    }
+                } else if (field.type === "textarea") {
+                    inputEl = document.createElement("textarea");
+                    inputEl.rows = 3;
+                } else {
+                    inputEl = document.createElement("input");
+                    inputEl.type = field.type || "text";
+                }
+
+                inputEl.id = field.id;
+                inputEl.name = field.id; // مهم عشان نجمع الداتا
+                if (field.required) inputEl.required = true;
+                if (field.placeholder) inputEl.placeholder = field.placeholder;
+
+                fieldWrapper.appendChild(inputEl);
+                formContainer.appendChild(fieldWrapper);
+            });
+
+            stepsContainer.appendChild(formContainer);
+            
+            // تحديث زر التالي
+            const btnText = nextBtn.querySelector(".btn-text");
+            if (btnText) btnText.textContent = "Save & Continue";
+            nextBtn.style.display = "inline-flex";
+
+        } else {
+            // --- حالة الخطوة العادية (Script) ---
+            const btnText = nextBtn.querySelector(".btn-text");
+            if (step.next_id) {
+                if (btnText) btnText.textContent = "Next Step";
+            } else {
+                if (btnText) btnText.textContent = "Finish Ticket";
+            }
+            nextBtn.style.display = "inline-flex";
+        }
+
+        startStepTimer();
+        saveCallState();
+    }
+
     function navigateToStep(e){if(stepVisitCount[e]=(stepVisitCount[e]||0)+1,stepVisitCount[e]>5)return void finishCall(!1,"Error: Potential infinite loop detected. Ticket terminated.");if(document.getElementById("call-flow-view").classList.add("decision-made-animation"),setTimeout((()=>document.getElementById("call-flow-view").classList.remove("decision-made-animation")),700),stopAndRecordStepTimer(),null==e||""===e)return void finishCall(!0,"Reached end of scenario path.");currentScenario.steps.find((t=>t?.id===e))?(currentStepId&&stepHistory.push(currentStepId),currentStepId=e,renderStep()):finishCall(!1,`Error: Path broken, step ${e} not found.`)}
     
     // دالة حساب التارجت اليومي
@@ -1357,7 +1540,93 @@ Waiting for Ticket
     receiveCallBtn.addEventListener("click",(async()=>{const e=document.getElementById("scenarioDropdownValue").value;if(e){setButtonLoadingState(receiveCallBtn,!0,"Start Ticket"),resetCallState(),switchToCallFlowView(),updateSystemStatus("Loading Scenario...","status-loading"),stepsContainer.innerHTML='<p class="placeholder-text">Loading scenario steps...</p>',decisionButtonsContainer.innerHTML="",scenarioTitleElement.textContent="Loading...";try{const{data:t,error:n}=await supabase.from("call_scenarios").select("id, title, steps").eq("id",e).single();if(n)throw n;if(!t||!Array.isArray(t.steps)||0===t.steps.length)throw new Error("Scenario data is invalid.");currentScenario=t,currentStepId=currentScenario.steps[0].id,accumulatedStepDurations={},currentScenario.steps.forEach((e=>{e?.id&&(accumulatedStepDurations[e.id]=0)})),callStartTimeISO=(new Date).toISOString();const{data:i,error:a}=await supabase.from("call_sessions").insert({user_id:currentUser.id,scenario_id:currentScenario.id,start_time:callStartTimeISO,agent_name:currentUser.name,agent_email:currentUser.email}).select("id").single();if(a)throw a;callSessionId=i.id;
     console.log('▶️ Starting ticket, will subscribe to:', currentScenario.id); // EXTRA LOGGING
     subscribeToScenarioUpdates(currentScenario.id);
-    const s=document.querySelector(`.scenario-item[data-value="${e}"]`);s&&s.classList.contains("compensation")&&(scenarioTitleElement.classList.add("highlight-scenario-title-animation"),setTimeout((()=>scenarioTitleElement.classList.remove("highlight-scenario-title-animation")),1200)),updateSystemStatus("In Ticket","status-in-call"),renderStep()}catch(e){console.error("Error starting ticket:",e),showCustomToast("Failed to start ticket. Please try again."),resetCallState(),switchToInitialView(),await loadActiveScenarios()}finally{setButtonLoadingState(receiveCallBtn,!1,"Start Ticket")}}else showCustomToast("Please select a scenario first.")})),nextStepBtn.addEventListener("click",(()=>{const e=currentScenario.steps.find((e=>e?.id===currentStepId));if(e){if("form"===e.type){const e=document.getElementById("current-step-form").querySelectorAll("input, textarea");let t={},n=!0;if(e.forEach((e=>{e.required&&!e.value&&(n=!1),t[e.name]=e.value})),!n)return void showCustomToast("Please fill all required fields.");console.log("Form Data Collected:",t)}e.next_id?navigateToStep(e.next_id):(stopAndRecordStepTimer(),finishCall(!0,"Scenario finished via button."))}})),prevStepBtn.addEventListener("click",(()=>{stopAndRecordStepTimer(),stepHistory.length>0&&(currentStepId=stepHistory.pop(),stepVisitCount[currentStepId]&&(stepVisitCount[currentStepId]=0),renderStep())}));
+    const s=document.querySelector(`.scenario-item[data-value="${e}"]`);s&&s.classList.contains("compensation")&&(scenarioTitleElement.classList.add("highlight-scenario-title-animation"),setTimeout((()=>scenarioTitleElement.classList.remove("highlight-scenario-title-animation")),1200)),updateSystemStatus("In Ticket","status-in-call"),renderStep()}catch(e){console.error("Error starting ticket:",e),showCustomToast("Failed to start ticket. Please try again."),resetCallState(),switchToInitialView(),await loadActiveScenarios()}finally{setButtonLoadingState(receiveCallBtn,!1,"Start Ticket")}}else showCustomToast("Please select a scenario first.")}));
+
+    // UPDATED: nextStepBtn Event Listener for Form Submission & Escalation Logic
+    nextStepBtn.addEventListener("click", async () => {
+        const currentStep = currentScenario.steps.find(s => s.id === currentStepId);
+        
+        if (!currentStep) return;
+
+        // منطق خاص إذا كانت الخطوة فورم
+        if (currentStep.type === "form") {
+            const formEl = document.getElementById("dynamic-step-form");
+            if (formEl) {
+                const inputs = formEl.querySelectorAll("input, textarea, select");
+                let formData = {};
+                let isValid = true;
+                
+                // تجميع البيانات والتحقق (Validation)
+                inputs.forEach(input => {
+                    if (input.required && !input.value.trim()) {
+                        isValid = false;
+                        input.style.borderColor = "var(--danger-color)";
+                    } else {
+                        input.style.borderColor = "var(--border-color)";
+                        formData[input.name] = input.value;
+                    }
+                });
+
+                if (!isValid) {
+                    showCustomToast("Please fill in all required fields.");
+                    return; // توقف هنا ولا تكمل
+                }
+
+                // --- المنطق الذكي للتصعيد وحالة التيكت ---
+                let escalationStatus = 'none';
+                let ticketStatus = 'closed'; // الافتراضي أنها انتهت
+
+                // نبحث عن حقل الإجراء (Action) أو التصعيد
+                // ملاحظة: تأكد ان في ال JSON اسم الحقل escalation_action او action
+                const actionValue = formData['escalation_action'] || formData['Action'] || '';
+                
+                if (actionValue.includes("Follow-up") || actionValue.includes("متابعة")) {
+                    escalationStatus = 'follow_up';
+                    ticketStatus = 'open'; // تفضل مفتوحة عشان راحت لفريق تاني
+                } else if (actionValue.includes("Level 2") || actionValue.includes("ليفل 2")) {
+                    escalationStatus = 'level_2';
+                    ticketStatus = 'open';
+                }
+
+                // --- الحفظ في Supabase ---
+                setButtonLoadingState(nextStepBtn, true, "Saving...");
+                try {
+                    // نجيب الداتا القديمة لو فيه فورمز سابقة في نفس المكالمة (Merge)
+                    // لكن للتبسيط هنعمل تحديث مباشر الآن
+                    const { error } = await supabase
+                        .from('call_sessions')
+                        .update({
+                            form_data: formData,          // تخزين الـ JSON كامل
+                            escalation_status: escalationStatus,
+                            ticket_status: ticketStatus
+                        })
+                        .eq('id', callSessionId);
+
+                    if (error) throw error;
+                    
+                    showCustomToast("Data saved successfully.", true);
+
+                } catch (err) {
+                    console.error("Error saving form data:", err);
+                    showCustomToast("Failed to save data. Please try again.");
+                    setButtonLoadingState(nextStepBtn, false, "Save & Continue");
+                    return; // لا تنتقل للخطوة التالية في حالة الخطأ
+                }
+                setButtonLoadingState(nextStepBtn, false, "Save & Continue");
+            }
+        }
+
+        // الانتقال للخطوة التالية (المنطق الطبيعي)
+        if (currentStep.next_id) {
+            navigateToStep(currentStep.next_id);
+        } else {
+            // لو مفيش خطوة تالية، يبقى دي النهاية
+            stopAndRecordStepTimer();
+            finishCall(true, "Scenario completed successfully.");
+        }
+    });
+
+    prevStepBtn.addEventListener("click",(()=>{stopAndRecordStepTimer(),stepHistory.length>0&&(currentStepId=stepHistory.pop(),stepVisitCount[currentStepId]&&(stepVisitCount[currentStepId]=0),renderStep())}));
     const customConfirmModal=document.getElementById("custom-confirm-modal"),modalConfirmBtn=document.getElementById("modal-confirm-btn"),modalCancelBtn=document.getElementById("modal-cancel-btn");function showConfirmModal(){customConfirmModal.classList.add("show")}function hideConfirmModal(){customConfirmModal.classList.remove("show")}endCallBtn.addEventListener("click",showConfirmModal),modalCancelBtn.addEventListener("click",hideConfirmModal),modalConfirmBtn.addEventListener("click",(()=>{hideConfirmModal(),stopAndRecordStepTimer(),finishCall(!1,"Ticket ended by agent")})),returnToInitialViewBtn.addEventListener("click",(async()=>{resetCallState(!0),await loadActiveScenarios()})),logoutButton.addEventListener("click",(async()=>{resetCallState(),localStorage.removeItem("elevoCoreUserData"),supabase&&await supabase.auth.signOut(),window.location.replace("login.html")}));
     
     searchScenarioInput.addEventListener("input", (e => {
