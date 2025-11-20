@@ -176,7 +176,7 @@
         .spinner { width: 48px; height: 48px; border: 4px solid rgba(255, 255, 255, 0.1); border-left: 4px solid var(--primary-color); border-radius: 50%; animation: spin 1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
-        /* --- تصميم تفاصيل الفورم داخل المودال (الجديد) --- */
+        /* --- تصميم تفاصيل الفورم داخل المودال --- */
         .form-details-container {
             background: rgba(255, 255, 255, 0.03);
             border-radius: 12px;
@@ -503,16 +503,21 @@
         }
 
         // ================= DATA LOADING =================
+        
+        // 1. دالة جلب البيانات (المحدثة)
         async function loadCallHistory() {
             const { data, error } = await supabase
-                .from('call_sessions_egypt')
+                .from('call_sessions') 
                 .select('*')
-                .eq('agent_email', State.user.email)
-                .order('start_time_egypt', { ascending: false });
+                .eq('user_id', State.user.id) 
+                .order('created_at', { ascending: false });
 
             if (!error && data) {
                 State.allCalls = data.map(processCallData);
                 State.filteredCalls = [...State.allCalls];
+                updateDashboard(); 
+            } else if (error) {
+                console.error("Error fetching history:", error);
             }
         }
 
@@ -530,25 +535,22 @@
             }
         }
 
+        // 2. معالجة البيانات (المحدثة)
         function processCallData(call) {
-            // تحديد الجودة بناءً على المعطيات
             let quality = 'average'; 
             if (call.completed === true) quality = 'good';
-            else if (call.quality_reason) quality = 'poor';
-            if (call.call_quality && ['good', 'average', 'poor'].includes(call.call_quality.toLowerCase())) {
-                quality = call.call_quality.toLowerCase();
-            }
+            
+            const formDataSafe = call.form_data || {};
 
             return {
                 id: call.id,
-                date: formatDate(call.start_time_egypt), // استخدام الحقل الأصلي لتفادي الأخطاء
-                rawDate: call.start_time_egypt,
-                scenario: call.scenario_title || (call.scenario_id ? 'Device Issue Flow' : 'Unknown Scenario'),
+                date: new Date(call.start_time).toLocaleDateString('en-GB'), 
+                rawDate: call.start_time,
+                scenario: 'Device Issue Flow', 
                 duration: formatDuration(call.duration),
-                rawDuration: call.duration,
                 quality: quality,
                 quality_reason: call.quality_reason,
-                formData: call.form_data || null // البيانات الجديدة
+                formData: formDataSafe 
             };
         }
 
@@ -589,7 +591,6 @@
 
             // 1. Daily Target Calculation
             const now = new Date();
-            // Create start of day based on local time to match user's perspective
             const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
             
             const todayCalls = calls.filter(c => {
@@ -602,7 +603,6 @@
             document.getElementById('dailyTargetPercentage').textContent = `${targetPercent}%`;
             document.getElementById('dailyTargetProgressBar').style.width = `${targetPercent}%`;
             
-            // Explicit Label: "Today: 1 / 40"
             const titleLabel = document.getElementById('dailyTargetLabel');
             if(titleLabel) {
                 titleLabel.innerHTML = `Daily Target <span style="font-size:0.85rem; color:var(--text-color-subtle); margin-left:5px;">(Today: ${todayCalls}/${DAILY_TARGET})</span>`;
@@ -900,7 +900,7 @@
             return `<span style="color:${color}; font-weight:600; text-transform:capitalize;">${q}</span>`;
         }
 
-        // دالة فتح المودال الجديدة
+        // دالة فتح المودال 
         window.openModal = function(id) {
             const call = State.allCalls.find(c => c.id == id);
             if(!call) return;
