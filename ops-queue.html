@@ -158,8 +158,6 @@
         .full-width { grid-column: 1 / -1; }
 
         .history-container { margin-top: 1rem; border-top: 1px solid var(--border-color); padding-top: 1rem; }
-        /* تم تعديل ستايل الهستوري في ال JS، لكن الستايل الأساسي هنا */
-        .history-item { padding: 0.75rem; margin-bottom: 0.75rem; background: rgba(255,255,255,0.03); border-radius: 8px; border-left: 3px solid var(--primary-color); }
         
         .app-footer { background: rgba(15, 23, 42, 0.9); border-top: 1px solid var(--border-color); padding: 1.5rem; text-align: center; color: var(--text-color-subtle); margin-top: auto; }
         
@@ -169,6 +167,35 @@
 
         @media (max-width: 768px) {
             .info-grid { grid-template-columns: 1fr; }
+        }
+
+        /* --- TOAST NOTIFICATION STYLES (New) --- */
+        .toast-box {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%) translateY(100px);
+            background: #10b981; /* Green */
+            color: white;
+            padding: 12px 24px;
+            border-radius: 50px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: 500;
+            opacity: 0;
+            transition: all 0.4s cubic-bezier(0.68, -0.55, 0.27, 1.55);
+            z-index: 2000;
+            pointer-events: none;
+        }
+        .toast-box.show {
+            transform: translateX(-50%) translateY(0);
+            opacity: 1;
+        }
+        .toast-box svg {
+            width: 20px;
+            height: 20px;
         }
     </style>
 </head>
@@ -317,7 +344,7 @@
                 </div>
             </div>
 
-            <!-- Action Form Section (Added ID as requested) -->
+            <!-- Action Form Section -->
             <div id="actionFormSection">
                 <div class="form-group" style="margin-bottom: 1rem;">
                     <label for="newStatusSelect">New Status</label>
@@ -348,6 +375,12 @@
                 </div>
             </div>
         </div>
+    </div>
+
+    <!-- TOAST ELEMENT -->
+    <div id="toastNotification" class="toast-box">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+        <span>Update Saved Successfully!</span>
     </div>
 
     <script>
@@ -389,6 +422,7 @@
         // ================= LOAD DATA =================
         async function loadTickets() {
             const list = document.getElementById('ticketsList');
+            // (نفس الكود القديم)
             list.innerHTML = '<tr><td colspan="10" style="text-align:center; padding:2rem; color:var(--text-color-light);">Loading queue data...</td></tr>';
             document.getElementById('emptyMessage').style.display = 'none';
 
@@ -413,11 +447,7 @@
 
             list.innerHTML = data.map(t => {
                 const fd = t.form_data || {};
-                
-                const date = new Date(t.created_at).toLocaleString('en-US', { 
-                    month:'short', day:'numeric', 
-                    hour:'numeric', minute:'2-digit', hour12: true 
-                });
+                const date = new Date(t.created_at).toLocaleString('en-US', { month:'short', day:'numeric', hour:'numeric', minute:'2-digit', hour12: true });
                 
                 let statusClass = 'status-new';
                 if (t.sub_status === 'Solved') statusClass = 'status-solved';
@@ -451,24 +481,16 @@
             }).join('');
         }
 
-        // ================= REPLACED FUNCTIONS AS REQUESTED =================
-
-        // 1. Updated openActionModal with Logic to Hide Form if Solved
+        // ================= FUNCTIONS =================
         window.openActionModal = async (id) => {
             State.activeTicketId = id;
             const modal = document.getElementById('actionModal');
             const actionForm = document.getElementById('actionFormSection'); 
 
-            const { data: ticket } = await supabase
-                .from('call_sessions')
-                .select('*')
-                .eq('id', id)
-                .single();
+            const { data: ticket } = await supabase.from('call_sessions').select('*').eq('id', id).single();
 
             if(ticket) {
                 const fd = ticket.form_data || {};
-                
-                // Filling Data
                 document.getElementById('modalStoreName').innerText = fd.store_name || '-';
                 document.getElementById('modalIssue').innerText = fd.store_feedback || '-';
                 document.getElementById('modalChefId').innerText = fd.chef_id || '-';
@@ -479,20 +501,16 @@
                 document.getElementById('modalStoreStatus').innerText = fd.store_status || '-';
                 document.getElementById('modalCurrentStatus').innerText = ticket.sub_status || 'New';
                 
-                // Logic for Solved Tickets
                 if (ticket.sub_status === 'Solved') {
                     actionForm.style.display = 'none';
                     const solvedMsg = document.getElementById('solvedMessage') || document.createElement('div');
                     solvedMsg.id = 'solvedMessage';
                     solvedMsg.innerHTML = '<div style="text-align:center; padding:1rem; margin: 1rem 0; color:#4caf50; font-weight:bold; background:rgba(76,175,80,0.1); border: 1px solid rgba(76,175,80,0.3); border-radius:8px;">✅ This ticket is marked as Solved. <br><span style="font-size:0.8em; font-weight:normal; color:#a3cfbb">No further actions allowed unless reopened.</span></div>';
-                    
-                    // Insert message before the history container if not exists
                     if(!document.getElementById('solvedMessage')) {
                         actionForm.parentNode.insertBefore(solvedMsg, document.querySelector('.history-container'));
                     }
                 } else {
                     actionForm.style.display = 'block';
-                    // Reset form default
                     document.getElementById('newStatusSelect').value = ticket.sub_status || 'Waiting';
                     const msg = document.getElementById('solvedMessage');
                     if(msg) msg.remove();
@@ -503,16 +521,11 @@
             }
         };
 
-        // 2. Updated loadHistory (renamed from loadHistoryLog to match your original code structure)
         async function loadHistory(id) {
             const container = document.getElementById('historyLogContainer');
             container.innerHTML = '<div style="text-align:center; padding:1rem; color:var(--text-color-subtle);">Loading history...</div>';
 
-            const { data: logs, error } = await supabase
-                .from('ticket_history')
-                .select('*')
-                .eq('ticket_id', id)
-                .order('created_at', { ascending: false });
+            const { data: logs, error } = await supabase.from('ticket_history').select('*').eq('ticket_id', id).order('created_at', { ascending: false });
 
             if (error || !logs || logs.length === 0) {
                 container.innerHTML = '<div style="text-align:center; padding:0.5rem; color:var(--text-color-subtle); font-style:italic;">No previous actions recorded.</div>';
@@ -520,7 +533,6 @@
             }
 
             container.innerHTML = logs.map(l => {
-                // Check if it's an Agent note (Orange highlight)
                 const isAgentUpdate = l.action_type === 'agent_note';
                 const borderStyle = isAgentUpdate ? 'border-left: 3px solid #f59e0b;' : 'border-left: 3px solid var(--primary-color);';
                 const bgStyle = isAgentUpdate ? 'background: rgba(245, 158, 11, 0.05);' : 'background: rgba(255,255,255,0.03);';
@@ -529,21 +541,16 @@
                 return `
                     <div class="history-item" style="${borderStyle} ${bgStyle} padding: 0.75rem; margin-bottom: 0.75rem; border-radius: 8px;">
                         <div class="history-meta" style="display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--text-color-subtle); margin-bottom: 0.25rem;">
-                            <span style="color:${nameColor}; font-weight:bold;">
-                                ${l.agent_name} ${isAgentUpdate ? '(Agent)' : ''}
-                            </span>
+                            <span style="color:${nameColor}; font-weight:bold;">${l.agent_name} ${isAgentUpdate ? '(Agent)' : ''}</span>
                             <span>${new Date(l.created_at).toLocaleString('en-US', {hour:'numeric', minute:'2-digit', hour12:true, month:'short', day:'numeric'})}</span>
                         </div>
-                        <div class="history-text" style="font-size: 0.9rem; color: var(--text-color-light);">
-                            ${l.notes}
-                        </div>
-                        ${l.new_status ? `<div style="font-size:0.75rem; color:#666; margin-top:4px;">Status set to: <strong>${l.new_status}</strong></div>` : ''}
+                        <div class="history-text" style="font-size: 0.9rem; color: var(--text-color-light);">${l.notes}</div>
+                        ${l.new_status ? `<div style="font-size:0.75rem; color:#666; margin-top:4px;">Status: <strong>${l.new_status}</strong></div>` : ''}
                     </div>
                 `;
             }).join('');
         }
 
-        // ================= UI ACTIONS =================
         window.switchTab = (team, tabElement) => {
             State.currentTeam = team;
             document.querySelectorAll('.queue-tab').forEach(t => t.classList.remove('active'));
@@ -554,12 +561,22 @@
         window.closeModal = () => {
             document.getElementById('actionModal').classList.remove('visible');
             document.getElementById('actionNotes').value = '';
-            // Ensure solved message is removed when closing
             const msg = document.getElementById('solvedMessage');
             if(msg) msg.remove();
             document.getElementById('actionFormSection').style.display = 'block';
         };
 
+        // --- NEW TOAST FUNCTION ---
+        function showToast(message) {
+            const toast = document.getElementById('toastNotification');
+            toast.querySelector('span').textContent = message;
+            toast.classList.add('show');
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 3000);
+        }
+
+        // --- UPDATED SUBMIT ACTION ---
         window.submitAction = async () => {
             const btn = document.getElementById('saveBtn');
             const newStatus = document.getElementById('newStatusSelect').value;
@@ -567,6 +584,8 @@
 
             if(!notes.trim()) return alert("Please enter action notes.");
 
+            // Disable button temporarily
+            const originalText = btn.textContent;
             btn.textContent = 'Saving...';
             btn.disabled = true;
 
@@ -575,7 +594,7 @@
                     ticket_id: State.activeTicketId,
                     user_id: State.user.id,
                     agent_name: State.user.user_metadata?.full_name || State.user.email,
-                    action_type: 'status_change', // Ops changes are usually status changes
+                    action_type: 'status_change',
                     new_status: newStatus,
                     notes: notes
                 });
@@ -584,14 +603,20 @@
                     sub_status: newStatus
                 }).eq('id', State.activeTicketId);
 
+                // 1. Close Modal Immediately
                 closeModal();
+
+                // 2. Show Modern Green Toast
+                showToast("Action saved successfully! 🚀");
+
+                // 3. Refresh Table Background
                 loadTickets(); 
 
             } catch (err) {
                 console.error(err);
                 alert("Failed to save action.");
             } finally {
-                btn.textContent = 'Save Update';
+                btn.textContent = originalText;
                 btn.disabled = false;
             }
         };
