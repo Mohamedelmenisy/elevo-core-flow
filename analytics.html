@@ -37,14 +37,17 @@
             overflow: hidden; /* Hide scrollbar for main body, scroll inside content */
         }
 
-        /* --- Header Styles (Matched to Screenshot) --- */
+        /* --- Header Styles (MODIFIED: Aligned to Right) --- */
         .app-header {
             height: 64px;
             background-color: var(--header-bg);
             border-bottom: 1px solid var(--border-color);
             display: flex;
             align-items: center;
-            justify-content: space-between;
+            /* CHANGE: Pushes everything to the right */
+            justify-content: flex-end; 
+            /* CHANGE: Adds space between Nav and User section */
+            gap: 3rem; 
             padding: 0 2rem;
             flex-shrink: 0;
         }
@@ -83,6 +86,10 @@
             display: flex;
             align-items: center;
             gap: 1.5rem;
+            /* Add a left border to separate from nav visually (Optional but looks nice) */
+            border-left: 1px solid var(--border-color);
+            padding-left: 1.5rem;
+            height: 40px;
         }
 
         .user-name {
@@ -181,17 +188,15 @@
 </head>
 <body>
     
-    <!-- Header (Matching Screenshot) -->
+    <!-- Header (Matching Screenshot BUT Aligned Right) -->
     <header class="app-header">
         <div class="nav-container">
-            <!-- Links ordered as per request/screenshot -->
             <a href="core-flow.html" class="nav-link">Call App</a>
             <a href="agent-portal.html" class="nav-link">Agent Portal</a>
             <a href="dashboard.html" class="nav-link">Admin Dashboard</a>
             <a href="rtm-dashboard.html" class="nav-link">RTM Dashboard</a>
             <a href="approvals.html" class="nav-link">Approvals</a>
             <a href="ops-queue.html" class="nav-link">Ops Queue</a>
-            <!-- This page is Analytics, so we keep it highlighted -->
             <a href="analytics.html" class="nav-link active">Analytics</a>
         </div>
 
@@ -301,7 +306,7 @@
         </div>
     </main>
 
-    <!-- NEW MODULE SCRIPT -->
+    <!-- SCRIPT MODULE -->
     <script type="module">
         import { supabase } from './supabaseClient.js';
         import { protectPage } from './role-check.js';
@@ -312,8 +317,7 @@
         document.addEventListener('DOMContentLoaded', async () => {
             console.log("🚀 Dashboard Initializing...");
             
-            // 1. التحقق من الصلاحيات (Admin or Manager)
-            // تأكد من أن دالة protectPage تقوم بإخفاء الـ auth-loader وإظهار app-content عند النجاح
+            // 1. التحقق من الصلاحيات
             const user = await protectPage(['admin', 'manager']);
             
             const loader = document.getElementById('auth-loader');
@@ -321,11 +325,9 @@
 
             if (!user) {
                 console.error("⛔ Access Denied or No User Found");
-                // Redirect usually handled by protectPage, but just in case:
                 return;
             }
 
-            // Manual visibility toggle if protectPage doesn't handle it for specific IDs
             if(loader) loader.style.display = 'none';
             if(content) content.style.display = 'block';
             
@@ -347,12 +349,10 @@
             }
         });
 
-        // دالة التحميل (متاحة للـ HTML عبر window)
         window.loadDashboardData = async () => {
             const timeFilter = document.getElementById('timeFilter').value;
             console.log(`📅 Loading data for filter: ${timeFilter}`);
 
-            // تحديد التاريخ بدقة
             let startDate = new Date();
             if (timeFilter === 'today') {
                 startDate.setHours(0, 0, 0, 0); 
@@ -361,12 +361,9 @@
             } else if (timeFilter === 'month') {
                 startDate.setMonth(startDate.getMonth() - 1);
             } else {
-                startDate = new Date('2024-01-01'); // كل الوقت
+                startDate = new Date('2024-01-01'); 
             }
 
-            console.log("🕒 Filter Date (ISO):", startDate.toISOString());
-
-            // جلب البيانات من Supabase
             const { data: tickets, error } = await supabase
                 .from('call_sessions')
                 .select('id, agent_name, escalation_status, created_at')
@@ -378,30 +375,24 @@
             }
 
             console.log(`✅ Fetched ${tickets.length} tickets.`);
-            
-            // معالجة وعرض البيانات
             processMetrics(tickets);
         }
 
         function processMetrics(tickets) {
-            // A. حساب الأرقام (KPIs)
             const total = tickets.length;
             const followUp = tickets.filter(t => t.escalation_status === 'follow_up').length;
             const level2 = tickets.filter(t => t.escalation_status === 'level_2').length;
             
-            // Solved: هو أي تيكت ليست (follow_up) وليست (level_2)
             const solved = tickets.filter(t => 
                 t.escalation_status !== 'follow_up' && 
                 t.escalation_status !== 'level_2'
             ).length;
 
-            // تحديث الكروت في الشاشة
             animateValue('kpiTotal', total);
             animateValue('kpiSolved', solved);
             animateValue('kpiFollowUp', followUp);
             animateValue('kpiLevel2', level2);
 
-            // B. إحصائيات الموظفين
             const agentStats = {};
             tickets.forEach(t => {
                 const name = t.agent_name || 'Unknown';
@@ -417,19 +408,16 @@
                 .map(([name, stats]) => ({ name, ...stats }))
                 .sort((a, b) => b.total - a.total);
 
-            // تحديث الرسوم والجدول
             updateCharts(solved, followUp, level2, sortedAgents.slice(0, 5));
             renderAgentTable(sortedAgents);
         }
 
         function updateCharts(solved, followUp, level2, topAgents) {
-            // التأكد من أن مكتبة Chart.js محملة
             if (typeof Chart === 'undefined') {
                 console.error("⚠️ Chart.js is not loaded!");
                 return;
             }
 
-            // 1. Pie Chart
             const pieCanvas = document.getElementById('outcomePieChart');
             if (pieCanvas) {
                 const pieCtx = pieCanvas.getContext('2d');
@@ -453,7 +441,6 @@
                 });
             }
 
-            // 2. Bar Chart
             const barCanvas = document.getElementById('agentBarChart');
             if (barCanvas) {
                 const barCtx = barCanvas.getContext('2d');
@@ -491,7 +478,6 @@
             tbody.innerHTML = agents.map(a => {
                 const escalationCount = a.followUp + a.level2;
                 const rate = a.total > 0 ? Math.round((escalationCount / a.total) * 100) : 0;
-                // استخدام الألوان المتغيرة بناءً على المعدل
                 const rateColor = rate > 50 ? '#ef4444' : (rate > 20 ? '#f59e0b' : '#10b981');
 
                 return `
@@ -511,17 +497,14 @@
             supabase
                 .channel('analytics-db-changes')
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'call_sessions' }, (payload) => {
-                    console.log('⚡ Realtime update received!', payload);
                     loadDashboardData();
                 })
                 .subscribe();
         }
 
-        // تأثير عداد للأرقام
         function animateValue(id, end) {
             const obj = document.getElementById(id);
             if (!obj) return;
-            // تحديث مباشر للنص لتجنب مشاكل التحويل
             obj.innerText = end; 
         }
     </script>
