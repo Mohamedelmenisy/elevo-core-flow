@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Operations Queue - Elevo Core</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234e8cff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M12 22V12M9 19l3-3 3 3M12 2a4 4 0 0 0-4 4v0a4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4z'/></svg>">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    
+    <style>
+        :root {
+            --background-color: #1c1c28;
+            --card-background-color: #2b2b3d;
+            --text-color: #f0f0f0;
+            --text-color-secondary: #a0a0b0;
+            --primary-color: #4e8cff;
+            --primary-color-dark: #3d7eff;
+            --secondary-color: #3a3a50;
+            --border-color: #444444;
+            --success-color: #4CAF50;
+            --danger-color: #F44336;
+            --warning-color: #FFC107;
+            --glass-bg: rgba(43, 43, 61, 0.7);
+        }
+
+        body {
+            background-color: var(--background-color);
+            color: var(--text-color);
+            font-family: 'Poppins', sans-serif;
+            margin: 0;
+            padding: 0;
+        }
+
+        /* Header (مطابق لباقي الصفحات) */
+        .app-header {
+            background: linear-gradient(135deg, var(--card-background-color), #242436);
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border-color);
+            position: sticky; top: 0; z-index: 100;
+            backdrop-filter: blur(10px);
+        }
+
+        .logo-container {
+            display: flex; align-items: center; gap: 10px; 
+            color: var(--primary-color); font-weight: 700; font-size: 1.3rem;
+        }
+
+        .nav-links a {
+            color: var(--text-color-secondary);
+            text-decoration: none;
+            margin-left: 20px;
+            font-weight: 500;
+            transition: 0.3s;
+            font-size: 0.95rem;
+        }
+        
+        .nav-links a:hover, .nav-links a.active {
+            color: var(--primary-color);
+        }
+
+        /* Main Container */
+        .ops-main {
+            padding: 2rem;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .page-title {
+            margin-bottom: 2rem;
+            font-size: 1.8rem;
+            background: linear-gradient(90deg, #fff, var(--text-color-secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        /* Tabs System */
+        .queue-tabs {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 1px;
+        }
+
+        .queue-tab {
+            padding: 0.8rem 1.5rem;
+            cursor: pointer;
+            font-weight: 600;
+            color: var(--text-color-secondary);
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s ease;
+            border-radius: 8px 8px 0 0;
+        }
+
+        .queue-tab:hover {
+            background: rgba(78, 140, 255, 0.05);
+            color: var(--text-color);
+        }
+
+        .queue-tab.active {
+            color: var(--primary-color);
+            border-bottom-color: var(--primary-color);
+            background: rgba(78, 140, 255, 0.1);
+        }
+
+        /* Table Design */
+        .table-container {
+            background: var(--card-background-color);
+            border-radius: 16px;
+            border: 1px solid var(--border-color);
+            overflow: hidden;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+        }
+
+        .ops-table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+        }
+
+        .ops-table th {
+            background: rgba(0,0,0,0.2);
+            padding: 1.2rem;
+            color: var(--text-color-secondary);
+            font-weight: 600;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .ops-table td {
+            padding: 1.2rem;
+            border-bottom: 1px solid var(--border-color);
+            color: var(--text-color);
+            vertical-align: middle;
+        }
+
+        .ops-table tr:last-child td { border-bottom: none; }
+        .ops-table tr:hover { background: rgba(255,255,255,0.02); }
+
+        /* Status Badges */
+        .status-badge {
+            padding: 5px 12px;
+            border-radius: 50px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            display: inline-block;
+        }
+        .badge-new { background: rgba(78, 140, 255, 0.15); color: #8bb4ff; border: 1px solid rgba(78, 140, 255, 0.3); }
+        .badge-waiting { background: rgba(255, 193, 7, 0.15); color: #ffc107; border: 1px solid rgba(255, 193, 7, 0.3); }
+        .badge-progress { background: rgba(156, 39, 176, 0.15); color: #e0aaff; border: 1px solid rgba(156, 39, 176, 0.3); }
+        .badge-solved { background: rgba(76, 175, 80, 0.15); color: #4caf50; border: 1px solid rgba(76, 175, 80, 0.3); }
+
+        /* Action Button */
+        .btn-action {
+            background: linear-gradient(135deg, var(--primary-color), var(--primary-color-dark));
+            color: white;
+            border: none;
+            padding: 0.6rem 1.2rem;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: transform 0.2s;
+            font-size: 0.9rem;
+            box-shadow: 0 4px 10px rgba(78, 140, 255, 0.2);
+        }
+
+        .btn-action:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 15px rgba(78, 140, 255, 0.3);
+        }
+
+        /* Modal Design */
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(10, 10, 15, 0.85);
+            backdrop-filter: blur(8px);
+            display: none; justify-content: center; align-items: center;
+            z-index: 1000; opacity: 0; transition: opacity 0.3s ease;
+        }
+        .modal-overlay.open { display: flex; opacity: 1; }
+
+        .modal-content {
+            background: var(--card-background-color);
+            padding: 2rem;
+            border-radius: 20px;
+            width: 90%;
+            max-width: 650px;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+            transform: scale(0.95); transition: transform 0.3s ease;
+        }
+        .modal-overlay.open .modal-content { transform: scale(1); }
+
+        .ticket-info-grid {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;
+            background: rgba(0,0,0,0.2); padding: 1.5rem; border-radius: 12px;
+            margin-bottom: 1.5rem; border: 1px solid var(--border-color);
+        }
+
+        .info-item label { display: block; font-size: 0.8rem; color: var(--text-color-secondary); margin-bottom: 0.3rem; }
+        .info-item div { font-weight: 600; font-size: 1rem; color: var(--text-color); }
+
+        .form-group { margin-bottom: 1.5rem; }
+        .form-group label { display: block; margin-bottom: 0.5rem; font-weight: 500; color: var(--text-color-secondary); }
+        .form-control {
+            width: 100%; padding: 0.8rem; background: var(--background-color);
+            border: 1px solid var(--border-color); border-radius: 10px;
+            color: var(--text-color); font-family: inherit; box-sizing: border-box;
+        }
+        .form-control:focus { outline: none; border-color: var(--primary-color); }
+
+        /* History Log Section */
+        .history-section {
+            margin-top: 2rem;
+            border-top: 1px solid var(--border-color);
+            padding-top: 1.5rem;
+        }
+        .history-list {
+            max-height: 200px; overflow-y: auto;
+            background: rgba(0,0,0,0.2); border-radius: 10px; padding: 1rem;
+        }
+        .history-item {
+            margin-bottom: 1rem; padding-bottom: 1rem; border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+        .history-item:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+        .history-header { display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--text-color-secondary); margin-bottom: 0.3rem; }
+        .history-note { font-size: 0.95rem; line-height: 1.5; }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .table-container { overflow-x: auto; }
+            .ticket-info-grid { grid-template-columns: 1fr; }
+            .header-controls { display: none; } /* Simplified header for mobile */
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Header -->
+    <header class="app-header">
+        <div class="logo-container">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+            Elevo Ops Queue
+        </div>
+        <nav class="nav-links">
+            <a href="core-flow.html">Call App</a>
+            <a href="agent-portal.html">Agent Portal</a>
+            <a href="ops-queue.html" class="active">Ops Queue</a>
+        </nav>
+    </header>
+
+    <!-- Main Content -->
+    <main class="ops-main">
+        <h1 class="page-title">Ticket Operations Queue</h1>
+
+        <!-- Tabs -->
+        <div class="queue-tabs">
+            <div class="queue-tab active" onclick="switchTab('follow_up')">
+                <span>🔁 Follow-up Team</span>
+            </div>
+            <div class="queue-tab" onclick="switchTab('level_2')">
+                <span>🛠️ Level 2 Support</span>
+            </div>
+        </div>
+
+        <!-- Tickets Table -->
+        <div class="table-container">
+            <table class="ops-table">
+                <thead>
+                    <tr>
+                        <th>Created At</th>
+                        <th>Chef ID</th>
+                        <th>Store Name</th>
+                        <th>Original Issue</th>
+                        <th>Sub Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="ticketsList">
+                    <tr><td colspan="6" style="text-align:center; padding: 3rem; color: var(--text-color-secondary);">Loading tickets...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </main>
+
+    <!-- Action Modal -->
+    <div id="actionModal" class="modal-overlay">
+        <div class="modal-content">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem;">
+                <h2 style="margin:0; font-size:1.4rem;">Update Ticket Status</h2>
+                <button onclick="closeModal()" style="background:none; border:none; color:var(--text-color-secondary); cursor:pointer; font-size:1.5rem;">&times;</button>
+            </div>
+
+            <div class="ticket-info-grid">
+                <div class="info-item">
+                    <label>Store Name</label>
+                    <div id="modalStoreName">-</div>
+                </div>
+                <div class="info-item">
+                    <label>Current Escalation</label>
+                    <div id="modalIssue" style="color:var(--primary-color);">-</div>
+                </div>
+                <div class="info-item">
+                    <label>Chef ID</label>
+                    <div id="modalChefId">-</div>
+                </div>
+                 <div class="info-item">
+                    <label>City</label>
+                    <div id="modalCity">-</div>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>New Status</label>
+                <select id="newStatusSelect" class="form-control">
+                    <option value="Waiting">⏳ Waiting (انتظار)</option>
+                    <option value="In Progress">⚙️ In Progress (جاري العمل)</option>
+                    <option value="Solved">✅ Solved (تم الحل)</option>
+                    <option value="Returned">↩️ Return to Level 1 (إعادة)</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>Action Notes / Feedback</label>
+                <textarea id="actionNotes" class="form-control" rows="3" placeholder="Enter details of the action taken... (e.g., Contacted store, Updated settings)"></textarea>
+            </div>
+
+            <div style="text-align:right; margin-bottom: 1.5rem;">
+                <button onclick="submitAction()" class="btn-action" style="display:inline-flex; width:auto;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                    Save Update
+                </button>
+            </div>
+
+            <!-- History Log -->
+            <div class="history-section">
+                <h4 style="margin-top:0; margin-bottom:1rem; color:var(--text-color-secondary);">📜 Action History</h4>
+                <div id="historyLogContainer" class="history-list">
+                    <!-- History items will be loaded here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { supabase } from './supabaseClient.js';
+        import { protectPage } from './role-check.js';
+
+        let currentTeam = 'follow_up'; 
+        let activeTicketId = null;
+        let currentUser = null;
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            // هنا بنحمي الصفحة وبنجيب بيانات اليوزر
+            const user = await protectPage(['admin', 'manager', 'agent']); 
+            if(user) currentUser = user;
+            loadTickets();
+        });
+
+        // Expose functions to window for HTML onClick
+        window.switchTab = (team) => {
+            currentTeam = team;
+            document.querySelectorAll('.queue-tab').forEach(t => t.classList.remove('active'));
+            event.currentTarget.classList.add('active');
+            loadTickets();
+        }
+
+        window.openActionModal = async (id) => {
+            activeTicketId = id;
+            const modal = document.getElementById('actionModal');
+            
+            // جلب بيانات التيكت
+            const { data: ticket } = await supabase
+                .from('call_sessions')
+                .select('form_data, sub_status, escalation_action') // تأكدنا من أسماء الأعمدة
+                .eq('id', id)
+                .single();
+
+            if(ticket) {
+                const fd = ticket.form_data || {};
+                document.getElementById('modalStoreName').innerText = fd.store_name || '-';
+                document.getElementById('modalIssue').innerText = fd.escalation_action || ticket.escalation_action || '-'; // دعم الاسم القديم والجديد
+                document.getElementById('modalChefId').innerText = fd.chef_id || '-';
+                document.getElementById('modalCity').innerText = fd.city || '-';
+                document.getElementById('newStatusSelect').value = ticket.sub_status || 'Waiting';
+            }
+
+            loadHistoryLog(id);
+            modal.classList.add('open');
+        }
+
+        window.closeModal = () => {
+            document.getElementById('actionModal').classList.remove('open');
+            document.getElementById('actionNotes').value = '';
+        }
+
+        // --- Core Functions ---
+
+        async function loadTickets() {
+            const list = document.getElementById('ticketsList');
+            list.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:2rem; color:var(--text-color-secondary);">Loading queue data...</td></tr>';
+
+            const { data, error } = await supabase
+                .from('call_sessions')
+                .select('*')
+                .eq('escalation_status', currentTeam)
+                .neq('ticket_status', 'closed_completely') // مثال: لو عايز تخفي اللي خلص تماما
+                .order('created_at', { ascending: false });
+
+            if (error) {
+                console.error(error);
+                list.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--danger-color);">Error loading data.</td></tr>';
+                return;
+            }
+
+            if (!data || data.length === 0) {
+                list.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:3rem; color:var(--text-color-secondary);">🎉 The queue is empty! No pending tickets.</td></tr>';
+                return;
+            }
+
+            list.innerHTML = data.map(t => {
+                const fd = t.form_data || {};
+                const date = new Date(t.created_at).toLocaleString('en-US', { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'});
+                
+                let statusClass = 'badge-new';
+                if (t.sub_status === 'Solved') statusClass = 'badge-solved';
+                else if (t.sub_status === 'Waiting') statusClass = 'badge-waiting';
+                else if (t.sub_status === 'In Progress') statusClass = 'badge-progress';
+
+                return `
+                    <tr>
+                        <td>${date}</td>
+                        <td>${fd.chef_id || '-'}</td>
+                        <td style="font-weight:500; color:var(--primary-color);">${fd.store_name || 'Unknown'}</td>
+                        <td>${fd.escalation_action || '-'}</td>
+                        <td><span class="status-badge ${statusClass}">${t.sub_status || 'New'}</span></td>
+                        <td>
+                            <button class="btn-action" onclick="openActionModal('${t.id}')">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                                Action
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        async function loadHistoryLog(ticketId) {
+            const container = document.getElementById('historyLogContainer');
+            container.innerHTML = '<div style="text-align:center; color:var(--text-color-secondary);">Loading history...</div>';
+            
+            const { data: logs } = await supabase
+                .from('ticket_history')
+                .select('*')
+                .eq('ticket_id', ticketId)
+                .order('created_at', { ascending: false });
+
+            if(logs && logs.length > 0) {
+                container.innerHTML = logs.map(log => `
+                    <div class="history-item">
+                        <div class="history-header">
+                            <span><strong>${log.agent_name || 'Agent'}</strong> changed status to <span style="color:var(--primary-color)">${log.new_status}</span></span>
+                            <span>${new Date(log.created_at).toLocaleString()}</span>
+                        </div>
+                        <div class="history-note">${log.notes}</div>
+                    </div>
+                `).join('');
+            } else {
+                container.innerHTML = '<div style="text-align:center; padding:1rem; color:var(--text-color-secondary); font-style:italic;">No actions recorded yet. Be the first!</div>';
+            }
+        }
+
+        window.submitAction = async () => {
+            const newStatus = document.getElementById('newStatusSelect').value;
+            const notes = document.getElementById('actionNotes').value;
+
+            if(!notes.trim()) return alert("Please write a note describing your action.");
+
+            const btn = document.querySelector('#actionModal .btn-action');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = 'Saving...';
+            btn.disabled = true;
+
+            try {
+                // 1. تسجيل في الهستوري
+                await supabase.from('ticket_history').insert({
+                    ticket_id: activeTicketId,
+                    user_id: currentUser.id,
+                    agent_name: currentUser.name || currentUser.email,
+                    action_type: 'status_change',
+                    new_status: newStatus,
+                    notes: notes
+                });
+
+                // 2. تحديث التيكت الأصلية
+                await supabase.from('call_sessions').update({
+                    sub_status: newStatus,
+                    // لو الحل "تم الحل"، ممكن نغير escalation_status لـ closed لو حابب تخفيها من الطابور
+                    // escalation_status: newStatus === 'Solved' ? 'resolved' : currentTeam 
+                }).eq('id', activeTicketId);
+
+                closeModal();
+                loadTickets(); // تحديث الجدول
+            } catch (e) {
+                console.error(e);
+                alert("Error saving update");
+            } finally {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }
+        }
+    </script>
+</body>
+</html>
