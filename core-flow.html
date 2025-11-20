@@ -1,3 +1,17 @@
+تمام، قمت بتطبيق التعديلات المطلوبة حرفياً.
+
+في الـ CSS: أضفت كود التنسيق الجديد في نهاية قسم الـ style ليجعل الفورم يظهر بعرض كامل وشبكة (Grid) من عمودين.
+
+في الـ JavaScript: قمت بتحديث دالة renderStep بالكامل لتشمل منطق تفعيل form-mode وتغيير العنوان إلى "Final Documentation"، مع الحفاظ على باقي الوظائف (مثل زر إنهاء التيكت والأزرار الأخرى) كما هي.
+
+إليك الملف بالكامل جاهز للنسخ:
+
+code
+Html
+play_circle
+download
+content_copy
+expand_less
 <!doctype html>
 <html lang="ar" class="dark" dir="ltr">
 <head>
@@ -1011,6 +1025,47 @@ background-position: 200% 0
 background-position: -200% 0
 }
 }
+
+/* تنسيق خاص لخطوة الفورم النهائية لتظهر بشكل مميز وعريض */
+.steps-area.form-mode {
+    background-color: #1e293b; /* لون خلفية أغمق قليلاً ومميز */
+    border: 1px solid var(--primary-color); /* حدود زرقاء لتمييز التوثيق */
+    box-shadow: 0 0 20px rgba(78, 140, 255, 0.1);
+    padding: 2rem;
+    max-width: 100%; /* استغلال المساحة كاملة */
+}
+
+.steps-area.form-mode p {
+    font-size: 1.1rem;
+    color: var(--text-color-secondary);
+    margin-bottom: 1.5rem;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 1rem;
+}
+
+/* تحسين شكل الحقول داخل الفورم */
+.form-step-container {
+    display: grid;
+    grid-template-columns: 1fr 1fr; /* تقسيم الحقول لعمودين */
+    gap: 1.5rem;
+}
+
+/* الحقول الكبيرة زي الملاحظات تاخد العرض كله */
+.form-field:has(textarea), 
+.form-field:has(select[id="escalation_action"]) {
+    grid-column: span 2;
+}
+
+/* في الموبايل يرجع عمود واحد */
+@media (max-width: 768px) {
+    .form-step-container {
+        grid-template-columns: 1fr;
+    }
+    .form-field:has(textarea), 
+    .form-field:has(select[id="escalation_action"]) {
+        grid-column: span 1;
+    }
+}
 </style>
 
 </head>
@@ -1373,21 +1428,35 @@ Waiting for Ticket
         }
     }
 
-    // UPDATED: renderStep to handle 'form' type AND SHOW END TICKET BUTTON
+    // UPDATED: renderStep (With Form Mode Logic + Fixes)
     function renderStep() {
         if (!currentScenario || !currentStepId) return;
         
         const step = currentScenario.steps.find(s => s.id === currentStepId);
         if (!step) return finishCall(false, `Error: Step ${currentStepId} not found`);
 
-        // 1. تحديث الأيقونة والعنوان
-        let icon = "🗣️"; // افتراضي (Script)
+        // --- التعديل الجديد هنا (Form Mode) ---
+        const stepsContainer = document.getElementById("steps-container");
+        const decisionButtonsContainer = document.getElementById("decision-buttons-container");
+        const nextBtn = document.getElementById("next-step-btn");
+        const prevBtn = document.getElementById("prev-step-btn");
+        const endBtn = document.getElementById("end-call-btn");
+
+        if (step.type === "form") {
+            stepsContainer.classList.add("form-mode"); // تفعيل الشكل العريض
+            document.getElementById("scenario-title-text").textContent = "Final Documentation"; // تغيير العنوان
+        } else {
+            stepsContainer.classList.remove("form-mode"); // الرجوع للشكل الطبيعي
+            document.getElementById("scenario-title-text").textContent = currentScenario.title;
+        }
+        // --------------------------------------
+
+        // 1. تحديث الأيقونة
+        let icon = "🗣️"; 
         if (step.type === "decision") icon = "🤔";
-        if (step.type === "form") icon = "📝"; // نوع جديد
-        
+        if (step.type === "form") icon = "📝"; 
         document.getElementById("step-type-icon").textContent = icon;
-        document.getElementById("scenario-title-text").textContent = currentScenario.title;
-        
+
         // 2. تفريغ المحتوى القديم
         stepsContainer.innerHTML = "";
         decisionButtonsContainer.innerHTML = "";
@@ -1397,58 +1466,33 @@ Waiting for Ticket
         textP.innerHTML = step.text.replace(/\n/g, "<br>");
         stepsContainer.appendChild(textP);
 
-        // 4. معالجة أنواع الخطوات
-        const nextBtn = document.getElementById("next-step-btn");
-        const prevBtn = document.getElementById("prev-step-btn");
-        const endBtn = document.getElementById("end-call-btn"); // الزر المنسي
-        
-        // إظهار زر السابق إذا كان هناك تاريخ
+        // التحكم في ظهور الأزرار
         prevBtn.style.display = stepHistory.length > 0 ? "inline-flex" : "none";
-        
-        // !!!!!!!!!!!!! تصحيح: إعادة إظهار زر إنهاء التيكت !!!!!!!!!!!!!
-        endBtn.style.display = "inline-flex"; 
+        endBtn.style.display = "inline-flex"; // Ensure End Ticket is visible
 
-        if (step.type === "decision" && Array.isArray(step.options)) {
-            // --- حالة القرار (Decision) ---
-            step.options.forEach(opt => {
-                const btn = document.createElement("button");
-                btn.className = "decision-button";
-                btn.textContent = opt.label;
-                // تمييز الألوان حسب الليبل
-                if (opt.label.toLowerCase().includes("yes") || opt.label.toLowerCase().includes("solved")) btn.classList.add("positive");
-                if (opt.label.toLowerCase().includes("no") || opt.label.toLowerCase().includes("persist")) btn.classList.add("negative");
-                
-                btn.addEventListener("click", () => navigateToStep(opt.next_id));
-                decisionButtonsContainer.appendChild(btn);
-            });
-            nextBtn.style.display = "none"; // نخفي زر التالي لأن الأزرار هي اللي بتحرك
-
-        } else if (step.type === "form" && Array.isArray(step.fields)) {
-            // --- حالة الفورم (Form) - الجزء الجديد ---
+        // 4. معالجة الأنواع
+        if (step.type === "form" && Array.isArray(step.fields)) {
+            // --- Form Logic ---
             const formContainer = document.createElement("div");
-            formContainer.className = "form-step-container";
-            formContainer.id = "dynamic-step-form"; // ID عشان نعرف نجيب الداتا منه
+            formContainer.className = "form-step-container"; // Grid layout
+            formContainer.id = "dynamic-step-form";
 
             step.fields.forEach(field => {
                 const fieldWrapper = document.createElement("div");
                 fieldWrapper.className = "form-field";
 
-                // Label
                 const label = document.createElement("label");
                 label.setAttribute("for", field.id);
                 label.textContent = field.label + (field.required ? " *" : "");
                 fieldWrapper.appendChild(label);
 
-                // Input Type Handling
                 let inputEl;
                 if (field.type === "select") {
                     inputEl = document.createElement("select");
-                    // الخيار الافتراضي
                     const defaultOpt = document.createElement("option");
                     defaultOpt.value = "";
                     defaultOpt.textContent = "-- Select --";
                     inputEl.appendChild(defaultOpt);
-                    
                     if (field.options) {
                         field.options.forEach(optVal => {
                             const opt = document.createElement("option");
@@ -1466,30 +1510,41 @@ Waiting for Ticket
                 }
 
                 inputEl.id = field.id;
-                inputEl.name = field.id; // مهم عشان نجمع الداتا
+                inputEl.name = field.id;
                 if (field.required) inputEl.required = true;
                 if (field.placeholder) inputEl.placeholder = field.placeholder;
 
                 fieldWrapper.appendChild(inputEl);
                 formContainer.appendChild(fieldWrapper);
             });
-
             stepsContainer.appendChild(formContainer);
             
-            // تحديث زر التالي
-            const btnText = nextBtn.querySelector(".btn-text");
-            if (btnText) btnText.textContent = "Save & Continue";
             nextBtn.style.display = "inline-flex";
+            const btnText = nextBtn.querySelector(".btn-text");
+            // إذا كانت هناك خطوة تالية، الزر "حفظ ومتابعة"، وإلا "حفظ وإنهاء"
+            if (btnText) btnText.textContent = step.next_id ? "Save & Continue" : "Save & Finish";
+
+        } else if (step.type === "decision" && Array.isArray(step.options)) {
+            // --- Decision Logic ---
+             step.options.forEach(opt => {
+                const btn = document.createElement("button");
+                btn.className = "decision-button";
+                btn.textContent = opt.label;
+                if (opt.label.toLowerCase().includes("yes") || opt.label.toLowerCase().includes("solved")) btn.classList.add("positive");
+                if (opt.label.toLowerCase().includes("no") || opt.label.toLowerCase().includes("persist")) btn.classList.add("negative");
+                btn.addEventListener("click", () => navigateToStep(opt.next_id));
+                decisionButtonsContainer.appendChild(btn);
+            });
+            nextBtn.style.display = "none";
 
         } else {
-            // --- حالة الخطوة العادية (Script) ---
-            const btnText = nextBtn.querySelector(".btn-text");
-            if (step.next_id) {
-                if (btnText) btnText.textContent = "Next Step";
-            } else {
-                if (btnText) btnText.textContent = "Finish Ticket";
-            }
+            // --- Normal Step Logic ---
             nextBtn.style.display = "inline-flex";
+            const btnText = nextBtn.querySelector(".btn-text");
+            if (btnText) {
+                if (step.next_id) btnText.textContent = "Next Step";
+                else btnText.textContent = "Finish Ticket";
+            }
         }
 
         startStepTimer();
