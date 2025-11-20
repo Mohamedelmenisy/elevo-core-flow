@@ -557,19 +557,26 @@
             }
         }
 
+        // 2. تحديث منطق عرض الجدول (إضافة الجرس وعرض الحالة)
         function processCallData(call) {
             let quality = 'average'; 
             if (call.completed === true) quality = 'good';
             else if (call.quality_reason) quality = 'poor';
+            
             if (call.call_quality && ['good', 'average', 'poor'].includes(call.call_quality.toLowerCase())) {
                 quality = call.call_quality.toLowerCase();
             }
 
+            const formDataSafe = call.form_data || {};
             const dateObj = new Date(call.start_time);
             const dateStr = dateObj.toLocaleDateString('en-GB', {
                 day: '2-digit', month: 'short', year: 'numeric', 
                 hour: '2-digit', minute: '2-digit'
             });
+
+            // التحقق من وجود رد (لو الحالة مش New ومش Updated ومش Updated by Agent يبقى الفولو أب رد)
+            const hasReply = call.sub_status && call.sub_status !== 'New' && call.sub_status !== 'Updated' && call.sub_status !== 'Updated by Agent';
+            const replyBadge = hasReply ? '🔔' : ''; // علامة جرس
 
             return {
                 id: call.id,
@@ -579,7 +586,9 @@
                 duration: formatDuration(call.duration),
                 quality: quality,
                 quality_reason: call.quality_reason,
-                formData: call.form_data || {}
+                formData: formDataSafe,
+                subStatus: call.sub_status || 'New', // هنحتاجها في العرض
+                replyBadge: replyBadge
             };
         }
 
@@ -693,6 +702,7 @@
             `).join('');
         }
 
+        // 3. تحديث دالة رسم الجدول لإظهار الجرس والحالة
         function renderTable() {
             const tbody = document.getElementById('callsTableBody');
             tbody.innerHTML = '';
@@ -713,7 +723,11 @@
                     <td>${call.scenario}</td>
                     <td>${call.duration}</td>
                     <td>${getQualityBadge(call.quality)}</td>
-                    <td><button class="action-button secondary-button" onclick="openModal('${call.id}')">View Details</button></td>
+                    <td>
+                        <!-- هنا عرضنا الجرس والحالة -->
+                        <span style="font-size:0.8rem; color:var(--text-color-light); margin-right:8px;">${call.replyBadge} ${call.subStatus}</span>
+                        <button class="action-button secondary-button" onclick="openModal('${call.id}')">View Details</button>
+                    </td>
                 `;
                 tbody.appendChild(row);
             });
@@ -1039,46 +1053,50 @@
             loadModalHistory(id);
         };
 
-        // دالة إرسال الملاحظة من الايجنت (مع التوست والريال تايم)
+        // 1. تحديث منطق إرسال النوت (عشان منحولش السولفد لـ Updated)
         window.addAgentNote = async (id) => {
             const noteInput = document.getElementById('agentExtraNote');
             const note = noteInput.value;
-            
             if(!note.trim()) return alert("Please write a note.");
             
-            // استخدام closest لضمان تحديد الزر حتى لو تم الضغط على الأيقونة بداخله (إن وجدت)
+            // استخدام closest لضمان تحديد الزر بشكل صحيح
             const btn = event.target.closest('button') || event.target;
-            btn.textContent = 'Sending...';
+            btn.textContent = 'Sending...'; 
             btn.disabled = true;
             
             try {
-                // 1. تسجيل النوت في الهستوري
-                const { error } = await supabase.from('ticket_history').insert({
+                // نعرف حالة التيكت الحالية الأول
+                const { data: ticket } = await supabase.from('call_sessions').select('sub_status').eq('id', id).single();
+                const isSolved = ticket && ticket.sub_status === 'Solved';
+
+                // 1. تسجيل في الهستوري
+                await supabase.from('ticket_history').insert({
                     ticket_id: id,
                     user_id: State.user.id,
-                    agent_name: State.user.user_metadata?.full_name || 'Agent (Level 1)',
-                    action_type: 'agent_note', // نوع مميز
-                    new_status: 'Updated by Agent', 
+                    agent_name: State.user.user_metadata?.full_name || 'Agent',
+                    action_type: 'agent_note',
+                    new_status: isSolved ? 'Note on Solved Ticket' : 'Updated', // تغيير المسمى
                     notes: note
                 });
 
-                if(error) throw error;
+                // 2. لو التيكت مش Solved، نحدث حالتها عشان تظهر في الكيو
+                if (!isSolved) {
+                    await supabase.from('call_sessions').update({
+                        sub_status: 'Updated' // الاسم الجديد المختصر
+                    }).eq('id', id);
+                } else {
+                    alert("Note sent to history (Ticket remains Solved).");
+                }
 
-                // 2. تحديث التيكت لتنبيه الفولو أب إن فيه تحديث جديد
-                await supabase.from('call_sessions').update({
-                    sub_status: 'Updated by Agent'
-                }).eq('id', id);
-
-                // 3. نجاح وتحديث الواجهة
-                alert("Note sent successfully! 🚀"); 
+                if(!isSolved) alert("Note sent successfully!");
                 noteInput.value = '';
-                loadModalHistory(id); // تحديث الهستوري فوراً
+                loadModalHistory(id);
 
             } catch (err) {
                 console.error(err);
                 alert("Error sending note.");
             } finally {
-                btn.textContent = 'Send';
+                btn.textContent = 'Send'; 
                 btn.disabled = false;
             }
         }
