@@ -481,6 +481,9 @@
                 State.user = session.user;
                 updateUserDisplay();
                 
+                // IMPORTANT FIX: Initialize Charts FIRST
+                initializeCharts();
+
                 // Load Data
                 await Promise.all([
                     loadCallHistory(),
@@ -488,9 +491,7 @@
                     loadTrainingPrograms()
                 ]);
 
-                // Init UI
-                initializeCharts(); 
-                updateDashboard(); 
+                // Setup Events
                 setupEventListeners();
 
                 document.getElementById('auth-loading').style.display = 'none';
@@ -498,19 +499,19 @@
 
             } catch (err) {
                 console.error('Init Error:', err);
-                alert('Failed to load application data.');
+                // alert('Failed to load application data.'); // Optional: Uncomment if needed
             }
         }
 
         // ================= DATA LOADING =================
         
-        // 1. دالة جلب البيانات (المحدثة)
         async function loadCallHistory() {
+            // Fix 2: Reverted to 'call_sessions_egypt' to fix 400 Bad Request error
             const { data, error } = await supabase
-                .from('call_sessions') 
+                .from('call_sessions_egypt') 
                 .select('*')
-                .eq('user_id', State.user.id) 
-                .order('created_at', { ascending: false });
+                .eq('agent_email', State.user.email) // Using email for this table
+                .order('start_time_egypt', { ascending: false });
 
             if (!error && data) {
                 State.allCalls = data.map(processCallData);
@@ -535,18 +536,20 @@
             }
         }
 
-        // 2. معالجة البيانات (المحدثة)
         function processCallData(call) {
             let quality = 'average'; 
             if (call.completed === true) quality = 'good';
+            else if (call.quality_reason) quality = 'poor';
             
+            if (call.call_quality) quality = call.call_quality.toLowerCase();
+
             const formDataSafe = call.form_data || {};
 
             return {
                 id: call.id,
-                date: new Date(call.start_time).toLocaleDateString('en-GB'), 
-                rawDate: call.start_time,
-                scenario: 'Device Issue Flow', 
+                date: formatDate(call.start_time_egypt), // Use correct column
+                rawDate: call.start_time_egypt,
+                scenario: call.scenario_title || 'Device Issue Flow', 
                 duration: formatDuration(call.duration),
                 quality: quality,
                 quality_reason: call.quality_reason,
@@ -764,6 +767,9 @@
         }
 
         function updateChartsData() {
+            // Safety check: If charts aren't ready, don't try to update
+            if (!State.charts.rating) return;
+
             const last7Days = [...Array(7)].map((_, i) => {
                 const d = new Date();
                 d.setDate(d.getDate() - i);
