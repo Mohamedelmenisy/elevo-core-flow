@@ -147,7 +147,7 @@
 </head>
 <body>
     <div class="app-container">
-        <!-- Header -->
+        <!-- Header (Updated based on core-flow structure) -->
         <header class="app-header">
             <div class="logo-container">
                 <svg class="company-logo" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -316,9 +316,11 @@
         // ================= CONFIGURATION & STATE =================
         const Config = {
             supabaseUrl: 'https://aefiigottnlcmjzilqnh.supabase.co',
-            supabaseKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFlZmlpZ290dG5sY21qemlscW5oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcxNzY2MDQsImV4cCI6MjA2Mjc1MjYwNH0.FypB02v3tGMnxXV9ZmZMdMC0oQpREKOJWgHMPxUzwX4',
-            dailyTarget: 20 // Set your daily target number here
+            supabaseKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFlZmlpZ290dG5sY21qemlscW5oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcxNzY2MDQsImV4cCI6MjA2Mjc1MjYwNH0.FypB02v3tGMnxXV9ZmZMdMC0oQpREKOJWgHMPxUzwX4'
         };
+
+        // 1. تعريف التارجت اليومي
+        const DAILY_TARGET = 40; 
 
         const supabase = window.supabase.createClient(Config.supabaseUrl, Config.supabaseKey);
 
@@ -420,13 +422,46 @@
             calculateKPIs();
             updatePerformanceSummary();
             updateAchievements();
-            updateChartsData(); // Fix: Actually update charts with real data
+            updateChartsData(); 
         }
 
+        // 2. إصلاح دالة حساب الـ KPIs مع منطق التارجت الجديد
         function calculateKPIs() {
             const calls = State.allCalls;
-            if (!calls.length) return;
+            if (!calls.length) {
+                // Reset UI if no calls
+                document.getElementById('kpiAvgTime').textContent = '--:--';
+                document.getElementById('kpiTotalCalls').textContent = '0';
+                document.getElementById('kpiAvgRating').textContent = '0% Good';
+                document.getElementById('dailyTargetPercentage').textContent = '0%';
+                document.getElementById('dailyTargetProgressBar').style.width = '0%';
+                return;
+            }
 
+            // --- حساب التارجت اليومي بدقة ---
+            // نستخدم التاريخ المحلي للمتصفح لضمان التطابق
+            const now = new Date();
+            const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+            
+            const todayCalls = calls.filter(c => {
+                // نفترض أن rawDate هو توقيت UTC قادم من Supabase أو ISO string
+                const callDate = new Date(c.rawDate).getTime(); 
+                return callDate >= startOfDay;
+            }).length;
+
+            // تحديث واجهة التارجت
+            const targetPercent = Math.min(100, Math.round((todayCalls / DAILY_TARGET) * 100));
+            document.getElementById('dailyTargetPercentage').textContent = `${targetPercent}%`;
+            document.getElementById('dailyTargetProgressBar').style.width = `${targetPercent}%`;
+            
+            // إضافة نص توضيحي
+            const titleSpan = document.querySelector('.progress-title span:first-child');
+            if(titleSpan) {
+                 titleSpan.innerHTML = `Daily Target <small style="color:var(--text-color-subtle)">(${todayCalls}/${DAILY_TARGET})</small>`;
+            }
+
+            // --- باقي الحسابات KPI ---
+            
             // 1. Avg Time
             const totalSec = calls.reduce((sum, c) => {
                 const parts = c.duration.split(':');
@@ -439,17 +474,8 @@
 
             // 3. Quality
             const goodCalls = calls.filter(c => c.quality === 'good').length;
-            const percentage = Math.round((goodCalls / calls.length) * 100) || 0;
-            document.getElementById('kpiAvgRating').textContent = `${percentage}% Good`;
-
-            // 4. Daily Target (FIXED)
-            // Get "Today" in Egypt/Local time (YYYY-MM-DD)
-            const todayStr = new Date().toLocaleDateString('en-CA'); // ISO format local date
-            const todayCalls = calls.filter(c => c.rawDate && c.rawDate.startsWith(todayStr)).length;
-            
-            const targetPercent = Math.min(100, Math.round((todayCalls / Config.dailyTarget) * 100));
-            document.getElementById('dailyTargetPercentage').textContent = `${targetPercent}%`;
-            document.getElementById('dailyTargetProgressBar').style.width = `${targetPercent}%`;
+            const qualityPercentage = Math.round((goodCalls / calls.length) * 100) || 0;
+            document.getElementById('kpiAvgRating').textContent = `${qualityPercentage}% Good`;
         }
 
         function renderTable() {
@@ -497,7 +523,6 @@
             document.getElementById('successRate').textContent = `${rate}%`;
 
             // Avg Resolution
-            // (Simplification: reusing avg duration for resolution time)
             if(weekCalls.length) {
                 const total = weekCalls.reduce((acc, curr) => {
                     const [m, s] = curr.duration.split(':').map(Number);
@@ -506,7 +531,7 @@
                 document.getElementById('avgResolutionTime').textContent = formatDuration(Math.round(total / weekCalls.length));
             }
 
-            // Best Performance (Shortest Good Call)
+            // Best Performance
             const bestCall = weekCalls.filter(c => c.quality === 'good')
                 .sort((a,b) => {
                     const durA = parseInt(a.duration.split(':')[0])*60 + parseInt(a.duration.split(':')[1]);
@@ -690,7 +715,7 @@
             return new Date(isoStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
         }
 
-        function formatDuration(seconds) { // if DB returns string "04:00" handle it, if number handle it
+        function formatDuration(seconds) { 
             if (typeof seconds === 'string' && seconds.includes(':')) return seconds;
             if (!seconds) return '0:00';
             const m = Math.floor(seconds / 60);
