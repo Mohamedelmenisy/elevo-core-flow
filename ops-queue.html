@@ -117,7 +117,7 @@
         .spinner { width: 40px; height: 40px; border: 3px solid rgba(255, 255, 255, 0.1); border-left: 3px solid var(--primary-color); border-radius: 50%; animation: spin 1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
-        /* --- 2. Premium Role Check Styles (From your file) --- */
+        /* --- 2. Premium Role Check Styles --- */
         .access-modal { position: fixed; inset: 0; display: flex; justify-content: center; align-items: center; z-index: 9999; opacity: 0; pointer-events: none; transition: opacity 0.4s ease; }
         .access-modal.open { opacity: 1; pointer-events: all; }
         .access-overlay { position: absolute; inset: 0; background: radial-gradient(circle at center, rgba(10,10,10,0.92) 0%, rgba(0,0,0,0.96) 90%); backdrop-filter: blur(14px); animation: fadeIn 0.5s ease forwards; }
@@ -141,11 +141,12 @@
             </div>
             <div class="header-controls">
                 <a href="core-flow.html" class="nav-link">Call App</a>
-                 <a href="./dashboard.html" class="nav-link">Admin Dashboard</a>
-                 <a href="./rtm-dashboard.html" class="nav-link">RTM Dashboard</a>
+                <a href="./dashboard.html" class="nav-link">Admin Dashboard</a>
+                <a href="./rtm-dashboard.html" class="nav-link">RTM Dashboard</a>
                 <a href="agent-portal.html" class="nav-link">Agent Portal</a>
                 <a href="ops-queue.html" class="nav-link active">Ops Queue</a>
-                 <a href="approvals.html" class="nav-link">Approvals</a
+                <!-- Fixed Syntax Error Here: Added closing tag -->
+                <a href="approvals.html" class="nav-link">Approvals</a>
                 
                 <div class="user-info">
                     <span id="userName" style="font-weight: 500; color: var(--text-color-light);">Loading...</span>
@@ -157,7 +158,7 @@
         <!-- Auth Loader -->
         <div id="auth-loader" class="loading-container">
             <div class="spinner"></div>
-            <p style="margin-top: 1rem; color: var(--text-color-light);">Checking permissions...</p>
+            <p id="loader-text" style="margin-top: 1rem; color: var(--text-color-light);">Checking permissions...</p>
         </div>
 
         <!-- Main Content (Hidden by default) -->
@@ -204,6 +205,7 @@
                 <div id="emptyMessage" style="display:none; text-align:center; padding: 3rem; color: var(--text-color-subtle);">
                     No pending tickets in this queue.
                 </div>
+                <div id="errorMessage" style="display:none; text-align:center; padding: 3rem; color: var(--danger-color);"></div>
             </div>
         </main>
 
@@ -263,20 +265,43 @@
             supabaseUrl: 'https://aefiigottnlcmjzilqnh.supabase.co',
             supabaseKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFlZmlpZ290dG5sY21qemlscW5oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcxNzY2MDQsImV4cCI6MjA2Mjc1MjYwNH0.FypB02v3tGMnxXV9ZmZMdMC0oQpREKOJWgHMPxUzwX4'
         };
-        const supabase = window.supabase.createClient(Config.supabaseUrl, Config.supabaseKey);
+        
+        // Initialize Supabase globally
+        window.supabaseClient = window.supabase.createClient(Config.supabaseUrl, Config.supabaseKey);
 
         // 2. STATE
         const State = { user: null, currentTeam: 'follow_up', activeTicketId: null };
 
-        // 3. PREMIUM ROLE CHECK LOGIC (INTEGRATED FROM YOUR FILE) 🧠
+        // 3. PREMIUM ROLE CHECK LOGIC
         async function getCurrentUserProfile() {
             try {
-                const { data: { user } } = await supabase.auth.getUser();
-                if (!user) return null;
-                const { data: profile, error } = await supabase.from('users').select('id, role, name, email').eq('id', user.id).single();
-                if (error && error.code !== 'PGRST116') throw error;
-                return { ...user, ...profile, role: profile?.role || 'agent' };
-            } catch (e) { console.error('Error getting user profile:', e.message); return null; }
+                const { data: { user }, error: authError } = await window.supabaseClient.auth.getUser();
+                if (authError || !user) return null;
+                
+                // Try to fetch role from 'users' table
+                let role = 'agent'; // Default role
+                try {
+                    const { data: profile, error } = await window.supabaseClient
+                        .from('users')
+                        .select('id, role, name, email')
+                        .eq('id', user.id)
+                        .single();
+                    
+                    if (profile) {
+                        role = profile.role || 'agent';
+                        return { ...user, ...profile, role };
+                    }
+                } catch (dbError) {
+                    console.warn("Could not fetch extended profile, using default info", dbError);
+                }
+                
+                // Fallback if profile not found but user is logged in
+                return { ...user, role, name: user.email };
+
+            } catch (e) { 
+                console.error('Error getting user profile:', e.message); 
+                return null; 
+            }
         }
 
         function showProtectedModal(message = "This area is for administrators only.", redirectUrl = 'core-flow.html') {
@@ -293,41 +318,69 @@
         }
 
         async function protectPage(allowedRoles = [], contentId = 'app-content') {
-            const userProfile = await getCurrentUserProfile();
             const authLoader = document.getElementById('auth-loader');
             const appContent = document.getElementById(contentId);
-            if (!userProfile) { window.location.href = 'index.html'; return null; }
-            const userNameEl = document.getElementById('userName');
-            if (userNameEl) userNameEl.textContent = userProfile.name || userProfile.email;
-            if (allowedRoles.length > 0 && !allowedRoles.includes(userProfile.role)) {
+            
+            try {
+                const userProfile = await getCurrentUserProfile();
+
+                if (!userProfile) { 
+                    // Not logged in
+                    window.location.href = 'index.html'; 
+                    return null; 
+                }
+
+                const userNameEl = document.getElementById('userName');
+                if (userNameEl) userNameEl.textContent = userProfile.name || userProfile.email;
+
+                if (allowedRoles.length > 0 && !allowedRoles.includes(userProfile.role)) {
+                    if (authLoader) authLoader.style.display = 'none';
+                    showProtectedModal(`Access Denied<br>Your current role: <strong>${userProfile.role}</strong>`, 'core-flow.html');
+                    return null;
+                }
+
+                // Success - Show content
                 if (authLoader) authLoader.style.display = 'none';
-                showProtectedModal(`Access Denied<br>Your current role: <strong>${userProfile.role}</strong>`, 'core-flow.html');
+                if (appContent) appContent.style.display = 'block';
+                
+                return userProfile;
+
+            } catch (err) {
+                console.error("Protection check failed:", err);
+                if (authLoader) {
+                    document.getElementById('loader-text').textContent = "Error loading permissions. Please refresh.";
+                    document.getElementById('loader-text').style.color = "var(--danger-color)";
+                }
                 return null;
             }
-            if (authLoader) authLoader.style.display = 'none';
-            if (appContent) appContent.style.display = 'block';
-            return userProfile;
         }
 
         // 4. APP INITIALIZATION
         document.addEventListener('DOMContentLoaded', async () => {
-            // Using the premium protect function:
-            State.user = await protectPage(['admin', 'manager', 'agent'], 'app-content');
-            
-            if (State.user) {
-                loadTickets();
-                setupRealtime();
+            try {
+                // Check access
+                State.user = await protectPage(['admin', 'manager', 'agent'], 'app-content');
+                
+                if (State.user) {
+                    await loadTickets();
+                    setupRealtime();
+                }
+            } catch (error) {
+                console.error("Initialization error:", error);
+                document.getElementById('auth-loader').style.display = 'none';
+                // Force show content but with error if strictly needed, or just alert
+                alert("Failed to load application. Please check console.");
             }
             
             document.getElementById('logoutButton').addEventListener('click', async () => {
-                await supabase.auth.signOut();
+                await window.supabaseClient.auth.signOut();
                 window.location.href = 'index.html';
             });
         });
 
         // 5. REALTIME UPDATES
         function setupRealtime() {
-            supabase.channel('ops-queue-changes')
+            window.supabaseClient.channel('ops-queue-changes')
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'call_sessions' }, (payload) => {
                     console.log('Realtime update:', payload);
                     loadTickets();
@@ -340,44 +393,60 @@
         // 6. DATA LOADING
         async function loadTickets() {
             const list = document.getElementById('ticketsList');
-            const { data, error } = await supabase.from('call_sessions').select('*')
-                .eq('escalation_status', State.currentTeam)
-                .neq('ticket_status', 'closed_completely')
-                .order('created_at', { ascending: false });
+            const emptyMsg = document.getElementById('emptyMessage');
+            const errorMsg = document.getElementById('errorMessage');
+            
+            list.innerHTML = '<tr><td colspan="10" style="text-align:center; padding:2rem;">Loading tickets...</td></tr>';
+            emptyMsg.style.display = 'none';
+            errorMsg.style.display = 'none';
 
-            if (error) return console.error(error);
-            if (!data || data.length === 0) {
-                list.innerHTML = ''; document.getElementById('emptyMessage').style.display = 'block'; return;
+            try {
+                const { data, error } = await window.supabaseClient.from('call_sessions').select('*')
+                    .eq('escalation_status', State.currentTeam)
+                    .neq('ticket_status', 'closed_completely')
+                    .order('created_at', { ascending: false });
+
+                if (error) throw error;
+
+                if (!data || data.length === 0) {
+                    list.innerHTML = ''; 
+                    emptyMsg.style.display = 'block'; 
+                    return;
+                }
+
+                list.innerHTML = data.map(t => {
+                    const fd = t.form_data || {};
+                    const date = new Date(t.created_at).toLocaleString('en-US', { month:'short', day:'numeric', hour:'numeric', minute:'2-digit', hour12: true });
+                    
+                    let statusClass = 'status-new';
+                    let displayStatus = t.sub_status || 'New';
+                    if (displayStatus === 'Solved') statusClass = 'status-solved';
+                    else if (displayStatus === 'Waiting') statusClass = 'status-waiting';
+                    else if (displayStatus === 'In Progress') statusClass = 'status-progress';
+                    else if (displayStatus === 'Updated by Agent' || displayStatus === 'Updated') { statusClass = 'status-updated'; displayStatus = 'Updated'; }
+
+                    let issueText = fd.store_feedback || '-';
+                    if(issueText.length > 40) issueText = issueText.substring(0, 40) + '...';
+
+                    return `<tr>
+                        <td style="font-size:0.85rem; color:#94a3b8;">${date}</td>
+                        <td>${fd.chef_id || '-'}</td>
+                        <td style="font-weight:500; color:var(--primary-color);">${fd.store_name || 'Unknown'}</td>
+                        <td>${fd.city || '-'}</td>
+                        <td>${fd.store_status || '-'}</td>
+                        <td>${fd.contact_number || '-'} <div style="font-size:0.7em; color:#aaa;">${fd.contact_method || ''}</div></td>
+                        <td>${fd.orders_count || '0'}</td>
+                        <td title="${fd.store_feedback}">${issueText}</td>
+                        <td><span class="status-badge ${statusClass}">${displayStatus}</span></td>
+                        <td><button class="action-button secondary-button" onclick="openActionModal('${t.id}')">Action</button></td>
+                    </tr>`;
+                }).join('');
+            } catch (err) {
+                console.error(err);
+                list.innerHTML = '';
+                errorMsg.innerText = "Error loading tickets: " + err.message;
+                errorMsg.style.display = 'block';
             }
-            document.getElementById('emptyMessage').style.display = 'none';
-
-            list.innerHTML = data.map(t => {
-                const fd = t.form_data || {};
-                const date = new Date(t.created_at).toLocaleString('en-US', { month:'short', day:'numeric', hour:'numeric', minute:'2-digit', hour12: true });
-                
-                let statusClass = 'status-new';
-                let displayStatus = t.sub_status || 'New';
-                if (displayStatus === 'Solved') statusClass = 'status-solved';
-                else if (displayStatus === 'Waiting') statusClass = 'status-waiting';
-                else if (displayStatus === 'In Progress') statusClass = 'status-progress';
-                else if (displayStatus === 'Updated by Agent' || displayStatus === 'Updated') { statusClass = 'status-updated'; displayStatus = 'Updated'; }
-
-                let issueText = fd.store_feedback || '-';
-                if(issueText.length > 40) issueText = issueText.substring(0, 40) + '...';
-
-                return `<tr>
-                    <td style="font-size:0.85rem; color:#94a3b8;">${date}</td>
-                    <td>${fd.chef_id || '-'}</td>
-                    <td style="font-weight:500; color:var(--primary-color);">${fd.store_name || 'Unknown'}</td>
-                    <td>${fd.city || '-'}</td>
-                    <td>${fd.store_status || '-'}</td>
-                    <td>${fd.contact_number || '-'} <div style="font-size:0.7em; color:#aaa;">${fd.contact_method || ''}</div></td>
-                    <td>${fd.orders_count || '0'}</td>
-                    <td title="${fd.store_feedback}">${issueText}</td>
-                    <td><span class="status-badge ${statusClass}">${displayStatus}</span></td>
-                    <td><button class="action-button secondary-button" onclick="openActionModal('${t.id}')">Action</button></td>
-                </tr>`;
-            }).join('');
         }
 
         // 7. INTERACTION
@@ -392,7 +461,11 @@
             State.activeTicketId = id;
             const modal = document.getElementById('actionModal');
             const actionForm = document.getElementById('actionFormSection'); 
-            const { data: ticket } = await supabase.from('call_sessions').select('*').eq('id', id).single();
+            
+            // Show modal immediately with loader
+            modal.classList.add('visible');
+            
+            const { data: ticket } = await window.supabaseClient.from('call_sessions').select('*').eq('id', id).single();
 
             if(ticket) {
                 const fd = ticket.form_data || {};
@@ -417,14 +490,13 @@
                     document.getElementById('newStatusSelect').value = ticket.sub_status === 'Updated by Agent' ? 'In Progress' : (ticket.sub_status || 'Waiting');
                 }
                 loadHistory(id);
-                modal.classList.add('visible');
             }
         };
 
         async function loadHistory(id) {
             const container = document.getElementById('historyLogContainer');
-            container.innerHTML = 'Loading...';
-            const { data: logs } = await supabase.from('ticket_history').select('*').eq('ticket_id', id).order('created_at', { ascending: false });
+            container.innerHTML = 'Loading history...';
+            const { data: logs } = await window.supabaseClient.from('ticket_history').select('*').eq('ticket_id', id).order('created_at', { ascending: false });
             if (!logs || logs.length === 0) { container.innerHTML = '<div style="text-align:center; padding:0.5rem; color:var(--text-color-subtle);">No history.</div>'; return; }
             container.innerHTML = logs.map(l => {
                 const isAgent = l.action_type === 'agent_note';
@@ -449,12 +521,13 @@
             if(!notes.trim()) return alert("Please enter action notes.");
             btn.textContent = 'Saving...'; btn.disabled = true;
             try {
-                await supabase.from('ticket_history').insert({
+                await window.supabaseClient.from('ticket_history').insert({
                     ticket_id: State.activeTicketId, user_id: State.user.id, agent_name: State.user.user_metadata?.full_name || 'Ops Team',
                     action_type: 'status_change', new_status: newStatus, notes: notes
                 });
-                await supabase.from('call_sessions').update({ sub_status: newStatus }).eq('id', State.activeTicketId);
+                await window.supabaseClient.from('call_sessions').update({ sub_status: newStatus }).eq('id', State.activeTicketId);
                 closeModal(); showToast();
+                loadTickets(); // Refresh table
             } catch (err) { console.error(err); alert("Error saving action."); } finally { btn.textContent = 'Save Update'; btn.disabled = false; }
         };
 
