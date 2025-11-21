@@ -79,6 +79,7 @@
             border-radius: 20px; border: 1px solid rgba(16, 185, 129, 0.2);
             animation: pulse 2s infinite;
             display: none;
+            margin-right: 1rem; /* Added margin for spacing */
         }
         @keyframes pulse { 0% { opacity: 0.7; } 50% { opacity: 1; } 100% { opacity: 0.7; } }
 
@@ -108,6 +109,17 @@
         .status-progress { background: rgba(78, 140, 255, 0.15); color: #93c5fd; border: 1px solid rgba(78, 140, 255, 0.3); }
         .status-solved { background: rgba(16, 185, 129, 0.15); color: #6ee7b7; border: 1px solid rgba(16, 185, 129, 0.3); }
         .status-updated { background: rgba(236, 72, 153, 0.15); color: #f472b6; border: 1px solid rgba(236, 72, 153, 0.3); }
+        
+        /* --- Pagination Styles --- */
+        .pagination-container { display: flex; justify-content: space-between; align-items: center; padding-top: 1.5rem; margin-top: 1rem; border-top: 1px solid var(--border-color); }
+        .pagination-info { font-size: 0.9rem; color: var(--text-color-subtle); }
+        .pagination-controls button { background-color: rgba(255,255,255,0.05); border: 1px solid var(--border-color); color: var(--text-color-light); padding: 0.5rem 1rem; border-radius: var(--border-radius-md); cursor: pointer; transition: all 0.2s; }
+        .pagination-controls button:hover:not(:disabled) { background-color: rgba(var(--primary-color-rgb), 0.2); border-color: var(--primary-color); color: var(--text-color); }
+        .pagination-controls button:disabled { opacity: 0.4; cursor: not-allowed; }
+        .page-numbers { display: flex; align-items: center; gap: 0.5rem; margin: 0 1rem; }
+        .page-number { cursor: pointer; padding: 0.5rem 0.8rem; border-radius: var(--border-radius-md); transition: all 0.2s; }
+        .page-number.active { background-color: var(--primary-color); color: white; font-weight: 600; }
+        .page-number:not(.active):hover { background-color: rgba(255,255,255,0.1); }
 
         /* Modal */
         .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(10, 10, 20, 0.85); backdrop-filter: blur(12px); display: none; align-items: center; justify-content: center; z-index: 1000; opacity: 0; transition: opacity 0.3s ease; }
@@ -224,6 +236,17 @@
                     No pending tickets in this queue.
                 </div>
                 <div id="errorMessage" style="display:none; text-align:center; padding: 3rem; color: var(--danger-color);"></div>
+
+                <!-- Pagination Container -->
+                <div id="paginationContainer" class="pagination-container" style="display: none;">
+                    <span class="pagination-info" id="paginationInfo"></span>
+                    <div class="pagination-controls" style="display: flex; align-items: center;">
+                        <button id="prevPage">‹ Prev</button>
+                        <div id="pageNumbers" class="page-numbers"></div>
+                        <button id="nextPage">Next ›</button>
+                    </div>
+                </div>
+
             </div>
         </main>
 
@@ -288,7 +311,14 @@
         window.supabaseClient = window.supabase.createClient(Config.supabaseUrl, Config.supabaseKey);
 
         // 2. STATE
-        const State = { user: null, currentTeam: 'follow_up', activeTicketId: null };
+        const State = { 
+            user: null, 
+            currentTeam: 'follow_up', 
+            activeTicketId: null,
+            allTickets: [],
+            currentPage: 1,
+            itemsPerPage: 10
+        };
 
         // 3. PREMIUM ROLE CHECK LOGIC
         async function getCurrentUserProfile() {
@@ -394,6 +424,21 @@
                 await window.supabaseClient.auth.signOut();
                 window.location.href = 'index.html';
             });
+            
+            document.getElementById('prevPage').addEventListener('click', () => {
+                if (State.currentPage > 1) {
+                    State.currentPage--;
+                    renderPage(State.currentPage);
+                }
+            });
+
+            document.getElementById('nextPage').addEventListener('click', () => {
+                const totalPages = Math.ceil(State.allTickets.length / State.itemsPerPage);
+                if (State.currentPage < totalPages) {
+                    State.currentPage++;
+                    renderPage(State.currentPage);
+                }
+            });
         });
 
         // 5. REALTIME UPDATES
@@ -417,6 +462,7 @@
             list.innerHTML = '<tr><td colspan="10" style="text-align:center; padding:2rem;">Loading tickets...</td></tr>';
             emptyMsg.style.display = 'none';
             errorMsg.style.display = 'none';
+            document.getElementById('paginationContainer').style.display = 'none';
 
             try {
                 const { data, error } = await window.supabaseClient.from('call_sessions').select('*')
@@ -425,40 +471,18 @@
                     .order('created_at', { ascending: false });
 
                 if (error) throw error;
+                
+                State.allTickets = data || [];
+                State.currentPage = 1;
 
-                if (!data || data.length === 0) {
+                if (State.allTickets.length === 0) {
                     list.innerHTML = ''; 
                     emptyMsg.style.display = 'block'; 
                     return;
                 }
+                
+                renderPage(State.currentPage);
 
-                list.innerHTML = data.map(t => {
-                    const fd = t.form_data || {};
-                    const date = new Date(t.created_at).toLocaleString('en-US', { month:'short', day:'numeric', hour:'numeric', minute:'2-digit', hour12: true });
-                    
-                    let statusClass = 'status-new';
-                    let displayStatus = t.sub_status || 'New';
-                    if (displayStatus === 'Solved') statusClass = 'status-solved';
-                    else if (displayStatus === 'Waiting') statusClass = 'status-waiting';
-                    else if (displayStatus === 'In Progress') statusClass = 'status-progress';
-                    else if (displayStatus === 'Updated by Agent' || displayStatus === 'Updated') { statusClass = 'status-updated'; displayStatus = 'Updated'; }
-
-                    let issueText = fd.store_feedback || '-';
-                    if(issueText.length > 40) issueText = issueText.substring(0, 40) + '...';
-
-                    return `<tr>
-                        <td style="font-size:0.85rem; color:#94a3b8;">${date}</td>
-                        <td>${fd.chef_id || '-'}</td>
-                        <td style="font-weight:500; color:var(--primary-color);">${fd.store_name || 'Unknown'}</td>
-                        <td>${fd.city || '-'}</td>
-                        <td>${fd.store_status || '-'}</td>
-                        <td>${fd.contact_number || '-'} <div style="font-size:0.7em; color:#aaa;">${fd.contact_method || ''}</div></td>
-                        <td>${fd.orders_count || '0'}</td>
-                        <td title="${fd.store_feedback}">${issueText}</td>
-                        <td><span class="status-badge ${statusClass}">${displayStatus}</span></td>
-                        <td><button class="action-button secondary-button" onclick="openActionModal('${t.id}')">Action</button></td>
-                    </tr>`;
-                }).join('');
             } catch (err) {
                 console.error(err);
                 list.innerHTML = '';
@@ -466,8 +490,74 @@
                 errorMsg.style.display = 'block';
             }
         }
+        
+        // 7. PAGINATION & RENDERING
+        function renderPage(page) {
+            State.currentPage = page;
+            const list = document.getElementById('ticketsList');
+            const paginationContainer = document.getElementById('paginationContainer');
+            const start = (page - 1) * State.itemsPerPage;
+            const end = start + State.itemsPerPage;
+            const paginatedItems = State.allTickets.slice(start, end);
 
-        // 7. INTERACTION
+            list.innerHTML = paginatedItems.map(t => {
+                const fd = t.form_data || {};
+                const date = new Date(t.created_at).toLocaleString('en-US', { month:'short', day:'numeric', hour:'numeric', minute:'2-digit', hour12: true });
+                
+                let statusClass = 'status-new';
+                let displayStatus = t.sub_status || 'New';
+                if (displayStatus === 'Solved') statusClass = 'status-solved';
+                else if (displayStatus === 'Waiting') statusClass = 'status-waiting';
+                else if (displayStatus === 'In Progress') statusClass = 'status-progress';
+                else if (displayStatus === 'Updated by Agent' || displayStatus === 'Updated') { statusClass = 'status-updated'; displayStatus = 'Updated'; }
+
+                let issueText = fd.store_feedback || '-';
+                if(issueText.length > 40) issueText = issueText.substring(0, 40) + '...';
+
+                return `<tr>
+                    <td style="font-size:0.85rem; color:#94a3b8;">${date}</td>
+                    <td>${fd.chef_id || '-'}</td>
+                    <td style="font-weight:500; color:var(--primary-color);">${fd.store_name || 'Unknown'}</td>
+                    <td>${fd.city || '-'}</td>
+                    <td>${fd.store_status || '-'}</td>
+                    <td>${fd.contact_number || '-'} <div style="font-size:0.7em; color:#aaa;">${fd.contact_method || ''}</div></td>
+                    <td>${fd.orders_count || '0'}</td>
+                    <td title="${fd.store_feedback}">${issueText}</td>
+                    <td><span class="status-badge ${statusClass}">${displayStatus}</span></td>
+                    <td><button class="action-button secondary-button" onclick="openActionModal('${t.id}')">Action</button></td>
+                </tr>`;
+            }).join('');
+            
+            setupPagination();
+            paginationContainer.style.display = State.allTickets.length > State.itemsPerPage ? 'flex' : 'none';
+        }
+
+        function setupPagination() {
+            const pageNumbers = document.getElementById('pageNumbers');
+            const totalPages = Math.ceil(State.allTickets.length / State.itemsPerPage);
+            pageNumbers.innerHTML = '';
+
+            for (let i = 1; i <= totalPages; i++) {
+                const pageNumber = document.createElement('span');
+                pageNumber.className = 'page-number';
+                pageNumber.textContent = i;
+                if (i === State.currentPage) {
+                    pageNumber.classList.add('active');
+                }
+                pageNumber.addEventListener('click', () => renderPage(i));
+                pageNumbers.appendChild(pageNumber);
+            }
+
+            document.getElementById('prevPage').disabled = State.currentPage === 1;
+            document.getElementById('nextPage').disabled = State.currentPage === totalPages;
+            
+            const startItem = (State.currentPage - 1) * State.itemsPerPage + 1;
+            const endItem = Math.min(startItem + State.itemsPerPage - 1, State.allTickets.length);
+            document.getElementById('paginationInfo').textContent = `Showing ${startItem}-${endItem} of ${State.allTickets.length}`;
+        }
+
+
+        // 8. INTERACTION
         window.switchTab = (team, tabElement) => {
             State.currentTeam = team;
             document.querySelectorAll('.queue-tab').forEach(t => t.classList.remove('active'));
